@@ -1,0 +1,370 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM08500Dao">
+<!-- 공정관리물류창고 입고 -->    
+
+    <!-- 공정관리물류창고 입고 조회 -->
+    <select id="selectOutSourceWarehouseWare" parameterType="map" resultType="hashmap">
+    		--
+            -- GetOutsourcedWarehouseWear
+            -- Version:10001    		
+    		WITH ATC AS 
+						(
+								SELECT 
+										SLT.LOTID
+								    ,	SLT.PLANTID
+								    ,	SLT.AREAID
+								    ,	SLT.LOTTYPE
+									,	PPH.PATHSEQUENCE AS PATHSEQUENCESTART
+									,	PPH.USERSEQUENCE AS USERSEQUENCE
+                                    ,	UFN_OSP_SELECTSAMEAREASEQ(SLT.LOTID, 'PRIMARY')   AS PATHSEQUENCEEND
+									,	UFN_OSP_SELECTSAMEAREASEQ(SLT.LOTID, 'ALTERNATE') AS PATHSEQUENCEEND_ALT
+									,	LAG(CPP.PROCESSSEGMENTID) OVER (ORDER BY CPP.PATHSEQUENCE ASC)					AS PREVPROCESSSEGMENTID
+                                    ,	LAG(CPP.PROCESSSEGMENTVERSION) OVER (ORDER BY CPP.PATHSEQUENCE ASC)			AS PREVPROCESSSEGMENTVERSION
+								FROM PCM_LOT SLT
+								LEFT OUTER JOIN PCM_LOTWORKRESULT  LWR   ON LWR.LOTID                 = SLT.LOTID
+															            AND LWR.PROCESSSEGMENTID      = SLT.PROCESSSEGMENTID
+															            AND LWR.PROCESSSEGMENTVERSION = SLT.PROCESSSEGMENTVERSION
+															            AND LWR.WORKCOUNT             = SLT.WORKCOUNT
+								LEFT OUTER JOIN BAS_PROCESSPATH    CPP   ON CPP.PROCESSDEFID          = LWR.PROCESSDEFID
+															            AND CPP.PROCESSDEFVERSION     = LWR.PROCESSDEFVERSION
+															            AND CPP.PROCESSSEGMENTID      = LWR.PROCESSSEGMENTID
+															            AND CPP.PROCESSSEGMENTVERSION = LWR.PROCESSSEGMENTVERSION
+								INNER JOIN BAS_PROCESSPATH         PPH   ON PPH.PROCESSDEFID          = LWR.PROCESSDEFID
+								                                        AND PPH.PROCESSDEFVERSION     = LWR.PROCESSDEFVERSION
+								                                        AND PPH.PATHSEQUENCE          = CPP.PATHSEQUENCE
+								
+								WHERE	1=1 
+								AND		SLT.LOTID   = #{P_LOTID}
+						)	
+				
+				SELECT
+					    '0' AS CHK
+					,	ENTERPRISEID
+					,	PLANTID
+					,	LOTHISTKEY
+					,	LOTID
+					,	LOTTYPE
+					,	PRODUCTDEFID
+					,	PRODUCTDEFVERSION
+					,	PRODUCTDEFNAME
+					,	PROCESSSEGMENTID
+					,	PROCESSSEGMENTNAME
+					,	PREVPROCESSSEGMENTID
+					,	PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(LOTID, USERSEQUENCE, 'P') AS PREVPROCESSSEGMENTNAME
+					,	USERSEQUENCE
+					,	AREAID
+					,	AREANAME
+					,	PREVAREAID
+					,	PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(LOTID, USERSEQUENCE, 'A') AS PREVAREANAME
+					--,	PCSQTY
+					,	TO_NUMBER(PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(LOTID, USERSEQUENCE, 'Q1')) AS PCSQTY
+					,	ARRAYQTY
+					--,	PANELQTY
+					,	TO_NUMBER(PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(LOTID, USERSEQUENCE, 'Q2')) AS PANELQTY
+					,	OSPMM
+					,	CASE WHEN LOTSTATE = 'InProduction' THEN 'InProdution' ELSE LOTSTATE END AS LOTSTATE
+					,	PROCESSSTATE
+					,	ISHOLD
+					,	ISLOCKING 
+					,	OWNTYPE
+					,	PATHSEQUENCESTART
+					,	PATHSEQUENCEEND
+					,	WEAROKCHECK
+					,	LOTHISTKEYOLT
+					,	WORKCOUNT
+				FROM (
+					SELECT
+							SLT.ENTERPRISEID
+						,	SLT.PLANTID
+						,	SLH.TXNHISTKEY                           AS LOTHISTKEY
+						,	SLT.LOTID
+						,	SLT.LOTTYPE
+						,	SLT.PRODUCTDEFID
+						,	SLT.PRODUCTDEFVERSION
+						,	PRD.PRODUCTDEFNAME
+						,	SLT.PROCESSSEGMENTID
+						,	DIC.DICTIONARYNAME                       AS   PROCESSSEGMENTNAME
+						,	HST.PREVPROCESSSEGMENTID                 AS   PREVPROCESSSEGMENTID
+						,	DCC.DICTIONARYNAME                       AS   PREVPROCESSSEGMENTNAME
+						,	SLH.USERSEQUENCE
+						,	SLH.AREAID
+						,	DAC.DICTIONARYNAME                       AS AREANAME
+						,	HST.PREVAREAID                           AS PREVAREAID
+						,	DAP.DICTIONARYNAME                       AS PREVAREANAME
+						--,	HST.PCSQTY                               AS PCSQTY						
+						--,	CASE WHEN NVL(HST.PCSQTY,0) = 0 THEN
+		             	--			NVL(SLH.SENDPCSQTY,0)           
+		             	--		ELSE
+		             	--			NVL(HST.PCSQTY,0)           
+		             	--	END AS PCSQTY
+		             	,	NVL(SLH.SENDPCSQTY,0) AS PCSQTY
+		             	
+						,	HST.ARRAYQTY                             AS ARRAYQTY
+						
+						--,	HST.PANELQTY                             AS PANELQTY						
+						--,   CASE WHEN NVL(HST.PANELQTY,0) = 0 THEN
+		             	--		    NVL(SLH.SENDPANELQTY,0)           
+		             	--		ELSE
+		             	--		   	NVL(HST.PANELQTY,0)
+		             	--    END AS PANELQTY
+		             	,	NVL(SLH.SENDPANELQTY,0) AS PANELQTY
+		             	 
+						,	CASE WHEN PRD.PCSMM =0        THEN 0
+						 	     WHEN HST.PCSQTY  IS NULL THEN 0
+						 	     ELSE HST.PCSQTY / PRD.PCSMM
+						 	END                                       AS  OSPMM
+						,	SLT.LOTSTATE
+						,	SLT.PROCESSSTATE
+						,	NVL(SLT.ISHOLD,'N')     AS ISHOLD
+						,	NVL(SLT.ISLOCKING,'N')  AS ISLOCKING 
+						,	SAC.OWNTYPE
+						,	ATC.PATHSEQUENCESTART   AS  PATHSEQUENCESTART
+						,	ATC.PATHSEQUENCEEND   AS  PATHSEQUENCEEND
+						<!--,	ATC.USERMIN-->
+						<!--,	ATC.USERMAX-->
+						,	CASE WHEN OLT.LOTHISTKEY IS NOT NULL  THEN 'RECEIPT'
+						         ELSE 'OK' END          AS WEAROKCHECK
+						,	NVL(OLT.LOTHISTKEY,'') AS LOTHISTKEYOLT
+						,	NVL(SLH.WORKCOUNT,0)   AS WORKCOUNT
+					FROM	PCM_LOT                              SLT
+					JOIN    PCM_LOTWORKRESULT                    SLH   ON SLH.LOTID                 = SLT.LOTID  
+					                                                  AND SLH.PROCESSSEGMENTID      = SLT.PROCESSSEGMENTID 
+					                                                  AND NVL(SLH.WORKCOUNT,0) 		= NVL(SLT.WORKCOUNT,0)
+					                                                  AND NVL(SLH.RESULTTYPE,'@') <![CDATA[<>]]> 'SKIP'
+					INNER JOIN ATC                                     ON ATC.LOTID                 = SLH.LOTID
+					LEFT OUTER JOIN PCM_LOTHISTORY               HST   ON HST.LOTID                 = SLH.LOTID
+					                                                  AND HST.TXNHISTKEY            = SLH.PREVSENDLOTHISTKEY
+					LEFT OUTER JOIN BAS_PRODUCTDEFINITION	     PRD   ON PRD.PRODUCTDEFID          = SLT.PRODUCTDEFID
+					                                                  AND PRD.PRODUCTDEFVERSION     = SLT.PRODUCTDEFVERSION
+					LEFT OUTER JOIN BAS_PROCESSSEGMENT           PRS   ON PRS.PROCESSSEGMENTID      = SLT.PROCESSSEGMENTID
+					                                                  AND PRS.PROCESSSEGMENTVERSION = SLT.PROCESSSEGMENTVERSION
+					LEFT OUTER JOIN CMD_DICTIONARY	             DIC   ON DIC.DICTIONARYID          = PRS.PROCESSSEGMENTNAME
+					                                                  AND DIC.LANGUAGETYPE          = #{LANGUAGETYPE}
+					
+					
+					--20210719이전공정명수정BYPHW
+					LEFT OUTER JOIN BAS_PROCESSSEGMENT           PSP   ON PSP.PROCESSSEGMENTID      = ATC.PREVPROCESSSEGMENTID
+					                                                  AND PSP.PROCESSSEGMENTVERSION = ATC.PREVPROCESSSEGMENTVERSION
+					LEFT OUTER JOIN CMD_DICTIONARY	             DCC   ON DCC.DICTIONARYID          = PSP.PROCESSSEGMENTNAME
+					                                                  AND DCC.LANGUAGETYPE          = #{LANGUAGETYPE}
+					
+					
+					
+					LEFT OUTER JOIN BAS_AREA                     SAC   ON SAC.AREAID                = SLT.AREAID
+					LEFT OUTER JOIN CMD_DICTIONARY	             DAC   ON DAC.DICTIONARYID          = SAC.AREANAME
+					                                                  AND DAC.LANGUAGETYPE          = #{LANGUAGETYPE}
+					LEFT OUTER JOIN BAS_AREA                     SAP   ON SAP.AREAID                = HST.PREVAREAID     
+					LEFT OUTER JOIN CMD_DICTIONARY	             DAP   ON DAP.DICTIONARYID          = SAP.AREANAME
+					                                                  AND DAP.LANGUAGETYPE          = #{LANGUAGETYPE}
+					LEFT OUTER JOIN OSM_OSPRECEIPTSENDLOT        OLT   ON OLT.LOTHISTKEY            = SLH.TXNHISTKEY   
+					                                                  AND OLT.LOTID                 = SLH.LOTID 
+					                                                  AND OLT.SENDDATE IS  NULL
+					WHERE	1=1
+					AND		SLT.LOTID          		= #{P_LOTID}
+					AND		SLT.PLANTID        		= #{P_PLANTID}
+					<!-- AND     OLT.LOTHISTKEY      IS NULL -->
+					<if test="P_LOTHISTKEY != null and P_LOTHISTKEY !='' ">
+						AND  SLH.TXNHISTKEY 		= #{P_LOTHISTKEY}			
+					</if>
+					AND		SLT.LOTSTATE    		= 'InTransit'
+					AND		SLT.PROCESSSTATE    	= 'WaitForReceive'
+					AND		NVL(SLT.ISHOLD,'N') 	!= 'Y'
+					AND		NVL(SLT.ISLOCKING,'N') 	!= 'Y'
+					AND		NOT EXISTS ( SELECT 'X'
+					                     FROM   MTM_LOTPLANTTRANSIT LPT
+					                     WHERE  LPT.LOTID = SLH.LOTID
+					                     AND    LPT.TRANSITSTATUS != 'InProduction')
+					ORDER BY SLT.LOTID ,SLH.TXNHISTKEY DESC
+				) A
+				WHERE ROWNUM = 1
+    </select>
+ 
+ 
+    <select id="selectOutsourcedWarehouseWearReceiptsequence" parameterType="map" resultType="hashmap">
+    			--
+                -- GetOutsourcedWarehouseWearReceiptsequence
+                -- Version:10001    			
+				SELECT
+						NVL(MAX(RECEIPTSEQUENCE),0)+1 AS RECEIPTSEQUENCE
+				FROM	OSM_OSPRECEIPTSENDLOT        OLT	 
+				WHERE	1=1
+				AND		OLT.LOTID          = #{P_LOTID}
+				AND		OLT.PLANTID        = #{P_PLANTID}
+				AND		OLT.LOTHISTKEY     = #{P_LOTHISTKEY}
+	</select>
+	
+	<insert id="insertOutsourcedWarehouseWear" parameterType="map">
+		 INSERT INTO OSM_OSPRECEIPTSENDLOT
+			    (   
+			    LOTHISTKEY         
+			,	LOTID
+			,	RECEIPTSEQUENCE
+			,	PLANTID
+			,	ENTERPRISEID	
+					
+			,	RECEIPTDATE			
+			,	RECEIPTUSER			
+			,	SENDAREAID	
+					
+			,	VALIDSTATE
+			,	ISLASTRECEIPT
+			,	LASTTXNID
+			
+			,	CREATOR
+			,	CREATEDTIME
+			,	MODIFIER
+			,	MODIFIEDTIME
+			,	PCMLASTTXNHISTKEY	--2021-07-21 BY PHW 방성혁B 추가요청건
+		) VALUES (
+				#{LOTHISTKEY}
+			,	#{LOTID}
+			,	#{RECEIPTSEQUENCE}
+			,	#{PLANTID}
+			,	#{ENTERPRISEID}
+						
+			,	SYSDATE				--2021-05-26 BY PHW
+			,	#{CREATOR}			--2021-05-26 BY PHW
+			,	#{SENDAREAID}
+			
+			,	#{VALIDSTATE}
+			,   #{ISLASTRECEIPT}			
+			,	#{LASTTXNID}	
+					
+			,	#{CREATOR}  
+	        ,	SYSDATE  
+	        ,	#{MODIFIER}  
+	        ,	SYSDATE
+	        
+	        ,	(SELECT LASTTXNHISTKEY FROM PCM_LOT WHERE LOTID = #{LOTID})
+		)		            
+    </insert>
+    
+    <select id="selectOspreceiptsendlotsegmentStatusChange" parameterType="map" resultType="hashmap">
+		SELECT
+				RECEIPTSEQUENCE
+		FROM	OSM_OSPRECEIPTSENDLOT	OLT	 
+		WHERE	1=1
+		AND		OLT.LOTHISTKEY     	= #{LOTHISTKEY}
+		AND		OLT.LOTID          	= #{LOTID}
+		AND		OLT.RECEIPTSEQUENCE	= #{RECEIPTSEQUENCE}
+		AND		OLT.PLANTID        	= #{PLANTID}
+	</select>
+	
+	<update id="updateOspreceiptsendlotsegmentStatusChange" parameterType="map">
+        UPDATE OSM_OSPRECEIPTSENDLOT	OLT  
+           SET ISLASTRECEIPT  = #{ISLASTRECEIPT}
+             , LASTTXNID      = #{LASTTXNID} 
+         WHERE 1=1
+         		AND		OLT.LOTHISTKEY     	= #{LOTHISTKEY}
+				AND		OLT.LOTID          	= #{LOTID}
+				AND		OLT.RECEIPTSEQUENCE	= #{RECEIPTSEQUENCE}
+				AND		OLT.PLANTID        	= #{PLANTID}
+    </update>
+    
+    
+    <select id="selectOutsourcedWarehouseWearSegment" parameterType="map" resultType="hashmap">
+  			--
+		-- GetOutsourcedWarehouseWearSegment
+		-- Version:10001
+		SELECT
+			 	LWR.PROCESSDEFID
+			,	LWR.PROCESSDEFVERSION
+			,	PPH.PROCESSSEGMENTID
+			,	PPH.PROCESSSEGMENTVERSION
+			,	PPH.PATHSEQUENCE 
+			,	PPH.USERSEQUENCE
+			,	CASE WHEN PPH.PATHSEQUENCE = #{P_PATHSEQUENCESTART}	THEN LWR.RESOURCEID
+			         ELSE NVL(CLA.RESOURCEID, SBR.RESOURCEID)  END  AS RESOURCEID
+			,	CASE WHEN PPH.PATHSEQUENCE = #{P_PATHSEQUENCESTART}	THEN LWR.AREAID
+			         ELSE NVL(RSL.AREAID, MRS.AREAID)  END	   AREAID
+			,	LWR.PLANTID
+			,	LWR.ENTERPRISEID
+		FROM  PCM_LOTWORKRESULT LWR   
+		LEFT OUTER JOIN BAS_PROCESSPATH         CPP   ON   CPP.PROCESSDEFID         = LWR.PROCESSDEFID
+								                     AND  CPP.PROCESSDEFVERSION     = LWR.PROCESSDEFVERSION
+								                     AND  CPP.PROCESSSEGMENTID      = LWR.PROCESSSEGMENTID
+								                     AND  CPP.PROCESSSEGMENTVERSION = LWR.PROCESSSEGMENTVERSION
+		INNER      JOIN BAS_PROCESSPATH         PPH   ON   PPH.PROCESSDEFID         = LWR.PROCESSDEFID
+		                                             AND  PPH.PROCESSDEFVERSION     = LWR.PROCESSDEFVERSION
+		                                             AND  PPH.PATHSEQUENCE          <![CDATA[>=]]> #{P_PATHSEQUENCESTART}
+		                                             AND  PPH.PATHSEQUENCE          <![CDATA[<=]]> #{P_PATHSEQUENCEEND}
+		LEFT OUTER JOIN PCM_LOTAREA             CLA   ON   CLA.LOTID                = LWR.LOTID
+		                                             AND  CLA.PROCESSDEFID          = PPH.PROCESSDEFID
+		                                             AND  CLA.PROCESSDEFVERSION     = PPH.PROCESSDEFVERSION
+		                                             AND  CLA.PROCESSSEGMENTID      = PPH.PROCESSSEGMENTID
+		                                             AND  CLA.PROCESSSEGMENTVERSION = PPH.PROCESSSEGMENTVERSION
+		                                             AND  CLA.WORKCOUNT             = LWR.WORKCOUNT
+		LEFT OUTER JOIN BAS_RESOURCE           RSL    ON   RSL.RESOURCEID           = CLA.RESOURCEID
+		                                             AND  RSL.PLANTID               = LWR.PLANTID
+		                                             AND  RSL.ENTERPRISEID          = LWR.ENTERPRISEID
+		LEFT OUTER JOIN BAS_BILLOFRESOURCE     SBR    ON   SBR.PRODUCTDEFID         = LWR.PRODUCTDEFID
+		                                             AND  SBR.PRODUCTDEFVERSION     = LWR.PRODUCTDEFVERSION
+		                                             AND  SBR.PROCESSDEFID          = PPH.PROCESSDEFID
+		                                             AND  SBR.PROCESSDEFVERSION     = PPH.PROCESSDEFVERSION
+		                                             AND  SBR.PROCESSSEGMENTID      = PPH.PROCESSSEGMENTID
+		                                             AND  SBR.PROCESSSEGMENTVERSION = PPH.PROCESSSEGMENTVERSION
+		                                             AND  SBR.PLANTID               = LWR.PLANTID
+		                                             AND  SBR.RESOURCETYPE          = 'Resource'
+		                                             AND  SBR.ISPRIMARYRESOURCE     = 'Y'
+		                                             AND  SBR.VALIDSTATE            = 'Valid'
+		LEFT OUTER JOIN BAS_RESOURCE             MRS  ON   MRS.RESOURCEID           = SBR.RESOURCEID
+		                                             AND  MRS.PLANTID               = SBR.PLANTID
+		                                             AND  MRS.ENTERPRISEID          = SBR.ENTERPRISEID
+		WHERE	1=1 
+		AND		LWR.LOTID      = #{P_LOTID}
+		AND		LWR.TXNHISTKEY = #{P_LOTHISTKEY}
+	</select>
+
+	<insert id="insertOspreceiptsendlotsegmentInsertData" parameterType="map">
+         INSERT INTO OSM_OSPRECEIPTSENDLOTSEGMENT
+			    (
+				 LOTHISTKEY
+				,LOTID
+				,RECEIPTSEQUENCE
+				,PROCESSDEFID
+				,PROCESSDEFVERSION
+				,PROCESSSEGMENTID
+				,PROCESSSEGMENTVERSION				
+				,PATHSEQUENCE
+				,USERSEQUENCE
+				,RESOURCEID
+				,AREAID
+				,PREVRESOURCEID
+				,PREVAREAID
+				,PLANTID
+				,ENTERPRISEID				
+				,VALIDSTATE
+				,LASTTXNID
+				,CREATOR
+				,CREATEDTIME
+				,MODIFIER
+				,MODIFIEDTIME
+		) VALUES (
+				 #{LOTHISTKEY}
+				,#{LOTID}
+				,#{RECEIPTSEQUENCE}
+				,#{PROCESSDEFID}
+				,#{PROCESSDEFVERSION}
+				,#{PROCESSSEGMENTID}
+				,#{PROCESSSEGMENTVERSION}				
+				,#{PATHSEQUENCE}
+				,#{USERSEQUENCE}
+				,#{RESOURCEID}
+				,#{AREAID}
+				,#{PREVRESOURCEID}
+				,#{PREVAREAID}
+				,#{PLANTID}
+				,#{ENTERPRISEID}				
+				,#{VALIDSTATE}
+				,#{LASTTXNID}
+				,#{CREATOR}  
+		        ,SYSDATE  
+		        ,#{MODIFIER}  
+		        ,SYSDATE
+		)		            
+    </insert>    
+
+</mapper>

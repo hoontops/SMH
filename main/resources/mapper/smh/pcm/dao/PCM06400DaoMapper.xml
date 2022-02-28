@@ -1,0 +1,458 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM06400Dao">
+	<select id="selectUserList" parameterType="map" resultType="hashmap">
+	/* GetUserList 10001 */
+	--id : selectUserList
+		SELECT 
+				USER_ID
+			,	USER_NM
+			,	DEPT_NM
+			,	DEPT_CD
+			,	(SELECT MEANING FROM CMD_LOOKUP_VALUES WHERE LOOKUP_TYPE='HRPostCode'AND LOOKUP_CODE= CLPS_CD) AS DUTY
+			,	PLANTID
+			,	ENTERPRISEID
+		FROM 	CMD_USERS
+		WHERE 	1 = 1
+		<if test="USER_NM != null and USER_NM !='' "> 
+			AND (
+					EXISTS
+							(
+								SELECT	1
+								FROM	UFN_SELECTSTRINGTOSPLIT(#{USER_NM}, ',')	T
+								WHERE	USER_ID LIKE '%' || T.VALUE || '%'
+							)
+					OR 
+					EXISTS
+							(
+								SELECT	1
+								FROM	UFN_SELECTSTRINGTOSPLIT(#{USER_NM}, ',')	T
+								WHERE	USER_NM LIKE '%' || T.VALUE || '%'
+							)
+				)
+		</if>
+		<if test="PLANTID != null and PLANTID !='' ">
+			AND	PLANTID = #{PLANTID}
+		</if>
+		<if test="ENTERPRISE != null and ENTERPRISE !='' ">
+			AND	ENTERPRISEID = #{ENTERPRISEID}
+		</if>
+		<if test="AREAID != null and AREAID !='' ">
+			AND	AREAID = #{AREAID}
+		</if>
+		ORDER BY USER_NM ASC
+
+	</select>
+	<select id="selectReworkHistory" parameterType="map" resultType="hashmap">
+	/* SelectReworkHistory 10002 */
+	--id : selectReworkHistory
+		SELECT  X.CREATEDTIME                 -- 발행일시 
+		    ,   PRODUCTDEFID                -- 품목코드
+		    ,   PRODUCTDEFVERSION           -- REV
+		    ,   PRODUCTDEFNAME               -- 품목명
+		    ,   LOTID                       -- LOT NO
+		    ,   SUBPROCESSDEFID             -- 재작업번호
+		    ,   SUBPROCESSDEFVERSION        -- REV
+		    ,   PROCESSDEFNAME              -- 재작업명
+		    ,   WORKCOUNT                   -- 차수
+		    ,   MOVESTATE                   -- 재작업 상태 (MOVE진행중/END완료)
+		    ,   PCSQTY                      -- PCS
+		    ,   PANELQTY                    -- PNL
+		    ,   AREANAME                    -- 인계작업장
+		    ,   USERNAME                    -- 처리자
+		    ,   APPROVEDUSER                -- 승인자
+		    ,   APPROVEDDATE                -- 승인일자
+		    ,   COALESCE(SD.DICTIONARYNAME,X.WORKTYPE) WORKTYPE
+		    ,   FROMPROCESSSEGMENTNAME        
+		    ,   TOPROCESSSEGMENTNAME	  
+		    ,	''	AS chk                      
+		FROM
+		(
+			SELECT 
+					RET.CREATEDTIME 				-- 발행일시	
+				,	RET.PRODUCTDEFID 				-- 품목코드
+				,	RET.PRODUCTDEFVERSION 			-- REV
+				,	PD.PRODUCTDEFNAME 				-- 품목명
+				,	RET.LOTID 						-- LOT NO
+				,	RET.SUBPROCESSDEFID 			-- 재작업번호
+				,	RET.SUBPROCESSDEFVERSION 		-- REV
+				,	PSD.PROCESSDEFNAME 				-- 재작업명
+				,	RET.WORKCOUNT 					-- 차수
+				,	COALESCE(MSD.DICTIONARYNAME, RET.MOVESTATE) AS MOVESTATE 	-- 재작업 상태 (MOVE진행중/END완료)
+				,	RET.REWORKQTY AS PCSQTY										-- PCS
+				,	CEIL(RET.REWORKQTY / NULLIF(PD.PCSPNL, 0)) AS PANELQTY -- PNL
+				,	COALESCE(ARD.DICTIONARYNAME, AR.AREANAME) AS AREANAME		-- 인계작업장
+				,	COALESCE(CU.USER_NM, RET.CREATOR) AS USERNAME				-- 처리자
+				,	COALESCE(AU.USER_NM, RET.APPLOVEDUSER) AS APPROVEDUSER		-- 승인자
+				,	RET.APPLOVEDDATE AS APPROVEDDATE							-- 승인일자
+			    ,  CASE WHEN L.LOTCREATEDTYPE = 'Return' THEN 'Return'
+			            WHEN L.LOTCREATEDTYPE = 'Repair' THEN 'MRB'
+			            WHEN L.LOTCREATEDTYPE = 'Claim' THEN 'Claim'
+			            ELSE CASE WHEN L.ISREWORK = 'Y' OR L.WORKCOUNT > 0 THEN 'IsRework' 
+			            ELSE 'Normal'
+			            END END WORKTYPE	
+			    ,   COALESCE(SD1.DICTIONARYNAME,RET.FROMPROCESSSEGMENTID) FROMPROCESSSEGMENTNAME       
+			    ,   COALESCE(SD2.DICTIONARYNAME,RET.TOPROCESSSEGMENTID)   TOPROCESSSEGMENTNAME					            					
+			FROM 		PCM_REWORKRETURN		RET
+			INNER JOIN  PCM_LOT                   L  ON  RET.LOTID = L.LOTID
+			INNER JOIN 	BAS_PRODUCTDEFINITION	PD	ON	PD.PRODUCTDEFID = RET.PRODUCTDEFID
+													AND	PD.PRODUCTDEFVERSION = RET.PRODUCTDEFVERSION
+			INNER JOIN  BAS_PROCESSSEGMENT      PS1  ON  RET.FROMPROCESSSEGMENTID = PS1.PROCESSSEGMENTID
+			                                        AND RET.FROMPROCESSSEGMENTVERSION = PS1.PROCESSSEGMENTVERSION 
+			INNER JOIN  BAS_PROCESSSEGMENT      PS2  ON  RET.TOPROCESSSEGMENTID = PS2.PROCESSSEGMENTID
+			                                        AND RET.TOPROCESSSEGMENTVERSION = PS2.PROCESSSEGMENTVERSION					
+			LEFT  JOIN  CMD_DICTIONARY          SD1  ON  PS1.PROCESSSEGMENTNAME = SD1.DICTIONARYID
+			                                        AND SD1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			LEFT  JOIN  CMD_DICTIONARY          SD2  ON  PS2.PROCESSSEGMENTNAME = SD2.DICTIONARYID
+			                                        AND SD2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}																	
+			LEFT  JOIN	BAS_PROCESSDEFINITION	PSD	ON	PSD.PROCESSDEFID = RET.SUBPROCESSDEFID
+													AND	PSD.PROCESSDEFVERSION = RET.SUBPROCESSDEFVERSION
+			LEFT  JOIN	BAS_AREA				AR	ON	AR.AREAID = RET.FROMAREAID
+			LEFT OUTER JOIN CMD_DICTIONARY		MSD	ON	MSD.DICTIONARYID = CASE RET.MOVESTATE 
+																				WHEN 'Move' THEN 'APPROVWAIT' 
+																				WHEN 'End'	THEN 'APPROVCOMPLETE'
+																			END
+													AND	MSD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			LEFT OUTER JOIN CMD_DICTIONARY		ARD	ON	ARD.DICTIONARYID = AR.AREANAME
+													AND	ARD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			LEFT OUTER JOIN CMD_USERS			CU	ON	CU.USER_ID = RET.CREATOR
+			LEFT OUTER JOIN CMD_USERS			AU	ON	AU.USER_ID = RET.APPLOVEDUSER
+			WHERE 	1 = 1
+			--AND   	PSD.PROCESSDEFTYPE = 'Rework'
+			--조회일자
+			<if test="PERIOD_PERIODFR != null and PERIOD_PERIODFR !='' and PERIOD_PERIODTO != null and PERIOD_PERIODTO !=''">
+				AND     RET.CREATEDTIME >= TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYYMMDD') 
+				AND     RET.CREATEDTIME <![CDATA[<]]>  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYYMMDD')
+			</if> 
+			--작업장
+			<if test="AREANAME != null and AREANAME !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{AREAID}, ',')        LMP
+							WHERE   RET.FROMAREAID = LMP.VALUE
+						)
+			</if>
+			--품목코드
+			<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')      LMP
+							WHERE   RET.PRODUCTDEFID = LMP.VALUE
+						)
+			</if>
+			<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFVERSION}, ',')      LMP
+							WHERE   RET.PRODUCTDEFVERSION = LMP.VALUE
+						)
+			</if>
+			--품목명
+			<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFNAME}, ',')      LMP
+							WHERE   PD.PRODUCTDEFNAME LIKE '%' || LMP.VALUE || '%'
+						)
+			</if>
+			--LOTID
+			<if test="LOTID != null and LOTID !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',')      LMP
+							WHERE   RET.LOTID = LMP.VALUE
+						)
+			</if>
+			<if test="USER_NM != null and USER_NM !=''">
+				AND EXISTS
+						(
+							SELECT	1
+							FROM	UFN_SELECTSTRINGTOSPLIT(#{USER_ID}, ',')	LMP
+							WHERE 	RET.APPLOVEDUSER = LMP.VALUE
+						)
+			</if>
+			<if test='ISACCEPT =="Y"'>
+				AND RET.APPLOVEDDATE IS NOT NULL
+			</if>
+			<if test='ISACCEPT =="N"'>
+				AND RET.APPLOVEDDATE IS NULL
+			</if>
+			--SITE
+			<if test="PLANTID != null and PLANTID !=''">
+				-- AND     RET.PLANTID = {P_PLANTID}	-- TODO : 수정필요
+			</if>
+			
+			UNION ALL
+		    SELECT  WR.CREATEDTIME                 -- 발행일시 
+		        ,   WR.PRODUCTDEFID                -- 품목코드
+		        ,   WR.PRODUCTDEFVERSION           -- REV
+		        ,   PD.PRODUCTDEFNAME              -- 품목명
+		        ,   WR.LOTID                       -- LOT NO
+		        ,   WR.PROCESSDEFID                -- 재작업번호
+		        ,   WR.PROCESSDEFVERSION           -- REV
+		        ,   NULL                        AS PROCESSDEFNAME              -- 재작업명
+		        ,   WR.WORKCOUNT                   -- 차수
+		        ,   NULL                        AS MOVESTATE                   -- 재작업 상태 (MOVE진행중/END완료)
+		        ,   COALESCE(WR.RECEIVEPCSQTY, WR.WORKSTARTPCSQTY)            AS PCSQTY                      -- PCS
+		        ,   WR.RECEIVEPANELQTY          AS PANELQTY                    -- PNL
+		        ,   COALESCE(ARD.DICTIONARYNAME, AR.AREANAME) AS AREANAME       -- 인계작업장
+		        ,   COALESCE(CU.USER_NM, WR.CREATOR) AS USERNAME              -- 처리자
+		        ,   NULL                        AS APPROVEDUSER                -- 승인자
+		        ,   NULL                        AS APPROVEDDATE                -- 승인일자
+			    ,  CASE WHEN L.LOTCREATEDTYPE = 'Return' THEN 'Return'
+			            WHEN L.LOTCREATEDTYPE = 'Repair' THEN 'MRB'
+			            WHEN L.LOTCREATEDTYPE = 'Claim' THEN 'Claim'
+			            ELSE CASE WHEN L.ISREWORK = 'Y' OR L.WORKCOUNT > 0 THEN 'IsRework' 
+			            ELSE 'Normal'
+			            END END WORKTYPE         
+			    ,   NULL FROMPROCESSSEGMENTNAME        
+			    ,   NULL TOPROCESSSEGMENTNAME					                            
+		    FROM    PCM_LOTWORKRESULT            WR
+		    INNER JOIN  PCM_LOT                   L  ON  WR.LOTID = L.LOTID
+		    INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  WR.PRODUCTDEFID = PD.PRODUCTDEFID
+		                                            AND WR.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+		    -- 출하재검은 제외
+		    INNER JOIN BAS_PROCESSSEGMENT        SG  ON  WR.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+		                                            AND SG.PROCESSSEGMENTCLASSID NOT IN ('7030')
+		    LEFT  JOIN  BAS_PROCESSDEFINITION    PSD ON  PSD.PROCESSDEFID = WR.PROCESSDEFID
+		                                            AND PSD.PROCESSDEFVERSION = WR.PROCESSDEFVERSION
+		    LEFT  JOIN  BAS_AREA                 AR  ON  AR.AREAID = WR.AREAID
+		    LEFT OUTER JOIN CMD_DICTIONARY       ARD ON  ARD.DICTIONARYID = AR.AREANAME
+		                                            AND ARD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		    LEFT OUTER JOIN CMD_USERS            CU  ON  CU.USER_ID = WR.CREATOR
+		    WHERE   1=1
+		    --조회일자
+		    <if test="PERIOD_PERIODFR != null and PERIOD_PERIODFR !='' and PERIOD_PERIODTO != null and PERIOD_PERIODTO !=''">
+		        AND     WR.CREATEDTIME >= TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYYMMDD') 
+		        AND     WR.CREATEDTIME <![CDATA[<]]>  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYYMMDD')
+		    </if>
+		    AND     WR.ISREWORK = 'Y'
+		    AND		L.ISDEFECTED <![CDATA[<>]]> 'Y'
+		    AND     WR.WORKCOUNT > 0
+		    AND     SPLIT_PART(WR.PROCESSPATHSTACK,'.',2) IS NULL                
+		    
+		    --작업장
+		    <if test="AREANAME != null and AREANAME !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{AREAID}, ',')        LMP
+							WHERE   WR.AREAID = LMP.VALUE
+						)
+			</if>
+		    --품목코드
+			<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')      LMP
+							WHERE   WR.PRODUCTDEFID = LMP.VALUE
+						)
+			</if>
+			<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFVERSION}, ',')      LMP
+							WHERE   WR.PRODUCTDEFVERSION = LMP.VALUE
+						)
+			</if>
+		    --품목명
+			<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFNAME}, ',')      LMP
+							WHERE   PD.PRODUCTDEFNAME LIKE '%' || LMP.VALUE || '%'
+						)
+			</if>
+		    --LOTID
+			<if test="LOTID != null and LOTID !=''">
+				AND EXISTS
+						(
+							SELECT  1
+							FROM    UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',')      LMP
+							WHERE   WR.LOTID = LMP.VALUE
+						)
+			</if>
+		    --SITE
+		    <if test="PLANTID != null and PLANTID !=''">
+		        -- AND     WR.PLANTID = '$!{P_PLANTID}'    -- TODO : 수정필요
+		    </if>
+		) X
+		LEFT JOIN CMD_LOOKUP_VALUES	SC ON  X.WORKTYPE = SC.LOOKUP_CODE
+									  AND SC.LOOKUP_TYPE = 'LotWorkType'
+		LEFT JOIN CMD_DICTIONARY 	SD ON  SC.DICTIONARYID = SD.DICTIONARYID
+		                              AND SD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}    
+		WHERE 1=1  
+		<if test="WORKTYPE != null and WORKTYPE !=''">
+			AND X.WORKTYPE = #{WORKTYPE}
+		</if>                                              
+		ORDER BY X.LOTID
+
+	</select>
+	<select id="selectCommentByProcess" parameterType="map" resultType="hashmap">
+	/* SelectCommentByProcess 10021 */
+	--id : selectCommentByProcess
+		SELECT
+				PP.PROCESSPATHID
+			,	PP.USERSEQUENCE
+			,	PP.PROCESSSEGMENTID
+			,	COALESCE(PSN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+			,	PP.DESCRIPTION
+		FROM			BAS_PROCESSPATH		PP	
+		LEFT OUTER JOIN BAS_PROCESSSEGMENT	PS	ON	PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+												AND	PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+		LEFT OUTER JOIN CMD_DICTIONARY		PSN	ON	PS.PROCESSSEGMENTNAME = PSN.DICTIONARYID
+												AND	PSN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE	1 = 1
+		AND		PP.PROCESSDEFID = #{PROCESSDEFID}
+		AND		PP.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+		ORDER BY PATHSEQUENCE ASC
+
+	</select>
+	<select id="selectPcmReworkReturnInfo" parameterType="map" resultType="hashmap">
+	--id : selectPcmReworkReturnInfo
+		SELECT 
+				TOPROCESSSEGMENTVERSION
+				, REWORKQTY
+				, FROMPROCESSSEGMENTVERSION
+				, TOPROCESSSTATE
+				, LASTTXNTIME
+				, PRODUCTDEFID
+				, LASTTXNID
+				, SUBPROCESSDEFID
+				, DESCRIPTION
+				, CREATOR
+				, APPLOVEDDATE
+				, LOTID
+				, FROMPROCESSSEGMENTID
+				, VALIDSTATE
+				, FROMAREAID
+				, TOAREAID
+				, REWORKRESOURCE
+				, MOVESTATE
+				, FROMPROCESSSTATE
+				, MODIFIER
+				, PROCESSDEFVERSION
+				, REWORKPROCESSSEGMENTID
+				, LASTTXNCOMMENT
+				, APPLOVEDUSER
+				, REWORKAREAID
+				, SUBPROCESSDEFVERSION
+				, LASTTXNHISTKEY
+				, WORKCOUNT
+				, TOPROCESSSEGMENTID
+				, MODIFIEDTIME
+				, TORESOURCEID
+				, LASTTXNUSER
+				, CREATEDTIME
+				, PRODUCTDEFVERSION
+				, PROCESSDEFID
+				, FROMRESOURCEID
+				, REWORKPROCESSSEGMENTVERSION 
+		FROM PCM_REWORKRETURN WHERE LOTID = #{LOTID}
+	</select>
+	<insert id="insertPcmReworkreturnhistory" parameterType="map">
+	--id : insertPcmReworkreturnhistory
+		INSERT INTO PCM_REWORKRETURNHISTORY
+		(
+			TXNHISTKEY
+			,LOTID
+			,PRODUCTDEFID
+			,PRODUCTDEFVERSION
+			,PROCESSDEFID
+			,PROCESSDEFVERSION
+			,SUBPROCESSDEFID
+			,SUBPROCESSDEFVERSION
+			,FROMPROCESSSEGMENTID
+			,FROMPROCESSSEGMENTVERSION
+			,FROMPROCESSSTATE
+			,FROMAREAID
+			,FROMRESOURCEID
+			,REWORKPROCESSSEGMENTID
+			,REWORKPROCESSSEGMENTVERSION
+			,REWORKAREAID
+			,REWORKRESOURCE
+			,TOPROCESSSEGMENTID
+			,TOPROCESSSEGMENTVERSION
+			,TOPROCESSSTATE
+			,TORESOURCEID
+			,TOAREAID
+			,MOVESTATE
+			,WORKCOUNT
+			,APPLOVEDUSER
+			,APPLOVEDDATE
+			,REWORKQTY
+			,DESCRIPTION
+			,CREATOR
+			,CREATEDTIME
+			,MODIFIER
+			,MODIFIEDTIME
+			,TXNID
+			,TXNUSER
+			,TXNTIME
+			,TXNCOMMENT
+			,VALIDSTATE
+		) VALUES(
+			#{TXNHISTKEY}
+			,#{LOTID}
+			,#{PRODUCTDEFID}
+			,#{PRODUCTDEFVERSION}
+			,#{PROCESSDEFID}
+			,#{PROCESSDEFVERSION}
+			,#{SUBPROCESSDEFID}
+			,#{SUBPROCESSDEFVERSION}
+			,#{FROMPROCESSSEGMENTID}
+			,#{FROMPROCESSSEGMENTVERSION}
+			,#{FROMPROCESSSTATE}
+			,#{FROMAREAID}
+			,#{FROMRESOURCEID}
+			,#{REWORKPROCESSSEGMENTID}
+			,#{REWORKPROCESSSEGMENTVERSION}
+			,#{REWORKAREAID}
+			,#{REWORKRESOURCE}
+			,#{TOPROCESSSEGMENTID}
+			,#{TOPROCESSSEGMENTVERSION}
+			,#{TOPROCESSSTATE}
+			,#{TORESOURCEID}
+			,#{TOAREAID}
+			,#{MOVESTATE}
+			,#{WORKCOUNT}
+			,#{APPLOVEDUSER}
+			,#{APPLOVEDDATE}
+			,#{REWORKQTY}
+			,NULL
+			,#{MODIFIER}
+			,SYSDATE
+			,#{MODIFIER}
+			,SYSDATE
+			,#{TXNID}
+			,#{TXNUSER}
+			,SYSDATE
+			,NULL
+			,#{VALIDSTATE}
+		)
+	</insert> 
+	<update id="updatePcmReworkreturn"  parameterType="map">
+	--id : updatePcmReworkreturn
+		UPDATE PCM_REWORKRETURN 
+		SET 
+			APPLOVEDUSER = #{APPLOVEDUSER}
+			,APPLOVEDDATE = #{APPLOVEDDATE}
+			,MODIFIEDTIME = SYSDATE 
+			,MODIFIER = #{MODIFIER}
+			,LASTTXNHISTKEY = #{LASTTXNHISTKEY}
+			,LASTTXNID = #{LASTTXNID}
+			,LASTTXNUSER = #{LASTTXNUSER}
+			,LASTTXNTIME = SYSDATE
+		WHERE LOTID = #{LOTID}
+	</update>
+</mapper>

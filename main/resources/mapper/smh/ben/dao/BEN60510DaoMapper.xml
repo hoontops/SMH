@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+  
+<mapper namespace="smh.ben.dao.BEN60510Dao">
+    
+    <!-- 신협 수신내역 조회 -->
+	<select id="selectCreditList" parameterType="map" resultType="hashmap">
+		SELECT  DEF.PRODUCT_NAME                              AS PRODUCT_NAME        /* 상품명              */
+		       ,TO_CHAR(DEF.TRADE_START_DATE,'YYYY-MM-DD')    AS TRADE_START_DATE    /* 계약일              */
+		       ,TO_CHAR(DEF.TRADE_END_DATE,'YYYY-MM-DD')      AS TRADE_END_DATE      /* 계약 만기일         */
+		       ,DEF.TRADE_AMOUNT                              AS TRADE_AMOUNT        /* 계약금액            */
+		       ,DEF.BALANCE                                   AS BALANCE             /* 잔액                */
+		       ,TO_CHAR(DEF.LAST_TRADE_DATE,'YYYY-MM-DD')     AS LAST_TRADE_DATE     /* 최종거래일          */
+		       ,DEF.NAME                                      AS NAME                /* 성명                */
+		       ,DEF.EMPLOYEE_NUMBER
+		       ,DECODE(DEF.RELATIONSHIP,'1', '본인'
+		                               ,'2', '배우자'
+		                               ,'3', '자녀'
+		                               ,'4', '부모'
+		                               ,'')                   AS RELATIONSHIP_NAME   /* 관계명              */               
+		  FROM (SELECT HCD.HJSBEN_CREDITUNION_DATA_SEQ  /* PK 일련번호           */
+		              ,HCD.EMPLOYEE_NUMBER              /* 사원번호              */
+		              ,HCD.CREDIT_LOAN_SECTION          /* 여수신구분            */
+		              ,HCD.ACCOUNT_NUMBER               /* 계좌번호              */
+		              ,NVL((SELECT MEANING
+		                      FROM FND_LOOKUP_VALUES
+		                     WHERE LOOKUP_TYPE = 'HJS_BEN_CREDIT_UNION'
+		                       AND LOOKUP_CODE = HCD.PRODUCT_NAME
+		                   ), HCD.PRODUCT_NAME) AS PRODUCT_NAME  /*  PRODUCT_NAME 상품명   CHM-201325831 신협여수신 상품명   */
+		              ,HCD.TRADE_START_DATE             /* 계약일                */
+		              ,HCD.TRADE_AMOUNT                 /* 계약금액              */
+		              ,HCD.TRADE_END_DATE               /* 계약 만기일           */
+		              ,HCD.LAST_TRADE_DATE              /* 최종거래일            */
+		              ,HCD.LAST_INTEREST_REPAY_DATE     /* 마지막 이자상환일     */
+		              ,HCD.BALANCE                      /* 잔액                  */
+		              ,HCD.NAME                         /* 성명                  */
+		              ,HCD.RELATIONSHIP                 /* 관계                  */
+		              ,HCD.OBJECT_VERSION_NUMBER        /* OBJECT_VERSION_NUMBER */
+		          FROM HJSBEN_CREDITUNION_DATA  HCD
+		         WHERE 1=1
+		           AND HCD.CREDIT_LOAN_SECTION = '1'
+		       ) DEF
+		 WHERE 1=1
+		   AND DEF.EMPLOYEE_NUMBER = APPS.HJS_HR_COMMON_PKG.GET_EMPLOYEE_NUMBER(#{PERSON_ID})
+	</select>
+	
+    <!-- 신협 여신내역 조회 -->
+	<select id="selectUnionList" parameterType="map" resultType="hashmap">
+		SELECT  DEF.PRODUCT_NAME                                       AS PRODUCT_NAME                /* 상품명              */
+		       ,TO_CHAR(DEF.TRADE_START_DATE,'YYYY-MM-DD')             AS TRADE_START_DATE            /* 계약일              */
+		       ,TO_CHAR(DEF.TRADE_END_DATE,'YYYY-MM-DD')               AS TRADE_END_DATE              /* 계약 만기일         */
+		       ,DEF.TRADE_AMOUNT                                       AS TRADE_AMOUNT                /* 계약금액            */
+		       ,DEF.BALANCE                                            AS BALANCE                     /* 잔액                */
+		       ,TO_CHAR(DEF.LAST_TRADE_DATE,'YYYY-MM-DD')              AS LAST_TRADE_DATE             /* 최종거래일          */
+		       ,DEF.NAME                                               AS NAME                        /* 성명                */
+		       ,DECODE(DEF.RELATIONSHIP,'1','본인'
+		                               ,'2','배우자'
+		                               ,'3','자녀'
+		                               ,'4','부모'
+		                               ,'')                            AS RELATIONSHIP_NAME            /* 관계명              */
+		  FROM (SELECT  HJSBEN_CREDITUNION_DATA_SEQ  /* PK 일련번호         */
+		               ,EMPLOYEE_NUMBER              /* 사원번호            */
+		               ,CREDIT_LOAN_SECTION          /* 여수신구분          */
+		               ,ACCOUNT_NUMBER               /* 계좌번호            */
+		               ,NVL((SELECT MEANING
+		                       FROM FND_LOOKUP_VALUES
+		                      WHERE LOOKUP_TYPE = 'HJS_BEN_CREDIT_UNION'
+		                        AND LOOKUP_CODE = HCD.PRODUCT_NAME
+		                    ), HCD.PRODUCT_NAME) AS PRODUCT_NAME   /*  PRODUCT_NAME 상품명   CHM-201325831 신협여수신 상품명   */
+		               ,TRADE_START_DATE             /* 계약일                */
+		               ,TRADE_AMOUNT                 /* 계약금액              */
+		               ,TRADE_END_DATE               /* 계약 만기일           */
+		               ,LAST_TRADE_DATE              /* 최종거래일            */
+		               ,LAST_INTEREST_REPAY_DATE     /* 마지막 이자상환일     */
+		               ,BALANCE                      /* 잔액                  */
+		               ,NAME                         /* 성명                  */
+		               ,RELATIONSHIP                 /* 관계                  */
+		               ,OBJECT_VERSION_NUMBER        /* OBJECT_VERSION_NUMBER */
+		           FROM HJSBEN_CREDITUNION_DATA  HCD
+		          WHERE HCD.CREDIT_LOAN_SECTION  = '2'  /* 여신 */
+		       ) DEF
+		 WHERE 1=1
+		   AND DEF.EMPLOYEE_NUMBER = APPS.HJS_HR_COMMON_PKG.GET_EMPLOYEE_NUMBER(#{PERSON_ID})
+	</select>
+
+</mapper>

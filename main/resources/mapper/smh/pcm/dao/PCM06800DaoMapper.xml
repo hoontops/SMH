@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM06800Dao">
+
+   <select id="selectAreaResourceByLot" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM09600Dao.selectAreaResourceByLot */
+			SELECT AREAID
+					, RESOURCEID
+					, PROCESSSEGMENTID
+					, LOTID
+			 FROM PCM_LOT
+			WHERE LOTID = #{LOTID}			
+    </select>
+
+	<!--
+	프 로 그 램 명	: 공정 관리 > 생산실적 > 설비별 실적 현황
+	설		명	: 
+	작	성	자	: 이용국
+	작	성	일	: 2021-06-10
+	주요 변경 로그	:
+	-->
+    <select id="SelectPerformancestatusbyEquipment" parameterType="map" resultType="hashmap">
+				-- Id : SelectPerformancestatusbyEquipment
+				-- Version : 10001
+					SELECT  EQUIP.AREAID
+                            ,EQUIP.AREANAME
+                            ,EQUIP.EQUIPMENTID
+                            ,EQUIP.EQUIPMENTNAME
+                            ,EQUIP.TRACKINTIME
+                            ,EQUIP.TRACKOUTTIME
+                            ,EQUIP.LOTID
+                            ,EQUIP.PROCESSSEGMENTID
+                            ,EQUIP.PROCESSSEGMENTNAME                            
+                            ,EQUIP.PRODUCTDEFID
+                            ,EQUIP.PRODUCTDEFNAME
+                            ,EQUIP.LAYER
+                            ,FLOOR(EQUIP.LOTQTY / EQUIP.CNT) + DECODE(ROW_NUMBER, EQUIP.CNT, EQUIP.LOTQTY - FLOOR(EQUIP.LOTQTY / EQUIP.CNT) * EQUIP.CNT, 0) AS LOTQTY
+                            ,FLOOR(EQUIP.PNLQTY / EQUIP.CNT) + DECODE(ROW_NUMBER, EQUIP.CNT, EQUIP.PNLQTY - FLOOR(EQUIP.PNLQTY / EQUIP.CNT) * EQUIP.CNT, 0) AS PNLQTY
+                            ,EQUIP.M2
+                            ,EQUIP.WORKCOUNT 
+                            ,ROW_NUMBER
+                            ,WORKMINUTE
+                    FROM (
+					SELECT LWR.AREAID
+						, COALESCE(ARD.DICTIONARYNAME, AR.AREAID)				AS AREANAME				--작업처
+						, LE.EQUIPMENTID																--설비ID
+						, SEC.DICTIONARYNAME									AS EQUIPMENTNAME		--설비명
+						, TO_CHAR(LWR.WORKSTARTTIME,'YYYY-MM-DD HH24:MI:SS')	    AS TRACKINTIME															--시작시간
+						, TO_CHAR(LWR.WORKENDTIME,'YYYY-MM-DD HH24:MI:SS')       AS TRACKOUTTIME																--완료시간
+						, LWR.LOTID																		--LOTID
+						, LWR.PROCESSSEGMENTID															--공정코드
+						, PSD.DICTIONARYNAME	AS PROCESSSEGMENTNAME									--공정명
+						, LWR.PRODUCTDEFID																--품목ID
+						, PD.PRODUCTDEFNAME																--품목명
+						,	NVL(LCD.DICTIONARYNAME, PD.LAYER)				AS LAYER				--층수
+						, SUM(NVL(LWR.SENDPCSQTY,0))                                                    AS  LOTQTY			--수량
+						, SUM(NVL(LWR.SENDPANELQTY,0))                                                    AS PNLQTY				--PNL
+						,DECODE(NVL(SUM(PD.PCSMM),0), 0, 0, ROUND(SUM(NVL(NVL(LWR.SENDPCSQTY,0)  / PD.PCSMM,0)),2) ) 	AS M2				--M2
+						,ROUND(LWR.WORKENDLEADTIME/60,2)                                                                                   AS WORKMINUTE
+                        , LWR.WORKCOUNT
+                        , COUNT(LE.EQUIPMENTID) OVER(PARTITION BY LWR.AREAID,LWR.LOTID,LWR.PROCESSSEGMENTID )  AS CNT
+                        , ROW_NUMBER() OVER(PARTITION BY LWR.AREAID,LWR.LOTID,LWR.PROCESSSEGMENTID ORDER BY LWR.AREAID,LWR.LOTID,LWR.PROCESSSEGMENTID)  AS ROW_NUMBER
+					FROM PCM_LOTEQUIPMENT LE
+					INNER JOIN PCM_LOTWORKRESULT	 LWR  				ON 	LE.LOTID = LWR.LOTID
+																					AND 	LE.PROCESSSEGMENTID = LWR.PROCESSSEGMENTID
+																					AND 	LE.PROCESSSEGMENTVERSION = LWR.PROCESSSEGMENTVERSION
+																					AND LE.PROCESSSEGMENTID = LWR.PROCESSSEGMENTID
+					LEFT OUTER JOIN BAS_EQUIPMENT SE 				ON 	LE.EQUIPMENTID = SE.EQUIPMENTID
+					LEFT OUTER JOIN CMD_DICTIONARY SEC 				ON SEC.DICTIONARYID = SE.EQUIPMENTNAME 
+																					AND SEC.LANGUAGETYPE =  #{LANGUAGETYPE}
+					LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS		ON	PS.PROCESSSEGMENTID = LWR.PROCESSSEGMENTID
+					LEFT OUTER JOIN CMD_DICTIONARY			PSD	ON	PSD.DICTIONARYID = PS.PROCESSSEGMENTNAME
+																					AND	PSD.LANGUAGETYPE =  #{LANGUAGETYPE}
+					LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD		ON	PD.PRODUCTDEFID = LWR.PRODUCTDEFID
+																					AND PD.PRODUCTDEFVERSION = LWR.PRODUCTDEFVERSION
+					LEFT OUTER JOIN CMD_LOOKUP_VALUES		LC		ON	LC.LOOKUP_CODE = PD.LAYER
+																					AND	LC.LOOKUP_TYPE = 'UserLayer'
+					LEFT OUTER JOIN CMD_DICTIONARY			LCD	ON	LCD.DICTIONARYID = LC.DICTIONARYID
+																					AND	LCD.LANGUAGETYPE =  #{LANGUAGETYPE}
+					LEFT OUTER JOIN BAS_AREA 					AR		ON	AR.AREAID = LWR.AREAID
+					LEFT OUTER JOIN CMD_DICTIONARY			ARD	ON	ARD.DICTIONARYID = AR.AREANAME
+																					AND	ARD.LANGUAGETYPE =  #{LANGUAGETYPE}
+					WHERE 	1 = 1 
+	                <if test="ENTERPRISEID != null and ENTERPRISEID !=''"> 
+						AND	LWR.ENTERPRISEID = #{ENTERPRISEID}				-- 회사
+	                </if>
+	                <if test="PLANTID != null and PLANTID !=''"> 
+						AND	LWR.PLANTID = #{PLANTID}							-- 공장
+	                </if>
+	                <if test="PRODUCTIONTYPE  != null and PRODUCTIONTYPE !=''"> 
+						AND	PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}			-- 생산구분(양산/샘플)
+	                </if>
+	                <if test="OWNTYPE  != null and OWNTYPE !=''"> 
+							AND 	AR.OWNTYPE = #{OWNTYPE}							-- 내외작구분 : 외작
+	                </if>
+	                <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !=''"> 
+					AND		PD.PRODUCTDEFTYPE  = #{PRODUCTDEFTYPE}			-- 품목구분(제품/반제품)
+	                </if>
+	                <if test="AREAID != null and AREAID !=''"> 
+					-- 작업장
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	ufn_selectStringToSplit(#{AREAID}, ',')	MAP
+								WHERE 	LWR.AREAID = MAP.VALUE
+							)
+	                </if>
+	                <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+					-- 공정
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	ufn_selectStringToSplit(#{PROCESSSEGMENTID}, ',')	MAP
+								WHERE 	LWR.PROCESSSEGMENTID = MAP.VALUE
+							)
+	                </if>
+	                <if test="LOTID != null and LOTID !=''"> 
+	                 AND		LWR.LOTID = #{LOTID}
+	                </if>
+					AND LWR.SENDTIME  <![CDATA[>=]]>  TO_TIMESTAMP(#{PERIODFR} || '000000', 'YYYYMMDDHH24MISS')
+					AND LWR.SENDTIME  <![CDATA[<]]>   TO_TIMESTAMP(#{PERIODTO} || '235959', 'YYYYMMDDHH24MISS') 
+					AND	COALESCE(LWR.RESULTTYPE, 'NORMAL')	NOT IN ('SKIP')
+					AND	LWR.SENDPCSQTY <![CDATA[>]]> 0
+              GROUP BY 
+				 	LWR.AREAID
+                ,COALESCE(ARD.DICTIONARYNAME, AR.AREAID)
+                ,   LE.EQUIPMENTID    
+			    ,SEC.DICTIONARYNAME
+                , LWR.WORKSTARTTIME													--시작시간
+				, LWR.WORKENDTIME																--완료시간
+				, LWR.LOTID																		--LOTID
+				, LWR.PROCESSSEGMENTID															--공정코드
+                ,PSD.DICTIONARYNAME
+			    , LWR.PRODUCTDEFID																--품목ID
+                ,PD.PRODUCTDEFNAME
+                ,NVL(LCD.DICTIONARYNAME, PD.LAYER)
+						,LWR.WORKENDLEADTIME
+                        , LWR.WORKCOUNT
+	                ORDER BY	LE.EQUIPMENTID,LWR.LOTID, LWR.PROCESSSEGMENTID,LWR.WORKCOUNT
+                ) EQUIP    
+               ORDER BY	EQUIP.EQUIPMENTID ,EQUIP.TRACKINTIME ,EQUIP.LOTID	                
+   </select>
+   
+</mapper>

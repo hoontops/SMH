@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pay.dao.PAY50210Dao">
+
+	<select id="salaryList" parameterType="map" resultType="hashmap">
+	SELECT 
+            DEF.HJSPAY_RUN_RESULT_SEQ,
+            DEF.EFFECTIVE_DATE,
+            DEF.PAY_TYPE,
+            DEF.PAY_TYPE_NAME,
+            DEF.EARN_TOT,
+            DEF.DED_TOT,
+            DEF.DIFF_TOT,
+            DEF.PERSON_ID
+  FROM
+        (
+            SELECT   HJSPAY_RUN_RESULT_SEQ as HJSPAY_RUN_RESULT_SEQ   /* 급여실적결과 PK    */               
+                    ,TO_CHAR(EFFECTIVE_DATE,'yyyy/mm') as EFFECTIVE_DATE /* 지급월            */
+                    ,PAY_TYPE              as PAY_TYPE                /* Pay Type         */  
+                    ,(
+                        SELECT ffvt.DESCRIPTION
+                        FROM   fnd_flex_values ffv, 
+                               fnd_flex_value_sets ffvs, 
+                               fnd_flex_values_tl ffvt
+                        WHERE  ffv.flex_value_set_id = ffvs.flex_value_set_id
+                          AND  ffvt.flex_value_id = ffv.flex_value_id
+                          AND  ffv.enabled_flag = 'Y'
+                          AND  UPPER(ffvt.LANGUAGE) = UPPER( 'US' )
+                          AND  ffv.flex_value = hrr.PAY_TYPE
+                          AND FFVS.FLEX_VALUE_SET_NAME = 'HJS_HR_PAY_TYPE'
+                          AND ROWNUM = 1 ) AS PAY_TYPE_NAME /* Pay Type명 */
+                                        
+                    ,EARN_TOT              as EARN_TOT               /* 지급총액          */                   
+                    ,DED_TOT               as DED_TOT                /* 공제총액          */                   
+                    ,DIFF_TOT              as DIFF_TOT               /* 실지급액          */
+                    ,PERSON_ID             as PERSON_ID              /* person id       */
+            FROM    HJSPAY_RUN_RESULTS hrr
+            WHERE  effective_date  between   to_date(#{EFFECTIVE_YEAR}||'0101', 'YYYYMMDD') and to_date(#{EFFECTIVE_YEAR}||'1231', 'YYYYMMDD') 
+            /*  20081219 튜닝으로 로직 변경함. 변경전에는 like 사용 */
+              AND   person_id = #{PERSON_ID}
+              AND   hrr.DIFF_TOT > 0     /*2008.1.25 EARN_TOT에서 DIFF_TOT로 변경*/
+              AND   HRR.PAY_TYPE = NVL(#{PAY_TYPE}, HRR.PAY_TYPE)
+              AND PAYOUT_DATE <![CDATA[ <= ]]> (
+                                SELECT TO_DATE( SUBSTR(NVL(global_value,0),0,10), 'YYYY/MM/DD') AS GLOBAL_VALUE
+                                FROM  ff_globals_f
+                                WHERE GLOBAL_NAME = 'HJS_PAY_급여실적조회일'    
+                                  AND SYSDATE BETWEEN effective_start_date AND effective_end_date
+                                  AND ROWNUM <![CDATA[ <= ]]> 1    
+              )
+            ORDER BY EFFECTIVE_DATE DESC, PAY_TYPE DESC
+        ) DEF
+  WHERE 1=1
+          
+          
+	</select>
+	
+
+</mapper>

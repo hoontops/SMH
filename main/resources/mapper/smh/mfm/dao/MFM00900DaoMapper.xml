@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM00900Dao">
+	
+	<!--
+    프 로 그 램 명   : 생산관리 > 우선 순위 관리 > 우선순위 적용 기준 등록
+    설       명   : 디스패칭 아이템 조회
+    생   성   자   : 정승원
+    생   성   일   : 2019-08-19
+    수  정   이  력 : 
+    -->
+    <select id="selectDispatchingItemList" parameterType="map" resultType="hashmap">
+                --
+                -- Id : SelectDispatchingItemList
+                -- Version : 10001                 
+                SELECT  DI.DISPATCHINGITEM
+                    ,   DI.PRIOTY
+                    ,   DI.ENTERPRISEID
+                    ,   DI.PLANTID
+                    ,   DI.DESCRIPTION
+                    ,   U1.USER_NM             AS CREATOR
+                    ,   TO_CHAR(DI.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+                    ,   U2.USER_NM             AS MODIFIER
+                    ,   TO_CHAR(DI.MODIFIEDTIME,'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+                    ,   DI.VALIDSTATE
+                    ,	'0' AS CHK
+                    ,	'N' AS EDITYN
+                    ,	ROWNUM AS NO
+                FROM    BAS_DISPATCHINGITEM      DI
+                LEFT OUTER JOIN CMD_USERS         U1  ON  DI.CREATOR = U1.USER_ID
+                LEFT OUTER JOIN CMD_USERS         U2  ON  DI.MODIFIER = U2.USER_ID
+                WHERE   1 = 1
+                AND     DI.ENTERPRISEID = #{ENTERPRISEID}
+                AND     DI.PLANTID = #{PLANTID}
+                 
+                <if test="P_DISPATCHINGITEM != null and P_DISPATCHINGITEM !='' ">
+                    AND     DI.DISPATCHINGITEM = #{P_DISPATCHINGITEM}
+                </if>
+                 
+                ORDER BY DI.PRIOTY, DI.DISPATCHINGITEM ASC
+    </select>
+	
+	<!--
+	프 로 그 램 명	: 생산관리 > 우선 순위 관리 > 우선순위 적용 기준 등록
+	설		명	: 디스패칭 아이템의 우선순위 조회
+	생	성	자	: 정승원
+	생	성	일	: 2019-08-19
+	수  정   이  력	: 
+	-->
+	<select id="selectPriorityOfDispatchingItemList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectPriorityOfDispatchingItemList
+				-- Version : 10001				
+				SELECT	DIP.DISPATCHINGITEM
+					,	DIP.ITEMPRIOTY
+					,	NVL(DIP.FROMVALUE, 0)	AS FROMVALUE
+					,	NVL(DIP.TOVALUE, 0)	AS TOVALUE
+					,	DIP.DESCRIPTION
+					,	DIP.ENTERPRISEID
+					,	DIP.PLANTID
+					,	U1.USER_NM					AS CREATOR
+					,	TO_CHAR(DIP.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					,	U2.USER_NM					AS MODIFIER
+					,	TO_CHAR(DIP.MODIFIEDTIME,'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+					,	DIP.VALIDSTATE
+					,	'0' AS CHK
+					,	ROWNUM AS NO
+				FROM	BAS_DISPATCHINGITEMPRIOTY	DIP
+				LEFT OUTER JOIN CMD_USERS				U1	ON	DIP.CREATOR = U1.USER_ID
+				LEFT OUTER JOIN CMD_USERS				U2	ON	DIP.MODIFIER = U2.USER_ID
+				WHERE	1 = 1
+				AND		DIP.ENTERPRISEID = #{ENTERPRISEID}
+				AND		DIP.PLANTID = #{PLANTID}
+				AND		DIP.DISPATCHINGITEM = #{P_DISPATCHINGITEM}
+				
+				ORDER BY DIP.ITEMPRIOTY ASC
+	</select>	
+	
+	<select id="selectDispatchingItemData" parameterType="map" resultType="hashmap">
+		SELECT DISPATCHINGITEM
+		FROM    BAS_DISPATCHINGITEM      DI
+		WHERE DI.DISPATCHINGITEM = #{DISPATCHINGITEM}
+	</select>	
+	
+	<select id="selectDispatchingItemPriorityData" parameterType="map" resultType="hashmap">
+		SELECT DISPATCHINGITEM,
+				ITEMPRIOTY
+		FROM    BAS_DISPATCHINGITEMPRIOTY      DIP
+		WHERE DIP.DISPATCHINGITEM = #{DISPATCHINGITEM}
+		AND DIP.ITEMPRIOTY = #{ITEMPRIOTY}
+	</select>	
+	
+	
+	
+	<update id="insertDispatchingItemData" parameterType="map">
+		INSERT INTO BAS_DISPATCHINGITEM
+				(
+					DISPATCHINGITEM
+				,	PRIOTY
+				,	ENTERPRISEID
+				,	PLANTID
+				,	DESCRIPTION
+				
+				,	CREATOR
+				,	CREATEDTIME
+				,	MODIFIER
+				,	MODIFIEDTIME
+				,	LASTTXNHISTKEY
+				,	LASTTXNID
+				,	LASTTXNUSER
+				,	LASTTXNTIME
+				,	LASTTXNCOMMENT
+				,	VALIDSTATE
+				) VALUES (
+			
+					#{DISPATCHINGITEM}
+				,	#{ITEMPRIOTY}
+				,	#{ENTERPRISEID}
+				,	#{PLANTID}
+				,	#{DESCRIPTION}
+				
+				,	#{CREATOR}
+				,	SYSDATE
+				,	#{MODIFIER}
+				,	SYSDATE
+				,	#{LASTTXNHISTKEY}
+				,	#{LASTTXNID}
+				,	#{LASTTXNUSER}
+				,	SYSDATE
+				,	null
+				,	#{VALIDSTATE}
+				)
+	</update>
+	
+	<update id="updateDispatchingItemData" parameterType="map">
+		UPDATE BAS_DISPATCHINGITEM
+		SET  
+			PRIOTY = #{PRIOTY},
+			ENTERPRISEID = #{ENTERPRISEID},
+			PLANTID = #{PLANTID},
+			DESCRIPTION = #{DESCRIPTION},
+			
+			MODIFIER		= #{MODIFIER}, 
+			MODIFIEDTIME	= SYSDATE, 
+			LASTTXNHISTKEY	= #{LASTTXNHISTKEY}, 
+			LASTTXNID		= #{LASTTXNID}, 
+			LASTTXNUSER		= #{LASTTXNUSER}, 
+			LASTTXNTIME		= SYSDATE, 
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT},
+			VALIDSTATE			= #{VALIDSTATE}
+		WHERE DISPATCHINGITEM = #{DISPATCHINGITEM}
+	</update>
+	
+	<update id="deleteDispatchingItemData" parameterType="map">
+		DELETE FROM BAS_DISPATCHINGITEM
+		WHERE DISPATCHINGITEM = #{DISPATCHINGITEM}
+	</update>
+	
+	<update id="deleteDispatchingItemData2" parameterType="map">
+		DELETE FROM BAS_DISPATCHINGITEMPRIOTY
+		WHERE DISPATCHINGITEM = #{DISPATCHINGITEM}
+	</update>
+	
+	
+	
+	
+	<update id="insertDispatchingItemPriority" parameterType="map">
+		INSERT INTO BAS_DISPATCHINGITEMPRIOTY
+				(
+					DISPATCHINGITEM
+				,	ITEMPRIOTY
+				,	FROMVALUE
+				,	TOVALUE
+				,	ENTERPRISEID
+				,	PLANTID
+				,	DESCRIPTION
+					
+				,	CREATOR
+				,	CREATEDTIME
+				,	MODIFIER
+				,	MODIFIEDTIME
+				,	LASTTXNHISTKEY
+				,	LASTTXNID
+				,	LASTTXNUSER
+				,	LASTTXNTIME
+				,	LASTTXNCOMMENT
+				,	VALIDSTATE
+				) VALUES (
+			
+					#{DISPATCHINGITEM}
+				,	#{ITEMPRIOTY}
+				,	#{FROMVALUE}
+				,	#{TOVALUE}
+				,	#{ENTERPRISEID}
+				,	#{PLANTID}
+				,	#{DESCRIPTION}
+				
+				,	#{CREATOR}
+				,	SYSDATE
+				,	#{MODIFIER}
+				,	SYSDATE
+				,	#{LASTTXNHISTKEY}
+				,	#{LASTTXNID}
+				,	#{LASTTXNUSER}
+				,	SYSDATE
+				,	null
+				,	#{VALIDSTATE}
+				)
+	</update>
+	
+	<update id="updateDispatchingItemPriority" parameterType="map">
+		UPDATE BAS_DISPATCHINGITEMPRIOTY
+		SET  
+			FROMVALUE = #{FROMVALUE},
+			TOVALUE	= #{TOVALUE},
+			ENTERPRISEID = #{ENTERPRISEID},
+			PLANTID = #{PLANTID},
+			DESCRIPTION = #{DESCRIPTION},
+			
+			MODIFIER		= #{MODIFIER}, 
+			MODIFIEDTIME	= SYSDATE, 
+			LASTTXNHISTKEY	= #{LASTTXNHISTKEY}, 
+			LASTTXNID		= #{LASTTXNID}, 
+			LASTTXNUSER		= #{LASTTXNUSER}, 
+			LASTTXNTIME		= SYSDATE, 
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT},
+			VALIDSTATE			= #{VALIDSTATE}
+		WHERE DISPATCHINGITEM = #{DISPATCHINGITEM}
+		AND ITEMPRIOTY = #{ITEMPRIOTY}
+	</update>
+	
+	<update id="deleteDispatchingItemPriority" parameterType="map">
+		DELETE FROM BAS_DISPATCHINGITEMPRIOTY
+		WHERE DISPATCHINGITEM = #{DISPATCHINGITEM}
+		AND ITEMPRIOTY = #{ITEMPRIOTY}
+	</update>
+	
+	
+	<!--
+	프 로 그 램 명	: 생산관리 > 우선 순위 관리 > 우선순위 적용 기준 등록 > 시뮬레이션 조회
+	설		명	: 재공에 디스패칭 항목별 우선순위 적용
+	생	성	자	: 정승원
+	생	성	일	: 2019-08-21
+	수  정   이  력	: 
+	-->
+	<select id="selectLotListSetDispatchingItemSimulation" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectLotListSetDispatchingItem
+				-- Version : 10001				
+				WITH PRODUCT_SEQ AS
+				(
+					--품목 우선순위
+					SELECT	PD.PRIORITY
+						,	L.LOTID
+						,	'Product'				AS DISPATCHINGITEM
+						,	DI.PRIOTY				AS SEQ
+					FROM	PCM_LOT					L
+					INNER JOIN BAS_PRODUCTDEFINITION PD		ON	L.PRODUCTDEFID = PD.PRODUCTDEFID
+																			AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+					INNER JOIN BAS_DISPATCHINGITEM	DI		ON	DI.DISPATCHINGITEM = 'Product'
+					WHERE	1 = 1
+					
+				),	DUEDATE_SEQ AS
+				(
+					--잔여 납기일
+					SELECT	L.LOTID
+						,	L.DUEDATE
+						,	L.DUEDATE - SYSDATE	AS GAP
+						,	TO_DATE(TO_CHAR(L.DUEDATE,'YYYY-MM-DD'),'YYYY-MM-DD') - TO_DATE(TO_CHAR(SYSDATE,'YYYY-MM-DD'),'YYYY-MM-DD')	AS REMAINDAY
+						,	'DueDate'															AS DISPATCHINGITEM
+						,	DI.PRIOTY															AS SEQ
+					FROM	PCM_LOT					L
+					INNER JOIN BAS_DISPATCHINGITEM 	DI 	ON di.DISPATCHINGITEM = 'DueDate'
+					
+				), PATH_SEQ AS 
+				(
+						SELECT	L.LOTID
+							,	PP.PATHSEQUENCE
+							,	PP.PROCESSPATHID
+							,	PP.PROCESSDEFID
+							,	PP.PROCESSDEFVERSION
+						FROM	PCM_LOT					L
+						LEFT OUTER JOIN BAS_PROCESSPATH	PP	ON	L.PROCESSPATHSTACK = PP.PROCESSPATHID
+				), SEGMENT_SEQ AS
+				(	
+					SELECT	COUNT(*)					AS REMAINSEG
+						,	L.LOTID
+						,	'Segment'					AS DISPATCHINGITEM
+						,	MAX(DI.PRIOTY)				AS SEQ
+					FROM	PCM_LOT						L
+					INNER JOIN PATH_SEQ					PS	ON	L.LOTID = PS.LOTID
+					INNER JOIN BAS_PROCESSPATH			PP	ON	PS.PROCESSDEFID = PP.PROCESSDEFID
+															AND PS.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+															AND PS.PATHSEQUENCE <![CDATA[<]]> PP.PATHSEQUENCE
+					INNER JOIN BAS_DISPATCHINGITEM 		DI	ON	DI.DISPATCHINGITEM = 'Segment'
+					GROUP BY L.LOTID
+				)
+				SELECT	PRD.PRIORITY					AS PRODUCTPRIORITY
+					,	DUE.REMAINDAY					AS LEFTDATE
+					,	SEG.REMAINSEG					AS REMAINSEGMENT
+					,	D2.DICTIONARYNAME				AS TOPSEGMENTCLASSNAME
+					,	D1.DICTIONARYNAME				AS MIDDLESEGMENTCLASSNAME
+					,	D3.DICTIONARYNAME				AS AREANAME
+					,	L.PRODUCTDEFID
+					,	PD.PRODUCTDEFNAME
+					,	L.LOTID
+					,	D4.DICTIONARYNAME					AS PROCESSSEGMENTNAME
+					,	PP.USERSEQUENCE
+					,	L.UNIT								AS UOM
+					,	L.PANELQTY							AS PNL
+					,	L.QTY								AS PCS
+					,	ROUND(L.QTY / PD.PCSMM, 3)			AS MM
+				FROM 	PCM_LOT 							L
+				LEFT OUTER JOIN PRODUCT_SEQ 			PRD ON	L.LOTID = PRD.LOTID
+				LEFT OUTER JOIN DUEDATE_SEQ				DUE ON	L.LOTID = DUE.LOTID
+				LEFT OUTER JOIN SEGMENT_SEQ				SEG ON	L.LOTID = SEG.LOTID
+				LEFT OUTER JOIN BAS_PROCESSPATH			PP	ON 	L.PROCESSPATHSTACK = PP.PROCESSPATHID
+				LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD	ON	L.PRODUCTDEFID = PD.PRODUCTDEFID
+															AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS	ON	L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+															AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY			D4	ON	PS.PROCESSSEGMENTNAME = D4.DICTIONARYID
+															AND D4.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS	PSM	ON	PS.PROCESSSEGMENTCLASSID = PSM.PROCESSSEGMENTCLASSID
+															AND PSM.PROCESSSEGMENTCLASSTYPE = 'MiddleProcessSegmentClass'
+				LEFT OUTER JOIN CMD_DICTIONARY			D1	ON	PSM.PROCESSSEGMENTCLASSNAME = D1.DICTIONARYID
+															AND D1.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS	PST ON	PSM.PARENTPROCESSSEGMENTCLASSID = PST.PROCESSSEGMENTCLASSID
+															AND PST.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+				LEFT OUTER JOIN CMD_DICTIONARY			D2	ON	PST.PROCESSSEGMENTCLASSNAME = D2.DICTIONARYID
+															AND D2.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_AREA					AR	ON	L.AREAID = AR.AREAID
+															AND AR.AREATYPE = 'Area'
+				LEFT OUTER JOIN CMD_DICTIONARY			D3	ON	AR.AREANAME = D3.DICTIONARYID
+															AND D3.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE	1 = 1
+				    AND     SUBSTR(L.LOTID, LENGTH(L.LOTID)-2, 1) != 'A'
+				<if test="AREAID != null and AREAID !='' ">
+					AND		L.AREAID = #{AREAID}
+				</if>
+				<if test="LOTTYPE != null and LOTTYPE !='' ">
+					AND		L.LOTTYPE = #{LOTTYPE}
+				</if>
+				
+				--재공조회 화면과 일치 처리=2020-06-14
+                AND L.LOTSTATE IN ('InProduction', 'InTransit')	
+		  		AND L.ISDEFECTED = 'N'		  		
+		  		-- SITE 
+				AND L.PLANTID = #{PLANTID}
+		   	 	-- HOLD
+			    AND  L.ISHOLD = 'N'	
+		    	-- 품목타입
+				AND EXISTS (SELECT 1 FROM UFN_SELECTSTRINGTOSPLIT('Product', ',') PMP WHERE PD.PRODUCTDEFTYPE = PMP.VALUE)				
+				
+			ORDER BY PRD.PRIORITY
+	               , DUE.REMAINDAY DESC
+	               , SEG.REMAINSEG DESC	
+	</select>
+	
+</mapper>

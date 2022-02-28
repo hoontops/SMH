@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.apr.dao.APR10110Dao">
+<!-- 업적평가-->
+
+
+    <!-- 로그인 피평가자 개인정보-->
+    <select id="selectAppraisalUserInfo" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR10110Dao.selectAppraisalUserInfo */
+    SELECT PERSON_ID       AS PERSONID
+	      ,KOR_NAME        AS NAME
+	      ,EMPLOYEE_NUMBER AS EMPLOYEENUMBER
+	      ,ORG_NAME        AS DEPARTMENT
+	      ,GRADE_NAME      AS GRADE      
+	      ,JOB_NAME        AS JOB
+	      ,POSITION_NAME   AS POSITION
+	  FROM HJSHRA_PER_PEOPLE_V
+	 WHERE 1=1
+	   AND EMPLOYEE_NUMBER = #{EMPLOYEE_NUMBER}
+    </select>
+   
+	<!-- 업적평가 피평가자 -->
+	<select id="selectEvaluationList" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR10110Dao.selectEvaluationList */
+    SELECT HAMV.HJSPFM_APPRAISAL_MASTER_SEQ  -- SEQ
+	      ,HAMV.APPRAISAL_TYPE               -- 평가유형(A110: 업적평가)   
+	      ,HAMV.APPRAISAL_YEAR               -- 평가년도
+	      ,HAMV.APPRAISAL_SEQUENCE           -- 평가차수   
+	      ,TO_CHAR(HAMV.APPRAISAL_START_DATE, 'MM/DD') || ' ~ ' || TO_CHAR(HAMV.APPRAISAL_END_DATE, 'MM/DD')	AS APPRAISAL_DATE        -- 평가기간
+	      ,HAMV.PARTICIPANT_NAME_1 			-- 파트장		
+	      ,HAMV.APPRAISER_1ST_NAME           -- 1차평가자	
+	      ,HAMV.APPRAISER_2ND_NAME           -- 2차평가자	
+	      ,HAMV.ASSESSMENT_STATUS            -- 평가상태
+	      ,HAMV.ORGANIZATION_ID              -- 부서 ID   	
+	      ,NVL(HPOM.CORRECTION_CHECK, '')	AS DISAGREEMENT_REVISE   -- Revision
+	      ,'' as CHK
+	      ,HJSPFM_SM_APPRAISAL_PKG.GET_ASS_STATUS(HAMV.ASSESSMENT_STATUS) AS ASSESSMENT_STATUS_DESC
+	  FROM HJSPFM_APPRAISAL_MASTER_V HAMV
+	     , HJSPFM_PERSON_OBJECT_MASTER HPOM
+	 WHERE 1=1
+	   AND HAMV.HJSPFM_APPRAISAL_MASTER_SEQ = HPOM.HJSPFM_APPRAISAL_MASTER_SEQ(+)
+	   AND HAMV.EMPLOYEE_NUMBER = #{EMPLOYEE_NUMBER}   -- 로그인 사번
+	   AND HAMV.APPRAISAL_TYPE  = 'A110'     -- 업적평가 고정값
+	 ORDER BY HAMV.APPRAISAL_YEAR DESC
+    </select> 
+    <!-- 업적평가 목표등록 Master 조회 -->
+	<select id="selectEvaluationListMaster" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR10110Dao.selectEvaluationListMaster */
+    SELECT HJSPFM_APPRAISAL_MASTER_SEQ
+	      ,HJSPFM_PER_OBJECT_MASTER_SEQ
+	      ,CURRENT_JOB_DETAILS
+	      ,#{ASSESSMENT_STATUS}	AS ASSESSMENT_STATUS
+	      ,NVL(PARTICIPANT_ACHITED_COMMENT1, PARTICIPANT_OBJECT_COMMENT1) AS PARTICIPANT_ACHITED_COMMENT1
+	      ,APPRAISAL_1ST_OBJECT_CONTENT
+	      ,PARTICIPANT_ACHITED_RATING1
+	      ,CONV_MGR_NOTICE1
+	      ,CONV_MGR_NOTICE2
+	  FROM HJSPFM_PERSON_OBJECT_MASTER
+	 WHERE 1=1
+	   AND HJSPFM_APPRAISAL_MASTER_SEQ = #{HJSPFM_APPRAISAL_MASTER_SEQ} -- 평가마스터 Key
+    </select> 
+    <!-- 업적평가 목표등록 Detail 조회 -->
+	<select id="selectEvaluationListDetail" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR10110Dao.selectEvaluationListDetail */
+    SELECT HJSPFM_PER_OBJECT_DETAIL_SEQ
+	      ,KPI_ID
+	      ,OBJECTIVES
+	      ,KPI_NAME
+	      ,OBJECTIVE_DETAILS
+	      ,TARGET_STATUS_DATE
+	      ,WEIGHT
+	      ,'' AS CHK
+	      ,CASE WHEN KPI_ID IS NULL THEN '20' 
+	      		ELSE '10' END AS EVALUATION_TYPE
+	      ,#{ASSESSMENT_STATUS}	AS ASSESSMENT_STATUS
+	      ,HJSPFM_PER_OBJECT_MASTER_SEQ
+	      ,NULL	AS OBJECT_VERSION_NUMBER 
+	  FROM HJSPFM_PERSON_OBJECT_DETAIL
+	 WHERE 1=1
+	   AND HJSPFM_PER_OBJECT_MASTER_SEQ = #{HJSPFM_PER_OBJECT_MASTER_SEQ} -- 업적평가 목표등록 Master Key
+    </select> 
+    <!-- KPI팝업 조회 -->
+	<select id="selectKpiList" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR10110Dao.selectKpiList */
+    SELECT MEANING,               -- Perspectiv
+	       ORG_KR_NAME,
+	       STRATEGIC_OBJECTIVES,  -- Objective
+	       KPI,                   -- KPI   
+	       TARGET,                -- Target   
+	       OBJECT_VERSION_NUMBER,
+	       KPI_ID,                -- KPI ID   
+	       TARGET_DATE,
+	       WEIGHT,                -- Weight   
+	       LAST_UPDATE_DATE,
+	       STRATEGIC_OBJECTIVES_ID,
+	       PERSPECTIVES,
+	       APPRAISAL_YEAR,
+	       APPRAISAL_SEQUENCE,
+	       ORG_NAME,
+	       ORGANIZATION_ID,
+	       PERSPECTIVE_ID         -- Perspective ID
+	  FROM HJSPFM_WEB_ORGANIZATION_KPI_V
+	 WHERE (APPRAISAL_YEAR = #{APPRAISAL_YEAR})  -- 평가년도
+	   and (APPRAISAL_SEQUENCE = #{APPRAISAL_SEQUENCE}) -- 평가차수
+	   and (ORGANIZATION_ID = #{ORGANIZATION_ID})   -- 피평가자 부서 ID
+	 order by ORG_NAME, KPI_ID
+    </select>    
+    <!-- 업적평가-목표등록(Master) SEQ조회 -->
+    <select id="selectAprMasterSeq" parameterType="map" resultType="hashmap">
+		SELECT HJSPFM_PERSON_OBJECT_MAST_SEQ.NEXTVAL FROM DUAL
+	</select>
+	<!-- 업적평가-목표등록(Master) 등록 insert -->
+	<insert id="insertAprMaster" parameterType="map">
+	/* smh.apr.dao.APR10110Dao.insertAprMaster */
+		INSERT INTO HJSPFM_PERSON_OBJECT_MASTER( 
+	           HJSPFM_PER_OBJECT_MASTER_SEQ  
+	          ,HJSPFM_APPRAISAL_MASTER_SEQ  
+	          ,APPRAISAL_STATUS  
+	          ,CURRENT_JOB_DETAILS           
+	          ,CREATED_BY
+	          ,CREATION_DATE  
+	          ,LAST_UPDATED_BY  
+	          ,LAST_UPDATE_DATE  
+	          ,LAST_UPDATE_LOGIN
+	          ,OBJECT_VERSION_NUMBER) 
+	      VALUES( 
+	           #{HJSPFM_PER_OBJECT_MASTER_SEQ}  
+	          ,#{HJSPFM_APPRAISAL_MASTER_SEQ}  
+	          ,#{APPRAISAL_STATUS}
+	          ,#{CURRENT_JOB_DETAILS}          
+	          ,#{CREATOR}
+	          ,SYSDATE
+	          ,#{MODIFIER}
+	          ,SYSDATE             
+	          ,#{MODIFIER}            
+	          ,1)
+	</insert>
+	<!-- 업적평가-목표등록(Master) 수정 update -->
+	<update id="updateAprMaster" parameterType="map" >
+		/* smh.apr.dao.APR10110Dao.updateAprMaster */
+		UPDATE HJSPFM_PERSON_OBJECT_MASTER 
+	      SET 
+	           HJSPFM_APPRAISAL_MASTER_SEQ = #{HJSPFM_APPRAISAL_MASTER_SEQ}     
+	          ,APPRAISAL_STATUS = #{APPRAISAL_STATUS}     
+	          ,CURRENT_JOB_DETAILS = #{CURRENT_JOB_DETAILS}                
+	          ,LAST_UPDATED_BY = #{MODIFIER}     
+	          ,LAST_UPDATE_DATE = SYSDATE 
+	     WHERE HJSPFM_PER_OBJECT_MASTER_SEQ = #{HJSPFM_PER_OBJECT_MASTER_SEQ}
+	</update>
+    <!-- 업적평가-목표등록(Detail) SEQ조회 -->
+    <select id="selectAprDetailSeq" parameterType="map" resultType="hashmap">
+		SELECT HJSPFM_PER_OBJECT_DETAIL_SEQ.NEXTVAL FROM DUAL
+	</select>
+    <!-- 업적평가-목표등록(Detail) 등록 insert -->
+	<insert id="insertAprDetail" parameterType="map">
+	/* smh.apr.dao.APR10110Dao.insertAprDetail */
+		INSERT INTO HJSPFM_PERSON_OBJECT_DETAIL( 
+	           HJSPFM_PER_OBJECT_DETAIL_SEQ  
+	          ,HJSPFM_PER_OBJECT_MASTER_SEQ  
+	          ,KPI_ID  
+	          ,OBJECTIVES
+	          ,KPI_NAME
+	          ,OBJECTIVE_DETAILS
+	          ,TARGET_STATUS_DATE
+	          ,WEIGHT
+	          ,CREATED_BY
+	          ,CREATION_DATE  
+	          ,LAST_UPDATED_BY  
+	          ,LAST_UPDATE_DATE  
+	          ,LAST_UPDATE_LOGIN
+	          ,OBJECT_VERSION_NUMBER) 
+	      VALUES( 
+	           #{HJSPFM_PER_OBJECT_DETAIL_SEQ}
+	          ,#{HJSPFM_PER_OBJECT_MASTER_SEQ}  
+	          ,#{KPI_ID}
+	          ,#{OBJECTIVES}
+	          ,#{KPI_NAME}
+	          ,#{OBJECTIVE_DETAILS}
+	          ,#{TARGET_STATUS_DATE}
+	          ,#{WEIGHT}
+	          ,#{PERSONID}
+	          ,SYSDATE
+	          ,#{PERSONID}
+	          ,SYSDATE             
+	          ,#{PERSONID}            
+	          ,1)
+	</insert>
+	<!-- 업적평가-목표등록(Detail) 수정 update -->
+	<update id="updateAprDetail" parameterType="map" >
+		/* smh.apr.dao.APR10110Dao.updateAprDetail */
+		UPDATE HJSPFM_PERSON_OBJECT_DETAIL 
+	      SET 
+	           HJSPFM_PER_OBJECT_MASTER_SEQ = #{HJSPFM_PER_OBJECT_MASTER_SEQ}     
+	          ,KPI_ID = #{KPI_ID}     
+	          ,OBJECTIVES = #{OBJECTIVES}
+	          ,KPI_NAME = #{KPI_NAME}
+	          ,OBJECTIVE_DETAILS = #{OBJECTIVE_DETAILS}
+	          ,TARGET_STATUS_DATE = #{TARGET_STATUS_DATE}
+	          ,WEIGHT = #{WEIGHT}        
+	          ,LAST_UPDATED_BY = #{PERSONID}     
+	          ,LAST_UPDATE_DATE = SYSDATE 
+	     WHERE HJSPFM_PER_OBJECT_DETAIL_SEQ = #{HJSPFM_PER_OBJECT_DETAIL_SEQ}
+	</update>
+	<!-- 업적평가-목표등록(Detail) 삭제 delete -->
+    <delete id="deleteAprDetail" parameterType="map" >
+    	/* smh.apr.dao.APR10110Dao.deleteAprDetail */
+    	DELETE  FROM HJSPFM_PERSON_OBJECT_DETAIL 
+      	WHERE HJSPFM_PER_OBJECT_DETAIL_SEQ = #{HJSPFM_PER_OBJECT_DETAIL_SEQ} 
+	</delete>
+	<!-- 업적평가-목표등록(Master) SEQ조회 -->
+    <select id="selectCheckAppraisalPeriod" parameterType="map" resultType="hashmap">
+		SELECT HJSPFM_COMMON_PKG.CHECK_APPRAISAL_PERIOD
+                     (
+                        #{APPRAISAL_TYPE}
+                     ,  #{APPRAISAL_YEAR}
+                     ,  #{APPRAISAL_SEQ}
+                     ,  #{ASSESSMENT_STATUS}
+                     ,  TRUNC(SYSDATE)
+                     ) AS CHECK_RESULT FROM dual
+                     
+	</select>
+	<!-- 업적평가-목표등록(AppraisalMaster) 수정 update -->
+	<update id="updateAppraisalMaster" parameterType="map" >
+		/* smh.apr.dao.APR10110Dao.updateAppraisalMaster */
+		UPDATE HJSPFM_APPRAISAL_MASTER 
+		   SET 
+		      ASSESSMENT_STATUS = #{ASSESSMENT_STATUS}                
+		      ,LAST_UPDATED_BY = #{PERSONID}     
+		      ,LAST_UPDATE_DATE = SYSDATE 
+              ,OBJECT_VERSION_NUMBER = (
+      							SELECT OBJECT_VERSION_NUMBER + 1
+      							FROM HJSPFM_PERSON_OBJECT_MASTER
+      							WHERE HJSPFM_APPRAISAL_MASTER_SEQ = #{HJSPFM_APPRAISAL_MASTER_SEQ}
+      							)
+		WHERE HJSPFM_APPRAISAL_MASTER_SEQ = #{HJSPFM_APPRAISAL_MASTER_SEQ}
+	</update>
+	<!-- 업적평가-목표등록(PersonObjectMaster) 수정 update -->
+	<update id="updatePersonObjectMaster" parameterType="map" >
+		/* smh.apr.dao.APR10110Dao.updatePersonObjectMaster */
+		UPDATE HJSPFM_PERSON_OBJECT_MASTER 
+		   SET 
+		   	   APPRAISAL_STATUS = #{APPRAISAL_STATUS}
+		      ,CORRECTION_CHECK = #{CORRECTION_CHECK}                
+		      ,LAST_UPDATED_BY = #{PERSONID}     
+		      ,LAST_UPDATE_DATE = SYSDATE 
+		      ,OBJECT_VERSION_NUMBER = (
+		      							SELECT OBJECT_VERSION_NUMBER + 1 
+		      							FROM HJSPFM_PERSON_OBJECT_MASTER 
+		      							WHERE HJSPFM_PER_OBJECT_MASTER_SEQ = #{HJSPFM_PER_OBJECT_MASTER_SEQ}
+		      							)
+		WHERE HJSPFM_PER_OBJECT_MASTER_SEQ = #{HJSPFM_PER_OBJECT_MASTER_SEQ}
+	</update>
+</mapper>

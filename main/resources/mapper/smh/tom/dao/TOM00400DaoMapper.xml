@@ -1,0 +1,783 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.tom.dao.TOM00400Dao">
+<!-- 치공구 수정 출고 -->    
+
+	<!-- 상단 Grid -->
+	<select id="selectNewSendToolListByToolList" parameterType="map" resultType="hashmap">
+		--
+        -- GetNewSendToolListByTool
+        -- Version:10001
+            SELECT
+            		   TRT.TOOLMAKETYPE              	AS TOOLMAKETYPE
+             	 	,   DCM.DICTIONARYNAME           AS TOOLMAKETYPENAME
+             	 	--######################################################################
+                    , 	CASE WHEN (
+		                                SELECT  COUNT(1) 
+		                                FROM    TOM_TOOLREQUESTDETAILLOT LOT         
+		                                WHERE   LOT.REQUESTDATE     = TRT.REQUESTDATE
+		                                AND     LOT.REQUESTSEQUENCE = TRT.REQUESTSEQUENCE
+		                                AND     LOT.SENDDATE        IS NOT NULL
+		                                AND     LOT.SENDSEQUENCE    IS NOT NULL
+			                            ) = (SELECT  SUM(QTY) 
+			                                 FROM    TOM_TOOLREQUESTDETAIL TRD         
+			                                 WHERE   TRD.REQUESTDATE     = TRT.REQUESTDATE
+			                                 AND     TRD.REQUESTSEQUENCE = TRT.REQUESTSEQUENCE	                        			 
+			                        	     ) 
+	                       	  THEN (
+		                            SELECT  SDC.DICTIONARYNAME 
+		                            FROM    CMD_LOOKUP_VALUES         SCD 
+		                            JOIN    CMD_DICTIONARY   SDC ON  SCD.DICTIONARYID = SDC.DICTIONARYID
+		                                                        AND SDC.LANGUAGETYPE = #{LANGUAGETYPE}
+		                                                        AND  SDC.USE_YN                = 'Y'
+		                            WHERE   SCD.LOOKUP_TYPE = 'OutboundYN'
+		                            AND     LOOKUP_CODE     = 'Y'
+	                                )
+	                           --========================================================     
+	                          WHEN (
+		                                SELECT  COUNT(1) 
+		                                FROM    TOM_TOOLREQUESTDETAILLOT LOT         
+		                                WHERE   LOT.REQUESTDATE     = TRT.REQUESTDATE
+		                                AND     LOT.REQUESTSEQUENCE = TRT.REQUESTSEQUENCE
+		                                AND     LOT.SENDDATE        IS NULL
+		                                AND     LOT.SENDSEQUENCE    IS NULL
+			                            ) = (SELECT  SUM(QTY) 
+			                                 FROM    TOM_TOOLREQUESTDETAIL TRD         
+			                                 WHERE   TRD.REQUESTDATE     = TRT.REQUESTDATE
+			                                 AND     TRD.REQUESTSEQUENCE = TRT.REQUESTSEQUENCE	                        			 
+			                        	     ) 
+	                       	  THEN (
+		                            SELECT  SDC.DICTIONARYNAME 
+		                            FROM    CMD_LOOKUP_VALUES         SCD 
+		                            JOIN    CMD_DICTIONARY   SDC ON  SCD.DICTIONARYID = SDC.DICTIONARYID
+		                                                        AND SDC.LANGUAGETYPE = #{LANGUAGETYPE}
+		                                                        AND  SDC.USE_YN                = 'Y'
+		                            WHERE   SCD.LOOKUP_TYPE = 'OutboundYN'
+		                            AND     LOOKUP_CODE     = 'N'
+	                                )
+	                          --========================================================
+	                          ELSE  (
+	                                SELECT  SDC.DICTIONARYNAME 
+	                                FROM    CMD_LOOKUP_VALUES         SCD 
+	                                JOIN    CMD_DICTIONARY   SDC ON  SCD.DICTIONARYID = SDC.DICTIONARYID
+	                                                            AND SDC.LANGUAGETYPE = #{LANGUAGETYPE}
+	                                                            AND  SDC.USE_YN                = 'Y'
+	                                WHERE   SCD.LOOKUP_TYPE = 'OutboundYN'
+	                                AND     LOOKUP_CODE     = 'S'
+	                        		)
+                    END                         AS SENDSTATUS           		--출고상태  의뢰수량과 출고수량이 같은지 검사
+                --######################################################################
+                ,   TO_CHAR(TRT.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE 		--의뢰일
+                ,   TO_CHAR(TRT.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS') AS REQUESTDATE2 		--의뢰일2
+                ,   TRT.REQUESTSEQUENCE         AS REQUESTSEQUENCE      		--의뢰순번
+                ,   TRT.TOOLMAKETYPE            AS TOOLMAKETYPEID       		--제작구분아이디
+                ,   DC1.DICTIONARYNAME          AS TOOLMAKETYPE         		--제작구분
+                ,   PDF.PRODUCTDEFID            AS PRODUCTDEFID         		--품목코드
+                ,   PDF.PRODUCTDEFVERSION       AS PRODUCTDEFVERSION    		--품목 REV
+                ,   PDF.PRODUCTDEFNAME          AS PRODUCTDEFNAME       		--품목명
+                ,   NVL((SELECT SUM(QTY)
+                         FROM TOM_TOOLREQUESTDETAIL TRD
+                         WHERE TRD.REQUESTDATE = TRT.REQUESTDATE
+                         AND TRD.REQUESTSEQUENCE = TRT.REQUESTSEQUENCE)
+                        ,0)       				AS REQUESTQTY           		--의뢰수량
+                ,   NVL((
+                        SELECT  COUNT(1) 
+                        FROM    TOM_TOOLREQUESTDETAILLOT LOT         
+                        WHERE   TRT.REQUESTDATE     = LOT.REQUESTDATE
+                        AND     TRT.REQUESTSEQUENCE = LOT.REQUESTSEQUENCE
+                        AND     LOT.SENDDATE        IS NOT NULL
+                        AND     LOT.SENDSEQUENCE    IS NOT NULL
+                        ),0)                    AS SENDQTY              		--출고수량
+                ,   TO_CHAR(TRT.DELIVERYDATE,'YYYY-MM-DD') AS DELIVERYDATE 		--납기일자
+                ,   TRT.REQUESTUSER             AS REQUESTUSERID        		--의뢰자아이디
+                ,   USR.USER_NM                 AS REQUESTUSER          		--의뢰자
+                ,   TRT.REQUESTDEPARTMENT       AS REQUESTDEPARTMENT    		--의뢰부서
+                ,   TRT.REQUESTCOMMENT          AS REQUESTCOMMENT       		--의뢰사유
+                ,   TRT.DESCRIPTION             AS DESCRIPTION          		--설명
+            FROM    TOM_TOOLREQUEST              TRT
+            INNER JOIN BAS_PRODUCTDEFINITION     PDF ON TRT.PRODUCTDEFID        = PDF.PRODUCTDEFID
+                                                    AND  TRT.PRODUCTDEFVERSION  = PDF.PRODUCTDEFVERSION
+            INNER JOIN CMD_LOOKUP_VALUES         CD1 ON TRT.TOOLMAKETYPE        = CD1.LOOKUP_CODE
+                                                    AND  CD1.LOOKUP_TYPE        = 'ToolMakeType'
+            INNER JOIN CMD_DICTIONARY            DC1 ON CD1.DICTIONARYID        = DC1.DICTIONARYID
+                                                    AND  DC1.LANGUAGETYPE       = #{LANGUAGETYPE}
+                                                    AND  DC1.USE_YN                = 'Y'
+			LEFT OUTER JOIN CMD_LOOKUP_VALUES        CDM  ON TRT.TOOLMAKETYPE    			= CDM.LOOKUP_CODE
+                                                       AND  CDM.LOOKUP_TYPE         	= 'ToolMakeType'
+          	LEFT OUTER JOIN CMD_DICTIONARY           DCM  ON CDM.DICTIONARYID        		= DCM.DICTIONARYID                                                       
+                                                       					AND  DCM.LANGUAGETYPE        	= #{LANGUAGETYPE}
+                                                       					AND  DCM.USE_YN          		= 'Y'                                                    
+            LEFT OUTER JOIN CMD_USERS            USR ON TRT.REQUESTUSER         = USR.USER_ID 
+            WHERE   1=1
+            AND 	TRT.VALIDSTATE          = 'Valid'
+            AND     TRT.TOOLPROGRESSSTATUS  IN ('DetailRegist', 'Outbound')
+            AND     TRT.TOOLMAKETYPE        IN ('Modify', 'Repair')	--의뢰를 통한 수정/수리 출고 처리            
+            <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+                AND     TRT.ENTERPRISEID        = #{ENTERPRISEID}
+            </if>
+            <if test="P_PLANTID != null and P_PLANTID !='' ">
+                AND     TRT.PLANTID             = #{P_PLANTID}
+            </if>
+            <if test="P_REQUESTDATE_PERIODFR != null and P_REQUESTDATE_PERIODFR !='' ">
+                AND     TRT.REQUESTDATE         <![CDATA[>=]]> TO_DATE(REPLACE(#{P_REQUESTDATE_PERIODFR},'-',''), 'YYYYMMDD')
+            </if>
+            <if test="P_REQUESTDATE_PERIODTO != null and P_REQUESTDATE_PERIODTO !='' ">
+                AND     TRT.REQUESTDATE         <![CDATA[<=]]> TO_DATE(REPLACE(#{P_REQUESTDATE_PERIODTO},'-',''), 'YYYYMMDD')
+            </if>
+            <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+                AND     PDF.PRODUCTDEFID        = #{PRODUCTDEFID}
+            </if>
+            
+            <if test="VENDORID != null and VENDORID !='' ">
+                AND     EXISTS (
+                                SELECT 1
+                                FROM TOM_TOOLREQUESTDETAIL SD
+                                WHERE   TRT.REQUESTDATE         = SD.REQUESTDATE
+                                AND     TRT.REQUESTSEQUENCE     = SD.REQUESTSEQUENCE
+                                AND     VENDORID                = #{VENDORID}
+                        )
+            </if>
+            
+            <!-- TOOL ID는 조회조건에 없슴 :: 조건참여 안함 -->
+            <if test="DURABLEDEFID != null and DURABLEDEFID !='' ">
+                AND     EXISTS (
+                                SELECT 1
+                                FROM TOM_TOOLREQUESTDETAIL SD
+                                WHERE   TRT.REQUESTDATE         = SD.REQUESTDATE
+                                AND     TRT.REQUESTSEQUENCE     = SD.REQUESTSEQUENCE
+                                AND     UPPER(SD.DURABLEDEFID) LIKE '%' || UPPER(#{DURABLEDEFID}) || '%'
+                        )
+            </if>
+            
+            <if test="TOOLMAKETYPE != null and TOOLMAKETYPE !='' ">
+                AND     TRT.TOOLMAKETYPE           = #{TOOLMAKETYPE}
+            </if>
+            
+            --TRT.REQUESTQTY MODIFY
+            <if test="SENDSTATUS eq 'Y'.toString() ">
+                AND     (SELECT COUNT(*)
+                           FROM TOM_TOOLREQUESTDETAIL SD
+                           WHERE SD.REQUESTDATE = TRT.REQUESTDATE 
+                           AND SD.REQUESTSEQUENCE = TRT.REQUESTSEQUENCE
+                           ) = (
+                                SELECT  COUNT(1) 
+                                FROM    TOM_TOOLREQUESTDETAILLOT LOT         
+                                WHERE   TRT.REQUESTDATE     = LOT.REQUESTDATE
+                                AND     TRT.REQUESTSEQUENCE = LOT.REQUESTSEQUENCE
+                                AND     LOT.SENDDATE        IS NOT NULL
+                                AND     LOT.SENDSEQUENCE    IS NOT NULL
+                        )
+            </if>
+            
+            --TRT.REQUESTQTY MODIFY
+            <if test="SENDSTATUS eq 'N'.toString() ">
+                AND     (SELECT COUNT(*)
+                           FROM TOM_TOOLREQUESTDETAIL SD
+                           WHERE SD.REQUESTDATE = TRT.REQUESTDATE 
+                           AND SD.REQUESTSEQUENCE = TRT.REQUESTSEQUENCE
+                           ) > (
+                                SELECT  COUNT(1) 
+                                FROM    TOM_TOOLREQUESTDETAILLOT LOT         
+                                WHERE   TRT.REQUESTDATE     = LOT.REQUESTDATE
+                                AND     TRT.REQUESTSEQUENCE = LOT.REQUESTSEQUENCE
+                                AND     LOT.SENDDATE        IS NOT NULL
+                                AND     LOT.SENDSEQUENCE    IS NOT NULL
+                        )
+            </if>
+            
+            <if test="P_TOOLNO != null and P_TOOLNO !='' ">
+                AND       EXISTS   ( SELECT 1
+                              FROM    TOM_TOOLREQUESTDETAILLOT RDL
+                              WHERE   RDL.REQUESTDATE       = TRT.REQUESTDATE
+                              AND     RDL.REQUESTSEQUENCE   = TRT.REQUESTSEQUENCE
+                              AND     UPPER(RDL.DURABLELOTID) LIKE '%' || UPPER(#{P_TOOLNO}) || '%'
+                            )
+            </if>
+            <if test="AREAID != null and AREAID !='' ">
+                AND       EXISTS   ( SELECT 1
+		                              FROM    TOM_TOOLREQUESTDETAIL RDT
+		                              WHERE   RDT.REQUESTDATE       = TRT.REQUESTDATE
+		                              AND     RDT.REQUESTSEQUENCE   = TRT.REQUESTSEQUENCE
+		                              AND     RDT.AREAID            = #{AREAID}
+		                            )
+            </if>
+            ORDER BY TRT.REQUESTDATE,   TRT.REQUESTSEQUENCE
+	</select>
+	
+	<!-- 하단 Grid : 새로운 수정출고 상세 조회 쿼리 -->
+	<select id="selectNewSendToolDetailListByToolList" parameterType="map" resultType="hashmap">
+        --
+        -- GetNewSendToolDetailListByTool
+        -- Version:10001
+            SELECT
+                	TRL.NEXTDURABLELOTID				AS NEXTDURABLELOTID
+                ,   TRL.DURABLELOTID                    AS TOOLNUMBER           			--Tool번호
+                ,   TRL.DURABLEDEFID                    AS DURABLEDEFID           			--치공구ID
+                ,   TRL.DURABLEDEFVERSION               AS DURABLEDEFVERSION       			--치공구Rev
+                ,   DC5.DICTIONARYNAME                  AS TOOLNAME             			--Tool 명
+                ,   TRD.REVDURABLEDEFVERSION            AS REVDURABLEDEFVERSION 			--변경 Tool Rev
+                ,   CASE WHEN TSL.VENDORID IS NULL
+                        THEN TRD.VENDORID
+                        ELSE TSL.VENDORID
+                    END                                 AS VENDORID             			--제작업체
+                ,   CASE WHEN TSL.VENDORID IS NULL
+                        THEN VD1.VENDORNAME
+                        ELSE VD2.VENDORNAME
+                    END                                 AS MAKEVENDOR           			--제작업체명
+                ,   CASE WHEN TSL.AREAID IS NULL                       
+                        THEN TRD.AREAID
+                        ELSE TSL.AREAID
+                    END                                 AS RECEIPTAREAID        			--입고작업장아이디
+                ,   CASE WHEN TSL.AREAID IS NULL
+                        THEN DC3.DICTIONARYNAME
+                        ELSE DC4.DICTIONARYNAME
+                    END                                 AS RECEIPTAREA          			--입고작업장
+                ,   TO_CHAR(TSL.SENDDATE,'YYYY-MM-DD')  AS SENDDATE             			--출고일
+                 ,   TO_CHAR(TSL.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS')  AS SENDDATE2             			--출고일2
+                ,   TSD.SENDUSER                        AS SENDUSERID           			--출고자
+                ,   US1.USER_NM                         AS SENDUSER             			--출고자
+                ,   DRL.DURABLESTATE                    AS DURABLESTATE         			--Tool 상태
+                ,   TO_CHAR(TRD.REQUESTDELIVERYDATE,'YYYY-MM-DD') AS REQUESTDELIVERYDATE  	--입고요청일
+                ,   TO_CHAR(TRD.PLANDELIVERYDATE,'YYYY-MM-DD') AS PLANDELIVERYDATE     		--입고예정일
+                
+                ,   DDF.DURABLECLASSID                  AS TOOLTYPEID
+                ,   FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DDF.DURABLECLASSID) AS TOOLTYPE  			--Tool구분
+                ,   DDF.FORM                            AS TOOLFORMCODE         			--Tool형식코드
+                ,   FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DDF.DURABLECLASSID, DDF.FORM) AS TOOLFORM	--Tool형식
+                ,   DDF.TOOLKIND					    AS TOOLKINDID							
+                ,   FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DDF.DURABLECLASSID, DDF.FORM, DDF.TOOLKIND) AS TOOLKIND	--Toll종류
+                
+                ,   CASE WHEN TRL.SENDDATE IS NULL
+                        THEN 'N'
+                        ELSE 'Y'
+                    END                                 AS ISSENDED             			--출고완료여부
+                ,   DRL.OWNSHIPTYPE                     AS OWNSHIPTYPE          			--소유구분
+                ,   TO_CHAR(TRD.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE
+                ,   TRD.REQUESTSEQUENCE                 	AS REQUESTSEQUENCE
+                ,   TRD.REQUESTIDX                 			AS REQUESTIDX
+                ,   CASE WHEN TSL.FINISHDATE IS NULL AND TSL.FINISHER IS NULL
+                        THEN 'NonResult'
+                        ELSE 'Result'
+                    END                                 AS RESULTSTATUS
+                ,   TO_CHAR(TRL.SENDDATE,'YYYY-MM-DD')  AS REPAIRSENDDATE
+                ,   TRL.SENDSEQUENCE                    AS REPAIRSENDSEQUENCE
+                ,   TRD.DESCRIPTION                     AS DESCRIPTION						--설명(특이사항)
+                ,	''									AS REQUESTCOMMENT					--의뢰사유
+                ,	'0'									AS CHK
+                ,	TRD.PLANTID							AS PLANTID
+                ,	TRD.ENTERPRISEID					AS ENTERPRISEID
+            FROM    TOM_TOOLREQUESTDETAIL            TRD 
+            LEFT OUTER JOIN TOM_TOOLREQUESTDETAILLOT TRL 	ON  TRD.REQUESTDATE         = TRL.REQUESTDATE
+                                                        						AND TRD.REQUESTSEQUENCE     = TRL.REQUESTSEQUENCE
+                                                        						AND  TRD.REQUESTIDX       		= TRL.REQUESTIDX
+                                                        						AND TRD.DURABLEDEFID        = TRL.DURABLEDEFID
+                                                        						AND TRD.DURABLEDEFVERSION   = TRL.DURABLEDEFVERSION
+            INNER JOIN TOM_DURABLEDEFINITION         DDF ON  TRD.DURABLEDEFID        = DDF.DURABLEDEFID
+                                                        AND TRD.DURABLEDEFVERSION   = DDF.DURABLEDEFVERSION
+            INNER JOIN CMD_DICTIONARY                DC5 ON  DDF.DURABLEDEFNAME      = DC5.DICTIONARYID
+                                                        AND DC5.LANGUAGETYPE        = #{LANGUAGETYPE}
+                                                        AND  DC5.USE_YN                = 'Y'
+            LEFT OUTER JOIN TOM_DURABLELOT           DRL ON  TRL.DURABLELOTID        = DRL.DURABLELOTID
+            LEFT OUTER JOIN TOM_TOOLREPAIRSENDLOT    TSL ON  TRL.SENDDATE            = TSL.SENDDATE
+                                                        AND TRL.SENDSEQUENCE        = TSL.SENDSEQUENCE
+                                                        AND TRL.DURABLELOTID        = TSL.DURABLELOTID
+            LEFT OUTER JOIN TOM_TOOLREPAIRSEND       TSD ON  TSL.SENDDATE            = TSD.SENDDATE
+                                                        AND TSL.SENDSEQUENCE        = TSD.SENDSEQUENCE
+            LEFT OUTER JOIN BAS_VENDOR               VD1 ON  TRD.VENDORID            = VD1.VENDORID
+            LEFT OUTER JOIN BAS_VENDOR               VD2 ON  TSL.VENDORID            = VD2.VENDORID
+            LEFT OUTER JOIN CMD_USERS                US1 ON  TSD.SENDUSER            = US1.USER_ID            
+            LEFT OUTER JOIN BAS_AREA                 AR3 ON  TRD.AREAID              = AR3.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY           DC3 ON  AR3.AREANAME            = DC3.DICTIONARYID
+                                                        AND DC3.LANGUAGETYPE        = #{LANGUAGETYPE}
+                                                        AND  DC3.USE_YN                = 'Y'
+            LEFT OUTER JOIN BAS_AREA                 AR4 ON  TSL.AREAID              = AR4.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY           DC4 ON  AR4.AREANAME            = DC4.DICTIONARYID
+                                                        AND DC4.LANGUAGETYPE        = #{LANGUAGETYPE}         
+                                                        AND  DC4.USE_YN                = 'Y'                                                        
+            WHERE   TRD.VALIDSTATE          = 'Valid'
+            AND     TRL.VALIDSTATE          = 'Valid'
+            AND     TRD.REQUESTDATE         = TO_DATE(REPLACE(#{REQUESTDATE},'-',''), 'YYYYMMDD')
+            AND     TRD.REQUESTSEQUENCE     = #{REQUESTSEQUENCE}
+            ORDER BY TRL.DURABLELOTID
+    </select>
+    
+    <!-- 출고순번 채번 -->
+	<select id="selectToolSendDateSequence" parameterType="map" resultType="hashmap">
+		SELECT NVL(MAX(SENDSEQUENCE),0)+1||'' AS SENDSEQUENCE 
+		FROM TOM_TOOLREPAIRSEND
+		WHERE 1=1
+		AND TO_CHAR(SENDDATE,'YYYYMMDD') = TO_CHAR(TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD'),'YYYYMMDD')
+    </select>
+    
+    <select id="selectExistsToolUpdateAndRepairLotByTool" parameterType="map" resultType="hashmap">
+		--
+		-- "GetExistsToolUpdateAndRepairLotByTool"
+		-- Version:10001
+			SELECT
+				COUNT(TRDL.DURABLELOTID) AS SENDCOUNT				--입력받은 DurableLotID 갯수와 같아야 한다.
+			FROM	TOM_TOOLREQUEST					TRQT 
+			INNER JOIN TOM_TOOLREQUESTDETAILLOT		TRDL		ON	TRQT.REQUESTDATE		= TRDL.REQUESTDATE
+																AND	TRQT.REQUESTSEQUENCE	= TRDL.REQUESTSEQUENCE
+			INNER JOIN TOM_DURABLELOT				DRLT		ON	TRDL.DURABLELOTID		= DRLT.DURABLELOTID
+			WHERE	TRDL.VALIDSTATE					= 'Valid'
+			AND		TRQT.VALIDSTATE					= 'Valid'
+			AND		TRQT.TOOLMAKETYPE 				IN ('Modify','Repair')	--의뢰를 통한 수정/수리 출고 처리
+			AND		TRDL.SENDDATE	 					IS NULL
+			AND		TRQT.TOOLPROGRESSSTATUS		= 'DetailRegist'
+			AND		DRLT.DURABLESTATE				= 'Available'
+			AND		TRDL.DURABLELOTID				IN (
+											     					SELECT DATA AS COL_VALUE 
+											                        FROM TABLE(CAST(FN_TO_ROWS(#{DURABLELOTIDS}) AS TP_SIMPLE_TABLE))
+											                        )   
+	</select>
+	
+	<!-- 수리출고 존재여부 확인 -->
+	<select id="selectExistsRepairSend" parameterType="map" resultType="hashmap">
+		SELECT COUNT(*) AS CNT
+		FROM TOM_TOOLREPAIRSEND
+		WHERE SENDDATE 		= TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+		AND SENDSEQUENCE 	= #{SENDSEQUENCE}
+	</select>
+    
+    <!-- 수리출고 [추가] -->
+    <insert id="insertRepairSend" parameterType="map" >
+    	INSERT INTO TOM_TOOLREPAIRSEND (
+			SENDDATE,
+			SENDSEQUENCE,
+			
+			SENDUSER,
+			PLANTID,
+			ENTERPRISEID,
+			DESCRIPTION,	--DETAIL DESC
+			REPAIRTRTYPE,
+			
+			CREATOR,
+			CREATEDTIME,
+			MODIFIER,
+			MODIFIEDTIME,
+			LASTTXNHISTKEY,
+			LASTTXNID,
+			LASTTXNUSER,
+			LASTTXNTIME,
+			LASTTXNCOMMENT,
+			VALIDSTATE
+		) VALUES (
+			TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD'),
+			#{SENDSEQUENCE},
+			
+			#{SENDUSER},
+			#{PLANTID},
+			#{ENTERPRISEID},
+			#{DESCRIPTION},
+			'1',								--수정출고(의뢰를통한 수정/수리출고 데이터 이다.)
+			
+			#{CREATOR},					<!-- TR -->
+			SYSDATE,
+			#{MODIFIER},
+			SYSDATE,
+			#{LASTTXNHISTKEY},
+			#{LASTTXNID},
+			#{LASTTXNUSER},
+			SYSDATE,
+			#{LASTTXNCOMMENT},
+			#{VALIDSTATE}
+		)
+    </insert>
+    
+    <!-- 수리출고 [수정] -->
+    <update id="updateRepairSend" parameterType="map" >
+    	UPDATE TOM_TOOLREPAIRSEND
+    	SET SENDUSER				= #{SENDUSER},
+			PLANTID					= #{PLANTID},
+			ENTERPRISEID			= #{ENTERPRISEID},
+			DESCRIPTION			= #{DESCRIPTION},
+									
+			MODIFIER				= #{MODIFIER},
+			MODIFIEDTIME			= SYSDATE,
+			LASTTXNHISTKEY		= #{LASTTXNHISTKEY},
+			LASTTXNID				= #{LASTTXNID},
+			LASTTXNUSER			= #{LASTTXNUSER},
+			LASTTXNTIME			= SYSDATE,
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT},
+			VALIDSTATE				= #{VALIDSTATE}
+    	WHERE SENDDATE 		= TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+		AND SENDSEQUENCE 	= #{SENDSEQUENCE}
+    </update>
+    
+    <!-- 수리출고LOT 존재여부 확인 -->
+	<select id="selectExistsRepairSendLot" parameterType="map" resultType="hashmap">
+		SELECT COUNT(*) AS CNT
+		FROM TOM_TOOLREPAIRSENDLOT
+		WHERE DURABLELOTID = #{DURABLELOTID} 
+		AND SENDDATE = TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+		AND SENDSEQUENCE = #{SENDSEQUENCE}
+	</select>
+	
+    <!-- 수리출고LOT [추가] -->
+    <insert id="insertRepairSendLot" parameterType="map" >
+    	INSERT INTO TOM_TOOLREPAIRSENDLOT (
+			DURABLELOTID,			
+			SENDDATE,
+			SENDSEQUENCE,
+			
+			VENDORID,
+			TOOLREPAIRTYPE,			
+			AREAID,
+			PLANTID,
+			ENTERPRISEID,
+			LOTHISTKEY,
+			DESCRIPTION,
+			
+			CREATOR,
+			CREATEDTIME,
+			MODIFIER,
+			MODIFIEDTIME,
+			LASTTXNHISTKEY,
+			LASTTXNID,
+			LASTTXNUSER,
+			LASTTXNTIME,
+			LASTTXNCOMMENT,
+			VALIDSTATE
+		) VALUES (
+			#{DURABLELOTID},			
+			TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD'),
+			#{SENDSEQUENCE},
+					
+			#{VENDORID},
+			#{TOOLREPAIRTYPE},			
+			#{AREAID},
+			#{PLANTID},
+			#{ENTERPRISEID},
+			#{LOTHISTKEY},
+			#{DESCRIPTION},
+			
+			#{CREATOR},			<!-- TR -->
+			SYSDATE,
+			#{MODIFIER},
+			SYSDATE,
+			#{LASTTXNHISTKEY},
+			#{LASTTXNID},
+			#{LASTTXNUSER},
+			SYSDATE,
+			#{LASTTXNCOMMENT},
+			#{VALIDSTATE}
+		)
+    </insert>
+    
+    <!-- 수리출고LOT [수정] -->
+    <update id="updateRepairSendLot" parameterType="map" >
+    	UPDATE TOM_TOOLREPAIRSENDLOT
+    	SET VENDORID			= #{VENDORID},
+			TOOLREPAIRTYPE  	= #{TOOLREPAIRTYPE},		
+			AREAID				= #{AREAID},
+			PLANTID				= #{PLANTID},
+			ENTERPRISEID		= #{ENTERPRISEID},
+			LOTHISTKEY			= #{LOTHISTKEY},
+			DESCRIPTION		= #{DESCRIPTION},
+			
+			MODIFIER				= #{MODIFIER},
+			MODIFIEDTIME			= SYSDATE,
+			LASTTXNHISTKEY		= #{LASTTXNHISTKEY},
+			LASTTXNID				= #{LASTTXNID},
+			LASTTXNUSER			= #{LASTTXNUSER},
+			LASTTXNTIME			= SYSDATE,
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT},
+			VALIDSTATE				= #{VALIDSTATE}
+    	WHERE DURABLELOTID 	= #{DURABLELOTID}			
+		AND SENDDATE 			= TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+		AND SENDSEQUENCE 		= #{SENDSEQUENCE}
+    </update>
+    
+    <!-- 치공구Lot [수정] -->
+    <update id="updateDurableLot" parameterType="map">
+		UPDATE TOM_DURABLELOT
+		SET DURABLELOTGROUPID= NULL,
+			DURABLEDEFID			= #{DURABLEDEFID},		--치공구ID
+			DURABLEDEFVERSION	= #{DURABLEDEFVERSION},	--치공구Ver
+			DURABLELOTNAME		= #{DURABLELOTNAME},
+			ENTERPRISEID			= #{ENTERPRISEID},
+			PLANTID					= #{PLANTID},
+			AREAID					= #{AREAID},
+			VENDORID				= #{VENDORID},
+			ISHOLD					= 'N',
+			DURABLELOTQTY		= 1,
+			DURABLESTATE			= 'Repairing',
+			
+			MODIFIER 				= #{CREATOR},
+			MODIFIEDTIME 			= SYSDATE,
+			LASTTXNHISTKEY 		= #{LASTTXNHISTKEY},
+			LASTTXNID				= #{LASTTXNID},
+			LASTTXNUSER 			= #{LASTTXNUSER},
+			LASTTXNTIME 			= SYSDATE,
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT}
+		WHERE DURABLELOTID 	= #{DURABLELOTID}
+    </update>
+    
+    <insert id="insertDurableLotHistory" parameterType="map">
+		INSERT INTO TOM_DURABLELOTHISTORY
+			(
+			 TXNHISTKEY,
+			 DURABLELOTID, 			--PK
+			 
+			 DURABLELOTGROUPID,
+			 DURABLEDEFID, 			--치공구ID
+			 DURABLEDEFVERSION, 	--치공구Ver
+			 DURABLELOTNAME, 
+			 ENTERPRISEID, 
+			 PLANTID, 
+			 AREAID,
+			 VENDORID,
+			 ISHOLD,
+			 DURABLELOTQTY,
+			 DURABLESTATE,
+			 
+			 CREATOR,
+		     CREATEDTIME,
+		     MODIFIER,
+		     MODIFIEDTIME, 
+			 TXNGROUPHISTKEY, 
+		     TXNID,
+		     TXNUSER, 
+		     TXNTIME,
+		     TXNREASONCODECLASS, 
+		     TXNREASONCODE,
+		     TXNCOMMENT,
+		     
+		     TXNID2,
+		     TXNCOMMENT2
+		 	) VALUES (
+		 	 #{LASTTXNHISTKEY},
+		 	 #{DURABLELOTID},
+		 	 
+		 	 NULL,
+		 	 #{DURABLEDEFID},
+		 	 #{DURABLEDEFVERSION},
+		 	 #{DURABLELOTNAME},
+		 	 #{ENTERPRISEID},
+		 	 #{PLANTID},
+		 	 #{AREAID},
+		 	 #{VENDORID},
+		 	 'N',
+		 	 1,
+		 	 'Repairing',
+		 	 
+		 	 #{CREATOR},
+			 SYSDATE,
+			 #{MODIFIER},
+			 SYSDATE,
+		 	 #{TXNGROUPHISTKEY},
+		 	 #{LASTTXNID},
+		 	 #{LASTTXNUSER},		 	 
+		 	 SYSDATE,
+		 	 '',
+		 	 '',
+		 	 '',
+		 	 #{TXNID2},
+		 	 #{TXNCOMMENT2}
+			)
+    </insert>
+    
+    <!-- 수리의뢰LOT목록 [수정] -->
+    <update id="updateRequestDetailLot" parameterType="map" >
+    	UPDATE TOM_TOOLREQUESTDETAILLOT
+    	SET 
+			SENDDATE 				= TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD'),
+			SENDSEQUENCE 		= #{SENDSEQUENCE},
+			
+			MODIFIER				= #{MODIFIER}, 
+			MODIFIEDTIME			= SYSDATE, 
+			LASTTXNHISTKEY		= #{LASTTXNHISTKEY}, 
+			LASTTXNID				= #{LASTTXNID}, 
+			LASTTXNUSER			= #{LASTTXNUSER}, 
+			LASTTXNTIME			= SYSDATE, 
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT}, 
+			VALIDSTATE				= #{VALIDSTATE}
+		WHERE 1=1
+		AND DURABLEDEFID			= #{DURABLEDEFID}
+		AND DURABLEDEFVERSION	= #{DURABLEDEFVERSION}
+		AND REQUESTDATE			= #{REQUESTDATE}
+		AND REQUESTSEQUENCE		= #{REQUESTSEQUENCE}
+		AND DURABLELOTID			= #{DURABLELOTID}
+    </update>
+    
+    <!-- ########################################################################################## -->
+    
+    <!-- 수리 출고 취소 -->
+    <update id="updateRepairSendCancel" parameterType="map" >
+    	DELETE FROM TOM_TOOLREPAIRSEND
+		WHERE 1=1
+		AND SENDDATE			= TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+		AND SENDSEQUENCE	= #{SENDSEQUENCE}
+    </update>
+    
+    <!-- 수리 출고LOT 취소 -->
+    <update id="updateRepairSendLotCancel" parameterType="map" >
+    	DELETE FROM TOM_TOOLREPAIRSENDLOT
+		WHERE 1=1
+		AND	DURABLELOTID	= #{DURABLELOTID}
+		AND SENDDATE			= TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+		AND SENDSEQUENCE	= #{SENDSEQUENCE}
+    </update>
+    
+    <!-- 치공구LOT 출고 취소 -->
+    <update id="updateDurableLotCancel" parameterType="map" >
+    	UPDATE TOM_DURABLELOT
+    	SET 
+			DURABLESTATE 			= 'Available',
+			
+			MODIFIER				= #{MODIFIER}, 
+			MODIFIEDTIME			= SYSDATE, 
+			LASTTXNHISTKEY		= #{LASTTXNHISTKEY}, 
+			LASTTXNID				= #{LASTTXNID}, 
+			LASTTXNUSER			= #{LASTTXNUSER}, 
+			LASTTXNTIME			= SYSDATE, 
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT}
+		WHERE 1=1
+		AND DURABLELOTID		= #{DURABLELOTID}
+    </update>
+    
+    <insert id="insertDurableLotHistoryCancel" parameterType="map">
+		INSERT INTO TOM_DURABLELOTHISTORY
+			(
+			 TXNHISTKEY,
+			 DURABLELOTID, 			--PK
+			 
+			 DURABLELOTGROUPID,
+			 DURABLEDEFID, 			--치공구ID
+			 DURABLEDEFVERSION, 	--치공구Ver
+			 DURABLELOTNAME, 
+			 ENTERPRISEID, 
+			 PLANTID, 
+			 AREAID,
+			 VENDORID,
+			 ISHOLD,
+			 DURABLELOTQTY,
+			 DURABLESTATE,
+			 
+			 CREATOR,
+		     CREATEDTIME,
+		     MODIFIER,
+		     MODIFIEDTIME, 
+			 TXNGROUPHISTKEY, 
+		     TXNID,
+		     TXNUSER, 
+		     TXNTIME,
+		     TXNREASONCODECLASS, 
+		     TXNREASONCODE,
+		     TXNCOMMENT,
+		     
+		     TXNID2,
+		     TXNCOMMENT2
+		 	) VALUES (
+		 	 #{LASTTXNHISTKEY},
+		 	 #{DURABLELOTID},
+		 	 
+		 	 NULL,
+		 	 #{DURABLEDEFID},
+		 	 #{DURABLEDEFVERSION},
+		 	 #{DURABLELOTNAME},
+		 	 #{ENTERPRISEID},
+		 	 #{PLANTID},
+		 	 #{AREAID},
+		 	 #{VENDORID},
+		 	 'N',
+		 	 1,
+		 	 'Available',
+		 	 
+		 	 #{CREATOR},
+			 SYSDATE,
+			 #{MODIFIER},
+			 SYSDATE,
+		 	 #{TXNGROUPHISTKEY},
+		 	 #{LASTTXNID},
+		 	 #{LASTTXNUSER},		 	 
+		 	 SYSDATE,
+		 	 '',
+		 	 '',
+		 	 '',
+		 	 #{TXNID2},
+		 	 #{TXNCOMMENT2}
+			)
+    </insert>
+    
+    <update id="cancelDurableLotHistory" parameterType="map">
+		DELETE FROM TOM_DURABLELOTHISTORY WHERE TXNHISTKEY = (
+																						SELECT LOTHISTKEY 
+																						FROM TOM_TOOLREPAIRSENDLOT
+																						WHERE 1=1
+																						AND	DURABLELOTID	= #{DURABLELOTID}
+																						AND SENDDATE			= TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+																						AND SENDSEQUENCE	= #{SENDSEQUENCE}
+																						)
+	</update>
+    
+    <!-- 의뢰상세LOT 출고 취소 -->
+    <update id="updateRequestDetailLotCancel" parameterType="map" >
+    	UPDATE TOM_TOOLREQUESTDETAILLOT
+    	SET 
+			SENDDATE 			= NULL,
+			SENDSEQUENCE		= NULL,		
+			
+			MODIFIER				= #{MODIFIER}, 
+			MODIFIEDTIME			= SYSDATE, 
+			LASTTXNHISTKEY		= #{LASTTXNHISTKEY}, 
+			LASTTXNID				= #{LASTTXNID}, 
+			LASTTXNUSER			= #{LASTTXNUSER}, 
+			LASTTXNTIME			= SYSDATE, 
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT}, 
+			VALIDSTATE				= #{VALIDSTATE}
+		WHERE 1=1
+		AND DURABLEDEFID			= #{DURABLEDEFID}
+		AND DURABLEDEFVERSION	= #{DURABLEDEFVERSION}
+		AND REQUESTDATE			= #{REQUESTDATE}
+		AND REQUESTSEQUENCE		= #{REQUESTSEQUENCE}
+		AND DURABLELOTID			= #{DURABLELOTID}
+    </update>    
+    
+    
+    <!-- ###################################################  -->
+	<!-- ###################################################  -->
+	<!-- ###################################################  -->
+	<!-- 수정출고 / 취소 처리시 매번 호출 -->
+	<!-- 해당 요청건의 의뢰건수 vs 출고건수 확인  -->
+	<!-- 진행상태 : DetailRegist (내역등록) / Income (입고) / Outbound (출고) -->
+	<!-- ###################################################  -->
+	<!-- ###################################################  -->
+	<!-- ###################################################  -->
+	<update id="updatePerRequestStatus" parameterType="map">
+		UPDATE TOM_TOOLREQUEST A
+		SET  TOOLPROGRESSSTATUS		= CASE WHEN NVL((SELECT SUM(QTY) --의뢰건수
+													                     FROM TOM_TOOLREQUESTDETAIL B
+													                     WHERE B.REQUESTDATE = A.REQUESTDATE
+													                     AND B.REQUESTSEQUENCE = A.REQUESTSEQUENCE
+													                     ),0) = NVL((SELECT COUNT(*)		--제작입고Lot건수
+														                     		 FROM TOM_TOOLREQUESTDETAIL C,
+														                     		 		 TOM_TOOLREQUESTDETAILLOT D
+														                     		 WHERE 1=1
+														                     		 -- ****************************************************************
+														                     		 AND C.REQUESTDATE 			= A.REQUESTDATE
+														                     		 AND C.REQUESTSEQUENCE 		= A.REQUESTSEQUENCE
+														                     		 -- ****************************************************************
+														                     		 AND C.DURABLEDEFID			= D.DURABLEDEFID
+																				     AND C.DURABLEDEFVERSION	= D.DURABLEDEFVERSION                                                                   
+																				     AND C.REQUESTDATE           	= D.REQUESTDATE
+																				     AND C.REQUESTSEQUENCE   	= D.REQUESTSEQUENCE
+																				     AND C.REQUESTIDX       		= D.REQUESTIDX
+																				     AND D.SENDDATE IS NOT NULL		--출고일자가 지정되어 있으면
+																				     -- ****************************************************************
+																				     ),0) THEN 'Outbound' ELSE 'DetailRegist' END,
+			 
+			 MODIFIER					= #{MODIFIER}, 
+			 MODIFIEDTIME				= SYSDATE, 
+			 LASTTXNHISTKEY			= #{LASTTXNHISTKEY}, 
+			 LASTTXNID					= #{LASTTXNID}, 
+			 LASTTXNUSER				= #{LASTTXNUSER}, 
+			 LASTTXNTIME				= SYSDATE,
+			 VALIDSTATE					= 'Valid'
+		WHERE REQUESTDATE 		= #{REQUESTDATE}
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}
+    </update>
+    
+</mapper>

@@ -1,0 +1,1262 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 조직 부가정보
+    설명          : 조직 부가정보 테이블 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2017.04.01
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.04.01     진성하     최초  생성
+     2015-04.16    진성하     부가정보 관리 추가
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao">
+
+    <sql id="whoCol" >
+         , CREATED_BY
+         , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD') as CREATION_DATE
+         , LAST_UPDATED_BY, TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DATE
+     </sql>
+
+    <!-- 부가정보 속성관리 카운트 -->
+    <select id="selectOrgAddInfoAtbCnt" resultType="hashmap">
+	    SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.selectOrgAddInfoAtbCnt"  */
+		    COUNT(*) CNT
+		FROM CMD_ORGS_ADD_INFOS_ATBS
+        WHERE 1=1
+        <if test="JOB_SYS_CD != null and JOB_SYS_CD != ''">
+                   AND JOB_SYS_CD = #{JOB_SYS_CD}             /* 업무시스템코드 */
+        </if>
+        <if test="ATB_TY_CD != null and ATB_TY_CD != ''">
+                   AND ATB_TY_CD = #{ATB_TY_CD}               /* 데이터타입 유형코드 */
+        </if>
+        <if test="CND != '' and CND !=null ">
+             <if test="CND.equals('ADD_INFO_GRP_CD') and TEXT != null ">
+                    AND ADD_INFO_GRP_CD LIKE UPPER( '%' ||  #{TEXT} || '%')  /* 검색기준: 1.부가정보그룹코드  */
+            </if>
+             <if test="CND.equals('ATB_CLUM_NM') and TEXT != null ">
+                    AND ATB_CLUM_NM LIKE UPPER('%' ||  #{TEXT} || '%')        /* 검색기준: 2.속성컬럼명  */
+             </if>
+             <if test="CND.equals('ATB_CLUM') and TEXT != null ">
+                    AND ATB_CLUM LIKE UPPER('%' ||  #{TEXT} || '%')              /* 검색기준: 3.속성컬럼  */
+             </if>
+        </if>
+    </select>
+
+    <!-- 부가정보 속성 관리 리스트 -->
+    <select id="selectOrgAddInfoAtbList" resultType="hashmap">
+    SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.selectOrgAddInfoAtbList"  */
+            *
+            FROM (
+                SELECT
+                    ROWNUM AS RNUM,
+                    T.* FROM (
+			    SELECT
+			          ROWNUM as NUM      /* 순서 */
+			        , JOB_SYS_CD            /* 업무시스템코드 */
+				    , GET_CODE_F('CMD_JOB_SYSCD', JOB_SYS_CD) as JOB_SYS_NM  /* 업무시스템 */
+				    , ADD_INFO_GRP_CD    /* 부가정보그룹코드 */
+				    , ATB_CLUM               /* 속성컬럼 */
+				    , ATB_CLUM_NM         /* 속성컬럼명 */
+				    , ATB_TY_CD             /* 데이터 속성유형 코드 */
+				    , GET_CODE_F('CMD_DATA_ATRB', ATB_TY_CD) as ATB_TY_NM   /* 데이터 속성유형 */
+				    , ATB_TY_MIN_LT       /* 속성유형 최소 길이 */
+				    , ATB_TY_MAX_LT      /* 속성유형 최대 길이 */
+				    , (NVL(ATB_TY_MIN_LT,0) || ' ~ ' || NVL(ATB_TY_MAX_LT,0)) as ATB_TY_LT    /* 속성유형길이(최소~최대) */
+				    , SCRIN_INDICT_NAME as SCRIN_INDICT_NM  /* 화면표시명 */
+				    , SQL_ID                   /* SQL ID */
+				    , ATB_DESC               /* 속성 설명 */
+				    , 'N' as ROW_ADD_YN  /* 행추가ROW 여부 */
+				     <include refid="whoCol" />
+				FROM CMD_ORGS_ADD_INFOS_ATBS
+				WHERE 1=1
+				<if test="JOB_SYS_CD != null and JOB_SYS_CD != ''">
+		                   AND JOB_SYS_CD = #{JOB_SYS_CD}             /* 업무시스템코드 */
+		        </if>
+		        <if test="ATB_TY_CD != null and ATB_TY_CD != ''">
+		                   AND ATB_TY_CD = #{ATB_TY_CD}               /* 데이터타입 유형코드 */
+		        </if>
+		        <if test="CND != '' and CND !=null ">
+		             <if test="CND.equals('ATB_CLUM_NM') and TEXT != null ">
+		                    AND ATB_CLUM_NM LIKE UPPER('%' ||  #{TEXT} || '%')        /* 검색기준: 1. 속성컬럼명  */
+		             </if>
+		             <if test="CND.equals('SCRIN_INDICT_NM') and TEXT != null ">
+		                    AND SCRIN_INDICT_NM LIKE UPPER( '%' ||  #{TEXT} || '%')  /* 검색기준: 2. 화면표시명  */
+		             </if>
+		             <if test="CND.equals('ATB_CLUM') and TEXT != null ">
+		                    AND ATB_CLUM LIKE UPPER('%' ||  #{TEXT} || '%')              /* 검색기준: 3. 속성컬럼  */
+		             </if>
+		        </if>
+		        ORDER BY JOB_SYS_CD,ADD_INFO_GRP_CD, TO_NUMBER(SUBSTR(ATB_CLUM, 5,2)), CREATION_DATE DESC
+		        ) T WHERE 1=1
+                <if test= "P_END != null and P_END != ''">
+                 AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+                </if>
+            ) WHERE 1=1
+         <if test= "P_START != null and P_START != ''">
+         AND  RNUM >= #{P_START}
+         </if>
+    </select>
+
+    <!-- 조직부가정보 속성 삭제 -->
+    <delete id="deleteOrgAddInfoAtb" parameterType="hashmap">
+	    DELETE  /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.deleteOrgAddInfoAtb"  */
+	    FROM    CMD_ORGS_ADD_INFOS_ATBS
+	    WHERE  JOB_SYS_CD = #{JOB_SYS_CD}
+	    AND      ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+	    AND      ATB_CLUM = #{ATB_CLUM}
+    </delete>
+
+    <!-- 조직부가정보 속성 수정 -->
+    <update id="updateOrgAddInfoAtb" parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.updateOrgAddInfoAtb" */  CMD_ORGS_ADD_INFOS_ATBS
+        SET
+				  ATB_CLUM_NM = #{ATB_CLUM_NM}
+				, ATB_TY_CD = #{ATB_TY_CD}
+				, ATB_TY_MIN_LT = #{ATB_TY_MIN_LT}
+				, ATB_TY_MAX_LT = #{ATB_TY_MAX_LT}
+				, SCRIN_INDICT_NAME = #{SCRIN_INDICT_NM}
+				<if test="ATB_DESC != null and ATB_DESC != 'undefined' ">
+                , ATB_DESC = #{ATB_DESC}
+                </if>
+                <if test="SQL_ID > 0">
+                     , SQL_ID = #{SQL_ID}
+                </if>
+                <if test="USE_YN == 0">
+                     , USE_YN = 'N'
+               </if>
+               <if test="USE_YN == 1">
+                     , USE_YN = 'Y'
+               </if>
+	             , LAST_UPDATED_BY = #{LAST_UPDATED_BY}          /* 최종수정자ID - 차후 수정필요 */
+	             , LAST_UPDATE_DATE = SYSDATE                          /* 최종수정일 */
+        WHERE  JOB_SYS_CD = #{JOB_SYS_CD}
+        AND      ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+        AND      ATB_CLUM = #{ATB_CLUM}
+    </update>
+
+    <!-- 조직부가정보 속성 등록 -->
+    <insert id="insertOrgAddInfoAtb" parameterType="hashmap">
+        INSERT   /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.insertOrgAddInfoAtb" */
+        INTO      CMD_ORGS_ADD_INFOS_ATBS
+                    ( JOB_SYS_CD
+		            , ADD_INFO_GRP_CD
+		            , ATB_CLUM
+		            , ATB_CLUM_NM
+		            , ATB_TY_CD
+		            , ATB_TY_MIN_LT
+		            , ATB_TY_MAX_LT
+		            , SCRIN_INDICT_NAME
+		            , SQL_ID
+		            , CREATED_BY
+		            , CREATION_DATE
+		           )
+        VALUES (
+		              #{JOB_SYS_CD}
+		            , #{ADD_INFO_GRP_CD}
+		            , #{ATB_CLUM}
+		            , #{ATB_CLUM_NM}
+		            , #{ATB_TY_CD}
+		            , #{ATB_TY_MIN_LT}
+		            , #{ATB_TY_MAX_LT}
+		            , #{SCRIN_INDICT_NM}
+		            <if test="SQL_ID == 0 || SQL_ID == null">
+                    , 0
+                    </if>
+                    <if test="SQL_ID > 0">
+                    , #{SQL_ID}
+                    </if>
+		            , #{CREATED_BY}
+		            , SYSDATE
+                )
+    </insert>
+
+    <!-- 조직마스터+부가정보 리스트  -->
+    <!-- 참고: LVL + LVL2 + (LVL3) 규칙
+     우정사업본부1  서울지방청1     광화문(전체)2    광화문(총괄)3
+    0200000H,       1000000H,     1000042H,       1000043C
+     2+0(+0)          2+0(+1)         2+1(+2)          2+2(+3)
+    -->
+    <select id="selectOrgAddList" resultType="hashmap">
+    SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.selectOrgAddList" */
+              ORG.OFFICE_ID as OFC_ID                /* 관서ID(SEQNUM) */
+            , ORG.OFFICE_CODE as OFC_CD           /* 관서코드(조직코드) */
+            , ORG.OFFICE_NAME as OFC_NM          /* 관서명 */
+            , ORG_ADD.JOB_SYS_CD   /* 부가정보 업무시스템코드 */
+            , GET_CODE_F('CMD_JOB_SYSCD', ORG_ADD.JOB_SYS_CD) as JOB_SYS_NM  /* 업무시스템 */
+            , ORG_ADD.ADD_INFO_GRP_CD /* 부가정보 그룹코드 */
+            , ORG.UPPER_OFFICE_CODE as UPPER_OFC_CD     /* 상위관서코드 */
+            , ORG.DEPTH_CD            /* 전체 경로CD*/
+            , ORG.DEPTH_NAME        /* 전체 경로명 */
+            , ORG.LVL
+            , ORG.ISLEAF
+            , ORG_ADD.ATB_1          /* 부가정보 속성1 */
+            /*20160704 modify*/
+           ,DECODE(ORG_ADD.ADD_INFO_GRP_CD,'CMD_ORG_ADD',NVL((SELECT M.MPNG_OFFICE_CODE
+                                                            FROM CMD_ORGS_MPNGS M
+                                                           WHERE M.MPNG_SYS_CD = 'FNC'
+                                                             AND M.OFFICE_ID = ORG.OFFICE_ID
+                                                             and m.use_yn = 'Y'
+                                                             and m.mpng_office_name = ORG_ADD.ATB_5
+                                                             and rownum = 1),'')
+                                          ,ORG_ADD.ATB_2) ATB_2 /* 부가정보 속성2 */
+            ,DECODE(ORG_ADD.ADD_INFO_GRP_CD,'CMD_ORG_ADD',NVL((SELECT M.MPNG_OFFICE_CODE
+                                                            FROM CMD_ORGS_MPNGS M
+                                                           WHERE M.MPNG_SYS_CD = 'POST'
+                                                             AND M.OFFICE_ID = ORG.OFFICE_ID
+                                                             and m.use_yn = 'Y'
+                                                             and rownum = 1),'')
+                                          ,ORG_ADD.ATB_2) ATB_3 /* 부가정보 속성3 */
+            , ORG_ADD.ATB_4          /* 부가정보 속성4 */
+            , ORG_ADD.ATB_5          /* 부가정보 속성5 */
+            , ORG_ADD.ATB_6
+            , ORG_ADD.ATB_7
+            , ORG_ADD.ATB_8
+            , ORG_ADD.ATB_9
+            , ORG_ADD.ATB_10
+            , ORG_ADD.ATB_11
+            , ORG_ADD.ATB_12
+            , ORG_ADD.ATB_13
+            , ORG_ADD.ATB_14
+            , ORG_ADD.ATB_15
+            , ORG_ADD.ATB_16
+            , ORG_ADD.ATB_17
+            , ORG_ADD.ATB_18
+            , ORG_ADD.ATB_19
+            , ORG_ADD.ATB_20
+            , ORG_ADD.ATB_21
+            , ORG_ADD.ATB_22
+            , ORG_ADD.ATB_23
+            , ORG_ADD.ATB_24
+            , ORG_ADD.ATB_25
+            , ORG_ADD.ATB_26
+            , ORG_ADD.ATB_27
+            , ORG_ADD.ATB_28
+            , ORG_ADD.ATB_29
+            , ORG_ADD.ATB_30
+            , ORG.ORDR
+            , ORG.USE_YN
+    FROM (
+            SELECT
+                OFFICE_ID,                               /* 관서ID (SEQNUM) */
+                OFFICE_CODE,                           /* 관서코드 */
+                OFFICE_NAME,                           /* 관서명 */
+                UPPER_OFFICE_CODE,                  /* 상위관서코드 */
+                LTRIM (SYS_CONNECT_BY_PATH (OFFICE_CODE, ' > '), ' > ') AS DEPTH_CD,   /* 전체DEPTH 경로코드 */
+                LTRIM (SYS_CONNECT_BY_PATH (OFFICE_NAME, ' > '), ' > ') AS DEPTH_NAME, /* 전체DEPTH 경로명 */
+                (LEVEL+#{LVL3}) as LVL,             /* TREE DEPTH 레벨 */
+                CONNECT_BY_ISLEAF AS ISLEAF,   /* 자식노드가 없으면 1, 있으면 0 */
+                ORDR,
+                USE_YN
+            FROM CMD_ORGS A
+            WHERE 1=1
+            <if test='USE_YN != null and USE_YN == "Y" '>
+                    AND USE_YN = 'Y'
+            </if>
+            <if test='USE_YN != null and USE_YN == "N" '>
+                    AND USE_YN = 'N'
+            </if>
+            <if test="LVL != null and LVL > 0 ">
+                    AND LEVEL <![CDATA[ <= ]]> #{LVL}  + #{LVL2}   /* 레벨(1~5) 이하만 */
+            </if>
+            <if test="UPPER_OFC_CD == null or UPPER_OFC_CD == ''">
+            START WITH UPPER_OFFICE_CODE IN ('0200000H', '0100000J') /* 최상위코드-생략시 (미래창조과학부 포함) */
+            </if>
+            <if test="UPPER_OFC_CD != null and UPPER_OFC_CD != ''">
+            START WITH UPPER_OFFICE_CODE = #{UPPER_OFC_CD}       /* 최상위코드-있을경우 = 부모의 시작 조건(우정사업본부:0200000H) */
+            </if>
+            CONNECT BY PRIOR OFFICE_CODE = UPPER_OFFICE_CODE   /* 자신과 부모키를 비교 */
+            ORDER SIBLINGS BY                          /* 계층내에서 정렬할수 있는 SIBLINGS BY */
+            UPPER_OFFICE_CODE ASC, ORDR ASC, OFFICE_CODE ASC
+        ) ORG
+        LEFT OUTER JOIN CMD_ORGS_ADD_INFOS ORG_ADD
+        ON ORG.OFFICE_ID = ORG_ADD.OFFICE_ID
+        <if test="JOB_SYS_CD != null and JOB_SYS_CD != ''">
+        AND ORG_ADD.JOB_SYS_CD = #{JOB_SYS_CD}
+        </if>
+        <if test="ADD_INFO_GRP_CD != null and ADD_INFO_GRP_CD != ''">
+        AND ORG_ADD.ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+        </if>
+        AND ORG_ADD.USE_YN  = 'Y'
+        WHERE 1=1
+        <if test="EXIST_CND != '' and EXIST_CND !=null ">
+            <if test="EXIST_CND.equals('EXIST') ">
+               AND ORG_ADD.JOB_SYS_CD IS NOT NULL
+            </if>
+            <if test="EXIST_CND.equals('NONE') ">
+               AND ORG_ADD.JOB_SYS_CD IS NULL
+            </if>
+        </if>
+        <if test="CND != '' and CND !=null ">
+             <if test="CND.equals('OFC_CD') and TEXT != null ">
+                    AND ORG.OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'               /* 관서코드 검색   */
+            </if>
+             <if test="CND.equals('OFC_NM') and TEXT != null ">
+                    AND ORG.OFFICE_NAME LIKE UPPER('%' ||  #{TEXT} || '%')    /* 관서명 검색      */
+             </if>
+             <if test="CND.equals('RM') and TEXT != null ">
+                    AND ORG_ADD.RM LIKE UPPER('%' ||  #{TEXT} || '%')    /* 비고 설명 검색 */
+             </if>
+        </if>
+    </select>
+
+    <!-- 부가정보 속성 관리 헤더 리스트((부가정보 관리에서 사용) -->
+    <select id="selectOrgAddInfoAtbHeadList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.selectOrgAddInfoAtbHeadList"  */
+              TO_NUMBER(SUBSTR(ATB_CLUM, 5,2)) as NUM      /* 순서 */
+            , JOB_SYS_CD            /* 업무시스템코드 */
+            , GET_CODE_F('CMD_JOB_SYSCD', JOB_SYS_CD) as JOB_SYS_NM  /* 업무시스템 */
+            , ADD_INFO_GRP_CD    /* 부가정보그룹코드 */
+            , ATB_CLUM               /* 속성컬럼 */
+            , ATB_CLUM_NM         /* 속성컬럼명 */
+            , ATB_TY_CD             /* 데이터 속성유형 코드 */
+            , GET_CODE_F('CMD_DATA_ATRB', ATB_TY_CD) as ATB_TY_NM   /* 데이터 속성유형 */
+            , ATB_TY_MIN_LT       /* 속성유형 최소 길이 */
+            , ATB_TY_MAX_LT      /* 속성유형 최대 길이 */
+            , (NVL(ATB_TY_MIN_LT,0) || ' ~ ' || NVL(ATB_TY_MAX_LT,0)) as ATB_TY_LT    /* 속성유형길이(최소~최대) */
+            , SCRIN_INDICT_NAME as SCRIN_INDICT_NM   /* 화면표시명 */
+            , SQL_ID                   /* SQL ID */
+            , ATB_DESC               /* 속성 설명 */
+            , 'N' as ROW_ADD_YN  /* 행추가ROW 여부 */
+        FROM CMD_ORGS_ADD_INFOS_ATBS
+        WHERE 1=1
+        <if test="JOB_SYS_CD != null and JOB_SYS_CD != ''">
+                   AND JOB_SYS_CD = #{JOB_SYS_CD}             /* 업무시스템코드 */
+        </if>
+        <if test="ADD_INFO_GRP_CD != null and ADD_INFO_GRP_CD != ''">
+                   AND ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}               /* 부가정보 그룹코드 */
+        </if>
+        ORDER BY ADD_INFO_GRP_CD, TO_NUMBER(SUBSTR(ATB_CLUM, 5,2))
+    </select>
+
+    <!-- 부가정보 그룹코드 조회 -->
+    <select id="selectOrgAddInfoGrpList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.selectOrgAddInfoGrpList"  */
+                     ADD_INFO_GRP_CD                           /* 부가정보 그룹코드 */
+                   , ADD_INFO_GRP_CD as ADD_INFO_GRP_NM /* 임시 */
+        FROM     CMD_ORGS_ADD_INFOS_ATBS
+        WHERE   JOB_SYS_CD = #{JOB_SYS_CD}   /* 업무시스템코드 */
+        GROUP BY ADD_INFO_GRP_CD
+    </select>
+
+    <!-- 조직부가정보 상세 조회1(상단) -->
+    <select id="selectOrgAddInfoDtl" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.selectOrgAddInfoDtl"  */
+		      ROWNUM as NUM    /* 순서 */
+		    , A.JOB_SYS_CD       /* 업무시스템코드 */
+		    , GET_CODE_F('CMD_JOB_SYSCD', A.JOB_SYS_CD) as JOB_SYS_NM  /* 업무시스템 */
+		    , B.OFFICE_CODE as OFC_CD
+		    , B.OFFICE_NAME as OFC_NM
+		    , A.ADD_INFO_GRP_CD  /* 부가정보그룹코드 */
+		    , C.ATB_DESC             /* 속성 설명 */
+		    , A.RM                       /* 비고 */
+		    , A.USE_YN
+		FROM CMD_ORGS_ADD_INFOS A, CMD_ORGS B, CMD_ORGS_ADD_INFOS_ATBS C
+		WHERE 1=1
+		AND A.OFFICE_ID = B.OFFICE_ID
+		AND A.JOB_SYS_CD = C.JOB_SYS_CD
+        AND A.ADD_INFO_GRP_CD = C.ADD_INFO_GRP_CD
+		AND A.JOB_SYS_CD = #{JOB_SYS_CD}
+		AND A.ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+		AND B.OFFICE_ID = #{OFC_ID}
+    </select>
+
+    <!-- 조직부가정보 상세 조회2(하단-부가정보 리스트) -->
+    <select id="selectOrgAddInfoDtlList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.selectOrgAddInfoDtlList"  */
+		      TO_NUMBER(SUBSTR(ATB_CLUM, 5,2)) as NUM      /* 순서 */
+		    , OFFICE_ID as OFC_ID
+		    , ATB_CLUM_NM         /* 속성컬럼명 */
+		    , ATB_CLUM              /* 속성컬럼 */
+		    , '' as ATB_VL
+		    , ATB_1                   /*  부가정보 값1 */
+		    , ATB_2
+		    , ATB_3
+		    , ATB_4
+		    , ATB_5
+		    , ATB_6
+		    , ATB_7
+		    , ATB_8
+		    , ATB_9
+		    , ATB_10
+		    , ATB_11
+		    , ATB_12
+		    , ATB_13
+		    , ATB_14
+		    , ATB_15
+		    , ATB_16
+		    , ATB_17
+		    , ATB_18
+		    , ATB_19
+		    , ATB_20
+		    , ATB_21
+		    , ATB_22
+		    , ATB_23
+		    , ATB_24
+		    , ATB_25
+		    , ATB_26
+		    , ATB_27
+		    , ATB_28
+		    , ATB_29
+		    , ATB_30
+		    , ATB_TY_CD              /* 데이터 속성유형 코드 */
+		    , GET_CODE_F('CMD_DATA_ATRB', ATB_TY_CD) as ATB_TY_NM   /* 데이터 속성유형 */
+		    , ATB_TY_MIN_LT        /* 속성유형 최소 길이 */
+		    , ATB_TY_MAX_LT       /* 속성유형 최대 길이 */
+		    , SCRIN_INDICT_NAME as SCRIN_INDICT_NM   /* 화면표시명 */
+		    , SQL_ID                    /* SQL ID */
+		    , B.RM                      /* 비고 */
+		    , B.RM as OLD_RM      /* 비고(old) */
+		    , B.USE_YN               /* 사용여부 */
+		    , B.USE_YN as OLD_USE_YN /* 사용여부(old) */
+		    , A.ATB_DESC            /* 속성 설명 */
+		    , A.JOB_SYS_CD         /* 업무시스템코드 */
+		    , GET_CODE_F('CMD_JOB_SYSCD', A.JOB_SYS_CD) as JOB_SYS_NM  /* 업무시스템 */
+		    , A.ADD_INFO_GRP_CD   /* 부가정보그룹코드 */
+		FROM CMD_ORGS_ADD_INFOS_ATBS A, CMD_ORGS_ADD_INFOS B
+		WHERE 1=1
+		AND A.JOB_SYS_CD = B.JOB_SYS_CD
+		AND A.ADD_INFO_GRP_CD = B.ADD_INFO_GRP_CD
+        AND B.JOB_SYS_CD = #{JOB_SYS_CD}
+        AND B.ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+        AND B.OFFICE_ID = #{OFC_ID}
+        ORDER BY TO_NUMBER(SUBSTR(ATB_CLUM, 5,2))
+    </select>
+
+    <!-- 조직 부가정보 등록/수정 MergeQuery -->
+    <update id="updateOrgAddInfo"  parameterType="hashmap">
+        MERGE /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.saveOrgAddInfo" */
+        INTO CMD_ORGS_ADD_INFOS T1
+		USING DUAL
+		ON
+		(
+		  T1.OFFICE_ID = #{OFC_ID}
+		  AND T1.JOB_SYS_CD = #{JOB_SYS_CD}
+		  AND T1.ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+		)
+		WHEN MATCHED THEN
+		    UPDATE SET
+		           T1.LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+		         , T1.LAST_UPDATE_DATE = SYSDATE
+		         <if test="USE_YN != null and USE_YN != 'undefined' ">
+                 , T1.USE_YN = #{USE_YN}
+                 </if>
+                 <if test="RM != null and RM != 'undefined' ">
+                 , T1.RM = #{RM}
+                 </if>
+		         <if test="ATB_1 != null and ATB_1 != 'undefined' ">
+                 , T1.ATB_1 = #{ATB_1}    /* 가변적 param 1 */
+                 </if>
+                 <if test="ATB_2 != null and ATB_2 != 'undefined' ">
+                 , T1.ATB_2 = #{ATB_2}    /* 가변적 param 2 */
+                 </if>
+		         <if test="ATB_3 != null and ATB_3 != 'undefined' ">
+		         , T1.ATB_3 = #{ATB_3}    /* 가변적 param 3 */
+		         </if>
+		         <if test="ATB_4 != null and ATB_4 != 'undefined' ">
+                 , T1.ATB_4 = #{ATB_4}
+                 </if>
+                 <if test="ATB_5 != null and ATB_5 != 'undefined' ">
+                 , T1.ATB_5 = #{ATB_5}
+                 </if>
+                 <if test="ATB_6 != null and ATB_6 != 'undefined' ">
+                 , T1.ATB_6 = #{ATB_6}
+                 </if>
+                 <if test="ATB_7 != null and ATB_7 != 'undefined' ">
+                 , T1.ATB_7 = #{ATB_7}
+                 </if>
+                 <if test="ATB_8 != null and ATB_8 != 'undefined' ">
+                 , T1.ATB_8 = #{ATB_8}
+                 </if>
+                 <if test="ATB_9 != null and ATB_9 != 'undefined' ">
+                 , T1.ATB_9 = #{ATB_9}
+                 </if>
+                 <if test="ATB_10 != null and ATB_10 != 'undefined' ">
+                 , T1.ATB_10 = #{ATB_10}
+                 </if>
+                 <if test="ATB_11 != null and ATB_11 != 'undefined' ">
+                 , T1.ATB_11 = #{ATB_11}
+                 </if>
+                 <if test="ATB_12 != null and ATB_12 != 'undefined' ">
+                 , T1.ATB_12 = #{ATB_12}
+                 </if>
+                 <if test="ATB_13 != null and ATB_13 != 'undefined' ">
+                 , T1.ATB_13 = #{ATB_13}
+                 </if>
+                 <if test="ATB_14 != null and ATB_14 != 'undefined' ">
+                 , T1.ATB_14 = #{ATB_14}
+                 </if>
+                 <if test="ATB_15 != null and ATB_15 != 'undefined' ">
+                 , T1.ATB_15 = #{ATB_15}
+                 </if>
+                 <if test="ATB_16 != null and ATB_16 != 'undefined' ">
+                 , T1.ATB_16 = #{ATB_16}
+                 </if>
+                 <if test="ATB_17 != null and ATB_17 != 'undefined' ">
+                 , T1.ATB_17 = #{ATB_17}
+                 </if>
+                 <if test="ATB_18 != null and ATB_18 != 'undefined' ">
+                 , T1.ATB_18 = #{ATB_18}
+                 </if>
+                 <if test="ATB_19 != null and ATB_19 != 'undefined' ">
+                 , T1.ATB_19 = #{ATB_19}
+                 </if>
+                 <if test="ATB_20 != null and ATB_20 != 'undefined' ">
+                 , T1.ATB_20 = #{ATB_20}
+                 </if>
+                 <if test="ATB_21 != null and ATB_21 != 'undefined' ">
+                 , T1.ATB_21 = #{ATB_21}
+                 </if>
+                 <if test="ATB_22 != null and ATB_22 != 'undefined' ">
+                 , T1.ATB_22 = #{ATB_22}
+                 </if>
+                 <if test="ATB_23 != null and ATB_23 != 'undefined' ">
+                 , T1.ATB_23 = #{ATB_23}
+                 </if>
+                 <if test="ATB_24 != null and ATB_24 != 'undefined' ">
+                 , T1.ATB_24 = #{ATB_24}
+                 </if>
+                 <if test="ATB_25 != null and ATB_25 != 'undefined' ">
+                 , T1.ATB_25 = #{ATB_25}
+                 </if>
+                 <if test="ATB_26 != null and ATB_26 != 'undefined' ">
+                 , T1.ATB_26 = #{ATB_26}
+                 </if>
+                 <if test="ATB_27 != null and ATB_27 != 'undefined' ">
+                 , T1.ATB_27 = #{ATB_27}
+                 </if>
+                 <if test="ATB_28 != null and ATB_28 != 'undefined' ">
+                 , T1.ATB_28 = #{ATB_28}
+                 </if>
+                 <if test="ATB_29 != null and ATB_29 != 'undefined' ">
+                 , T1.ATB_29 = #{ATB_29}
+                 </if>
+                 <if test="ATB_30 != null and ATB_30 != 'undefined' ">
+                 , T1.ATB_30 = #{ATB_30}
+                 </if>
+		WHEN NOT MATCHED THEN
+		    INSERT
+		    (
+		         T1.OFFICE_ID
+		       , T1.JOB_SYS_CD
+		       , T1.ADD_INFO_GRP_CD
+		       <if test="ATB_1 != null and ATB_1 != 'undefined' ">
+               , T1.ATB_1     /* 가변적 param 1 */
+               </if>
+               <if test="ATB_2 != null and ATB_2 != 'undefined' ">
+               , T1.ATB_2     /* 가변적 param 2 */
+               </if>
+		       <if test="ATB_3 != null and ATB_3 != 'undefined' ">
+		       , T1.ATB_3     /* 가변적 param 3 */
+		       </if>
+		       <if test="ATB_4 != null and ATB_4 != 'undefined' ">
+               , T1.ATB_4
+               </if>
+               <if test="ATB_5 != null and ATB_5 != 'undefined' ">
+               , T1.ATB_5
+               </if>
+               <if test="ATB_6 != null and ATB_6 != 'undefined' ">
+               , T1.ATB_6
+               </if>
+               <if test="ATB_7 != null and ATB_7 != 'undefined' ">
+               , T1.ATB_7
+               </if>
+               <if test="ATB_8 != null and ATB_8 != 'undefined' ">
+               , T1.ATB_8
+               </if>
+               <if test="ATB_9 != null and ATB_9 != 'undefined' ">
+               , T1.ATB_9
+               </if>
+               <if test="ATB_10 != null and ATB_10 != 'undefined' ">
+               , T1.ATB_10
+               </if>
+               <if test="ATB_11 != null and ATB_11 != 'undefined' ">
+               , T1.ATB_11
+               </if>
+               <if test="ATB_12 != null and ATB_12 != 'undefined' ">
+               , T1.ATB_12
+               </if>
+               <if test="ATB_13 != null and ATB_13 != 'undefined' ">
+               , T1.ATB_13
+               </if>
+               <if test="ATB_14 != null and ATB_14 != 'undefined' ">
+               , T1.ATB_14
+               </if>
+               <if test="ATB_15 != null and ATB_15 != 'undefined' ">
+               , T1.ATB_15
+               </if>
+               <if test="ATB_16 != null and ATB_16 != 'undefined' ">
+               , T1.ATB_16
+               </if>
+               <if test="ATB_17 != null and ATB_17 != 'undefined' ">
+               , T1.ATB_17
+               </if>
+               <if test="ATB_18 != null and ATB_18 != 'undefined' ">
+               , T1.ATB_18
+               </if>
+               <if test="ATB_19 != null and ATB_19 != 'undefined' ">
+               , T1.ATB_19
+               </if>
+               <if test="ATB_20 != null and ATB_20 != 'undefined' ">
+               , T1.ATB_20
+               </if>
+               <if test="ATB_21 != null and ATB_21 != 'undefined' ">
+               , T1.ATB_21
+               </if>
+               <if test="ATB_22 != null and ATB_22 != 'undefined' ">
+               , T1.ATB_22
+               </if>
+               <if test="ATB_23 != null and ATB_23 != 'undefined' ">
+               , T1.ATB_23
+               </if>
+               <if test="ATB_24 != null and ATB_24 != 'undefined' ">
+               , T1.ATB_24
+               </if>
+               <if test="ATB_25 != null and ATB_25 != 'undefined' ">
+               , T1.ATB_25
+               </if>
+               <if test="ATB_26 != null and ATB_26 != 'undefined' ">
+               , T1.ATB_26
+               </if>
+               <if test="ATB_27 != null and ATB_27 != 'undefined' ">
+               , T1.ATB_27
+               </if>
+               <if test="ATB_28 != null and ATB_28 != 'undefined' ">
+               , T1.ATB_28
+               </if>
+               <if test="ATB_29 != null and ATB_29 != 'undefined' ">
+               , T1.ATB_29
+               </if>
+               <if test="ATB_30 != null and ATB_30 != 'undefined' ">
+               , T1.ATB_30
+               </if>
+               <if test="USE_YN != null and USE_YN != 'undefined' ">
+               , T1.USE_YN
+               </if>
+               <if test="RM != null and RM != 'undefined' ">
+               , T1.RM
+               </if>
+		       , T1.CREATED_BY
+		       , T1.CREATION_DATE
+		    )
+		    VALUES
+		    (
+		         #{OFC_ID}
+		       , #{JOB_SYS_CD}
+		       , #{ADD_INFO_GRP_CD}
+		       <if test="ATB_1 != null and ATB_1 != 'undefined' ">
+               , #{ATB_1}       /* 가변적 param 1 */
+               </if>
+               <if test="ATB_2 != null and ATB_2 != 'undefined' ">
+               , #{ATB_2}       /* 가변적 param 2 */
+               </if>
+		       <if test="ATB_3 != null and ATB_3 != 'undefined' ">
+		       , #{ATB_3}       /* 가변적 param 3 */
+		       </if>
+		       <if test="ATB_4 != null and ATB_4 != 'undefined' ">
+               , #{ATB_4}
+               </if>
+               <if test="ATB_5 != null and ATB_5 != 'undefined' ">
+               , #{ATB_5}
+               </if>
+               <if test="ATB_6 != null and ATB_6 != 'undefined' ">
+               , #{ATB_6}
+               </if>
+               <if test="ATB_7 != null and ATB_7 != 'undefined' ">
+               , #{ATB_7}
+               </if>
+               <if test="ATB_8 != null and ATB_8 != 'undefined' ">
+               , #{ATB_8}
+               </if>
+               <if test="ATB_9 != null and ATB_9 != 'undefined' ">
+               , #{ATB_9}
+               </if>
+               <if test="ATB_10 != null and ATB_10 != 'undefined' ">
+               , #{ATB_10}
+               </if>
+               <if test="ATB_11 != null and ATB_11 != 'undefined' ">
+               , #{ATB_11}
+               </if>
+               <if test="ATB_12 != null and ATB_12 != 'undefined' ">
+               , #{ATB_12}
+               </if>
+               <if test="ATB_13 != null and ATB_13 != 'undefined' ">
+               , #{ATB_13}
+               </if>
+               <if test="ATB_14 != null and ATB_14 != 'undefined' ">
+               , #{ATB_14}
+               </if>
+               <if test="ATB_15 != null and ATB_15 != 'undefined' ">
+               , #{ATB_15}
+               </if>
+               <if test="ATB_16 != null and ATB_16 != 'undefined' ">
+               , #{ATB_16}
+               </if>
+               <if test="ATB_17 != null and ATB_17 != 'undefined' ">
+               , #{ATB_17}
+               </if>
+               <if test="ATB_18 != null and ATB_18 != 'undefined' ">
+               , #{ATB_18}
+               </if>
+               <if test="ATB_19 != null and ATB_19 != 'undefined' ">
+               , #{ATB_19}
+               </if>
+               <if test="ATB_20 != null and ATB_20 != 'undefined' ">
+               , #{ATB_20}
+               </if>
+               <if test="ATB_21 != null and ATB_21 != 'undefined' ">
+               , #{ATB_21}
+               </if>
+               <if test="ATB_22 != null and ATB_22 != 'undefined' ">
+               , #{ATB_22}
+               </if>
+               <if test="ATB_23 != null and ATB_23 != 'undefined' ">
+               , #{ATB_23}
+               </if>
+               <if test="ATB_24 != null and ATB_24 != 'undefined' ">
+               , #{ATB_24}
+               </if>
+               <if test="ATB_25 != null and ATB_25 != 'undefined' ">
+               , #{ATB_25}
+               </if>
+               <if test="ATB_26 != null and ATB_26 != 'undefined' ">
+               , #{ATB_26}
+               </if>
+               <if test="ATB_27 != null and ATB_27 != 'undefined' ">
+               , #{ATB_27}
+               </if>
+               <if test="ATB_28 != null and ATB_28 != 'undefined' ">
+               , #{ATB_28}
+               </if>
+               <if test="ATB_29 != null and ATB_29 != 'undefined' ">
+               , #{ATB_29}
+               </if>
+               <if test="ATB_30 != null and ATB_30 != 'undefined' ">
+               , #{ATB_30}
+               </if>
+               <if test="USE_YN != null and USE_YN != 'undefined' ">
+               , #{USE_YN}
+               </if>
+               <if test="RM != null and RM != 'undefined' ">
+               , #{RM}
+               </if>
+		       , #{CREATED_BY}
+		       , SYSDATE
+		    )
+    </update>
+
+    <!-- 조직부가정보 변경이력 등록 -->
+    <insert id="insertOrgsAddInfosHst" parameterType="hashmap">
+	    INSERT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.insertOrgsAddInfosHst" */  INTO CMD_ORGS_ADD_INFOS_HST
+        (         OFFICE_ID
+			    , JOB_SYS_CD
+			    , ADD_INFO_GRP_CD
+			    , HST_SEQ_NO
+			    , ATB_1
+			    , ATB_2
+			    , ATB_3
+			    , ATB_4
+			    , ATB_5
+			    , ATB_6
+			    , ATB_7
+			    , ATB_8
+			    , ATB_9
+			    , ATB_10
+			    , ATB_11
+			    , ATB_12
+			    , ATB_13
+			    , ATB_14
+			    , ATB_15
+			    , ATB_16
+			    , ATB_17
+			    , ATB_18
+			    , ATB_19
+			    , ATB_20
+			    , ATB_21
+			    , ATB_22
+			    , ATB_23
+			    , ATB_24
+			    , ATB_25
+			    , ATB_26
+			    , ATB_27
+			    , ATB_28
+			    , ATB_29
+			    , ATB_30
+			    , RM
+			    , USE_YN
+			    , CREATED_BY
+			    , CREATION_DATE
+			    , LAST_UPDATED_BY
+			    , LAST_UPDATE_DATE
+			   )
+		SELECT
+		      OFFICE_ID
+		    , JOB_SYS_CD
+		    , ADD_INFO_GRP_CD
+		    , (SELECT NVL(MAX(HST_SEQ_NO), 0) +1 FROM CMD_ORGS_ADD_INFOS_HST
+		       WHERE OFFICE_ID = #{OFC_ID}
+		       AND JOB_SYS_CD = #{JOB_SYS_CD}
+		       AND ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+		     )
+		    , ATB_1
+		    , ATB_2
+		    , ATB_3
+		    , ATB_4
+		    , ATB_5
+		    , ATB_6
+		    , ATB_7
+		    , ATB_8
+		    , ATB_9
+		    , ATB_10
+		    , ATB_11
+		    , ATB_12
+		    , ATB_13
+		    , ATB_14
+		    , ATB_15
+		    , ATB_16
+		    , ATB_17
+		    , ATB_18
+		    , ATB_19
+		    , ATB_20
+		    , ATB_21
+		    , ATB_22
+		    , ATB_23
+		    , ATB_24
+		    , ATB_25
+		    , ATB_26
+		    , ATB_27
+		    , ATB_28
+		    , ATB_29
+		    , ATB_30
+		    , RM
+		    , USE_YN
+		    , CREATED_BY
+		    , CREATION_DATE
+		    , #{LAST_UPDATED_BY}
+		    , SYSDATE
+		FROM CMD_ORGS_ADD_INFOS
+		WHERE OFFICE_ID = #{OFC_ID}
+		AND JOB_SYS_CD = #{JOB_SYS_CD}
+		AND ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+    </insert>
+
+    <!-- 조직부가정보 변경이력 전체카운트 -->
+    <select id="selectOrgAddsAltResveCount" resultType="hashmap">
+	    SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgAddsAltResveCount"  */
+	                   COUNT(*) as CNT
+	    FROM CMD_ORGS_ADD_INFOS_HST A, CMD_ORGS B
+	    WHERE 1=1
+	    AND A.OFFICE_ID = B.OFFICE_ID
+	    AND A.USE_YN = B.USE_YN
+	    AND A.USE_YN = 'Y'
+	    AND A.LAST_UPDATE_DATE IS NOT NULL
+	    <if test="START_DATEC != null and START_DATEC != ''">
+	    AND TO_CHAR(A.LAST_UPDATE_DATE, 'YYYYMMDD')  BETWEEN #{START_DATEC} AND #{END_DATEC}
+	    </if>
+	    <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+         AND B.AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}
+        </if>
+	    <if test="JOB_SYS_CD != null and JOB_SYS_CD != ''">
+	     AND A.JOB_SYS_CD = #{JOB_SYS_CD}
+	    </if>
+	    <if test="ADD_INFO_GRP_CD != null and ADD_INFO_GRP_CD != ''">
+	     AND A.ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+	    </if>
+	    <if test="CND != '' and CND !=null ">
+	        <if test="CND.equals('OFFICE_CODE') and TEXT != '' ">
+	         AND B.OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+	        </if>
+	        <if test="CND.equals('OFFICE_NAME') and TEXT != '' ">
+	         AND B.OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+	        </if>
+	        <if test="CND.equals('RM') and TEXT != '' ">
+	         AND A.RM LIKE '%' ||  #{TEXT} || '%'
+	        </if>
+	    </if>
+    </select>
+
+    <!-- 조직부가정보 변경이력 조회 -->
+    <select id="selectOrgAddsAltResveList" resultType="hashmap">
+        SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.selectOrgAddsAltResveList" */
+		*
+		FROM (
+		    SELECT
+		    ROWNUM AS RNUM,
+		    T.* FROM (
+		        SELECT
+		              A.OFFICE_ID
+		            , A.JOB_SYS_CD
+		            , GET_CODE_F('CMD_JOB_SYSCD', A.JOB_SYS_CD) as JOB_SYS_NM
+		            , B.AGFC_GUBUN_CD
+		            , B.AGFC_GUBUN_NM
+		            , B.OFFICE_CODE
+		            , B.OFFICE_NAME
+		            , TO_CHAR(A.LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DAY /* 변경일자 */
+		            , A.HST_SEQ_NO
+		            , B.UPPER_OFFICE_CODE
+		            , (SELECT OFFICE_NAME FROM CMD_ORGS A1 WHERE A1.OFFICE_CODE = B.UPPER_OFFICE_CODE  AND USE_YN = 'Y') as UPPER_OFFICE_NAME   /* 상위관서명 */
+		            , A.ATB_1          /* 부가정보 속성1 */
+		            , A.ATB_2          /* 부가정보 속성2 */
+		            , A.ATB_3          /* 부가정보 속성3 */
+		            , A.ATB_4          /* 부가정보 속성4 */
+		            , A.ATB_5          /* 부가정보 속성5 */
+		            , A.ATB_6
+		            , A.ATB_7
+		            , A.ATB_8
+		            , A.ATB_9
+		            , A.ATB_10
+		            , A.ATB_11
+		            , A.ATB_12
+		            , A.ATB_13
+		            , A.ATB_14
+		            , A.ATB_15
+		            , A.ATB_16
+		            , A.ATB_17
+		            , A.ATB_18
+		            , A.ATB_19
+		            , A.ATB_20
+		            , A.ATB_21
+		            , A.ATB_22
+		            , A.ATB_23
+		            , A.ATB_24
+		            , A.ATB_25
+		            , A.ATB_26
+		            , A.ATB_27
+		            , A.ATB_28
+		            , A.ATB_29
+		            , A.ATB_30
+		            , A.ADD_INFO_GRP_CD
+		            , A.RM
+		            , A.LAST_UPDATED_BY
+		            , (SELECT USER_NM FROM PES_PORTAL_USERS WHERE PORTAL_USER_ID = A.LAST_UPDATED_BY) as UPDATE_USER_NM    /* 최종수정자명 */
+		            , TO_CHAR(A.LAST_UPDATE_DATE, 'YYYY-MM-DD HH24:MI:SS') as LAST_UPDATE_TIME    /* 변경시간 */
+		        FROM CMD_ORGS_ADD_INFOS_HST A, CMD_ORGS B
+		        WHERE 1=1
+		        AND A.OFFICE_ID = B.OFFICE_ID
+		        AND A.USE_YN = B.USE_YN
+		        AND A.USE_YN = 'Y'
+		        AND A.LAST_UPDATE_DATE IS NOT NULL
+		        <if test="START_DATEC != null and START_DATEC != ''">
+		        AND TO_CHAR(A.LAST_UPDATE_DATE, 'YYYYMMDD') BETWEEN #{START_DATEC} AND #{END_DATEC}
+		        </if>
+		        <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+		        AND B.AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}
+		        </if>
+		        <if test="JOB_SYS_CD != null and JOB_SYS_CD != ''">
+                 AND A.JOB_SYS_CD = #{JOB_SYS_CD}
+                </if>
+		        <if test="ADD_INFO_GRP_CD != null and ADD_INFO_GRP_CD != ''">
+		         AND A.ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+		        </if>
+		        <if test="CND != '' and CND !=null ">
+                    <if test="CND.equals('OFFICE_CODE') and TEXT != '' ">
+                     AND B.OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+                    </if>
+                    <if test="CND.equals('OFFICE_NAME') and TEXT != '' ">
+                     AND B.OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+                    </if>
+                    <if test="CND.equals('RM') and TEXT != '' ">
+                     AND A.RM LIKE '%' ||  #{TEXT} || '%'
+                    </if>
+                </if>
+		        ORDER BY  A.LAST_UPDATE_DATE DESC,  A.OFFICE_ID, A.HST_SEQ_NO DESC
+		    ) T WHERE 1=1
+	       <if test= "P_END != null and P_END != ''">
+               AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+              </if>
+	        ) WHERE 1=1
+		 <if test= "P_START != null and P_START != ''">
+	         AND  RNUM >= #{P_START}
+	     </if>
+    </select>
+
+    <!-- 조직부가정보 속성IF 삭제 X -->
+    <delete id="deleteOrgAddInfoAtbIfs" parameterType="hashmap">
+        DELETE  /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.deleteOrgAddInfoAtbIfs"  */
+        FROM    CMD_ORGS_ADD_INFOS_ATBS_IFS
+        WHERE  JOB_SYS_CD = #{JOB_SYS_CD}
+        AND      ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+        AND      ATB_CLUM = #{ATB_CLUM}
+        AND      LINK_STAT_CD = 'S'   /* 연계성공건만 삭제 */
+    </delete>
+
+    <!-- 조직부가정보 속성IF 등록 -->
+    <insert id="insertOrgAddInfoAtbIfs" parameterType="hashmap">
+        INSERT   /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.insertOrgAddInfoAtbIfs" */
+        INTO      CMD_ORGS_ADD_INFOS_ATBS_IFS
+                    ( TRAN_ID
+                    , JOB_SYS_CD
+                    , ADD_INFO_GRP_CD
+                    , ATB_CLUM
+                    , ATB_CLUM_NM
+                    , ATB_TY_CD
+                    , ATB_TY_MIN_LT
+                    , ATB_TY_MAX_LT
+                    , SCRIN_INDICT_NAME
+                    , SQL_ID
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , LINK_DEAL_DTM
+                    , LINK_STAT_CD
+                    , CUD_KEY
+                   )
+        VALUES (
+                      CMD_GET_TRAN_ID_F('CMD')
+                    , #{JOB_SYS_CD}
+                    , #{ADD_INFO_GRP_CD}
+                    , #{ATB_CLUM}
+                    , #{ATB_CLUM_NM}
+                    , #{ATB_TY_CD}
+                    , #{ATB_TY_MIN_LT}
+                    , #{ATB_TY_MAX_LT}
+                    , #{SCRIN_INDICT_NM}
+                    <if test="SQL_ID == 0 || SQL_ID == null">
+                    , 0
+                    </if>
+                    <if test="SQL_ID > 0">
+                    , #{SQL_ID}
+                    </if>
+                    , #{CREATED_BY}
+                    ,  SYSDATE
+                    ,  NULL
+                    , #{LINK_STAT_CD}       /* N:신규,  P:진행,  S:성공,  F:실패  */
+                    , #{CUD_KEY}               /* C:Create, U:Delete 후 Insert, D:Delete */
+                )
+    </insert>
+
+    <!-- 조직부가정보 IF 삭제 X -->
+    <delete id="deleteOrgAddInfoIfs" parameterType="hashmap">
+        DELETE  /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.deleteOrgAddInfoIfs"  */
+        FROM    CMD_ORGS_ADD_INFOS_IFS
+        WHERE  1=1
+        AND      OFFICE_ID = #{OFC_ID}
+        AND      JOB_SYS_CD = #{JOB_SYS_CD}
+        AND      ADD_INFO_GRP_CD = #{ADD_INFO_GRP_CD}
+        AND      LINK_STAT_CD = 'S'   /* 연계성공건만 삭제 */
+    </delete>
+
+    <!-- 조직부가정보 IF 등록 -->
+    <insert id="insertOrgAddInfoIfs" parameterType="hashmap">
+        INSERT   /* "com.nbdf.cmd.cm.cmog.dao.CMOG03000Dao.insertOrgAddInfoIfs" */
+        INTO      CMD_ORGS_ADD_INFOS_IFS
+            (    TRAN_ID
+               , OFFICE_ID
+               , JOB_SYS_CD
+               , ADD_INFO_GRP_CD
+               <if test="ATB_1 != null and ATB_1 != 'undefined' ">
+               , ATB_1
+               </if>
+               <if test="ATB_2 != null and ATB_2 != 'undefined' ">
+               , ATB_2
+               </if>
+               <if test="ATB_3 != null and ATB_3 != 'undefined' ">
+               , ATB_3
+               </if>
+               <if test="ATB_4 != null and ATB_4 != 'undefined' ">
+               , ATB_4
+               </if>
+               <if test="ATB_5 != null and ATB_5 != 'undefined' ">
+               , ATB_5
+               </if>
+               <if test="ATB_6 != null and ATB_6 != 'undefined' ">
+               , ATB_6
+               </if>
+               <if test="ATB_7 != null and ATB_7 != 'undefined' ">
+               , ATB_7
+               </if>
+               <if test="ATB_8 != null and ATB_8 != 'undefined' ">
+               , ATB_8
+               </if>
+               <if test="ATB_9 != null and ATB_9 != 'undefined' ">
+               , ATB_9
+               </if>
+               <if test="ATB_10 != null and ATB_10 != 'undefined' ">
+               , ATB_10
+               </if>
+               <if test="ATB_11 != null and ATB_11 != 'undefined' ">
+               , ATB_11
+               </if>
+               <if test="ATB_12 != null and ATB_12 != 'undefined' ">
+               , ATB_12
+               </if>
+               <if test="ATB_13 != null and ATB_13 != 'undefined' ">
+               , ATB_13
+               </if>
+               <if test="ATB_14 != null and ATB_14 != 'undefined' ">
+               , ATB_14
+               </if>
+               <if test="ATB_15 != null and ATB_15 != 'undefined' ">
+               , ATB_15
+               </if>
+               <if test="ATB_16 != null and ATB_16 != 'undefined' ">
+               , ATB_16
+               </if>
+               <if test="ATB_17 != null and ATB_17 != 'undefined' ">
+               , ATB_17
+               </if>
+               <if test="ATB_18 != null and ATB_18 != 'undefined' ">
+               , ATB_18
+               </if>
+               <if test="ATB_19 != null and ATB_19 != 'undefined' ">
+               , ATB_19
+               </if>
+               <if test="ATB_20 != null and ATB_20 != 'undefined' ">
+               , ATB_20
+               </if>
+               <if test="ATB_21 != null and ATB_21 != 'undefined' ">
+               , ATB_21
+               </if>
+               <if test="ATB_22 != null and ATB_22 != 'undefined' ">
+               , ATB_22
+               </if>
+               <if test="ATB_23 != null and ATB_23 != 'undefined' ">
+               , ATB_23
+               </if>
+               <if test="ATB_24 != null and ATB_24 != 'undefined' ">
+               , ATB_24
+               </if>
+               <if test="ATB_25 != null and ATB_25 != 'undefined' ">
+               , ATB_25
+               </if>
+               <if test="ATB_26 != null and ATB_26 != 'undefined' ">
+               , ATB_26
+               </if>
+               <if test="ATB_27 != null and ATB_27 != 'undefined' ">
+               , ATB_27
+               </if>
+               <if test="ATB_28 != null and ATB_28 != 'undefined' ">
+               , ATB_28
+               </if>
+               <if test="ATB_29 != null and ATB_29 != 'undefined' ">
+               , ATB_29
+               </if>
+               <if test="ATB_30 != null and ATB_30 != 'undefined' ">
+               , ATB_30
+               </if>
+               <if test="USE_YN != null and USE_YN != 'undefined' ">
+               , USE_YN
+               </if>
+               <if test="RM != null and RM != 'undefined' ">
+               , RM
+               </if>
+               , CREATED_BY
+               , CREATION_DATE
+               , LINK_DEAL_DTM
+               , LINK_STAT_CD
+               , CUD_KEY
+            )
+            VALUES
+            (
+                 CMD_GET_TRAN_ID_F('CMD')
+               , #{OFC_ID}
+               , #{JOB_SYS_CD}
+               , #{ADD_INFO_GRP_CD}
+               <if test="ATB_1 != null and ATB_1 != 'undefined' ">
+               , #{ATB_1}
+               </if>
+               <if test="ATB_2 != null and ATB_2 != 'undefined' ">
+               , #{ATB_2}
+               </if>
+               <if test="ATB_3 != null and ATB_3 != 'undefined' ">
+               , #{ATB_3}
+               </if>
+               <if test="ATB_4 != null and ATB_4 != 'undefined' ">
+               , #{ATB_4}
+               </if>
+               <if test="ATB_5 != null and ATB_5 != 'undefined' ">
+               , #{ATB_5}
+               </if>
+               <if test="ATB_6 != null and ATB_6 != 'undefined' ">
+               , #{ATB_6}
+               </if>
+               <if test="ATB_7 != null and ATB_7 != 'undefined' ">
+               , #{ATB_7}
+               </if>
+               <if test="ATB_8 != null and ATB_8 != 'undefined' ">
+               , #{ATB_8}
+               </if>
+               <if test="ATB_9 != null and ATB_9 != 'undefined' ">
+               , #{ATB_9}
+               </if>
+               <if test="ATB_10 != null and ATB_10 != 'undefined' ">
+               , #{ATB_10}
+               </if>
+               <if test="ATB_11 != null and ATB_11 != 'undefined' ">
+               , #{ATB_11}
+               </if>
+               <if test="ATB_12 != null and ATB_12 != 'undefined' ">
+               , #{ATB_12}
+               </if>
+               <if test="ATB_13 != null and ATB_13 != 'undefined' ">
+               , #{ATB_13}
+               </if>
+               <if test="ATB_14 != null and ATB_14 != 'undefined' ">
+               , #{ATB_14}
+               </if>
+               <if test="ATB_15 != null and ATB_15 != 'undefined' ">
+               , #{ATB_15}
+               </if>
+               <if test="ATB_16 != null and ATB_16 != 'undefined' ">
+               , #{ATB_16}
+               </if>
+               <if test="ATB_17 != null and ATB_17 != 'undefined' ">
+               , #{ATB_17}
+               </if>
+               <if test="ATB_18 != null and ATB_18 != 'undefined' ">
+               , #{ATB_18}
+               </if>
+               <if test="ATB_19 != null and ATB_19 != 'undefined' ">
+               , #{ATB_19}
+               </if>
+               <if test="ATB_20 != null and ATB_20 != 'undefined' ">
+               , #{ATB_20}
+               </if>
+               <if test="ATB_21 != null and ATB_21 != 'undefined' ">
+               , #{ATB_21}
+               </if>
+               <if test="ATB_22 != null and ATB_22 != 'undefined' ">
+               , #{ATB_22}
+               </if>
+               <if test="ATB_23 != null and ATB_23 != 'undefined' ">
+               , #{ATB_23}
+               </if>
+               <if test="ATB_24 != null and ATB_24 != 'undefined' ">
+               , #{ATB_24}
+               </if>
+               <if test="ATB_25 != null and ATB_25 != 'undefined' ">
+               , #{ATB_25}
+               </if>
+               <if test="ATB_26 != null and ATB_26 != 'undefined' ">
+               , #{ATB_26}
+               </if>
+               <if test="ATB_27 != null and ATB_27 != 'undefined' ">
+               , #{ATB_27}
+               </if>
+               <if test="ATB_28 != null and ATB_28 != 'undefined' ">
+               , #{ATB_28}
+               </if>
+               <if test="ATB_29 != null and ATB_29 != 'undefined' ">
+               , #{ATB_29}
+               </if>
+               <if test="ATB_30 != null and ATB_30 != 'undefined' ">
+               , #{ATB_30}
+               </if>
+               <if test="USE_YN != null and USE_YN != 'undefined' ">
+               , #{USE_YN}
+               </if>
+               <if test="RM != null and RM != 'undefined' ">
+               , #{RM}
+               </if>
+               , #{CREATED_BY}
+               , SYSDATE
+               ,  NULL
+               , #{LINK_STAT_CD}       /* N:신규,  P:진행,  S:성공,  F:실패  */
+               , #{CUD_KEY}               /* C:Create, U:Delete 후 Insert, D:Delete */
+            )
+        </insert>
+
+ </mapper>

@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.apr.dao.APR90110Dao">
+<!-- My Admin::평가기준::부서별 인원배분 -->
+
+    <!-- 조직정보 조회 -->
+    <select id="selectOrganizationList" parameterType="map" resultType="hashmap">
+        /* smh.apr.dao.APR90110Dao.selectOrganizationList */
+        SELECT HOV.CHILD_ORGANIZATION_ID       AS ORG_ID
+             , HOV.CHILD_ORGANIZATION_NAME     AS ORG_NAME_KR
+             , HOV.CHILD_ORGANIZATION_NAME_ENG AS ORG_NAME_EN
+             , HOV.ORGANIZATION_TYPE_CODE      AS ORG_TYPE_CODE
+             , HOV.ORGANIZATION_TYPE_NAME      AS ORG_TYPE_NAME
+          FROM HJSPFM_ORG_HIERARCHY_V1 HOV
+         WHERE 1=1
+           AND HOV.ORGANIZATION_TYPE_CODE <![CDATA[<>]]> 'A010'  /*회사 제외*/
+        <if test="ORG_ID != null and ORG_ID !='' ">
+           AND HOV.CHILD_ORGANIZATION_ID LIKE '%'||  #{ORG_ID} ||'%'
+        </if>
+        <if test="ORG_NAME != null and ORG_NAME !='' ">
+           AND HOV.CHILD_ORGANIZATION_NAME LIKE '%'|| UPPER(#{ORG_NAME}) ||'%'
+        </if>
+        ORDER BY HOV.CHILD_ORGANIZATION_NAME
+    </select>
+
+    <!-- 부서인원배분 정보 조회 -->
+    <select id="selectAppraisalHeadcountList" parameterType="map" resultType="hashmap">
+        /* smh.apr.dao.APR90110Dao.selectAppraisalHeadcountList */
+        SELECT 0                       AS CHK
+             , HAV.HJSPFM_APPRAISAL_HEADCOUNT_SEQ
+             , HAV.APPRAISAL_TYPE
+             , HAV.APPRAISAL_YEAR
+             , HAV.APPRAISAL_SEQUENCE
+             , HAV.ORGANIZATION_ID
+             , HOU.ATTRIBUTE2           AS ORGANIZATION_NM
+             , HAV.APPRAISAL_GROUP_SIZE
+             , HAV.S_HEADCOUNT
+             , HAV.A_HEADCOUNT
+             , HAV.B_HEADCOUNT
+             , HAV.C_HEADCOUNT
+             , HAV.D_HEADCOUNT
+             , (HAV.S_HEADCOUNT + HAV.A_HEADCOUNT + HAV.B_HEADCOUNT + HAV.C_HEADCOUNT + HAV.D_HEADCOUNT) AS SUM_HEADCOUNT
+             , HAV.OBJECT_VERSION_NUMBER
+          FROM HJSPFM_APPRAISAL_HEADCOUNT_V HAV
+             , HR_ALL_ORGANIZATION_UNITS    HOU
+         WHERE 1=1
+           AND HAV.APPRAISAL_TYPE           = 'A140'   /*고정값 처리 (종합평가)*/
+           AND HAV.APPRAISAL_YEAR           = #{APPRAISAL_YEAR}      /*param1: 년도 */
+           AND HAV.APPRAISAL_SEQUENCE       = #{APPRAISAL_SEQUENCE}  /*param2: 차수 */
+           AND NVL(HAV.ORGANIZATION_ID,'1') = NVL(#{ORGANIZATION_ID}, NVL(HAV.ORGANIZATION_ID,'1'))  /* Param3: 조직 id */
+           AND HAV.ORGANIZATION_ID          = HOU.ORGANIZATION_ID(+)
+        ORDER BY HAV.HJSPFM_APPRAISAL_HEADCOUNT_SEQ DESC
+    </select>
+    
+    <!-- 부서인원배분 정보 등록 -->
+    <insert id="insertAppraisalHeadcount" parameterType="map" >
+         /* smh.apr.dao.APR90110MDao.insertAppraisalHeadcount */
+         INSERT INTO HJSPFM_APPRAISAL_HEADCOUNT
+         (  HJSPFM_APPRAISAL_HEADCOUNT_SEQ/*PK 일련번호*/
+          , APPRAISAL_TYPE                /*평가유형        */
+          , APPRAISAL_YEAR                /*평가년도        */
+          , APPRAISAL_SEQUENCE            /*평가차수        */
+          , BSC_GRADE                     /*조직평가등급    */
+          , APPRAISAL_GROUP_SIZE          /*평가그룹 인원수 */
+          , S_HEADCOUNT                   /*S등급 할당인원  */
+          , A_HEADCOUNT                   /*A등급 할당인원  */
+          , B_HEADCOUNT                   /*B등급 할당인원  */
+          , C_HEADCOUNT                   /*C등급 할당인원  */
+          , D_HEADCOUNT                   /*D등급 할당인원  */
+          , CREATED_BY                    /*자료 생성자     */
+          , CREATION_DATE                 /*자료 생성일     */
+          , LAST_UPDATED_BY               /*최종 수정자     */
+          , LAST_UPDATE_DATE              /*최종 수정일     */
+          , LAST_UPDATE_LOGIN             /*로그인 유저     */
+          , OBJECT_VERSION_NUMBER         /**/
+          , ORGANIZATION_ID               /*부서id*/
+        )VALUES(
+           HJSPFM_APPRAISAL_HEADCOUNT_SEQ.NEXTVAL /*PK 일련번호*/
+         , #{APPRAISAL_TYPE}               /*평가유형_종합평가*/
+         , #{APPRAISAL_YEAR}               /*평가년도        */
+         , #{APPRAISAL_SEQUENCE}           /*평가차수        */
+         , 'B'                             /*조직평가등급    */
+         , NVL(#{APPRAISAL_GROUP_SIZE},0)  /*평가그룹 인원수 */
+         , NVL(#{S_HEADCOUNT},0)           /*S등급 할당인원  */
+         , NVL(#{A_HEADCOUNT},0)           /*A등급 할당인원  */
+         , NVL(#{B_HEADCOUNT},0)           /*B등급 할당인원  */
+         , NVL(#{C_HEADCOUNT},0)           /*C등급 할당인원  */
+         , NVL(#{D_HEADCOUNT},0)           /*D등급 할당인원  */
+         , #{PERSONID}                    /*자료 생성자     */
+         , SYSDATE                         /*자료 생성일     */
+         , #{PERSONID}                    /*최종 수정자     */
+         , SYSDATE                         /*최종 수정일     */
+         , #{PERSONID}                    /*로그인 유저     */
+         , #{OBJECT_VERSION_NUMBER}        /**/
+         , #{ORGANIZATION_ID}              /*부서id*/
+        )
+    </insert>
+    
+    <!-- 부서인원배분 정보 수정 -->
+    <update id="updateAppraisalHeadcount" parameterType="map">
+        /* smh.apr.dao.APR90110MDao.updateAppraisalHeadcount */
+        UPDATE HJSPFM_APPRAISAL_HEADCOUNT
+           SET APPRAISAL_GROUP_SIZE          = #{APPRAISAL_GROUP_SIZE}         /*평가그룹 인원수 */
+             , S_HEADCOUNT                   = #{S_HEADCOUNT}                  /*S등급 할당인원  */
+             , A_HEADCOUNT                   = #{A_HEADCOUNT}                  /*A등급 할당인원  */
+             , B_HEADCOUNT                   = #{B_HEADCOUNT}                  /*B등급 할당인원  */
+             , C_HEADCOUNT                   = #{C_HEADCOUNT}                  /*C등급 할당인원  */
+             , D_HEADCOUNT                   = #{D_HEADCOUNT}                  /*D등급 할당인원  */
+             , LAST_UPDATED_BY               = #{PERSONID}                    /*최종 수정자     */
+             , LAST_UPDATE_DATE              = SYSDATE                         /*최종 수정일     */
+             , LAST_UPDATE_LOGIN             = #{PERSONID}                    /*로그인 유저     */
+             , OBJECT_VERSION_NUMBER         = OBJECT_VERSION_NUMBER+1         /**/
+         WHERE HJSPFM_APPRAISAL_HEADCOUNT_SEQ= #{HJSPFM_APPRAISAL_HEADCOUNT_SEQ}/*PK 일련번호*/
+    </update>
+    
+    <!-- 부서인원배분 정보 삭제 -->
+    <delete id="deleteAppraisalHeadcount" parameterType="map">
+        /* smh.apr.dao.APR90110MDao.deleteAppraisalHeadcount */
+        DELETE HJSPFM_APPRAISAL_HEADCOUNT
+         WHERE HJSPFM_APPRAISAL_HEADCOUNT_SEQ= #{HJSPFM_APPRAISAL_HEADCOUNT_SEQ}/*PK 일련번호*/
+    </delete>
+    
+    <!-- 부서인원배분 정보 생성 -->
+	<select id="createAppraisalHeadcount"  statementType="CALLABLE" parameterType="map">
+		/* smh.apr.dao.APR90110MDao.createAppraisalHeadcount */
+        {
+          call HJSPFM_WEB_SM_APPRAISAL_PKG.APPRAISAL_HEADCOUNT_CREATE 
+                 ( #{APPRAISAL_TYPE     ,mode=IN    ,jdbcType=VARCHAR    ,javaType=java.lang.String}
+                 , #{APPRAISAL_YEAR     ,mode=IN    ,jdbcType=VARCHAR    ,javaType=java.lang.String}
+                 , #{APPRAISAL_SEQUENCE ,mode=IN    ,jdbcType=VARCHAR    ,javaType=java.lang.String}
+                 , #{ORGANIZATION_ID    ,mode=IN    ,jdbcType=VARCHAR    ,javaType=java.lang.String}
+                 , #{PERSONID           ,mode=IN    ,jdbcType=VARCHAR    ,javaType=java.lang.String}
+                 , #{ACT_SIT_ID         ,mode=IN    ,jdbcType=VARCHAR    ,javaType=java.lang.String}
+                 )
+        }
+    </select>
+</mapper>

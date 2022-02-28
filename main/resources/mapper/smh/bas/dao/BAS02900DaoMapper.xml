@@ -1,0 +1,900 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS02900Dao">
+<!-- Routing 자원 치공구 외주단가 등록-->
+
+    <!-- BOM Tree 조회-->
+    <select id="selectBasBOMList" parameterType="map" resultType="hashmap">
+    --selectBasBOMList
+    WITH BOMTREE 
+             ( 
+                         PARENTS_ASSEMBLYITEMID
+                        ,PARENTS_ASSEMBLYITEMVERSION
+                        ,PARENTBOMID
+                        ,PLANTID
+                        ,ASSEMBLYITEMID
+                        ,ASSEMBLYITEMVERSION
+                        ,ASSEMBLYITEMBOMID_HALF
+                        ,ASSEMBLYITEMBOMID
+                        ,ASSEMBLYSEQUENCE
+                        ,ASSEMBLYQTY
+                        ,ASSEMBLYTYPE
+                        ,USERSEQUENCE
+					    ,PARENTBOMSEQUENCE
+					    ,BOMSEQUENCE   
+					    ,OPERSEQ
+					    ,BOMLEVEL
+                ) AS 
+                  (
+                   SELECT  *
+                    from (
+                            SELECT
+                                     P.ASSEMBLYITEMID       PARENTS_ASSEMBLYITEMID
+                                    ,P.ASSEMBLYITEMVERSION  PARENTS_ASSEMBLYITEMVERSION
+                                    ,'0' PARENTBOMID
+                                    ,A.PLANTID
+                                    ,P.ASSEMBLYITEMID       ASSEMBLYITEMID
+                                    ,P.ASSEMBLYITEMVERSION  ASSEMBLYITEMVERSION
+                                    ,A.ASSEMBLYBOMID        ASSEMBLYITEMBOMID_HALF
+                                    ,A.COMPONENTBOMID       ASSEMBLYITEMBOMID
+                                    ,A.COMPONENTSEQUENCE    ASSEMBLYSEQUENCE
+                                    ,A.COMPONENTQTY         ASSEMBLYQTY
+                                    ,A.WIPSUPPLYTYPE        ASSEMBLYTYPE
+                                    ,'0'					USERSEQUENCE
+						       		,'-1'                     PARENTBOMSEQUENCE
+						       		,'0' 					BOMSEQUENCE      
+						       		, '0' OPERSEQ
+						       		, 0 BOMLEVEL
+                                 FROM
+                                    BAS_BOMCOMPONENT               A
+                                 INNER JOIN BAS_ASSEMBLYBILLOFMATERIAL P   ON  P.ASSEMBLYBOMID = A.ASSEMBLYBOMID
+                                                                         AND  P.ENTERPRISEID  = A.ENTERPRISEID
+                                 WHERE P.ENTERPRISEID   = #{ENTERPRISEID}
+                                   AND P.ASSEMBLYITEMID = #{PRODUCTDEFID} 
+                                   AND P.ASSEMBLYITEMVERSION = #{PRODUCTDEFVERSION}
+                                   AND ROWNUM = 1
+                        ) A
+                        UNION all  
+                        SELECT
+                            P.ASSEMBLYITEMID       PARENTS_ASSEMBLYITEMID
+                           ,P.ASSEMBLYITEMVERSION  PARENTS_ASSEMBLYITEMVERSION
+                           ,TO_CHAR(P.ASSEMBLYBOMID)  PARENTBOMID
+                           ,A.PLANTID
+                           ,A.COMPONENTITEMID      ASSEMBLYITEMID
+                           ,A.COMPONENTITEMVERSION ASSEMBLYITEMVERSION
+                           ,C.ASSEMBLYBOMID        ASSEMBLYITEMBOMID_HALF
+                           ,A.COMPONENTBOMID       ASSEMBLYITEMBOMID
+                           ,A.COMPONENTSEQUENCE    ASSEMBLYSEQUENCE
+                           ,A.COMPONENTQTY         ASSEMBLYQTY
+                           ,A.WIPSUPPLYTYPE        ASSEMBLYTYPE
+                           ,TO_CHAR(OP.USERSEQUENCE) USERSEQUENCE
+				       	   ,BG.BOMSEQUENCE AS PARENTBOMSEQUENCE
+				       		,CASE WHEN BG.BOMSEQUENCE != '' THEN BG.BOMSEQUENCE || '.' || LPAD(TO_CHAR(OP.USERSEQUENCE), 4, '0') || '.' || LPAD(ROW_NUMBER() OVER(PARTITION BY BG.BOMSEQUENCE ORDER BY A.COMPONENTSEQUENCE), 4, '0') 
+					              ELSE LPAD(TO_CHAR(OP.USERSEQUENCE), 4, '0') || '.' || LPAD(ROW_NUMBER() OVER(PARTITION BY BG.BOMSEQUENCE ORDER BY A.COMPONENTSEQUENCE), 4, '0')  
+				            END	AS	BOMSEQUENCE	
+				           <!-- , BG.OPERSEQ || TO_CHAR(RANK() OVER (ORDER BY OP.USERSEQUENCE, A.COMPONENTSEQUENCE)) OPERSEQ -->
+<!-- 					        ,BG.OPERSEQ ||
+					         TO_CHAR(RANK() OVER(ORDER BY TO_NUMBER(OP.USERSEQUENCE)
+					         ,TO_NUMBER(A.COMPONENTSEQUENCE))) OPERSEQ -->
+        					,BG.OPERSEQ || OP.USERSEQUENCE || A.COMPONENTSEQUENCE AS OPERSEQ
+				           , BOMLEVEL + 1 AS BOMLEVEL
+                        FROM
+                           BAS_BOMCOMPONENT A
+                        INNER JOIN BAS_ASSEMBLYBILLOFMATERIAL P ON
+                               P.ASSEMBLYBOMID = A.ASSEMBLYBOMID
+              	        INNER JOIN BAS_OPERATION	OP	ON	A.OPERATIONID = OP.OPERATIONID
+              	        INNER JOIN BOMTREE BG
+                            ON P.ASSEMBLYITEMID      = BG.ASSEMBLYITEMID  --1025362J1
+                           AND P.ASSEMBLYITEMVERSION = BG.ASSEMBLYITEMVERSION  --FA1
+                        LEFT OUTER JOIN BAS_ASSEMBLYBILLOFMATERIAL C ON
+                               C.ASSEMBLYITEMID = A.COMPONENTITEMID
+                           AND C.ASSEMBLYITEMVERSION = A.COMPONENTITEMVERSION
+                        WHERE OP.VALIDSTATE = 'Valid'
+				)
+              SELECT
+                    BT.PLANTID
+                   ,NVL(BT.ASSEMBLYITEMBOMID_HALF,BT.ASSEMBLYITEMBOMID) AS BOMID
+                   ,BT.PARENTBOMID
+                   ,BT.ASSEMBLYITEMID
+                   ,NVL(IM.ITEMNAME,'-') ASSEMBLYITEMNAME
+                   ,BT.ASSEMBLYITEMVERSION
+                   ,BT.ASSEMBLYSEQUENCE
+                   ,BT.ASSEMBLYQTY
+                   ,BT.ASSEMBLYTYPE
+                   ,TO_NUMBER(BT.USERSEQUENCE) AS USERSEQUENCE
+                   ,CASE WHEN TO_CHAR(BT.USERSEQUENCE) = '0' THEN BT.ASSEMBLYITEMID 	
+                   		 ELSE TO_CHAR(BT.USERSEQUENCE)  ||'      '|| BT.ASSEMBLYITEMID 		
+         				 END AS DISPLAYNAME
+         		   ,IM.MASTERDATACLASSID
+         		   ,BT.PARENTBOMSEQUENCE
+         		   ,BT.BOMSEQUENCE
+				   , OPERSEQ
+             	   ,BOMLEVEL
+             FROM  BOMTREE BT
+             LEFT OUTER JOIN BAS_ITEMMASTER IM  ON  BT.ASSEMBLYITEMID = IM.ITEMID
+                                       AND BT.ASSEMBLYITEMVERSION = IM.ITEMVERSION
+           	ORDER BY OPERSEQ
+                 
+    </select>    
+
+	<!-- Product Info 조회-->
+    <select id="selectProductDEFInfo" parameterType="map" resultType="hashmap">
+    	-- Id : selectProductDEFInfo
+				SELECT  MS.CUSTOMERNAME           								-- 고객사
+				       ,MA.ITEMID               	  	as PRODUCTDEFID			-- 품목코드
+				       ,MA.ITEMVERSION            		as PRODUCTDEFVERSION	-- 품목버전
+				       ,MA.MASTERDATACLASSID			as PRODUCTDEFCLASSID	-- 품목구분
+				       ,RT.COMPLETIONWAREHOUSEID  								-- 완료창고
+				       ,WH.WAREHOUSENAME										-- 완료창고명
+				       ,MA.ITEMNAME               		as PRODUCTDEFNAME		-- 품목명
+				       ,MA.UOMDEFID												-- UOM
+				       ,MS.JOBTYPE                								-- 작업구분
+				       ,JT.JOBTYPENAME											-- 작업구분명
+				       ,MA.PRODUCTIONTYPE										-- 생산구분
+				       ,B.PRODUCTIONTYPENAME       								-- 생산구분명
+				       ,MS.RTRSHT
+				       ,MS.PNLSIZEXAXIS
+				       ,MS.PNLSIZEYAXIS
+				       ,MS.PCSPNL												--배열수
+				       ,MS.PCSMM												--산출수
+				       ,MS.USELAYER												--사용층
+				       ,PISC.CHANGENOTE1				as REMARK				--비고
+				FROM BAS_ITEMMASTER MA
+				INNER JOIN BAS_PRODUCTITEMSPEC MS 				ON 	MS.ENTERPRISEID 		= MA.ENTERPRISEID
+				                                 				AND MS.ITEMID 				= MA.ITEMID
+				                                 				AND MS.ITEMVERSION 			= MA.ITEMVERSION
+				LEFT OUTER JOIN BAS_ROUTING    RT 				ON 	RT.ENTERPRISEID 		= MA.ENTERPRISEID
+				                                 				AND RT.ASSEMBLYITEMID 		= MA.ITEMID
+				                                 				AND RT.ASSEMBLYITEMVERSION	= MA.ITEMVERSION
+				LEFT OUTER JOIN BAS_WAREHOUSE  WH				ON 	WH.ENTERPRISEID 		= MA.ENTERPRISEID
+																AND WH.PLANTID				= #{PLANTID}
+				                                 				AND WH.WAREHOUSEID 			= RT.COMPLETIONWAREHOUSEID         
+				LEFT OUTER JOIN BAS_PRODUCTITEMSPECCOMMENT  PISC	ON 	PISC.ITEMID 			= MA.ITEMID
+																AND PISC.ITEMVERSION			= MA.ITEMVERSION                                 	                        	
+				LEFT JOIN 	(	
+								SELECT	C.LOOKUP_CODE CODEID
+						              , D.DICTIONARYNAME	AS PRODUCTIONTYPENAME
+								FROM CMD_LOOKUP_VALUES	C
+								LEFT OUTER JOIN	CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID
+								WHERE	1=1
+									AND		C.LOOKUP_TYPE = 'ProductionType'
+									AND		C.ENABLED_FLAG = 'Y'
+									AND		D.LANGUAGETYPE = #{LANGUAGETYPE} 
+								) B										ON MA.PRODUCTIONTYPE = B.CODEID
+				LEFT JOIN 	(	
+								SELECT	C.LOOKUP_CODE CODEID
+						              , F.DICTIONARYNAME	AS JOBTYPENAME
+								FROM CMD_LOOKUP_VALUES	C
+								LEFT OUTER JOIN	CMD_DICTIONARY	F	ON	C.DICTIONARYID = F.DICTIONARYID
+								WHERE	1=1
+									AND		C.LOOKUP_TYPE = 'JobType'
+									AND		C.ENABLED_FLAG = 'Y'
+									AND		F.LANGUAGETYPE =#{LANGUAGETYPE} 
+							) JT									ON 	MS.JOBTYPE =JT.CODEID   				
+				WHERE 1=1
+					AND MA.ENTERPRISEID 	= #{ENTERPRISEID}
+					AND MA.ITEMID 			= #{P_PRODUCTDEFID}
+					AND MA.ITEMVERSION 		= #{P_PRODUCTDEFVERSION}
+					AND MA.VALIDSTATE = 'Valid' 
+	</select>
+	<!-- Product Oper Resource 조회-->
+    <select id="selectOpeRationResource" parameterType="map" resultType="hashmap">
+    			-- selectOpeRationResource
+				SELECT  OP.PLANTID
+					,	OP.OPERATIONID
+					,	OP.OPERATIONSEQUENCE   
+					,	OP.USERSEQUENCE                 
+					,	OP.PROCESSSEGMENTID
+					,	PN.DICTIONARYNAME               AS PROCESSSEGMENTNAME
+					,	OP.DESCRIPTION
+					,	OP.ENTERPRISEID
+					,	CASE WHEN RS.OPERATIONID IS NULL THEN 'N' ELSE 'Y' END AS RESOURCEYN
+					,	CASE WHEN DS.OPERATIONID IS NULL THEN 'N' ELSE 'Y' END AS DURABLEYN
+					,   OP.MAINPRODUCTID
+					,   OP.MAINPRODUCTVERSION
+					,   PG.ISREQUIREDMATERIAL
+					,   PG.ISREQUIREDOPERATIONSPEC
+					,   PG.ISREQUIREDTOOL
+					,	OP.CREATEDTIME
+					,	OP.MODIFIEDTIME
+					,	CU.USER_NM 			AS CREATOR
+					,	MU.USER_NM 			AS MODIFIER
+				FROM  BAS_OPERATION                  	OP   
+				INNER JOIN BAS_ROUTING					RT	ON OP.ENTERPRISEID = RT.ENTERPRISEID
+				                                            AND OP.ASSEMBLYROUTINGID = RT.ASSEMBLYROUTINGID
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT    PG  ON PG.PROCESSSEGMENTID	= OP.PROCESSSEGMENTID 
+				                                            AND PG.ENTERPRISEID	= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY           PN  ON PN.DICTIONARYID	= PG.PROCESSSEGMENTNAME
+				                                            AND PN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN  ( SELECT ENTERPRISEID
+										, OPERATIONID
+										, COUNT(OPERATIONRESOURCEID) RESOURCECNT 
+				                   FROM BAS_OPERATIONRESOURCE
+				                   WHERE RESOURCETYPE = 'Resource'
+				                   GROUP BY ENTERPRISEID, OPERATIONID) RS ON RS.ENTERPRISEID = OP.ENTERPRISEID
+				                                                           AND RS.OPERATIONID = OP.OPERATIONID
+				LEFT OUTER JOIN (
+					 SELECT 
+				    	  ENTERPRISEID
+						, OPERATIONID
+						, COUNT(OPERATIONRESOURCEID) RESOURCECNT 
+				      FROM BAS_OPERATIONRESOURCE
+				      WHERE RESOURCETYPE = 'Durable'
+				      GROUP BY  ENTERPRISEID, OPERATIONID
+				) DS	ON	DS.ENTERPRISEID = OP.ENTERPRISEID
+						AND	DS.OPERATIONID = OP.OPERATIONID
+				LEFT OUTER JOIN CMD_USERS 		 CU ON CU.USER_ID = OP.CREATOR
+				LEFT OUTER JOIN CMD_USERS 		 MU ON MU.USER_ID = OP.MODIFIER							
+				WHERE RT.ENTERPRISEID  =#{ENTERPRISEID}
+				AND RT.MAINPRODUCTID  = #{P_PRODUCTDEFID}
+				AND RT.MAINPRODUCTVERSION  = #{P_PRODUCTDEFVERSION}
+				AND OP.VALIDSTATE = 'Valid'
+				ORDER BY OP.OPERATIONSEQUENCE ASC
+    </select>
+    
+    <!-- Resource 조회-->
+    <select id="selectResource" parameterType="map" resultType="hashmap">
+    -- selectResource
+    	SELECT
+                        OS.OPERATIONRESOURCEID
+					,   TO_NUMBER(OS.RESOURCESEQUENCE) RESOURCESEQUENCE
+					,   OS.OPERATIONID
+					,   OS.ENTERPRISEID
+					,   OS.PLANTID
+					,   OS.RESOURCETYPE	AS DURABLETYPE
+					,   OS.RESOURCEID
+					,   RS.DESCRIPTION RESOURCENAME
+					,   OS.SCHEDULESEQUENCE
+					,   OS.DESCRIPTION
+					,   OS.VALIDSTATE
+					,   RS.AVAILABLECAPACITY
+					,   EC.EQUIPMENTCLASSID
+					,   DIE.DICTIONARYNAME      AS EQUIPMENTCLASSNAME
+					,   AR.AREAID
+					,   DIA.DICTIONARYNAME 	    AS AREANAME
+					,   AR.WAREHOUSEID
+					,   WH.WAREHOUSENAME
+					,   AR.VENDORID
+					,   VD.VENDORNAME
+					,   OS.ISPRIMARY            
+					,   OP.PROCESSSEGMENTID
+					,	OS.CREATOR
+					,	TO_CHAR(OS.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					,	OS.MODIFIER
+					,	TO_CHAR(OS.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+					,	CU.USER_NM 			AS CREATORNAME
+					,	MU.USER_NM 			AS MODIFIERNAME
+					,   OS.MAINPRODUCTID
+					,   OS.MAINPRODUCTVERSION
+                FROM BAS_OPERATIONRESOURCE         OS
+                LEFT OUTER JOIN BAS_RESOURCE       RS ON  OS.ENTERPRISEID = RS.ENTERPRISEID
+                                                     AND OS.PLANTID = RS.PLANTID
+                                                     AND OS.RESOURCEID = RS.RESOURCEID    									  
+                LEFT OUTER JOIN BAS_AREA           AR ON  RS.ENTERPRISEID = AR.ENTERPRISEID
+                                                     AND RS.PLANTID = AR.PLANTID
+                                                     AND RS.AREAID  = AR.AREAID                                                   
+                LEFT JOIN CMD_DICTIONARY 		  DIA ON DIA.DICTIONARYID = AR.AREANAME
+                                                     AND DIA.LANGUAGETYPE =  #{LANGUAGETYPE}                                                                               
+                LEFT OUTER JOIN BAS_WAREHOUSE      WH ON  AR.ENTERPRISEID = WH.ENTERPRISEID
+                                                     AND AR.PLANTID = WH.PLANTID
+                                                     AND AR.WAREHOUSEID = WH.WAREHOUSEID			  
+                LEFT OUTER JOIN BAS_EQUIPMENTCLASS EC ON  RS.ENTERPRISEID = EC.ENTERPRISEID
+                                                     AND RS.EQUIPMENTCLASSID = EC.EQUIPMENTCLASSID                                     
+                LEFT JOIN CMD_DICTIONARY 		  DIE ON DIE.DICTIONARYID = EC.EQUIPMENTCLASSNAME
+                                                     AND DIE.LANGUAGETYPE = #{LANGUAGETYPE}                            
+                LEFT OUTER JOIN BAS_VENDOR         VD ON  AR.ENTERPRISEID = VD.ENTERPRISEID
+                                                     AND AR.PLANTID = VD.PLANTID
+                                                     AND AR.VENDORID = VD.VENDORID
+   			    LEFT JOIN  BAS_OPERATION           OP ON  OS.ENTERPRISEID = OP.ENTERPRISEID
+                                        			 AND OS.OPERATIONID  = OP.OPERATIONID
+				LEFT OUTER JOIN CMD_USERS 		 CU ON CU.USER_ID = OS.CREATOR
+				LEFT OUTER JOIN CMD_USERS 		 MU ON MU.USER_ID = OS.MODIFIER									 				 	 
+			    WHERE OS.RESOURCETYPE ='Resource' 
+			    AND   OS.OPERATIONID = #{OPERATIONID}
+		    <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString())"> 
+		        AND OS.ENTERPRISEID = #{ENTERPRISEID}
+		    </if> 
+		    <if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())"> 
+		    	AND	OS.PLANTID = #{PLANTID}
+		    </if>
+    </select>
+    
+    <!-- Resource Popup 조회-->
+    <select id="selectResourcePopup" parameterType="map" resultType="hashmap">
+     -- selectResourcePopup
+				SELECT 
+                       	RS.RESOURCEID
+                    ,	RS.DESCRIPTION
+                    ,	RS.AREAID
+                    ,	DI.DICTIONARYNAME       AREANAME
+                    ,   RS.EQUIPMENTCLASSID
+                    ,	EDI.DICTIONARYNAME      EQUIPMENTCLASSNAME
+                FROM BAS_RESOURCE               			RS
+                INNER JOIN BAS_AREA 			    		AR  ON  RS.AREAID   = AR.AREAID
+				LEFT OUTER JOIN CMD_DICTIONARY   		DI  ON  DI.DICTIONARYID = AR.AREANAME
+													 		AND DI.LANGUAGETYPE = #{LANGUAGETYPE}   					 
+				LEFT JOIN BAS_EQUIPMENTCLASS     		EC 	ON  RS.ENTERPRISEID = EC.ENTERPRISEID
+													 		AND RS.EQUIPMENTCLASSID = EC.EQUIPMENTCLASSID								 
+				LEFT JOIN CMD_DICTIONARY 	    		EDI ON  EDI.DICTIONARYID = EC.EQUIPMENTCLASSNAME
+												     		AND EDI.LANGUAGETYPE = #{LANGUAGETYPE}   
+				WHERE 1=1
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString())"> 
+					AND	RS.ENTERPRISEID = #{ENTERPRISEID}
+				</if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())"> 
+					AND	RS.PLANTID = #{PLANTID}
+				</if>
+				<if test="RESOURCEID != null and RESOURCEID !='' and !(RESOURCEID eq '*'.toString())"> 
+					AND	UPPER(RS.RESOURCEID) like UPPER( <![CDATA['%' ||]]> #{RESOURCEID} <![CDATA[|| '%']]> )
+				</if>
+				<if test="DESCRIPTION != null and DESCRIPTION !='' and !(DESCRIPTION eq '*'.toString())"> 
+					AND	UPPER(RS.DESCRIPTION) like UPPER( <![CDATA['%' ||]]> #{DESCRIPTION} <![CDATA[|| '%']]> )
+				</if>
+				<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' and !(PROCESSSEGMENTID eq '*'.toString())"> 
+					AND RS.EQUIPMENTCLASSID IN 
+					(
+					     SELECT 
+					     	 	EQUIPMENTCLASSID 
+	                	 FROM 	BAS_PROCESSSEGMENTEQPTCLASS 
+	                	 WHERE  ENTERPRISEID =#{ENTERPRISEID}
+	                	 AND    PROCESSSEGMENTID =#{PROCESSSEGMENTID}
+	                	 AND    VALIDSTATE = 'Valid'
+					)
+				</if>
+				AND RS.VALIDSTATE = 'Valid'
+    </select>
+    
+    
+    
+    
+    <!-- Durable 조회-->
+    <select id="selectDurableList" parameterType="map" resultType="hashmap">
+    			-- selectDurableList
+				SELECT 
+					   OS.RESOURCEID        	AS TOOLCODE       /* 치공구ID */
+				      ,DI.DICTIONARYNAME    	AS TOOLNAME       /* 치공구명 */
+				      ,OS.RESOURCEIDVERSION 	AS TOOLVERSION    /* 치공구버전 */
+				      ,DD.FILMUSELAYER1		          	              /*  CS 사용층 */
+				      ,DD.FILMUSELAYER2 		           	          /*  SS 사용층 */
+				      ,OS.DESCRIPTION                   	      /* 비고  */
+				      ,OS.RESOURCETYPE			AS DURABLETYPE
+				      ,BR.RESOURCETYPE
+				      ,BR.EQUIPMENTID
+				      ,BR.RESOURCECLASSID
+				      ,BR."sequence"						AS SEQUENCE
+				      ,CU.USER_NM 				AS CREATOR
+				      ,	TO_CHAR(BR.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+				      ,MU.USER_NM 				AS MODIFIER
+				      ,	TO_CHAR(BR.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+				      ,OS.OPERATIONID
+				      ,DD.TOOLTYPE
+				      ,DD.TOOLDETAILTYPE
+				      ,DD.HITCOUNT
+				      ,DD.SUMMARY
+				      ,OS.WRAPTYPE
+				      ,DD.DURABLECLASSID              /* TOOL구분 */
+				      ,PG.PROCESSSEGMENTCLASSID
+				      ,DD.PRODUCTDEFID				/* 품목 코드 */
+                      ,DD.PRODUCTDEFVERSION			/* 품목 버전 */
+                      ,IM.ITEMNAME                    AS PRODUCTDEFNAME		/* 품목 명 */
+                      ,OS.PLANTID
+				FROM BAS_OPERATIONRESOURCE 			  OS
+				INNER JOIN BAS_OPERATION			  OP	ON OP.OPERATIONID			= OS.OPERATIONID
+				INNER JOIN TOM_DURABLEDEFINITION  	  DD 	ON DD.ENTERPRISEID  		= OS.ENTERPRISEID
+				              							 	AND DD.DURABLEDEFID  		= OS.RESOURCEID
+				   								            AND DD.DURABLEDEFVERSION  	= OS.RESOURCEIDVERSION							            
+				INNER JOIN BAS_BILLOFRESOURCE 	  	  BR	ON BR.RESOURCEID			= DD.DURABLEDEFID
+															AND BR.RESOURCEVERSION		= DD.DURABLEDEFVERSION
+															AND BR.PRODUCTDEFID       	= #{PRODUCTDEFID}
+                                                         	AND BR.PRODUCTDEFVERSION 	= #{PRODUCTDEFVERSION} 
+															AND BR.PRODUCTDEFID       	= BR.PROCESSDEFID
+                                                         	AND BR.PRODUCTDEFVERSION 	= BR.PROCESSDEFVERSION
+                                                         	AND BR.PROCESSSEGMENTID		= OP.PROCESSSEGMENTID
+                INNER JOIN BAS_PROCESSSEGMENTEXT  	  PG    ON PG.PROCESSSEGMENTID      = OP.PROCESSSEGMENTID 
+                                                            AND PG.ENTERPRISEID         = OP.ENTERPRISEID
+				INNER JOIN BAS_ITEMMASTER              IM   ON  DD.PRODUCTDEFID         = IM.ITEMID
+				                                            AND DD.PRODUCTDEFVERSION    = IM.ITEMVERSION
+				                                            AND OS.ENTERPRISEID         = IM.ENTERPRISEID                                         	
+				LEFT JOIN CMD_DICTIONARY  		  	  DI 	ON  DI.DICTIONARYID  		= DD.DURABLEDEFNAME
+				              								AND DI.LANGUAGETYPE  		= #{LANGUAGETYPE}
+				LEFT OUTER JOIN CMD_USERS      		  CU 	ON CU.USER_ID  			    = BR.CREATOR
+				LEFT OUTER JOIN CMD_USERS             MU  	ON MU.USER_ID      			= BR.MODIFIER  
+				WHERE OS.RESOURCETYPE = 'Durable'
+					AND OS.ENTERPRISEID 		= #{ENTERPRISEID}
+				    AND OS.OPERATIONID			= #{OPERATIONID}
+				ORDER BY BR."sequence" ASC
+    </select>
+    
+    <!-- Durable POPUP 조회-->
+    <select id="selectDurablePopupList" parameterType="map" resultType="hashmap">
+    				-- selectDurablePopupList
+				SELECT DC.DURABLECLASSTYPE
+				    ,	DSD.DICTIONARYNAME		AS DURABLETYPENAME
+				    ,   DT.PRODUCTDEFID
+				    ,   IM.ITEMNAME  			AS PRODUCTDEFNAME
+				    ,   DT.PRODUCTDEFVERSION
+				    ,	DT.DURABLEDEFID 		AS TOOLCODE    
+					,	DT.DURABLEDEFID         
+					,   DT.DURABLEDEFVERSION    
+				    ,	DI.DICTIONARYNAME       AS DURABLEDEFNAME
+				     ,	DT.FILMUSELAYER1		AS FILMUSELAYER1          	       
+				      ,	DT.FILMUSELAYER2		AS FILMUSELAYER2          	          
+				    ,	DT.DURABLECLASSID
+				    ,   C2.MEANING 				AS DURABLECLASSNAME
+				    ,	DT.TOOLTYPE
+				    ,	DT.TOOLDETAILTYPE
+				    ,	C1.DESCRIPTION				AS FORM
+				    ,	DT.SUMMARY
+				    ,	DT.HITCOUNT  
+				    ,	DT.DURABLETYPE
+				    ,   DT.TOOLKIND									AS TOOLKINDID
+					,	FN_GETTOOLKINDNAME('SMLINES', 'ko-KR', DT.DURABLECLASSID, DT.FORM, DT.TOOLKIND) AS TOOLKIND 	--TOOL종류
+				FROM TOM_DURABLEDEFINITION       DT
+				INNER JOIN TOM_DURABLECLASS       DC  ON 	DC.DURABLECLASSID 	= DT.DURABLECLASSID
+				                                    AND DC.ENTERPRISEID   	= DT.ENTERPRISEID
+				LEFT JOIN CMD_DICTIONARY   	    DI  ON 	DI.DICTIONARYID 	= DT.DURABLEDEFNAME
+												    AND DI.LANGUAGETYPE 	= #{LANGUAGETYPE}
+				LEFT JOIN CMD_DICTIONARY  		DSD ON  DSD.DICTIONARYID  	= DC.DURABLECLASSNAME
+				              						AND DSD.LANGUAGETYPE  	= #{LANGUAGETYPE}  												    
+				INNER JOIN BAS_ITEMMASTER			IM  ON 	IM.ITEMID 			= DT.PRODUCTDEFID			
+				                                    AND IM.ITEMVERSION 		= DT.PRODUCTDEFVERSION			
+				                                    AND IM.ENTERPRISEID 	= DT.ENTERPRISEID
+				LEFT JOIN BAS_PRODUCTITEMSPEC    IMS ON 	IMS.ITEMID 			= IM.ITEMID			
+				                                    AND IMS.ITEMVERSION 	= IM.ITEMVERSION			
+				LEFT JOIN CMD_LOOKUP_VALUES		C1  ON 	DT.FORM 	=  C1.LOOKUP_CODE
+				    								AND C1.LOOKUP_TYPE = 'ToolForm'     
+				LEFT JOIN CMD_LOOKUP_VALUES 	C2  ON C2.LOOKUP_CODE = DT.DURABLECLASSID AND C2.LOOKUP_TYPE = 'DurableClass'   		
+                WHERE 1 = 1
+                AND	   DT.ENTERPRISEID = #{ENTERPRISEID}
+                AND  	NOT EXISTS(
+										SELECT 	1
+										FROM 	BAS_OPERATIONRESOURCE 		OPS
+										WHERE 	OPS.RESOURCEID = DT.DURABLEDEFID
+										  AND   OPS.ENTERPRISEID = DT.ENTERPRISEID
+										  AND   OPS.OPERATIONID =  #{OPERATIONID}
+									)
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())"> 		
+					AND	   DT.PLANTID = #{PLANTID}
+				</if>
+                <if test="ITEMID != null and ITEMID !='' and !(ITEMID eq '*'.toString())">  		
+					AND   (UPPER(DT.PRODUCTDEFID) LIKE UPPER(#{ITEMID} ||'%') 
+					OR   UPPER(IM.ITEMNAME) LIKE UPPER(#{ITEMID} ||'%'))
+				</if>
+				<if test="ITEMNAME != null and ITEMNAME !='' and !(ITEMNAME eq '*'.toString())"> 	
+					AND   UPPER(IM.ITEMNAME) LIKE UPPER(#{ITEMNAME} ||'%')
+				</if>	
+				<if test="ITEMVERSION != null and ITEMVERSION !='' and !(ITEMVERSION eq '*'.toString())">  	
+					AND   UPPER(DT.PRODUCTDEFVERSION) LIKE UPPER(#{ITEMVERSION} ||'%')
+				</if>
+				<if test="DURABLEDEFID != null and DURABLEDEFID !='' and !(DURABLEDEFID eq '*'.toString())">  		
+					AND	UPPER(DT.DURABLEDEFID) LIKE UPPER(#{DURABLEDEFID} ||'%')
+				</if>
+				<if test="DURABLEDEFNAME != null and DURABLEDEFNAME !='' and !(DURABLEDEFNAME eq '*'.toString())">  	
+					AND	UPPER(DI.DICTIONARYNAME) LIKE UPPER(#{DURABLEDEFNAME} ||'%')
+				</if>
+				<if test="DURABLECLASSID != null and DURABLECLASSID !='' and !(DURABLECLASSID eq '*'.toString())">  	
+					AND	DT.DURABLECLASSID = #{DURABLECLASSID}
+				</if>
+    </select>
+    
+    <!-- BillofResource 존재 여부 조회-->
+    <select id="selectExistByBillofResource" parameterType="map" resultType="hashmap">
+    /* selectDurablePopupList */ 
+    		SELECT 
+				OS.RESOURCEID
+				FROM BAS_OPERATIONRESOURCE 			  OS
+				LEFT OUTER JOIN TOM_DURABLEDEFINITION  DD 	ON DD.ENTERPRISEID  		= OS.ENTERPRISEID
+				              							 	AND DD.DURABLEDEFID  		= OS.RESOURCEID
+				   								            AND DD.DURABLEDEFVERSION  	= OS.RESOURCEIDVERSION
+				LEFT OUTER JOIN BAS_BILLOFRESOURCE 	  BR	ON  BR.ENTERPRISEID       	= DD.ENTERPRISEID
+															AND BR.RESOURCEID			= DD.DURABLEDEFID
+															AND BR.RESOURCEVERSION		= DD.DURABLEDEFVERSION
+                                                         	AND BR.PRODUCTDEFID       	= #{PRODUCTDEFID}
+                                                         	AND BR.PRODUCTDEFVERSION 	= #{PRODUCTDEFVERSION}
+                WHERE 1=1
+               	AND OS.ENTERPRISEID      = #{ENTERPRISEID}
+               	AND OS.OPERATIONID       = #{OPERATIONID}
+               	AND OS.RESOURCEID = #{RESOURCEID}
+               	AND OS.RESOURCEIDVERSION = #{RESOURCEVERSION}
+    </select>
+    
+    <select id="selectMaxDegreeByBillofResource" parameterType="map" resultType="hashmap">
+    	/* selectMaxDegreeByBillofResource */
+    			SELECT  NVL(DS."sequence",0) AS DEGREE	
+				FROM BAS_OPERATIONRESOURCE 			  OS
+				LEFT OUTER JOIN TOM_DURABLEDEFINITION  DD 	ON DD.ENTERPRISEID  		= OS.ENTERPRISEID
+				              							 	AND DD.DURABLEDEFID  		= OS.RESOURCEID
+				   								            AND DD.DURABLEDEFVERSION  	= OS.RESOURCEIDVERSION
+				LEFT OUTER JOIN BAS_BILLOFRESOURCE	  DS	ON DS.RESOURCEID			= DD.DURABLEDEFID
+															AND DS.RESOURCEVERSION		= DD.DURABLEDEFVERSION
+															AND DS.PRODUCTDEFID       	=  #{PRODUCTDEFID}
+                                                         	AND DS.PRODUCTDEFVERSION 	=  #{PRODUCTDEFVERSION}
+				WHERE OS.RESOURCETYPE = #{RESOURCETYPE} 
+					AND OS.ENTERPRISEID 		= #{ENTERPRISEID} 
+				    AND OS.OPERATIONID			= #{OPERATIONID}
+    </select>
+    
+    
+    <!-- 자원 정보 등록 -->
+    <insert id="insertBasBillofresource" parameterType="map">
+	    INSERT INTO BAS_BILLOFRESOURCE( 
+	        PRODUCTDEFID  
+	        ,PRODUCTDEFVERSION  
+	        ,PROCESSDEFID  
+	        ,PROCESSDEFVERSION  
+	        ,PROCESSSEGMENTID  
+	        ,PROCESSSEGMENTVERSION  
+	        ,RESOURCETYPE  
+	        ,"sequence"  
+	        ,EQUIPMENTID  
+	        ,RESOURCECLASSID  
+	        ,RESOURCEID  
+	        ,ISPRIMARYRESOURCE  
+	        ,ENTERPRISEID  
+	        ,PLANTID  
+	        ,DESCRIPTION  
+	        ,CREATOR  
+	        ,CREATEDTIME  
+	        ,MODIFIER  
+	        ,MODIFIEDTIME  
+	        ,LASTTXNHISTKEY  
+	        ,LASTTXNID  
+	        ,LASTTXNUSER  
+	        ,LASTTXNTIME  
+	        ,LASTTXNCOMMENT  
+	        ,VALIDSTATE  
+	        ,RESOURCEVERSION        ) 
+	    VALUES( 
+	        #{PRODUCTDEFID}  
+	        ,#{PRODUCTDEFVERSION}  
+	        ,#{PRODUCTDEFID}  
+	        ,#{PRODUCTDEFVERSION}  
+	        ,#{PROCESSSEGMENTID}  
+	        ,#{PROCESSSEGMENTVERSION}  
+	        ,#{RESOURCETYPE}
+	        ,#{sequence}  
+	        ,#{EQUIPMENTID} 
+	        ,#{RESOURCECLASSID}
+	        ,#{RESOURCEID}  
+	        ,#{ISPRIMARYRESOURCE}
+	        ,#{ENTERPRISEID}  
+	        ,#{PLANTID}  
+	        ,#{DESCRIPTION}  
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{MODIFIER}  
+	        ,SYSDATE  
+	        ,#{LASTTXNHISTKEY}  
+	        ,'create'
+	        ,#{CREATOR}
+	        ,SYSDATE  
+	        ,#{LASTTXNCOMMENT}  
+	        ,#{VALIDSTATE}  
+	        ,#{RESOURCEVERSION}    )
+    </insert>
+
+    <!-- 자원 정보 변경 -->
+    <update id="updateBasBillofresource" parameterType="map" >
+	    UPDATE BAS_BILLOFRESOURCE 
+	    SET  DESCRIPTION = #{DESCRIPTION}    
+	    	,ISPRIMARYRESOURCE = #{ISPRIMARYRESOURCE}                 
+	        ,MODIFIER = #{MODIFIER}     
+	        ,MODIFIEDTIME = SYSDATE     
+	        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+	        ,LASTTXNID = 'modify'   
+	        ,LASTTXNUSER = #{MODIFIER}     
+	        ,LASTTXNTIME = SYSDATE  
+	        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+	        ,VALIDSTATE = #{VALIDSTATE}
+	    WHERE EQUIPMENTID = #{EQUIPMENTID}
+	    AND PROCESSDEFID = #{PROCESSDEFID}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+	    AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	    AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	    AND PRODUCTDEFID = #{PRODUCTDEFID}
+	    AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	    AND RESOURCECLASSID = #{RESOURCECLASSID}
+	    AND RESOURCEID = #{RESOURCEID}
+	    AND RESOURCETYPE = #{RESOURCETYPE}
+	    AND RESOURCEVERSION = #{RESOURCEVERSION}
+	    AND "sequence" = #{SEQ}
+    </update>
+
+    <!-- 자원 정보 삭제 -->
+    <delete id="deleteBasBillofresource" parameterType="map" > 
+	    DELETE FROM BAS_BILLOFRESOURCE 
+	    WHERE EQUIPMENTID = #{EQUIPMENTID}
+	    AND PROCESSDEFID = #{PROCESSDEFID}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+	    AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	    AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	    AND PRODUCTDEFID = #{PRODUCTDEFID}
+	    AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	    AND RESOURCECLASSID = #{RESOURCECLASSID}
+	    AND RESOURCEID = #{RESOURCEID}
+	    AND RESOURCETYPE = #{RESOURCETYPE}
+	    AND RESOURCEVERSION = #{RESOURCEVERSION}
+	   <!-- AND "sequence" = #{SEQ} --> 
+    </delete>
+    
+    <!-- 자원 정보 조회-->
+    <select id="selectBasBillofresourceList" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.PRODUCTDEFID	
+        ,A.PRODUCTDEFVERSION	
+        ,A.PROCESSDEFID	
+        ,A.PROCESSDEFVERSION	
+        ,A.PROCESSSEGMENTID	
+        ,A.PROCESSSEGMENTVERSION	
+        ,A.RESOURCETYPE	
+        ,A."sequence"	
+        ,A.EQUIPMENTID	
+        ,A.RESOURCECLASSID	
+        ,A.RESOURCEID	
+        ,A.ISPRIMARYRESOURCE	
+        ,A.ENTERPRISEID	
+        ,A.PLANTID	
+        ,A.DESCRIPTION	
+        ,A.CREATOR	
+        ,A.CREATEDTIME	
+        ,A.MODIFIER	
+        ,A.MODIFIEDTIME	
+        ,A.LASTTXNHISTKEY	
+        ,A.LASTTXNID	
+        ,A.LASTTXNUSER	
+        ,A.LASTTXNTIME	
+        ,A.LASTTXNCOMMENT	
+        ,A.VALIDSTATE	
+        ,A.RESOURCEVERSION	
+    FROM	BAS_BILLOFRESOURCE A 
+    WHERE 1=1 
+    <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+        AND A.PRODUCTDEFID = #{PRODUCTDEFID}
+    </if>
+    <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' "> 
+        AND A.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+    </if>
+    <if test="PROCESSDEFID != null and PROCESSDEFID !='' "> 
+        AND A.PROCESSDEFID = #{PROCESSDEFID}
+    </if>
+    <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' "> 
+        AND A.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </if>
+    <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+        AND A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </if>
+    <if test="PROCESSSEGMENTVERSION != null and PROCESSSEGMENTVERSION !='' "> 
+        AND A.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+    </if>
+    <if test="RESOURCETYPE != null and RESOURCETYPE !='' "> 
+        AND A.RESOURCETYPE = #{RESOURCETYPE}
+    </if>
+    <if test="SEQ != null and SEQ !='' "> 
+        AND A."sequence" = #{SEQ}
+    </if>
+    <if test="EQUIPMENTID != null and EQUIPMENTID !='' "> 
+        AND A.EQUIPMENTID = #{EQUIPMENTID}
+    </if>
+    <if test="RESOURCECLASSID != null and RESOURCECLASSID !='' "> 
+        AND A.RESOURCECLASSID = #{RESOURCECLASSID}
+    </if>
+    <if test="RESOURCEID != null and RESOURCEID !='' "> 
+        AND A.RESOURCEID = #{RESOURCEID}
+    </if>
+    <if test="ISPRIMARYRESOURCE != null and ISPRIMARYRESOURCE !='' "> 
+        AND A.ISPRIMARYRESOURCE = #{ISPRIMARYRESOURCE}
+    </if>
+    <if test="ENTERPRISEID != null and ENTERPRISEID !='' "> 
+        AND A.ENTERPRISEID = #{ENTERPRISEID}
+    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND A.PLANTID = #{PLANTID}
+    </if>
+    <if test="DESCRIPTION != null and DESCRIPTION !='' "> 
+        AND A.DESCRIPTION = #{DESCRIPTION}
+    </if>
+    <if test="LASTTXNHISTKEY != null and LASTTXNHISTKEY !='' "> 
+        AND A.LASTTXNHISTKEY = #{LASTTXNHISTKEY}
+    </if>
+    <if test="LASTTXNID != null and LASTTXNID !='' "> 
+        AND A.LASTTXNID = #{LASTTXNID}
+    </if>
+    <if test="LASTTXNUSER != null and LASTTXNUSER !='' "> 
+        AND A.LASTTXNUSER = #{LASTTXNUSER}
+    </if>
+    <if test="LASTTXNTIME != null and LASTTXNTIME !='' "> 
+        AND A.LASTTXNTIME = #{LASTTXNTIME}
+    </if>
+    <if test="LASTTXNCOMMENT != null and LASTTXNCOMMENT !='' "> 
+        AND A.LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+    </if>
+    <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+        AND A.VALIDSTATE = #{VALIDSTATE}
+    </if>
+    <if test="RESOURCEVERSION != null and RESOURCEVERSION !='' "> 
+        AND A.RESOURCEVERSION = #{RESOURCEVERSION}
+    </if>
+    </select>
+
+    <!-- 자원 정보 상세조회-->
+    <select id="selectBasBillofresource" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.PRODUCTDEFID	 
+        ,A.PRODUCTDEFVERSION	 
+        ,A.PROCESSDEFID	 
+        ,A.PROCESSDEFVERSION	 
+        ,A.PROCESSSEGMENTID	 
+        ,A.PROCESSSEGMENTVERSION	 
+        ,A.RESOURCETYPE	 
+        ,A."sequence"	 
+        ,A.EQUIPMENTID	 
+        ,A.RESOURCECLASSID	 
+        ,A.RESOURCEID	 
+        ,A.ISPRIMARYRESOURCE	 
+        ,A.ENTERPRISEID	 
+        ,A.PLANTID	 
+        ,A.DESCRIPTION	 
+        ,A.CREATOR	 
+        ,A.CREATEDTIME	 
+        ,A.MODIFIER	 
+        ,A.MODIFIEDTIME	 
+        ,A.LASTTXNHISTKEY	 
+        ,A.LASTTXNID	 
+        ,A.LASTTXNUSER	 
+        ,A.LASTTXNTIME	 
+        ,A.LASTTXNCOMMENT	 
+        ,A.VALIDSTATE	 
+        ,A.RESOURCEVERSION	 
+    FROM	BAS_BILLOFRESOURCE A 
+    WHERE A.EQUIPMENTID = #{EQUIPMENTID}
+    AND	A.PROCESSDEFID = #{PROCESSDEFID}
+    AND	A.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    AND	A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    AND	A.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+    AND	A.PRODUCTDEFID = #{PRODUCTDEFID}
+    AND	A.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+    AND	A.RESOURCECLASSID = #{RESOURCECLASSID}
+    AND	A.RESOURCEID = #{RESOURCEID}
+    AND	A.RESOURCETYPE = #{RESOURCETYPE}
+    AND	A.RESOURCEVERSION = #{RESOURCEVERSION}
+    AND	A."sequence" = #{SEQ}
+    </select>
+    
+    <!-- 자원 정보 상세조회-->
+    <select id="selectExistDurableComponent" parameterType="map" resultType="hashmap">
+    				SELECT   OPERATIONRESOURCEID
+							,OPERATIONID
+							,RESOURCEID
+							,RESOURCEIDVERSION
+							,RESOURCETYPE
+							,RESOURCESEQUENCE
+							,MAINPRODUCTID
+							,MAINPRODUCTVERSION
+					FROM BAS_OPERATIONRESOURCE OS
+					WHERE 	rownum = 1
+						AND OS.ENTERPRISEID 		= #{ENTERPRISEID}
+						AND OS.OPERATIONID   		= #{OPERATIONID}
+						AND OS.RESOURCEID			= #{RESOURCEID}
+						AND NVL(OS.RESOURCEIDVERSION,'*') 	= #{RESOURCEIDVERSION}
+						AND OS.RESOURCETYPE 		= #{RESOURCETYPE}
+						AND OS.MAINPRODUCTID 		= #{PRODUCTDEFID}
+						AND OS.MAINPRODUCTVERSION 	= #{PRODUCTDEFVERSION}
+    </select>
+    
+	<!-- Routing 자원 정보 등록 -->
+    <update id="saveBasOperationresource" parameterType="map">
+    	MERGE INTO BAS_OPERATIONRESOURCE
+    	USING DUAL
+    	        ON (    ENTERPRISEID = #{ENTERPRISEID}
+				    AND OPERATIONID = #{OPERATIONID}
+				    AND OPERATIONRESOURCEID = #{OPERATIONRESOURCEID}
+				    AND RESOURCESEQUENCE = #{RESOURCESEQUENCE}
+                    )
+              WHEN  MATCHED THEN  
+	              UPDATE SET PLANTID = #{PLANTID}     
+					        ,RESOURCETYPE = #{RESOURCETYPE}     
+					        ,RESOURCEID = #{RESOURCEID}     
+					        ,RESOURCEIDVERSION = #{RESOURCEIDVERSION}       
+					        ,ISPRIMARY = #{ISPRIMARY}     
+					        ,MAINPRODUCTID = #{PRODUCTDEFID}     
+					        ,MAINPRODUCTVERSION = #{PRODUCTDEFVERSION}     
+					        ,DESCRIPTION = #{DESCRIPTION}       
+					        ,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = 'modify'     
+					        ,LASTTXNUSER = #{MODIFIER}     
+					        ,LASTTXNTIME = SYSDATE   
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}  
+							,VALIDSTATE = #{VALIDSTATE}	
+							,WRAPTYPE = #{WRAPTYPE}
+					    WHERE ENTERPRISEID = #{ENTERPRISEID}
+					    AND OPERATIONID = #{OPERATIONID}
+					    AND OPERATIONRESOURCEID = #{OPERATIONRESOURCEID}
+					    AND RESOURCESEQUENCE = #{RESOURCESEQUENCE}
+			WHEN NOT MATCHED THEN
+				INSERT ( OPERATIONID  
+				        ,RESOURCESEQUENCE  
+				        ,OPERATIONRESOURCEID  
+				        ,ENTERPRISEID  
+				        ,PLANTID  
+				        ,RESOURCETYPE  
+				        ,RESOURCEID  
+				        ,RESOURCEIDVERSION  
+				        ,WRAPTYPE
+				        ,ISPRIMARY  
+				        ,MAINPRODUCTID  
+				        ,MAINPRODUCTVERSION  
+				        ,DESCRIPTION  
+				        ,CREATOR  
+				        ,CREATEDTIME  
+				        ,MODIFIER  
+				        ,MODIFIEDTIME  
+				        ,LASTTXNHISTKEY  
+				        ,LASTTXNID  
+				        ,LASTTXNUSER  
+				        ,LASTTXNTIME  
+				        ,LASTTXNCOMMENT  
+				        ,VALIDSTATE        ) 
+				    VALUES( 
+				        #{OPERATIONID}  
+				        ,#{RESOURCESEQUENCE}  
+				        ,#{OPERATIONRESOURCEID}  
+				        ,#{ENTERPRISEID}  
+				        ,#{PLANTID}  
+				        ,#{RESOURCETYPE}  
+				        ,#{RESOURCEID}  
+				        ,#{RESOURCEIDVERSION}  
+				        ,#{WRAPTYPE}
+				        ,#{ISPRIMARY}  
+				        ,#{PRODUCTDEFID}  
+				        ,#{PRODUCTDEFVERSION}  
+				        ,#{DESCRIPTION}  
+				        ,#{CREATOR}  
+				        ,SYSDATE  
+				        ,#{MODIFIER}  
+				        ,SYSDATE  
+				        ,#{LASTTXNHISTKEY}  
+				        ,'create'
+				        ,#{CREATOR} 
+				        ,SYSDATE
+				        ,#{LASTTXNCOMMENT}  
+				        ,#{VALIDSTATE}    )
+    </update>
+    
+    
+	<!-- Routing 자원 정보 삭제 -->
+    <delete id="deleteBasOperationresource" parameterType="map" > 
+					    DELETE FROM BAS_OPERATIONRESOURCE 
+					    WHERE ENTERPRISEID 		= #{ENTERPRISEID}
+						AND OPERATIONID   		= #{OPERATIONID}
+						AND RESOURCEID			= #{RESOURCEID}
+						AND NVL(RESOURCEIDVERSION,'*') 	= #{RESOURCEIDVERSION}
+						AND RESOURCETYPE 		= #{RESOURCETYPE}
+						AND MAINPRODUCTID 		= #{PRODUCTDEFID}
+						AND MAINPRODUCTVERSION 	= #{PRODUCTDEFVERSION}
+    </delete>
+
+	<!-- 수정할 Resource에 Sequence 조회-->
+    <select id="selectBillofResourceChk" parameterType="map" resultType="hashmap">
+    	/* GetBillofResourceChk 10001 */
+    		SELECT 
+					 	BOR.PRODUCTDEFID
+					,	BOR.PRODUCTDEFVERSION
+					,	BOR.PROCESSDEFID
+					,	BOR.PROCESSDEFVERSION
+					,	BOR.PROCESSSEGMENTID
+					,	BOR.PROCESSSEGMENTVERSION
+					,	BOR.RESOURCETYPE
+					,	BOR."sequence"			AS SEQ
+                FROM  BAS_BILLOFRESOURCE                    BOR
+                WHERE BOR.ENTERPRISEID = #{ENTERPRISEID}
+                AND   BOR.PRODUCTDEFID = #{PRODUCTDEFID}
+                AND   BOR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				AND   BOR.PROCESSSEGMENTID = #{PROCESSSEGMENTID} 
+				AND   BOR.RESOURCEID = #{RESOURCEID}
+                AND   BOR.RESOURCETYPE  = #{RESOURCETYPE}
+    </select>
+</mapper>

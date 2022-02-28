@@ -1,0 +1,1441 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM05100Dao">
+
+	
+	<select id="selectProductDefVersion" parameterType="map" resultType="hashmap">
+	/* "GetProductDefVersion" 10003 */
+	--id : selectProductDefVersion
+		SELECT 	PD.PRODUCTDEFID
+			,	COALESCE(DC.DICTIONARYNAME, PD.PRODUCTDEFNAME)	AS PRODUCTDEFNAME
+			,	PD.PRODUCTDEFVERSION 
+			,   COALESCE(DC1.DICTIONARYNAME, CD.MEANING)       AS PRODUCTIONTYPE
+			,   CU.CUSTOMERID
+                  ,   CU.CUSTOMERNAME
+		FROM BAS_PRODUCTDEFINITION	PD
+		LEFT JOIN CMD_DICTIONARY		DC  ON  PD.PRODUCTDEFNAME = DC.DICTIONARYID
+										AND DC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT JOIN BAS_CUSTOMER		CU	ON 	PD.CUSTOMERID = CU.CUSTOMERID
+		LEFT JOIN CMD_LOOKUP_VALUES CD  ON  PD.PRODUCTIONTYPE = CD.LOOKUP_CODE
+                                              AND CD.LOOKUP_TYPE = 'ProductionType'
+              LEFT JOIN CMD_DICTIONARY     DC1 ON  CD.DICTIONARYID = DC1.DICTIONARYID
+                                              AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE 1=1
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID != ''">
+			AND EXISTS (SELECT 1 FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',') PMP WHERE PD.PRODUCTDEFID = PMP.VALUE)
+		</if>
+		ORDER BY PD.PRODUCTDEFVERSION
+	</select>
+	<!-- 왼쪽 라우팅 그리드  -->
+	<select id="selectProductDetailRoutingList" parameterType="map" resultType="hashmap">
+	/* "SelectProductDetailRoutingList" 10001 */
+	--id : selectProductDetailRoutingList
+		WITH ROUTING AS
+		(
+			SELECT  PR.PROCESSDEFID
+				,   PR.PROCESSDEFVERSION
+				,   PR.PATHSEQUENCE
+				,   PR.USERSEQUENCE
+				,   PR.PROCESSSEGMENTID
+				,   COALESCE(DC1.DICTIONARYNAME, SG.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+				,   PR.PLANTID
+			FROM    BAS_PROCESSPATH              PR
+			INNER JOIN BAS_PROCESSDEFINITION_V   PP  ON  PR.PROCESSDEFID = PP.PROCESSDEFID
+													AND  PR.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+			INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  PP.PRODUCTDEFID = PD.PRODUCTDEFID
+													AND  PP.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+--			INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  PP.PROCESSDEFID = PD.PROCESSDEFID
+--													AND PP.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+			INNER JOIN BAS_PROCESSSEGMENT        SG  ON  PR.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+			LEFT JOIN CMD_DICTIONARY             DC1 ON  SG.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+													AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			WHERE  1=1 
+			--AND 	PR.PATHSEQUENCE IS NOT NULL
+			AND    PD.PRODUCTDEFID = #{PRODUCTDEFID}
+			AND     EXISTS
+                          (
+                              SELECT 1
+                              FROM    PCM_LOT      L 
+                              WHERE   L.PRODUCTDEFID = PD.PRODUCTDEFID
+                              AND     L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                          )
+			-- ProductDefVersion
+			<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION != ''">
+				AND     PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			</if>					
+			-- 품목명
+			<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME != ''">
+				AND     PD.PRODUCTDEFNAME LIKE #{PRODUCTDEFNAME}
+			</if>					
+			-- Site
+			<if test="PLANTID != null and PLANTID != ''">
+				AND     PR.PLANTID = #{PLANTID}
+			</if>	
+			 -- 품목 Routing 에 있는 공정만 가져오게 함. 
+			AND PR.PROCESSSEGMENTID || PR.PROCESSSEGMENTVERSION IN  
+			(	
+				SELECT PROCESSSEGMENTID || PROCESSSEGMENTVERSION FROM BAS_PROCESSPATH IPP
+				WHERE PROCESSDEFID = #{PRODUCTDEFID}
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION != ''">
+					AND PROCESSDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>
+			)				
+			ORDER BY PR.PATHSEQUENCE
+		),
+		WIPLIST AS
+		(
+			SELECT  RT.PROCESSDEFID
+				,   RT.PROCESSDEFVERSION
+				,   RT.PROCESSSEGMENTID
+				,   RT.USERSEQUENCE
+				,   SUM(L.QTY)          AS PCSQTY
+				,   SUM(L.PANELQTY)     AS PNLQTY
+				,   COUNT(L.LOTID)      AS LOTCNT
+			FROM    ROUTING             RT
+			LEFT JOIN (
+					SELECT LOTID, QTY,PANELQTY , PROCESSDEFID, PROCESSDEFVERSION, PROCESSSEGMENTID, USERSEQUENCE, ISLOCKING, ISHOLD
+					FROM PCM_LOT 
+					WHERE LOTSTATE IN ('InProduction', 'InTransit')
+					  AND SUBSTR(#{PERIOD_PERIODTO},1,8) >= TO_char(SYSDATE,'YYYYMMDD')
+					  AND COALESCE(ISDEFECTED, 'N') = 'N'
+					UNION 
+					SELECT LOTID, QTY,PANELQTY , PROCESSDEFID, PROCESSDEFVERSION, PROCESSSEGMENTID, USERSEQUENCE, ISLOCKING, ISHOLD
+					FROM PCM_LOTPERDAILY
+					WHERE LOTSTATE IN ('InProduction', 'InTransit')
+					  AND TXNTIME =  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYY-MM-DD')
+					) L   					ON  RT.PROCESSDEFID = L.PROCESSDEFID
+											AND RT.PROCESSDEFVERSION = L.PROCESSDEFVERSION
+											AND RT.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+											AND RT.USERSEQUENCE = L.USERSEQUENCE
+			WHERE  1=1 
+			<if test="ISLOCKING != null and ISLOCKING !='' "> 
+		        AND    COALESCE(L.ISLOCKING, 'N') = #{ISLOCKING}
+		    </if>
+			<if test="ISHOLD != null and ISHOLD !='' "> 
+		        AND    COALESCE(L.ISHOLD, 'N') = #{ISHOLD}
+		    </if> 
+			GROUP BY RT.PROCESSDEFID
+				,   RT.PROCESSDEFVERSION
+				,   RT.PROCESSSEGMENTID
+				,   RT.USERSEQUENCE
+		),
+		WORKRESULT AS
+		(
+			SELECT  RT.PROCESSDEFID
+				,   RT.PROCESSDEFVERSION
+				,   RT.PROCESSSEGMENTID
+				,   RT.USERSEQUENCE
+				,   SUM(WR.WORKENDPCSQTY)       AS PCSQTY
+				,   SUM(WR.WORKENDPANELQTY)     AS PNLQTY
+				,   COUNT(WR.LOTID)             AS LOTCNT
+			FROM    ROUTING                 RT
+			LEFT JOIN PCM_LOTWORKRESULT      WR  ON  RT.PROCESSDEFID = WR.PROCESSDEFID
+												AND RT.PROCESSDEFVERSION = WR.PROCESSDEFVERSION
+												AND RT.PROCESSSEGMENTID = WR.PROCESSSEGMENTID
+												AND RT.USERSEQUENCE = WR.USERSEQUENCE
+			LEFT JOIN PCM_LOT            	L    ON WR.LOTID = L.LOTID
+			WHERE   1 = 1
+			AND     COALESCE(WR.RESULTTYPE, 'NORMAL') = 'NORMAL' 
+			AND  	COALESCE(L.ISDEFECTED, 'N') = 'N'
+			AND     COALESCE(WR.WORKENDPCSQTY, 0) > 0
+		    AND     COALESCE(WR.WORKENDPANELQTY, 0) > 0
+		    AND     WR.WORKENDUSER IS NOT NULL
+		    AND    L.LOTSTATE IN ('InProduction', 'InTransit') 
+			--조회일자
+			<if test="PERIOD_PERIODFR != null and PERIOD_PERIODFR != ''">
+				AND     WR.SENDTIME BETWEEN TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8) || '083000', 'YYYY-MM-DD HH24:MI:SS')
+			</if>						
+			<if test="PERIOD_PERIODFR == null and PERIOD_PERIODFR == ''">
+				AND     WR.SENDTIME BETWEEN TO_TIMESTAMP(TO_CHAR(SYSDATE , 'YYYY-MM-DD') || ' 00:00:00', 'YYYY-MM-DD HH24:MI:SS')
+			</if> 
+			<if test="PERIOD_PERIODTO != null and PERIOD_PERIODTO != ''">
+				AND TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8) || '083000', 'YYYY-MM-DD HH24:MI:SS')
+			</if>					
+			<if test="PERIOD_PERIODTO == null and PERIOD_PERIODTO == ''">
+				AND TO_TIMESTAMP(TO_CHAR(SYSDATE, 'YYYY-MM-DD') || ' 23:59:59', 'YYYY-MM-DD HH24:MI:SS')
+			</if> 	
+			<if test="ISLOCKING != null and ISLOCKING !='' "> 
+		        AND    COALESCE(L.ISLOCKING, 'N') = #{ISLOCKING}
+		    </if>
+			<if test="ISHOLD != null and ISHOLD !='' "> 
+		        AND    COALESCE(L.ISHOLD, 'N') = #{ISHOLD}
+		    </if>										
+			AND     COALESCE(WR.RESULTTYPE, 'NORMAL') = 'NORMAL' 
+			GROUP BY RT.PROCESSDEFID
+				,   RT.PROCESSDEFVERSION
+				,   RT.PROCESSSEGMENTID
+				,   RT.USERSEQUENCE
+		)
+		SELECT USERSEQUENCE
+			, PROCESSSEGMENTID
+			, PROCESSSEGMENTNAME
+			, PLANTID
+			, SUM(LOTCNT) AS LOTCNT
+			, SUM(RESULTLOTCNT) AS RESULTLOTCNT
+			, SUM(WIPPCSQTY) AS WIPPCSQTY
+			, CEIL(SUM(WIPPNLQTY)) AS WIPPNLQTY
+			, SUM(RESULTPCSQTY) AS RESULTPCSQTY
+			, CEIL(SUM(RESULTPNLQTY)) AS RESULTPNLQTY
+		FROM
+		(
+			SELECT  TO_NUMBER(RT.USERSEQUENCE)	AS USERSEQUENCE
+				,   RT.PROCESSSEGMENTID
+				,   RT.PROCESSSEGMENTNAME
+				,   RT.PLANTID
+				,   WL.LOTCNT
+				,   WR.LOTCNT                   AS RESULTLOTCNT
+				,   SUM(WL.PCSQTY)              AS WIPPCSQTY
+				,   SUM(WL.PNLQTY)              AS WIPPNLQTY
+				,   SUM(WR.PCSQTY)              AS RESULTPCSQTY
+				,   SUM(WR.PNLQTY)              AS RESULTPNLQTY
+			FROM    ROUTING                 RT
+			LEFT JOIN WIPLIST               WL  ON  RT.PROCESSDEFID = WL.PROCESSDEFID
+												AND RT.PROCESSDEFVERSION = WL.PROCESSDEFVERSION
+												AND RT.PROCESSSEGMENTID = WL.PROCESSSEGMENTID
+												AND RT.USERSEQUENCE = WL.USERSEQUENCE
+			LEFT JOIN WORKRESULT            WR  ON  RT.PROCESSDEFID = WR.PROCESSDEFID
+												AND RT.PROCESSDEFVERSION = WR.PROCESSDEFVERSION
+												AND RT.PROCESSSEGMENTID = WR.PROCESSSEGMENTID
+												AND RT.USERSEQUENCE = WR.USERSEQUENCE
+			GROUP BY RT.USERSEQUENCE
+				,   RT.PROCESSSEGMENTID
+				,   RT.PROCESSSEGMENTNAME
+				,   RT.PLANTID
+				,   WL.LOTCNT
+				,   WR.LOTCNT
+		) Z
+		GROUP BY USERSEQUENCE
+			, PROCESSSEGMENTID
+			, PROCESSSEGMENTNAME
+			, PLANTID
+		ORDER BY TO_NUMBER(USERSEQUENCE)
+	</select>
+	
+	<!-- 오른쪽 품목 상세 정보 탭 > 자재 탭 그리드 -->
+	<select id="selectProductDetailConsumableList" parameterType="map" resultType="hashmap">
+	/* "SelectProductDetailConsumableList" 10001 */
+	--id : selectProductDetailConsumableList
+		WITH ROUTING AS
+            (
+                SELECT  PD.PRODUCTDEFID
+                    ,   PD.PRODUCTDEFVERSION   
+                    ,   PR.PROCESSDEFID
+                    ,   PR.PROCESSDEFVERSION
+                    ,   PR.PATHSEQUENCE
+                    ,   PR.USERSEQUENCE
+                    ,   PR.PROCESSSEGMENTID
+                    ,   COALESCE(DC1.DICTIONARYNAME, SG.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+                    ,   PR.PLANTID
+                    ,   PD.PCSPNL
+                FROM    BAS_PROCESSPATH              PR
+			INNER JOIN BAS_PROCESSDEFINITION_V   PP  ON  PR.PROCESSDEFID = PP.PROCESSDEFID
+													AND  PR.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+			INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  PP.PRODUCTDEFID = PD.PRODUCTDEFID
+													AND  PP.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+--			INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  PP.PROCESSDEFID = PD.PROCESSDEFID
+--													AND PP.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+			INNER JOIN BAS_PROCESSSEGMENT        SG  ON  PR.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+			LEFT JOIN CMD_DICTIONARY             DC1 ON  SG.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+													AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			WHERE  1=1 
+			--AND 	PR.PATHSEQUENCE IS NOT NULL
+			AND    PD.PRODUCTDEFID = #{PRODUCTDEFID}
+			AND     EXISTS
+                          (
+                              SELECT 1
+                              FROM    PCM_LOT      L 
+                              WHERE   L.PRODUCTDEFID = PD.PRODUCTDEFID
+                              AND     L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                          )
+			-- ProductDefVersion
+			<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION != ''">
+				AND     PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			</if>					
+			-- 품목명
+			<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME != ''">
+				AND     PD.PRODUCTDEFNAME LIKE #{PRODUCTDEFNAME}
+			</if>					
+			-- Site
+			<if test="PLANTID != null and PLANTID != ''">
+				AND     PR.PLANTID = #{PLANTID}
+			</if>	
+			 -- 품목 Routing 에 있는 공정만 가져오게 함. 
+			AND PR.PROCESSSEGMENTID || PR.PROCESSSEGMENTVERSION IN  
+			(	
+				SELECT PROCESSSEGMENTID || PROCESSSEGMENTVERSION FROM BAS_PROCESSPATH IPP
+				WHERE PROCESSDEFID = #{PRODUCTDEFID}
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION != ''">
+					AND PROCESSDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>
+			)				
+			ORDER BY PR.PATHSEQUENCE
+            ),
+            BOMLIST AS
+            (
+                SELECT  RT.PROCESSDEFID
+                    ,   RT.PROCESSDEFVERSION
+                    ,   RT.PROCESSSEGMENTID
+                    ,   RT.PROCESSSEGMENTNAME
+                    ,   RT.PATHSEQUENCE
+                    ,   RT.USERSEQUENCE
+                    ,   RT.PLANTID
+                    ,   BM.MATERIALDEFID                                    AS CONSUMABLEDEFID
+                    ,   BM.MATERIALDEFVERSION                               AS CONSUMABLEDEFVERSION
+                    ,   COALESCE(DC1.DICTIONARYNAME, CD.CONSUMABLEDEFNAME)  AS CONSUMABLEDEFNAME
+                    ,   BM.QTY
+                FROM    ROUTING                     RT
+                INNER JOIN BAS_BILLOFMATERIAL        BM  ON  RT.PROCESSDEFID = BM.PROCESSDEFID
+                                                        AND RT.PROCESSDEFVERSION = BM.PROCESSDEFVERSION
+                                                        AND RT.PROCESSSEGMENTID = BM.PROCESSSEGMENTID
+                INNER JOIN BAS_CONSUMABLEDEFINITION  CD  ON  BM.MATERIALDEFID = CD.CONSUMABLEDEFID
+											AND BM.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION
+                LEFT JOIN  CMD_DICTIONARY            DC1 ON  CD.CONSUMABLEDEFNAME = DC1.DICTIONARYID
+                                                        AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                WHERE   1 = 1
+                AND 	CD.CONSUMABLECLASSID = 'SubAssembly'
+            ),
+            SUBASSEMBLY AS
+            (
+                SELECT  BM.PROCESSDEFID
+                    ,   BM.PROCESSDEFVERSION
+                    ,   BM.PROCESSSEGMENTID
+                    ,   BM.PROCESSSEGMENTNAME
+                    ,   BM.PATHSEQUENCE
+                    ,   BM.USERSEQUENCE
+                    ,   BM.PLANTID
+                    ,   BM.CONSUMABLEDEFID
+                    ,   BM.CONSUMABLEDEFVERSION
+                    ,   SUM(L.PANELQTY)                 AS PNLQTY
+                FROM    BOMLIST     BM
+                LEFT JOIN PCM_LOT    L   ON  BM.CONSUMABLEDEFID = L.PRODUCTDEFID
+                                        AND BM.CONSUMABLEDEFVERSION = L.PRODUCTDEFVERSION
+                                        AND BM.PLANTID = L.PLANTID
+                WHERE   COALESCE(L.ISLOCKING, 'N') = 'N'
+                AND     COALESCE(L.ISHOLD, 'N') = 'N'
+                AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+                AND     L.LOTSTATE IN ('InProduction', 'InTransit')
+                GROUP BY BM.PROCESSDEFID
+                    ,   BM.PROCESSDEFVERSION
+                    ,   BM.PROCESSSEGMENTID
+                    ,   BM.PROCESSSEGMENTNAME
+                    ,   BM.PATHSEQUENCE
+                    ,   BM.USERSEQUENCE
+                    ,   BM.PLANTID
+                    ,   BM.CONSUMABLEDEFID
+                    ,   BM.CONSUMABLEDEFVERSION
+            ),
+            WIPLIST AS
+            (
+                SELECT  RT.PROCESSDEFID
+                    ,   RT.PROCESSDEFVERSION
+                    ,   RT.PROCESSSEGMENTID
+                    ,   RT.USERSEQUENCE
+                    ,   SUM(L.QTY)          AS PCSQTY
+                    ,   SUM(L.PANELQTY)     AS PNLQTY
+                FROM    ROUTING             RT
+                INNER JOIN PCM_LOT           L   ON  RT.PROCESSDEFID = L.PROCESSDEFID
+                                                AND RT.PROCESSDEFVERSION = L.PROCESSDEFVERSION
+                                                AND RT.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+                                                AND RT.USERSEQUENCE = L.USERSEQUENCE
+				WHERE 1=1
+				<if test="ISLOCKING != null and ISLOCKING !='' "> 
+			        AND     COALESCE(ISLOCKING, 'N') = #{ISLOCKING}
+			    </if>
+				<if test="ISHOLD != null and ISHOLD !='' "> 
+			        AND     COALESCE(ISHOLD, 'N') = #{ISHOLD}
+			    </if>
+                AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+                AND 	L.LOTSTATE IN ('InProduction', 'InTransit')
+                GROUP BY RT.PROCESSDEFID
+                    ,   RT.PROCESSDEFVERSION
+                    ,   RT.PROCESSSEGMENTID
+                    ,   RT.USERSEQUENCE
+            ),
+            PRODUCTWIP AS
+            (
+                SELECT  BM.PROCESSDEFID
+                    ,   BM.PROCESSSEGMENTID
+                    ,   BM.USERSEQUENCE
+                    ,   SUM(WL.PNLQTY)              AS PDQTY
+                FROM    
+                (
+                    SELECT  PROCESSDEFID
+                        ,   PROCESSDEFVERSION
+                        ,   PROCESSSEGMENTID
+                        ,   USERSEQUENCE
+                    FROM    BOMLIST
+                    GROUP BY PROCESSDEFID
+                        ,   PROCESSDEFVERSION
+                        ,   PROCESSSEGMENTID
+                        ,   USERSEQUENCE 
+                )   BM
+                LEFT JOIN WIPLIST   WL  ON  BM.PROCESSDEFID = WL.PROCESSDEFID
+                                        --AND BM.PROCESSDEFVERSION = WL.PROCESSDEFVERSION
+                                        AND TO_NUMBER(BM.USERSEQUENCE) >= TO_NUMBER(WL.USERSEQUENCE)
+                GROUP BY BM.PROCESSDEFID
+                    ,   BM.PROCESSSEGMENTID
+                    ,   BM.USERSEQUENCE
+            ),
+            CONSUMESTOCK AS
+            (
+                SELECT  RT.PROCESSDEFID
+                    --,   RT.PROCESSDEFVERSION
+                    ,   RT.PROCESSSEGMENTID
+                    ,   RT.PROCESSSEGMENTNAME
+                    ,   RT.PATHSEQUENCE
+                    ,   RT.USERSEQUENCE
+                    ,   RT.PLANTID
+                    ,   BM.CONSUMABLEDEFID
+                    ,   BM.CONSUMABLEDEFVERSION
+                    ,   BM.CONSUMABLEDEFNAME
+                    ,   SUM(ST.ONHAND_QTY)                AS STOCKQTY
+                FROM    ROUTING                         RT
+                INNER JOIN BOMLIST                      BM  ON  RT.PROCESSDEFID = BM.PROCESSDEFID
+                                                            AND RT.PROCESSDEFVERSION = BM.PROCESSDEFVERSION
+                                                            AND RT.PROCESSSEGMENTID = BM.PROCESSSEGMENTID
+                                                            AND RT.PATHSEQUENCE = BM.PATHSEQUENCE
+                INNER JOIN IFC_MES_S_ONHAND_V@ERPPROD	ST   ON ST.PLANTID = BM.PLANTID
+                											AND ST.ITEM_CODE =   BM.CONSUMABLEDEFID || BM.CONSUMABLEDEFVERSION
+                GROUP BY RT.PROCESSDEFID
+                    --,   RT.PROCESSDEFVERSION
+                    ,   RT.PROCESSSEGMENTID
+                    ,   RT.PROCESSSEGMENTNAME
+                    ,   RT.PATHSEQUENCE
+                    ,   RT.USERSEQUENCE
+                    ,   RT.PLANTID
+                    ,   BM.CONSUMABLEDEFID
+                    ,   BM.CONSUMABLEDEFVERSION
+                    ,   BM.CONSUMABLEDEFNAME
+            )
+            SELECT  DISTINCT
+                    RT.PROCESSDEFID
+                --,   RT.PROCESSDEFVERSION
+                ,   RT.PROCESSSEGMENTID
+                ,   RT.PROCESSSEGMENTNAME
+                ,   RT.PATHSEQUENCE
+                ,   RT.USERSEQUENCE
+                ,   RT.PLANTID
+                ,   BM.CONSUMABLEDEFID
+                ,   BM.CONSUMABLEDEFNAME
+                ,   PW.PDQTY                                                        AS PDQTY
+                ,   SA.PNLQTY                                                       AS WIPQTY
+                ,   NVL(CS.STOCKQTY,0)												AS STOCKQTY 
+                --,   CEIL((COALESCE(SA.PNLQTY * RT.PCSPNL, 0) + COALESCE(CS.STOCKQTY, 0)) / RT.PCSPNL) - COALESCE(PW.PDQTY, 0)   AS LACKQTY
+                ,   COALESCE(SA.PNLQTY, 0) + COALESCE(CS.STOCKQTY, 0) - COALESCE(PW.PDQTY, 0)   AS LACKQTY
+            FROM    ROUTING                 RT
+            INNER JOIN BOMLIST              BM  ON  RT.PROCESSDEFID = BM.PROCESSDEFID
+                                                --AND RT.PROCESSDEFVERSION = BM.PROCESSDEFVERSION
+                                                AND RT.PROCESSSEGMENTID = BM.PROCESSSEGMENTID
+                                                AND RT.PATHSEQUENCE = BM.PATHSEQUENCE
+            LEFT  JOIN PRODUCTWIP           PW  ON  RT.PROCESSDEFID = PW.PROCESSDEFID
+                                                AND RT.USERSEQUENCE = PW.USERSEQUENCE
+            LEFT  JOIN SUBASSEMBLY          SA  ON  BM.PROCESSDEFID = SA.PROCESSDEFID
+                                                AND BM.CONSUMABLEDEFID = SA.CONSUMABLEDEFID
+                                                AND RT.USERSEQUENCE = SA.USERSEQUENCE
+            LEFT  JOIN CONSUMESTOCK         CS  ON  RT.PROCESSDEFID = CS.PROCESSDEFID
+                                                --AND RT.PROCESSDEFVERSION = CS.PROCESSDEFVERSION
+                                                AND RT.PROCESSSEGMENTID = CS.PROCESSSEGMENTID
+                                                AND RT.PATHSEQUENCE = CS.PATHSEQUENCE
+                                                AND BM.CONSUMABLEDEFID = CS.CONSUMABLEDEFID
+                                                AND BM.CONSUMABLEDEFVERSION = CS.CONSUMABLEDEFVERSION
+            ORDER BY RT.PATHSEQUENCE
+	</select>
+	
+	<!-- 오른쪽 품목 상세 정보 탭 > Site 별 제공 현황 그리드 -->
+	<select id="selectProductDetailRelatedSegment" parameterType="map" resultType="hashmap">
+	/* "SelectProductDetailRelatedSegment" 10001 */
+	--id : selectProductDetailRelatedSegment
+		WITH RELATEDPATH AS
+          (
+              SELECT  A.PROCESSDEFID
+              	,	A.PLANTID
+              	,	A.RELATEDMAX
+              	,	A.RELATEDMIN
+                  ,   ROWNUM  AS RN
+              FROM
+              (
+                  SELECT  DISTINCT 
+                          PT.PROCESSDEFID
+                      ,   PT.PLANTID
+                      ,   MAX(PT.PATHSEQUENCE) OVER (PARTITION BY PT.PLANTID) AS RELATEDMAX
+                      ,   MIN(PT.PATHSEQUENCE) OVER (PARTITION BY PT.PLANTID) AS RELATEDMIN
+                  FROM    BAS_PROCESSPATH              PT
+                  INNER JOIN BAS_PROCESSDEFINITION_V   PP  ON  PT.PROCESSDEFID = PP.PROCESSDEFID
+														   AND PT.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				  INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  PP.PRODUCTDEFID = PD.PRODUCTDEFID
+														   AND PP.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+--                  INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  PT.PROCESSDEFID = PD.PRODUCTDEFID
+--                                                           AND PT.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+                  WHERE   PD.PRODUCTDEFID = #{PRODUCTDEFID}
+              	-- ProductDefVersion
+              	<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION != ''">
+					AND     PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>  
+                  AND     PT.VALIDSTATE = 'Valid'
+                   -- 품목 Routing 에 있는 공정만 가져오게 함. 
+				AND PT.PROCESSSEGMENTID || PT.PROCESSSEGMENTVERSION IN  
+				(	
+					SELECT PROCESSSEGMENTID || PROCESSSEGMENTVERSION FROM BAS_PROCESSPATH IPP
+					WHERE PROCESSDEFID = #{PRODUCTDEFID}
+					<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION != ''">
+						AND PROCESSDEFVERSION = #{PRODUCTDEFVERSION}
+					</if>
+				)	
+                  ORDER BY RELATEDMAX
+              ) A
+          ),
+          LOTSTATUS AS
+          (
+              SELECT  DISTINCT
+                      PT.PROCESSDEFID
+                  ,   PT.PLANTID
+                  ,   PT.PROCESSSEGMENTID
+                  ,   COALESCE(DC.DICTIONARYNAME, SG.PROCESSSEGMENTNAME)  AS PROCESSSEGMENTNAME
+                  ,   TO_NUMBER(PT.USERSEQUENCE)							AS USERSEQUENCE
+              FROM    BAS_PROCESSPATH              PT
+              INNER JOIN RELATEDPATH              RP  ON  PT.PROCESSDEFID = RP.PROCESSDEFID
+                                                      AND PT.PATHSEQUENCE = CASE WHEN RP.RN = 1 THEN RP.RELATEDMAX
+                                                                            ELSE RP.RELATEDMIN END
+              INNER JOIN BAS_PROCESSSEGMENT        SG  ON  PT.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+              LEFT  JOIN CMD_DICTIONARY            DC  ON  SG.PROCESSSEGMENTNAME = DC.DICTIONARYID
+                                                      AND DC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+          ),
+          WIPSTATUS AS
+          (
+              SELECT  LS.PROCESSDEFID
+                  ,   LS.PLANTID
+                  ,   COUNT(L.LOTID)    AS LOTCNT
+                  ,   SUM(L.QTY)        AS PCSQTY
+                  ,   CEIL(SUM(L.PANELQTY))   AS PNLQTY
+              FROM    LOTSTATUS           LS
+              INNER JOIN PCM_LOT           L   ON  LS.PROCESSDEFID = L.PROCESSDEFID
+                                              AND LS.PLANTID = L.PLANTID
+                                              --AND L.LOTTYPE = 'Main'
+              WHERE   1=1
+            <if test="ISLOCKING != null and ISLOCKING !='' "> 
+			        AND     COALESCE(L.ISLOCKING, 'N') = #{ISLOCKING}
+		    </if>
+		    <if test="ISHOLD != null and ISHOLD !='' "> 
+			        AND     COALESCE(L.ISHOLD, 'N') = #{ISHOLD}
+		    </if>
+              AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+              AND 	L.LOTSTATE IN ('InProduction', 'InTransit')
+              GROUP BY LS.PROCESSDEFID
+                  ,   LS.PLANTID
+          ),
+          SHIPPINGREADY AS
+          (
+              SELECT  LS.PROCESSDEFID
+                  ,   LS.PLANTID
+                  ,   LS.PROCESSSEGMENTID
+                  ,   LS.USERSEQUENCE
+                  ,   SUM(L.QTY)              AS PCSQTY
+                  ,   SUM(L.PANELQTY)         AS PNLQTY
+              FROM    LOTSTATUS           LS
+              LEFT JOIN PCM_LOT            L   ON  LS.PROCESSDEFID = L.PROCESSDEFID
+                                              AND LS.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+                                              AND LS.USERSEQUENCE = TO_NUMBER(L.USERSEQUENCE)
+              WHERE   L.LOTSTATE = 'InProduction'
+              AND     L.PROCESSSTATE = 'WaitForSend'
+            <if test="ISLOCKING != null and ISLOCKING !='' "> 
+			        AND     COALESCE(L.ISLOCKING, 'N') = #{ISLOCKING}
+		    </if>
+		    <if test="ISHOLD != null and ISHOLD !='' "> 
+			        AND     COALESCE(L.ISHOLD, 'N') = #{ISHOLD}
+		    </if>
+              AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+              GROUP BY LS.PROCESSDEFID
+                  ,   LS.PLANTID
+                  ,   LS.PROCESSSEGMENTID
+                  ,   LS.USERSEQUENCE
+          ),
+          TRANSITREADY AS
+          (
+              SELECT  LS.PROCESSDEFID
+                  ,   LS.PLANTID
+                  ,   LS.PROCESSSEGMENTID
+                  ,   LS.USERSEQUENCE
+                  ,   SUM(L.QTY)              AS PCSQTY
+                  ,   SUM(L.PANELQTY)         AS PNLQTY
+              FROM    LOTSTATUS           LS
+              LEFT JOIN PCM_LOT            L   ON  LS.PROCESSDEFID = L.PROCESSDEFID
+                                              AND LS.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+                                              AND LS.USERSEQUENCE = TO_NUMBER(L.USERSEQUENCE)
+              WHERE   L.LOTSTATE = 'InTransit'
+              AND     L.PROCESSSTATE = 'WaitForReceive'
+            <if test="ISLOCKING != null and ISLOCKING !='' "> 
+			        AND     COALESCE(L.ISLOCKING, 'N') = #{ISLOCKING}
+		    </if>
+		    <if test="ISHOLD != null and ISHOLD !='' "> 
+			        AND     COALESCE(L.ISHOLD, 'N') = #{ISHOLD}
+		    </if> 
+              AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+              GROUP BY LS.PROCESSDEFID
+                  ,   LS.PLANTID
+                  ,   LS.PROCESSSEGMENTID
+                  ,   LS.USERSEQUENCE
+          ),
+          INPUTREADY AS
+          (
+              SELECT  LS.PROCESSDEFID
+                  ,   LS.PLANTID
+                  ,   LS.PROCESSSEGMENTID
+                  ,   LS.USERSEQUENCE
+                  ,   SUM(L.QTY)              AS PCSQTY
+                  ,   SUM(L.PANELQTY)         AS PNLQTY
+              FROM    LOTSTATUS           LS
+              LEFT JOIN PCM_LOT            L   ON  LS.PROCESSDEFID = L.PROCESSDEFID
+                                              AND LS.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+                                              AND LS.USERSEQUENCE = TO_NUMBER(L.USERSEQUENCE)
+              WHERE   L.LOTSTATE = 'InProduction'
+              AND     L.PROCESSSTATE = 'WaitForReceive'
+            <if test="ISLOCKING != null and ISLOCKING !='' "> 
+			        AND     COALESCE(L.ISLOCKING, 'N') = #{ISLOCKING}
+		    </if>
+		    <if test="ISHOLD != null and ISHOLD !='' "> 
+			        AND     COALESCE(L.ISHOLD, 'N') = #{ISHOLD}
+		    </if>
+              AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+              GROUP BY LS.PROCESSDEFID
+                  ,   LS.PLANTID
+                  ,   LS.PROCESSSEGMENTID
+                  ,   LS.USERSEQUENCE
+          )
+          SELECT  --A.PROCESSDEFID   --품목 routing , Lot Routing 별로 나와서 groupping  함. 
+                 A.PLANTID
+              ,   SUM(B.LOTCNT)        AS LOTCNT
+              ,   SUM(B.PCSQTY)        AS WIPPCSQTY
+              ,   SUM(B.PNLQTY)        AS WIPPNLQTY
+              ,   SUM(C.PCSQTY)        AS RDSHIPPCSQTY
+              ,   SUM(C.PNLQTY)        AS RDSHIPPNLQTY
+              ,   SUM(D.PCSQTY)        AS PLANPCSQTY
+              ,   SUM(D.PNLQTY)        AS PLANPNLQTY
+              ,   SUM(E.PCSQTY)        AS INPUTRDPCSQTY
+              ,   SUM(E.PNLQTY)        AS INPUTRDPNLQTY
+          FROM    LOTSTATUS           A
+          LEFT  JOIN WIPSTATUS        B   ON  A.PROCESSDEFID = B.PROCESSDEFID
+                                          AND A.PLANTID = B.PLANTID
+          LEFT  JOIN SHIPPINGREADY    C   ON  A.PROCESSDEFID = C.PROCESSDEFID
+                                          AND A.PLANTID = C.PLANTID
+                                          AND A.PROCESSSEGMENTID = C.PROCESSSEGMENTID
+                                          AND A.USERSEQUENCE = C.USERSEQUENCE
+          LEFT  JOIN TRANSITREADY     D   ON  A.PROCESSDEFID = D.PROCESSDEFID
+                                          AND A.PLANTID = D.PLANTID
+                                          AND A.PROCESSSEGMENTID = D.PROCESSSEGMENTID
+                                          AND A.USERSEQUENCE = D.USERSEQUENCE
+          LEFT  JOIN INPUTREADY       E   ON  A.PROCESSDEFID = E.PROCESSDEFID
+                                          AND A.PLANTID = E.PLANTID
+                                          AND A.PROCESSSEGMENTID = E.PROCESSSEGMENTID
+                                          AND A.USERSEQUENCE = E.USERSEQUENCE
+          GROUP BY A.PLANTID
+	</select>
+	
+	<!-- 오른쪽 품목 상세 정보 탭 > 치공구 탭 그리드 -->
+	<select id="selectProductDetailDurableList" parameterType="map" resultType="hashmap">
+	/* "SelectProductDetailDurableList" 10001 */
+	--id : selectProductDetailDurableList
+		WITH ROUTING AS
+            (
+                SELECT  PD.PRODUCTDEFID
+                    ,   PD.PRODUCTDEFVERSION   
+                    ,   PR.PROCESSDEFID
+                    ,   PR.PROCESSDEFVERSION
+                    ,   PR.PATHSEQUENCE
+                    ,   PR.USERSEQUENCE
+                    ,   PR.PROCESSSEGMENTID
+                    ,   COALESCE(DC1.DICTIONARYNAME, SG.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+                    ,   PR.PLANTID
+                FROM    BAS_PROCESSPATH              PR
+                INNER JOIN BAS_PROCESSDEFINITION     PP  ON  PR.PROCESSDEFID = PP.PROCESSDEFID
+                                                        AND PR.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+                -- LOT Routing 까지 두번 나올 필요가 없으므로 품목 라우팅 기준으로 치공구를 가져옴. 
+                INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  PP.PROCESSDEFID = PD.PROCESSDEFID   
+                                                        AND PP.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+                INNER JOIN BAS_PROCESSSEGMENT        SG  ON  PR.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+                LEFT JOIN CMD_DICTIONARY             DC1 ON  SG.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+                                                        AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                WHERE   PD.PRODUCTDEFID =  #{PRODUCTDEFID}
+                -- ProductDefVersion
+                <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION != ''">
+					AND     PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>                       
+                ORDER BY PR.PATHSEQUENCE
+            )
+            SELECT  DISTINCT
+                    RT.PROCESSDEFID
+                --,   RT.PROCESSDEFVERSION
+                ,   RT.PROCESSSEGMENTID
+                ,   RT.PROCESSSEGMENTNAME
+                --,   RT.PATHSEQUENCE
+                ,   RT.USERSEQUENCE
+                ,   RT.PLANTID
+                ,   BR.RESOURCEID
+                ,   DD.DURABLEDEFVERSION
+                ,   COALESCE(DC1.DICTIONARYNAME, DD.DURABLEDEFNAME)     AS DURABLEDEFNAME
+                ,   DL1.AREAID
+                ,   COALESCE(DC2.DICTIONARYNAME, AR.AREANAME)           AS AREANAME
+                ,	DL1.CNT			     AS TOTALQTY
+                ,	NVL(DL2.CNT,0)	     AS AVAILABLEQTY
+                ,	NVL(DL3.CNT,0)	     AS REPAIRQTY
+            FROM    ROUTING                     RT
+            INNER JOIN BAS_BILLOFRESOURCE        BR  ON  RT.PROCESSDEFID = BR.PROCESSDEFID
+                                                    AND RT.PROCESSDEFVERSION = BR.PROCESSDEFVERSION
+                                                    AND RT.PROCESSSEGMENTID = BR.PROCESSSEGMENTID
+                                                    AND BR.RESOURCETYPE = 'Durable'
+            INNER JOIN TOM_DURABLEDEFINITION     DD  ON  BR.RESOURCEID = DD.DURABLEDEFID
+                                                    AND BR.RESOURCEVERSION = DD.DURABLEDEFVERSION
+            LEFT JOIN  CMD_DICTIONARY            DC1 ON  DD.DURABLEDEFNAME = DC1.DICTIONARYID
+                                                    AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+            LEFT JOIN (SELECT DURABLEDEFID, DURABLEDEFVERSION, AREAID, COUNT(*) CNT FROM TOM_DURABLELOT             
+		            	WHERE DURABLESTATE IN ('Available', 'InUse', 'Repairing')
+		            	GROUP BY  DURABLEDEFID, DURABLEDEFVERSION, AREAID
+            		  )							 DL1 ON  DD.DURABLEDEFID = DL1.DURABLEDEFID
+                                                    AND DD.DURABLEDEFVERSION = DL1.DURABLEDEFVERSION
+            LEFT JOIN (SELECT DURABLEDEFID, DURABLEDEFVERSION, COUNT(*) CNT FROM TOM_DURABLELOT             
+		            	WHERE DURABLESTATE IN ('Available', 'InUse')
+		            	GROUP BY  DURABLEDEFID, DURABLEDEFVERSION
+            		  )	                         DL2 ON  DD.DURABLEDEFID = DL2.DURABLEDEFID
+                                                    AND DD.DURABLEDEFVERSION = DL2.DURABLEDEFVERSION
+            LEFT JOIN (SELECT DURABLEDEFID, DURABLEDEFVERSION, COUNT(*) CNT FROM TOM_DURABLELOT             
+		            	WHERE DURABLESTATE IN ('Repairing')
+		            	GROUP BY  DURABLEDEFID, DURABLEDEFVERSION
+            		  )						           DL3 ON  DD.DURABLEDEFID = DL3.DURABLEDEFID
+                                                    AND DD.DURABLEDEFVERSION = DL3.DURABLEDEFVERSION   
+			LEFT JOIN BAS_AREA                   AR  ON  DL1.AREAID = AR.AREAID
+            LEFT JOIN CMD_DICTIONARY             DC2 ON  AR.AREANAME = DC2.DICTIONARYID
+                                                    AND DC2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+            WHERE   1 = 1
+            ORDER BY TO_NUMBER(RT.USERSEQUENCE) 
+	</select>
+	
+	<!-- 오른쪽 품목 상세 정보 탭 > 설비 탭 그리드 -->
+	<select id="selectProductDetailEquipmentList" parameterType="map" resultType="hashmap">
+	/* "SelectProductDetailEquipmentList" 10001 */
+	--id : selectProductDetailEquipmentList
+		WITH ROUTING AS
+				(
+				    SELECT  PD.PRODUCTDEFID
+				        ,   PD.PRODUCTDEFVERSION   
+				        ,   PR.PROCESSDEFID
+				        ,   PR.PROCESSDEFVERSION
+				        ,   PR.PATHSEQUENCE
+				        ,   PR.USERSEQUENCE
+				        ,   PR.PROCESSSEGMENTID
+				        ,   COALESCE(DC1.DICTIONARYNAME, SG.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+				        ,   PR.PLANTID
+				    FROM    BAS_PROCESSPATH              PR
+				    INNER JOIN BAS_PROCESSDEFINITION     PP  ON  PR.PROCESSDEFID = PP.PROCESSDEFID
+				                                            AND PR.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				    -- LOT Routing 까지 두번 나올 필요가 없으므로 품목 라우팅 기준으로 치공구를 가져옴.
+				    INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  PP.PROCESSDEFID = PD.PROCESSDEFID
+				                                            AND PP.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+				    INNER JOIN BAS_PROCESSSEGMENT        SG  ON  PR.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+				    LEFT JOIN CMD_DICTIONARY             DC1 ON  SG.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+				                                            AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				    WHERE   PD.PRODUCTDEFID = #{PRODUCTDEFID}
+				    -- ProductDefVersion
+				    <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION != ''">
+						AND     PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+					</if>    				    
+					ORDER BY PR.PATHSEQUENCE
+				)
+				SELECT  DISTINCT
+				        RT.PROCESSDEFID
+				    --,   RT.PROCESSDEFVERSION
+				    ,   RT.PROCESSSEGMENTID
+				    ,   RT.PROCESSSEGMENTNAME
+				    --,   RT.PATHSEQUENCE
+				    ,   RT.USERSEQUENCE
+				    ,   RT.PLANTID
+				    ,   BR.RESOURCEID
+				    ,   RS.AREAID
+				    ,   COALESCE(DC3.DICTIONARYNAME, SC.MEANING)           AS OWNTYPE
+				    ,   COALESCE(DC2.DICTIONARYNAME, AR.AREANAME)           AS AREANAME
+				    ,   COALESCE(DC1.DICTIONARYNAME, EC.EQUIPMENTCLASSNAME) AS EQUIPMENTCLASS
+					,	(	SELECT	COUNT(EQ1.EQUIPMENTID)
+							FROM 	BAS_EQUIPMENT EQ1
+							WHERE	RS.EQUIPMENTCLASSID = EQ1.EQUIPMENTCLASSID
+							AND		RT.PLANTID = EQ1.PLANTID
+							AND		RS.AREAID = EQ1.AREAID
+							AND		EQ1.VALIDSTATE = 'Valid'
+						) TOTALQTY
+					,   (	SELECT 	COUNT(EQ2.EQUIPMENTID)
+							FROM 	BAS_EQUIPMENT EQ2
+							WHERE 	RS.EQUIPMENTCLASSID = EQ2.EQUIPMENTCLASSID
+							AND 	RT.PLANTID = EQ2.PLANTID
+							AND 	RS.AREAID = EQ2.AREAID
+							AND 	EQ2.STATE IN ('Idle', 'Run')
+							AND 	EQ2.VALIDSTATE = 'Valid'
+						) AVAILABLEQTY
+					,   (	SELECT	COUNT(EQ3.EQUIPMENTID)
+							FROM	BAS_EQUIPMENT EQ3
+							WHERE	RS.EQUIPMENTCLASSID = EQ3.EQUIPMENTCLASSID
+							AND		RT.PLANTID = EQ3.PLANTID
+							AND		RS.AREAID = EQ3.AREAID
+							AND		EQ3.STATE IN ('Down')
+							AND		EQ3.VALIDSTATE = 'Valid'
+						) REPAIRQTY  
+				FROM    ROUTING                     RT
+				INNER JOIN BAS_BILLOFRESOURCE        BR  ON  RT.PROCESSDEFID = BR.PROCESSDEFID
+				                                        AND RT.PROCESSDEFVERSION = BR.PROCESSDEFVERSION
+				                                        AND RT.PROCESSSEGMENTID = BR.PROCESSSEGMENTID
+				                                        AND BR.RESOURCETYPE = 'Resource'
+				INNER JOIN BAS_RESOURCE				RS	ON 	BR.RESOURCEID = RS.RESOURCEID
+				INNER JOIN BAS_EQUIPMENTCLASS        EC  ON  RS.EQUIPMENTCLASSID = EC.EQUIPMENTCLASSID
+				                                        AND EC.PARENTEQUIPMENTCLASSID NOT IN ('P9')
+				LEFT  JOIN CMD_DICTIONARY            DC1 ON  EC.EQUIPMENTCLASSNAME = DC1.DICTIONARYID
+				                                        AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN BAS_AREA                   AR  ON  RS.AREAID = AR.AREAID
+				LEFT JOIN CMD_DICTIONARY             DC2 ON  AR.AREANAME = DC2.DICTIONARYID
+				                                        AND DC2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN CMD_LOOKUP_VALUES          SC  ON  AR.OWNTYPE = SC.LOOKUP_CODE
+                                                    	AND SC.LOOKUP_TYPE = 'OwnType'
+				LEFT JOIN CMD_DICTIONARY             DC3 ON  SC.LOOKUP_CODE = DC3.DICTIONARYID
+				                                        AND DC3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE   1 = 1
+				GROUP BY RT.PROCESSDEFID
+				    ,   RT.PROCESSDEFVERSION
+				    ,   RT.PROCESSSEGMENTID
+				    ,   RT.PROCESSSEGMENTNAME
+				    --,   RT.PATHSEQUENCE
+				    ,   RT.USERSEQUENCE
+				    ,   RT.PLANTID
+				    ,   BR.RESOURCEID
+				    ,   RS.AREAID
+					,	RS.EQUIPMENTCLASSID
+				    ,   COALESCE(DC3.DICTIONARYNAME, SC.MEANING)
+				    ,   COALESCE(DC2.DICTIONARYNAME, AR.AREANAME)
+				    ,   COALESCE(DC1.DICTIONARYNAME, EC.EQUIPMENTCLASSNAME)
+				ORDER BY TO_NUMBER(RT.USERSEQUENCE)  --RT.PATHSEQUENCE
+	</select>
+	
+	<!-- 오른쪽 품목 상세 정보 탭 > 불량 현황 탭 그리드 -->
+	<select id="selectProductDetailDefectList" parameterType="map" resultType="hashmap">
+	/* "SelectProductDetailDefectList" 10001 */
+	--id : selectProductDetailDefectList
+		WITH SALESORDER AS
+                (
+                    SELECT  DISTINCT 
+                            L.PRODUCTIONORDERID
+                        ,   L.LINENO
+                        ,   TO_NUMBER(SO.PLANQTY)   						AS PUREORDER
+                        ,   L.PRODUCTDEFID
+                        ,   L.PRODUCTDEFVERSION
+                        ,   TO_CHAR(L.ROOTLOTSTARTDATE, 'YYYY-MM-DD')		AS ROOTLOTSTARTDATE
+                    FROM    PCM_LOT                  L
+                    INNER JOIN MFM_PRODUCTIONORDER   SO  ON  SO.PRODUCTIONORDERID = L.PRODUCTIONORDERID
+                                                        AND SO.LINENO = L.LINENO
+                                                        AND L.ROOTLOTID = L.LOTID
+                                                        AND L.ROOTLOTSTARTDATE IS NOT NULL
+                    WHERE   L.PRODUCTDEFID = #{PRODUCTDEFID}
+                    -- ProductDefVersion
+                    <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION != ''">
+						AND     L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+					</if>                       
+                ),
+                LOTINPUT AS
+                (
+                    SELECT  SO.PRODUCTIONORDERID
+                        ,   SO.LINENO
+                        ,   SUM(L.CREATEDQTY)                                        AS INPUTQTY
+                        ,   ROUND(SUM(L.CREATEDQTY) / SO.PUREORDER * 100, 2)  		AS INPUTRATE
+                    FROM    SALESORDER      SO
+                    INNER JOIN PCM_LOT       L   ON  SO.PRODUCTIONORDERID = L.PRODUCTIONORDERID
+                                                AND SO.LINENO = L.LINENO
+                                                AND SO.PRODUCTDEFID = L.PRODUCTDEFID
+                                                AND SO.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+                                                AND L.ROOTLOTID = L.LOTID
+                    GROUP BY SO.PRODUCTIONORDERID
+                        ,   SO.LINENO
+                        ,   SO.PUREORDER
+                ),
+                WIPLIST AS
+                (
+                    SELECT  SO.PRODUCTIONORDERID
+                        ,   SO.LINENO
+                        ,   SUM(LI.QTY)             AS WIPQTY
+                    FROM    SALESORDER              SO
+                    LEFT JOIN PCM_LOT                LI  ON  SO.PRODUCTIONORDERID = LI.PRODUCTIONORDERID
+                                                        AND SO.LINENO = LI.LINENO
+                                                        AND SO.PRODUCTDEFID = LI.PRODUCTDEFID
+                                                        AND SO.PRODUCTDEFVERSION = LI.PRODUCTDEFVERSION
+                                                        AND COALESCE(LI.ISHOLD, 'N') = 'N'
+                                                        AND COALESCE(LI.ISLOCKING, 'N') = 'N'
+                                                        AND LI.LOTSTATE IN ('InProduction', 'InTransit', 'Finished')
+                    GROUP BY SO.PRODUCTIONORDERID
+                        ,   SO.LINENO
+                ),
+                DEFECTLIST AS
+                (
+                    SELECT  SO.PRODUCTIONORDERID
+                        ,   SO.LINENO
+                        ,   SUM(DF.DEFECTQTY)       AS DEFECTQTY
+                    FROM    SALESORDER              SO
+                    INNER JOIN PCM_LOT               LI  ON  SO.PRODUCTIONORDERID = LI.PRODUCTIONORDERID
+                                                        AND SO.LINENO = LI.LINENO
+                                                        AND SO.PRODUCTDEFID = LI.PRODUCTDEFID
+                                                        AND SO.PRODUCTDEFVERSION = LI.PRODUCTDEFVERSION
+                                                        AND LI.LOTSTATE IN ('InProduction', 'InTransit', 'Finished')
+                    INNER JOIN PCM_LOTDEFECT         DF  ON  LI.LOTID = DF.LOTID
+                                                        AND SO.PRODUCTDEFID = DF.PRODUCTDEFID
+                                                        AND SO.PRODUCTDEFVERSION = DF.PRODUCTDEFVERSION
+                                                        AND DF.VALIDSTATE = 'Valid'
+                    GROUP BY SO.PRODUCTIONORDERID
+                        ,   SO.LINENO
+                ),
+                SHIPLIST AS
+                (
+                    SELECT  SO.PRODUCTIONORDERID
+                        ,   SO.LINENO
+                        ,   SUM(LI.QTY)             AS SHIPQTY
+                    FROM    SALESORDER              SO
+                    LEFT JOIN PCM_LOT                LI  ON  SO.PRODUCTIONORDERID = LI.PRODUCTIONORDERID
+                                                        AND SO.LINENO = LI.LINENO
+                                                        AND SO.PRODUCTDEFID = LI.PRODUCTDEFID
+                                                        AND SO.PRODUCTDEFVERSION = LI.PRODUCTDEFVERSION
+                                                        AND COALESCE(LI.ISHOLD, 'N') = 'N'
+                                                        AND COALESCE(LI.ISLOCKING, 'N') = 'N'
+                                                        AND LI.LOTSTATE IN ('Finished')
+                    GROUP BY SO.PRODUCTIONORDERID
+                        ,   SO.LINENO
+                )
+                SELECT  SO.PRODUCTIONORDERID						AS SALESORDERID
+                    ,   SO.LINENO
+                    ,   SO.PUREORDER
+                    ,   SO.ROOTLOTSTARTDATE							AS INPUTDATE
+                    ,   LI.INPUTQTY
+                    ,   ROUND(LI.INPUTRATE, 2)                  	AS INPUTRATE
+                    ,   WL.WIPQTY
+                    ,   DF.DEFECTQTY
+                    ,   SL.SHIPQTY									AS INCOMEQTY
+                    ,   ROUND(((DF.DEFECTQTY / LI.INPUTQTY) * 100), 2)          AS INPUTDEFECTRATE
+                    ,   ROUND(((DF.DEFECTQTY / SL.SHIPQTY) * 100), 2)           AS SHIPDEFECTRATE
+                FROM    SALESORDER              SO
+                LEFT JOIN LOTINPUT              LI  ON  SO.PRODUCTIONORDERID = LI.PRODUCTIONORDERID
+                                                    AND SO.LINENO = LI.LINENO
+                LEFT JOIN WIPLIST               WL  ON  SO.PRODUCTIONORDERID = WL.PRODUCTIONORDERID
+                                                    AND SO.LINENO = WL.LINENO
+				LEFT JOIN DEFECTLIST            DF  ON  SO.PRODUCTIONORDERID = DF.PRODUCTIONORDERID
+                                                    AND SO.LINENO = DF.LINENO
+				LEFT JOIN SHIPLIST              SL  ON  SO.PRODUCTIONORDERID = SL.PRODUCTIONORDERID
+                                                    AND SO.LINENO = SL.LINENO
+	</select>
+	
+	<!-- 재공 현황 탭 -->
+	<select id="selectWIPListCommon" parameterType="map" resultType="hashmap">
+	/* "SelectWIPListCommon" 10001 */
+	--id : selectWIPListCommon
+		WITH BASE_LOT 
+				AS
+				(
+					SELECT L.PLANTID
+					    ,  L.LOTID
+					    ,  L.ISLOCKING
+					    ,  L.ISHOLD
+					    ,  L.LOTTYPE
+					    ,  L.RESOURCEID
+					    ,  L.PRODUCTDEFID
+					    ,  L.PRODUCTDEFVERSION
+					    ,  PD.PRODUCTDEFNAME
+					    ,  PD.PRODUCTDEFTYPE
+					    ,  PD.PRODUCTIONTYPE
+					    ,  L.PROCESSSEGMENTID
+					    ,  L.PROCESSSEGMENTVERSION
+					    ,  PS.PROCESSSEGMENTCLASSID
+					    ,  PSC.PARENTPROCESSSEGMENTCLASSID   
+					    ,  WR.TXNHISTKEY
+					    ,  WR.PREVSENDLOTHISTKEY
+					    ,  L.PROCESSDEFID
+					    ,  L.PROCESSDEFVERSION
+					    ,  L.PROCESSPATHSTACK
+					    ,  L.ISREWORK
+						,   CASE WHEN L.ISREWORK = 'Y' OR L.WORKCOUNT > 0 THEN 'Rework'
+						         ELSE 'Normal'   
+						         END  REWORKDIVISION
+						,  L.LOTCREATEDTYPE        
+						,  L.USERSEQUENCE
+						,  L.AREAID
+						,  L.QTY
+						,  L.PANELPERQTY
+						,  L.PROCESSSTATE
+						,  CASE WHEN L.PROCESSSTATE = 'WaitForReceive'  THEN 'WaitForReceive'
+						        WHEN L.PROCESSSTATE = 'Wait'            THEN 'Receive'
+						        WHEN L.PROCESSSTATE = 'Run'             THEN 'WorkStart'
+						        WHEN L.PROCESSSTATE = 'WaitForSend'     THEN 'WorkEnd'
+						        END WIPPROCESSSTATE
+						,  COALESCE(PD.RTRSHT,'SHT') RTRSHT    
+						,  L.PRODUCTIONORDERID
+						,  L.LINENO
+						,  PD.PCSMM
+						,  L.CREATEDQTY
+						,  L.ROOTLOTSTARTDATE
+						--,  L.SENDTIME
+						,  L.LOTSTATE
+						,  WR.SELFSHIPINSPRESULT
+						,  WR.SELFTAKEINSPRESULT
+						,  WR.MEASUREINSPRESULT
+						--,  L.EXPECTEDCOMPLETEDATE
+						,  L.UNIT
+						,  PS.OSPREQUIRED   	
+						--,  L.ISFINALINSPECTPROGESS
+						,  L.SUBPROCESSDEFID
+						,  L.SUBPROCESSDEFVERSION						
+					FROM (
+							SELECT PLANTID
+						    ,  LOTID
+						    ,  ISLOCKING
+						    ,  ISHOLD
+						    ,  LOTTYPE
+						    ,  RESOURCEID
+						    ,  PRODUCTDEFID
+						    ,  PRODUCTDEFVERSION
+						    ,  PROCESSSEGMENTID
+						    ,  PROCESSSEGMENTVERSION
+						    ,  PROCESSDEFID
+						    ,  PROCESSDEFVERSION
+						    ,  PROCESSPATHSTACK
+						    ,  ISREWORK
+						    ,  WORKCOUNT
+						    ,  LOTCREATEDTYPE        
+							,  USERSEQUENCE
+							,  AREAID
+							,  QTY
+							,  PANELPERQTY
+							,  PROCESSSTATE
+							,  PRODUCTIONORDERID
+							,  LINENO
+							,  CREATEDQTY
+							,  ROOTLOTSTARTDATE
+--							,  SENDTIME
+							,  LOTSTATE
+--							,  EXPECTEDCOMPLETEDATE
+							,  UNIT
+--							,  ISFINALINSPECTPROGESS
+							,  SUBPROCESSDEFID
+							,  SUBPROCESSDEFVERSION		
+							FROM PCM_LOT 
+							WHERE LOTSTATE IN ('InProduction', 'InTransit')
+							  AND SUBSTR(#{PERIOD_PERIODTO},1,8) >= TO_char(SYSDATE,'YYYYMMDD')
+							  AND COALESCE(ISDEFECTED, 'N') = 'N'
+							UNION 
+							SELECT PLANTID
+						    ,  LOTID
+						    ,  ISLOCKING
+						    ,  ISHOLD
+						    ,  LOTTYPE
+						    ,  RESOURCEID
+						    ,  PRODUCTDEFID
+						    ,  PRODUCTDEFVERSION
+						    ,  PROCESSSEGMENTID
+						    ,  PROCESSSEGMENTVERSION
+						    ,  PROCESSDEFID
+						    ,  PROCESSDEFVERSION
+						    ,  PROCESSPATHSTACK
+						    ,  ISREWORK
+						    ,  WORKCOUNT
+						    ,  LOTCREATEDTYPE        
+							,  USERSEQUENCE
+							,  AREAID
+							,  QTY
+							,  PANELPERQTY
+							,  PROCESSSTATE
+							,  PRODUCTIONORDERID
+							,  LINENO
+							,  CREATEDQTY
+							,  ROOTLOTSTARTDATE
+--							,  SENDTIME
+							,  LOTSTATE
+--							,  EXPECTEDCOMPLETEDATE
+							,  UNIT
+--							,  ISFINALINSPECTPROGESS
+							,  SUBPROCESSDEFID
+							,  SUBPROCESSDEFVERSION	
+							FROM PCM_LOTPERDAILY
+							WHERE LOTSTATE IN ('InProduction', 'InTransit')
+							  AND TXNTIME =  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYY-MM-DD')
+						) L
+					--INNER JOIN FN_AREA('$!{_TXNINFO.USER}') SA 	ON	L.AREAID = SA.AREAID
+					INNER JOIN BAS_AREA 				  SA ON	L.AREAID = SA.AREAID
+					INNER JOIN BAS_PRODUCTDEFINITION      PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+					                                        AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION               
+					INNER JOIN BAS_PROCESSSEGMENT_V       PS ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+					                                        AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION  
+					INNER JOIN BAS_PROCESSSEGMENTCLASS   PSC ON PS.PROCESSSEGMENTCLASSID = PSC.PROCESSSEGMENTCLASSID
+					INNER JOIN BAS_PROCESSPATH            PP ON  SPLIT_PART(L.PROCESSPATHSTACK,'.',1) = PP.PROCESSPATHID					     
+					LEFT JOIN PCM_LOTWORKRESULT          WR ON L.LOTID = WR.LOTID
+												            AND L.PROCESSSEGMENTID = WR.PROCESSSEGMENTID
+												            AND L.USERSEQUENCE = WR.USERSEQUENCE
+												            AND WR.RESULTTYPE = 'NORMAL'
+											                AND L.WORKCOUNT = WR.WORKCOUNT	
+					LEFT JOIN OSM_OSPRECEIPTSENDLOT       OS ON  L.LOTID = OS.LOTID
+					                                        AND WR.TXNHISTKEY = OS.LOTHISTKEY
+					                                        AND OS.ISLASTRECEIPT = 'Y'		
+			        LEFT  JOIN PCM_LOTHISTORY			LH	ON	WR.LOTID = LH.LOTID
+			        										AND	WR.PREVSENDLOTHISTKEY = LH.TXNHISTKEY				                                        						                                        									                
+					WHERE 1=1					
+				    AND     ((L.LOTSTATE = 'InProduction') OR (L.LOTSTATE = 'InTransit' AND OS.RECEIPTDATE IS NULL))
+			         -- SITE 조건
+			        <if test="PLANTID != null and PLANTID !=''"> 
+						AND	L.PLANTID = #{PLANTID}
+					</if>			        
+			        -- Locking 여부			        
+			        <if test="ISLOCKING != null and ISLOCKING !=''"> 
+						AND	L.ISLOCKING = #{ISLOCKING}
+					</if>
+					<if test="ISHOLD != null and ISHOLD !=''"> 
+						AND	L.ISHOLD = #{ISHOLD}
+					</if>
+			        -- 2020.06.04 김기수 대공정 조건 추가
+			        <if test="PARENTPROCESSSEGMENTCLASSID != null and PARENTPROCESSSEGMENTCLASSID !=''"> 
+						AND	PSC.PARENTPROCESSSEGMENTCLASSID = #{PARENTPROCESSSEGMENTCLASSID}
+					</if> 			       			        
+					-- 품목코드
+					<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',') PMP 
+						        WHERE	L.PRODUCTDEFID = PMP.VALUE
+					        )
+					</if> 
+					
+					<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+						AND	PD.PRODUCTDEFNAME LIKE #{PRODUCTDEFNAME}
+					</if> 				
+					-- 품목VERSION
+					<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''">
+						AND	L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+					</if>					
+					-- 품목VERSION
+					<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''">
+						AND	L.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+					</if>
+					-- 작업장
+					<if test="AREAID != null and AREAID !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{AREAID}, ',') PMP 
+						        WHERE	L.AREAID = PMP.VALUE
+					        )
+					</if> 
+					-- 구분
+					<if test="LOTTYPE != null and LOTTYPE !=''">
+						AND	L.LOTTYPE = #{LOTTYPE}
+					</if>
+
+			        -- 제품구분
+			        <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFTYPE}, ',') PMP 
+						        WHERE	PD.PRODUCTDEFTYPE = PMP.VALUE
+					        )
+					</if> 
+					
+			        -- 자사/외주구분
+			        <if test="OWNTYPE != null and OWNTYPE !=''">
+						AND	SA.OWNTYPE = #{OWNTYPE}
+					</if>					
+			    )
+	   			SELECT X.LOTTYPE                
+				    ,  X.PRODUCTDEFID
+				    ,  X.PRODUCTDEFVERSION
+					,  X.PRODUCTDEFNAME
+					,  X.PROCESSDEFID
+					,  X.PROCESSDEFVERSION
+					,  X.PROCESSSTATE
+					,  TO_NUMBER(X.USERSEQUENCE)  AS USERSEQUENCE
+				    ,  X.PROCESSSEGMENTID
+				    ,  X.PROCESSSEGMENTVERSION
+				    ,  X.PROCESSSEGMENTNAME			
+				    ,  X.PLANTID
+				    ,  X.AREAID
+				    ,  X.AREANAME			   
+				    ,  X.RTRSHT
+				    ,  X.LOTID
+				    ,  X.UNIT
+	                ,  X.ISLOCKING
+					,  X.ISHOLD	
+					,  X.RESOURCEID
+					,  X.SUBPROCESSDEFID
+					,  X.SUBPROCESSDEFVERSION	
+					,  X.WIPTOTALPCS  QTY
+					,  X.WIPTOTALPNL  PANELQTY
+				    ,  X.SENDPCSQTY
+				    ,  X.SENDPANELQTY
+				    ,  X.RECEIVEPCSQTY
+				    ,  X.RECEIVEPANELQTY							    
+				    ,  X.WORKSTARTPCSQTY
+				    ,  X.WORKSTARTPANELQTY							   
+				    ,  X.WORKENDPCSQTY
+				    ,  X.WORKENDPANELQTY
+				    ,  X.TOTALLEADTIME
+				    ,  X.SEGMENTINCOMETIME
+				    ,  X.PROCESSSEGMENTLEADTIME
+				    ,  TO_CHAR(X.ROOTLOTSTARTDATE, 'YYYY-MM-DD HH24:MI:SS')		                AS LOTINPUTDATE
+				    ,  X.DELIVERYDATE
+				    ,  X.LEFTDATE
+				    ,  LOTTYPEID
+				FROM
+				(
+					SELECT L.LOTID 
+					    ,  L.ISLOCKING
+					    ,  L.ISHOLD
+					    ,  L.UNIT
+					    ,  L.RESOURCEID
+					    ,  L.LOTTYPE LOTTYPEID
+					    ,  COALESCE(SD1.DICTIONARYNAME,L.LOTTYPE) LOTTYPE
+					    ,  L.PRODUCTDEFID       
+					    ,  L.PRODUCTDEFVERSION 
+					    ,  L.PRODUCTDEFNAME
+					    ,  L.PRODUCTDEFTYPE
+					    ,  L.PRODUCTIONTYPE
+					    ,  L.PRODUCTIONORDERID  SALESORDERID 
+					    ,  L.LINENO
+					    ,  L.PROCESSDEFID
+					    ,  L.PROCESSDEFVERSION
+					    ,  L.PROCESSSEGMENTID    
+					    ,  L.PROCESSSEGMENTVERSION
+					    ,  COALESCE(SD6.DICTIONARYNAME,L.PROCESSSEGMENTID) PROCESSSEGMENTNAME
+					    ,  PP.PROCESSUOM UOM
+					    ,  CASE WHEN L.ISREWORK = 'Y' THEN PP.USERSEQUENCE || '.' || L.USERSEQUENCE
+					            ELSE L.USERSEQUENCE 
+					            END  USERSEQUENCE       
+					    ,  L.PLANTID
+					    ,  L.AREAID
+					    ,  COALESCE(SD5.DICTIONARYNAME,L.AREAID)           AREANAME    
+					    ,  L.RTRSHT
+					    ,  L.QTY WIPTOTALPCS
+					    ,  L.QTY PCSQTY    
+					    ,  L.REWORKDIVISION
+						,  L.SUBPROCESSDEFID
+						,  L.SUBPROCESSDEFVERSION				    
+					    ,  CASE WHEN L.LOTCREATEDTYPE IN ('Claim', 'Repair') THEN COALESCE(DC3.DICTIONARYNAME, L.LOTCREATEDTYPE)
+					       ELSE COALESCE(SD2.DICTIONARYNAME, L.REWORKDIVISION) 
+					       END PROCESSCLASSID_R  
+					    ,  CEIL(L.QTY/L.PANELPERQTY)  WIPTOTALPNL   
+						,  CASE WHEN L.PRODUCTDEFTYPE = 'SubAssembly' THEN ROUND(((L.QTY / L.PANELPERQTY * PD.PCSPNL)/PD.PCSMM), 2)
+							    ELSE ROUND((L.QTY / L.PCSMM), 2)					
+							    END AS M2QTY 
+					    ,  PO.PLANENDTIME DELIVERYDATE			
+					    ,  LH.SENDTIME
+					    ,  COALESCE(SD4.DICTIONARYNAME,L.WIPPROCESSSTATE) PROCESSSTATE  
+						,  L.ROOTLOTSTARTDATE
+							,   CASE WHEN PP.PATHTYPE = 'Start'OR PP.PATHTYPE = 'StartEnd' THEN TO_CHAR(L.ROOTLOTSTARTDATE,'YYYY-MM-DD HH24:MI:SS')
+							         ELSE TO_CHAR(LH.SENDTIME,'YYYY-MM-DD HH24:MI:SS')
+							         END SEGMENTINCOMETIME				
+					,	TO_NUMBER(EXTRACT(DAY FROM (CURRENT_TIMESTAMP - PO.PLANENDTIME))) 					 AS LEFTDATE  	
+					,	CASE WHEN L.PROCESSSTATE = 'WaitForReceive' THEN  L.QTY ELSE 0 END          AS SENDPCSQTY
+					,   CASE WHEN L.PROCESSSTATE = 'WaitForReceive' THEN  CEIL(L.QTY/L.PANELPERQTY) ELSE 0 END        AS SENDPANELQTY							
+					-- 작업시작(인수 완료 수량)
+					,	CASE WHEN L.PROCESSSTATE = 'Wait' THEN  L.QTY ELSE 0 END          AS RECEIVEPCSQTY
+					,   CASE WHEN L.PROCESSSTATE = 'Wait' THEN  CEIL(L.QTY/L.PANELPERQTY) ELSE 0 END        AS RECEIVEPANELQTY					
+					-- 작업완료(작업 시작 수량)
+					,	CASE WHEN L.PROCESSSTATE = 'Run' THEN  L.QTY ELSE 0 END         AS WORKSTARTPCSQTY
+					,   CASE WHEN L.PROCESSSTATE = 'Run' THEN  CEIL(L.QTY/L.PANELPERQTY)ELSE 0 END       AS WORKSTARTPANELQTY					
+					-- 인계 대기(작업완료 수량)
+					,	CASE WHEN L.PROCESSSTATE = 'WaitForSend' THEN  L.QTY ELSE 0 END   AS WORKENDPCSQTY
+					,   CASE WHEN L.PROCESSSTATE = 'WaitForSend' THEN  CEIL(L.QTY/L.PANELPERQTY) ELSE 0 END AS WORKENDPANELQTY 
+					/*
+					,   TO_CHAR(TO_NUMBER(EXTRACT(EPOCH FROM SYSDATE - (CASE WHEN PP.PATHTYPE = 'Start'OR PP.PATHTYPE = 'StartEnd' THEN L.ROOTLOTSTARTDATE
+					                                         ELSE LH.SENDTIME
+															 END )))/3600 ,'FM9999999999999.0') AS PROCESSSEGMENTLEADTIME	
+					,  TO_CHAR(TO_NUMBER(EXTRACT(EPOCH FROM SYSDATE - L.ROOTLOTSTARTDATE))/86400 ,'FM9999999999999.00') AS TOTALLEADTIME	
+					*/
+					,   TO_CHAR(TO_NUMBER(SYSDATE - (CASE WHEN PP.PATHTYPE = 'Start'OR PP.PATHTYPE = 'StartEnd' THEN L.ROOTLOTSTARTDATE
+					                                         ELSE LH.SENDTIME
+															 END ))*24 ,'FM9999999999999.0') AS PROCESSSEGMENTLEADTIME
+															 
+					,  TO_CHAR(TO_NUMBER(SYSDATE - L.ROOTLOTSTARTDATE),'FM9999999999999.00') AS TOTALLEADTIME
+					,  L.SELFTAKEINSPRESULT
+					,  L.SELFSHIPINSPRESULT
+					,  L.MEASUREINSPRESULT
+					--,  TO_CHAR(L.EXPECTEDCOMPLETEDATE,'YYYY-MM-DD')EXPECTPRODUCTDATE
+					FROM BASE_LOT L
+					INNER JOIN BAS_PROCESSPATH        PP ON  SPLIT_PART(L.PROCESSPATHSTACK, '.', 1) = PP.PROCESSPATHID
+					LEFT  JOIN MTM_LOTPLANTTRANSIT    LP ON  L.LOTID = LP.LOTID
+					                                    AND LP.TRANSITSTATUS <![CDATA[<>]]> 'InProduction'
+					LEFT JOIN PCM_LOTHISTORY  	LH ON L.PREVSENDLOTHISTKEY = LH.TXNHISTKEY
+					                            	AND    L.LOTID = LH.LOTID
+					LEFT JOIN CMD_LOOKUP_VALUES	SC1 ON  L.LOTTYPE = SC1.LOOKUP_CODE
+					                            	AND SC1.LOOKUP_TYPE = 'ProductionType'  
+					LEFT JOIN CMD_DICTIONARY 	SD1 ON  SC1.DICTIONARYID = SD1.DICTIONARYID
+					                            	AND SD1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					LEFT JOIN CMD_LOOKUP_VALUES SC2 ON  L.REWORKDIVISION = SC2.LOOKUP_CODE
+					                            	AND SC2.LOOKUP_TYPE = 'ReworkDivision'     
+					LEFT JOIN CMD_DICTIONARY 	SD2 ON  SC2.DICTIONARYID = SD2.DICTIONARYID
+					                            	AND SD2.LANGUAGETYPE =  #{SESSION_LANGUAGETYPE}
+					LEFT  JOIN CMD_LOOKUP_VALUES CD3	ON 	L.LOTCREATEDTYPE = CD3.LOOKUP_CODE
+													AND CD3.LOOKUP_TYPE = 'LotWorkType'
+					LEFT  JOIN CMD_DICTIONARY	DC3	ON 	CD3.DICTIONARYID = DC3.DICTIONARYID
+													AND DC3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					LEFT JOIN CMD_LOOKUP_VALUES	SC4 ON  L.WIPPROCESSSTATE = SC4.LOOKUP_CODE
+					                            	AND SC4.LOOKUP_TYPE = 'WipProcessState'  
+					LEFT JOIN CMD_DICTIONARY 	SD4 ON  SC4.DICTIONARYID = SD4.DICTIONARYID
+					                            	AND SD4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					LEFT JOIN BAS_AREA            SA ON  L.AREAID = SA.AREAID
+					LEFT JOIN CMD_DICTIONARY     SD5 ON  SA.AREANAME = SD5.DICTIONARYID
+					                                AND SD5.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					LEFT JOIN BAS_PROCESSSEGMENT  PS ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+					                                AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+					LEFT JOIN CMD_DICTIONARY     SD6 ON  PS.PROCESSSEGMENTNAME = SD6.DICTIONARYID
+					                                AND SD6.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					LEFT JOIN MFM_PRODUCTIONORDER PO ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+					                                AND L.LINENO = PO.LINENO
+					LEFT JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+					                                  AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION					                                  
+				)X
+	</select>
+	
+	<!-- 공정 실적 탭 -->
+	<select id="selectProductDetailWorkResult" parameterType="map" resultType="hashmap">
+	/* "SelectProductDetailWorkResult" 10001 */
+	--id : selectProductDetailWorkResult
+		WITH WORKRESULT AS
+				(
+				    SELECT  CR.LOTID
+				        ,   L.ROOTLOTID
+				        ,   CR.PROCESSDEFID
+				        ,   CR.PROCESSDEFVERSION
+				        ,   CR.PRODUCTDEFID
+				        ,   CR.PRODUCTDEFVERSION
+				        ,   CR.PROCESSSEGMENTID
+				        ,   CR.PROCESSSEGMENTVERSION
+				        ,   D.DICTIONARYNAME            	AS PROCESSSEGMENTNAME
+				        ,   CR.USERSEQUENCE
+				        ,   COALESCE(CR.ISREWORK, 'N')  	AS ISREWORK
+				        ,	SUM(CR.RECEIVEPCSQTY)			AS RECEIVEPCSQTY
+				        ,	SUM(CR.RECEIVEPANELQTY)			AS RECEIVEPANELQTY
+				        ,   SUM(CR.WORKENDPCSQTY)          	AS WORKENDPCSQTY
+				        ,   SUM(CR.WORKENDPANELQTY)        	AS WORKENDPANELQTY
+				        ,   CR.PLANTID
+				        ,   CR.AREAID
+				        ,   COALESCE(PD.RTRSHT, 'Sheet')	AS RTRSHT
+				        ,   COUNT(LE.EQUIPMENTID)       	AS EQUIPMENT
+				        ,   L.LOTTYPE
+				    FROM    PCM_LOTWORKRESULT        		CR
+				    INNER JOIN PCM_LOT               		L   ON  CR.LOTID = L.LOTID
+				    INNER JOIN BAS_PRODUCTDEFINITION 		PD  ON  CR.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                                AND CR.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				    INNER JOIN PCM_LOTEQUIPMENT      		LE  ON  CR.LOTID = LE.LOTID
+				                                                AND CR.PROCESSSEGMENTID = LE.PROCESSSEGMENTID
+				                                                AND CR.PROCESSSEGMENTVERSION = LE.PROCESSSEGMENTVERSION
+				    INNER JOIN BAS_PROCESSSEGMENT    		PS  ON  CR.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                                AND CR.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				    LEFT JOIN CMD_DICTIONARY         		D   ON  PS.PROCESSSEGMENTNAME = D.DICTIONARYID
+				                                                AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				    WHERE   1 = 1
+				    AND     COALESCE(CR.RESULTTYPE, ' ') NOT IN ('SKIP')
+				    AND     COALESCE(CR.WORKENDPCSQTY, 0) > 0
+				    AND     COALESCE(CR.WORKENDPANELQTY, 0) > 0
+				    AND     COALESCE(CR.WORKENDUSER, ' ') != ' '
+				    <if test="ISLOCKING != null and ISLOCKING !=''"> 
+						AND	L.ISLOCKING = #{ISLOCKING}
+					</if>
+					<if test="ISHOLD != null and ISHOLD !=''"> 
+						AND	L.ISHOLD = #{ISHOLD}
+					</if>
+				    --AND     COALESCE(L.ISHOLD, 'N') = 'N'
+              		AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+				    AND     L.LOTSTATE IN ('InProduction', 'InTransit')
+				    --조회일자
+				    <if test="PERIOD_PERIODFR != null and PERIOD_PERIODFR != ''">
+						AND     CR.SENDTIME BETWEEN TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8) || '083000', 'YYYY-MM-DD HH24:MI:SS')
+					</if>						
+					<if test="PERIOD_PERIODFR == null and PERIOD_PERIODFR == ''">
+						AND     CR.SENDTIME BETWEEN TO_TIMESTAMP(TO_CHAR(SYSDATE , 'YYYY-MM-DD') || ' 00:00:00', 'YYYY-MM-DD HH24:MI:SS')
+					</if> 
+					<if test="PERIOD_PERIODTO != null and PERIOD_PERIODTO != ''">
+						AND TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8) || '083000', 'YYYY-MM-DD HH24:MI:SS')
+					</if>					
+					<if test="PERIOD_PERIODTO == null and PERIOD_PERIODTO == ''">
+						AND TO_TIMESTAMP(TO_CHAR(SYSDATE, 'YYYY-MM-DD') || ' 23:59:59', 'YYYY-MM-DD HH24:MI:SS')
+					</if> 			
+					
+				    --품목코드
+				    <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',') PMP 
+						        WHERE	CR.PRODUCTDEFID = PMP.VALUE
+					        )
+					</if> 
+					-- 품목VERSION
+					<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''">
+						AND	CR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+					</if>				    
+				    --품목명
+				    <if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFNAME}, ',') PMP 
+						        WHERE	PD.PRODUCTDEFNAME LIKE PMP.VALUE
+					        )
+					</if>				    
+				    --공정
+				    <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID}, ',') PMP 
+						        WHERE	CR.PROCESSSEGMENTID =  PMP.VALUE
+					        )
+					</if>				    
+				    --SITE
+				    <if test="PLANTID != null and PLANTID !=''"> 
+						AND	CR.PLANTID = #{PLANTID}
+					</if>					    
+				    GROUP BY CR.LOTID
+				        ,   L.ROOTLOTID
+				        ,   CR.PROCESSDEFID
+				        ,   CR.PROCESSDEFVERSION
+				        ,   CR.PRODUCTDEFID
+				        ,   CR.PRODUCTDEFVERSION
+				        ,   CR.PROCESSSEGMENTID
+				        ,   CR.PROCESSSEGMENTVERSION
+				        ,   D.DICTIONARYNAME		--작업장
+				        ,   CR.USERSEQUENCE
+				        ,   CR.ISREWORK
+				        ,   CR.PLANTID
+				        ,   CR.AREAID
+				        ,   PD.RTRSHT
+				        ,   L.LOTTYPE
+				)
+				SELECT  WR.PLANTID
+				    ,   D1.DICTIONARYNAME               AS AREANAME
+				    ,   WR.RTRSHT
+				    ,   WR.EQUIPMENT
+				    ,   D2.DICTIONARYNAME               AS LOTTYPE
+				    ,   WR.PRODUCTDEFID
+				    ,   WR.PRODUCTDEFVERSION
+				    ,   WR.PROCESSSEGMENTNAME
+				    ,   WR.LOTID
+				    ,   WR.WORKENDPCSQTY
+				    ,   WR.WORKENDPANELQTY
+				    ,   WR.RECEIVEPCSQTY                AS INPUTPCSQTY
+				    ,   WR.RECEIVEPANELQTY			    AS INPUTPANELQTY
+				    ,   L.QTY                           AS WIPQTY
+				    ,   L.PANELQTY                      AS WIPPANELQTY
+				    ,   ''		                        AS BASEPCSQTY
+				    ,   ''	                          	AS BASEPANELQTY
+				    ,   CASE WHEN WR.ISREWORK = 'Y'  THEN 'IsRework' 
+				    	ELSE L.LOTCREATEDTYPE END WORKTYPE				    
+				FROM    WORKRESULT  	WR
+				INNER JOIN PCM_LOT   	L   ON  WR.LOTID = L.LOTID
+				LEFT JOIN BAS_AREA   	A   ON  WR.AREAID = A.AREAID
+				LEFT JOIN CMD_DICTIONARY D1  ON  A.AREANAME = D1.DICTIONARYID
+				                            AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN CMD_LOOKUP_VALUES	C   ON  WR.LOTTYPE = C.LOOKUP_CODE
+				                            AND C.LOOKUP_TYPE = 'ProductionType'
+				LEFT JOIN CMD_DICTIONARY D2  ON  C.DICTIONARYID = D2.DICTIONARYID
+				                            AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE   1 = 1
+				ORDER BY WR.LOTID, WR.PRODUCTDEFID, TO_NUMBER(WR.USERSEQUENCE)
+	</select>
+</mapper>

@@ -1,0 +1,284 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS05400Dao">
+
+
+
+    <!--
+		설		명	: PCS이미지 관리 - 품목 팝업
+		생	성	자	: 김진현
+		생	성	일	: 2021-05-06 
+		수  정   이  력	:
+	-->
+    <select id="selectProductDefList" parameterType="map" resultType="hashmap">
+			
+			--
+			-- GetProductDefList
+			-- 10003
+			/* selectProductDefList -  PCS이미지 관리 - 품목 팝업 */
+			SELECT	A.PRODUCTDEFID
+					,	A.PRODUCTDEFNAME
+					,	A.PRODUCTDEFVERSION
+					,	A.CUSTOMERID
+					,	C.CUSTOMERNAME
+				FROM	BAS_PRODUCTDEFINITION	A
+				LEFT JOIN BAS_CUSTOMER           C   ON  A.CUSTOMERID = C.CUSTOMERID
+				WHERE 	1 = 1
+				
+				
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+					AND		A.ENTERPRISEID 	= #{ENTERPRISEID}
+				</if>
+				
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+					AND		A.PLANTID 			= #{PLANTID}
+				</if>	
+				
+				
+				<if test="PRODUCTDEF != null and PRODUCTDEF !='' and !(PRODUCTDEF eq '*'.toString()) ">
+					 AND (
+								UPPER(A.PRODUCTDEFID) 		LIKE  '%' || UPPER(#{PRODUCTDEF})|| '%' 
+					 OR	  	UPPER(A.PRODUCTDEFNAME) 	LIKE  '%' || UPPER(#{PRODUCTDEF})|| '%' 
+					 )
+				</if>					
+				AND 	A.VALIDSTATE = 'Valid'
+				ORDER BY PRODUCTDEFID ASC
+			   
+    </select>
+    
+    <!--
+		설		명	: PCS이미지 관리 - 메인 그리드 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-05-07 
+		수  정   이  력	:
+	-->
+    <select id="selectPCSImageList" parameterType="map" resultType="hashmap">
+			
+			--
+			-- ID : GetPCSImage
+			-- VERSION:10001
+			/* selectPCSImageList - PCS이미지 관리 - 메인 그리드 조회 */
+			SELECT	A.PRODUCTDEFID
+				,	A.PRODUCTDEFVERSION
+                ,   P.PRODUCTDEFNAME
+				,	A.WIDTH
+				,	A.HEIGHT
+				,	SF.OC_FILE_NM       		AS  FILENAME
+				,	''								AS  FILEDATA
+				,	SF.FILE_SIZE            		AS  FILESIZE
+				,	SF.FILE_EXT             		AS  FILEEXT
+				,	SM.ATCH_TY_CD          	AS  FILEPATH
+				,	''								AS	 SAFEFILENAME
+				,	''								AS	 LOCALFILEPATH
+				,	''								AS	 PROCESSINGSTATUS
+				,	A.VALIDSTATE		
+				,   SF.ATCH_FILE_GUID       	AS FILEGUID
+				,   ''								AS X_BTN
+			FROM	BAS_QCPCSIMAGE A
+			LEFT OUTER JOIN BAS_PRODUCTDEFINITION P
+                    ON P.PRODUCTDEFID       		= A.PRODUCTDEFID
+                   AND P.PRODUCTDEFVERSION  	= A.PRODUCTDEFVERSION			
+			-- 파일 추가  [21.05.06] 업로드한 이미지               
+			LEFT OUTER JOIN CMD_ATCH_FILES_MPNGS SM
+						 ON SM.ATCH_SRC_KEY     	= (A.PRODUCTDEFID || '|'  || A.PRODUCTDEFVERSION)
+						AND SM.ATCH_TY_CD      	= 'BAS_QCPCSIMAGE'
+			LEFT OUTER JOIN CMD_ATCH_FILES SF  
+						 ON SM.ATCH_FILE_ID     	= SF.ATCH_FILE_ID
+			
+			WHERE	1=1
+			
+			<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+				AND		A.PRODUCTDEFID 			= #{P_PRODUCTDEFID}
+			</if>
+			
+			<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString()) ">
+				AND		A.PRODUCTDEFVERSION 	= #{P_PRODUCTDEFVERSION}
+			</if>
+
+			<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+				AND		A.VALIDSTATE 				= #{P_VALIDSTATE}
+			</if>
+    </select>
+    
+    
+    <!--
+		설		명	: PCS이미지 관리 - 메인 그리드 저장
+		생	성	자	: 김진현
+		생	성	일	: 2021-05-07
+		수  정   이  력	:
+	-->
+	  <insert id="insertPcmImage" parameterType="map">
+		INSERT /* smh.bas.dao.BAS05400Dao.insertPcmImage */	
+		INTO BAS_QCPCSIMAGE
+			(
+			  PRODUCTDEFID
+			, PRODUCTDEFVERSION
+			, WIDTH
+			, HEIGHT
+			, DESCRIPTION
+			, CREATOR
+			, CREATEDTIME
+			, LASTTXNHISTKEY
+			, LASTTXNID
+			, LASTTXNUSER
+			, LASTTXNTIME
+			, LASTTXNCOMMENT
+			, VALIDSTATE
+			)
+			VALUES
+			(
+			 #{PRODUCTDEFID}
+			,#{PRODUCTDEFVERSION}
+			,#{WIDTH}
+			,#{HEIGHT}
+			,''
+			,#{CREATOR}
+			,SYSDATE
+			,#{LASTTXNHISTKEY}  
+			,#{LASTTXNID}  
+			,#{LASTTXNUSER}  
+			,SYSDATE  
+			,#{LASTTXNCOMMENT} 
+			,#{VALIDSTATE}
+			)
+    </insert>
+    
+    <!--
+		설		명	: PCS이미지 저장전 - 데이터 확인
+		생	성	자	: 김진현
+		생	성	일	: 2021-05-07 
+		수  정   이  력	:
+	-->
+    <select id="selectChkPcmImageList" parameterType="map" resultType="hashmap">
+			
+			/* selectChkPcmImageList - PCS이미지 저장전 - 데이터 확인 */
+			SELECT	PRODUCTDEFID
+				, PRODUCTDEFVERSION
+				, WIDTH
+				, HEIGHT
+				, DESCRIPTION
+				, CREATOR
+				, CREATEDTIME
+				, LASTTXNHISTKEY
+				, LASTTXNID
+				, LASTTXNUSER
+				, LASTTXNTIME
+				, LASTTXNCOMMENT
+				, VALIDSTATE
+			FROM	BAS_QCPCSIMAGE 
+			
+			WHERE	1=1
+			 AND	PRODUCTDEFID 			= #{PRODUCTDEFID}
+			 AND	PRODUCTDEFVERSION		= #{PRODUCTDEFVERSION}
+    </select>
+    
+    <!--
+		설		명	: PCS이미지 관리 - 메인 그리드 저장(수정)
+		생	성	자	: 김진현
+		생	성	일	: 2021-05-07
+		수  정   이  력	:
+	-->
+    <update id="updatePcmImage" parameterType="map">
+			 /* smh.bas.dao.BAS05400Dao.updatePcmImage */	
+			 UPDATE  BAS_QCPCSIMAGE SET 
+						  HEIGHT									= #{HEIGHT}
+						, WIDTH									= #{WIDTH}
+						, VALIDSTATE							= #{VALIDSTATE}
+						, MODIFIER								= #{MODIFIER}
+						, MODIFIEDTIME							= SYSDATE
+						, LASTTXNHISTKEY 					= #{LASTTXNHISTKEY}     
+						, LASTTXNID 							= #{LASTTXNID}     
+						, LASTTXNUSER 						= #{LASTTXNUSER}     
+						, LASTTXNTIME 						= SYSDATE     
+						, LASTTXNCOMMENT 					= #{LASTTXNCOMMENT}    
+			WHERE 	PRODUCTDEFID 						= #{PRODUCTDEFID}
+			  AND   PRODUCTDEFVERSION 					= #{PRODUCTDEFVERSION}
+    </update>
+    
+    <!--
+		설		명	: selectImageHandV - 이미지 가로/세로 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-05-07 
+		수  정   이  력	:
+	-->
+	<select id="selectImageHandV" parameterType="map" resultType="hashmap">
+				
+				/* selectImageHandV - 이미지 가로/세로 조회 */
+				SELECT SF.FULL_SAVE_COURS
+					 , ''  						AS WIDTH 
+					 , ''  						AS HEIGHT
+					 , #{PRODUCTDEFID}   		AS PRODUCTDEFID
+					 , #{PRODUCTDEFVERSION}     AS PRODUCTDEFVERSION
+				  FROM CMD_ATCH_FILES_MPNGS SM
+					LEFT OUTER JOIN CMD_ATCH_FILES SF  
+					ON SM.ATCH_FILE_ID     	= SF.ATCH_FILE_ID
+				WHERE	1=1
+				  AND   SM.ATCH_SRC_KEY     = #{PRODUCTDEFID} || '|'  || #{PRODUCTDEFVERSION}
+				  AND   SM.ATCH_TY_CD      	= 'BAS_QCPCSIMAGE'
+	</select>
+	
+	<!--
+		설		명	: PCS이미지 관리 - 메인 그리드 저장(수정) - size
+		생	성	자	: 김진현
+		생	성	일	: 2021-05-07
+		수  정   이  력	:
+	-->
+    <update id="updatePcmImageSize" parameterType="map">
+			 /* smh.bas.dao.BAS05400Dao.updatePcmImageSize */	
+			 UPDATE  BAS_QCPCSIMAGE SET 
+						  HEIGHT									= #{HEIGHT}
+						, WIDTH									= #{WIDTH}
+						, MODIFIER								= #{MODIFIER}
+						, MODIFIEDTIME							= SYSDATE
+						, LASTTXNHISTKEY 					= #{LASTTXNHISTKEY}     
+						, LASTTXNID 							= #{LASTTXNID}     
+						, LASTTXNUSER 						= #{LASTTXNUSER}     
+						, LASTTXNTIME 						= SYSDATE     
+						, LASTTXNCOMMENT 					= #{LASTTXNCOMMENT}    
+			WHERE 	PRODUCTDEFID 						= #{PRODUCTDEFID}
+			  AND   PRODUCTDEFVERSION 					= #{PRODUCTDEFVERSION}
+    </update>
+    
+    <!--
+		설		명	: PCS이미지 관리 - 메인 그리드 저장(삭제)
+		생	성	자	: 김진현
+		생	성	일	: 2021-05-03
+		수  정   이  력	:
+	-->
+    <update id="deletePcmImage" parameterType="map" >
+     /* smh.bas.dao.BAS05400Dao.deletePcmImage */
+    	DELETE  
+    	 FROM 	BAS_QCPCSIMAGE	
+    	WHERE 	PRODUCTDEFID 						= #{PRODUCTDEFID}
+		  AND   PRODUCTDEFVERSION 					= #{PRODUCTDEFVERSION}
+    </update>
+    
+    
+    
+    <!--
+		설		명	: PCS이미지 관리 - 등록된 이미지 파일 있으면 파일 테이블의 내용 삭제
+		생	성	자	: 김진현
+		생	성	일	: 2021-07-16
+		수  정   이  력	:
+	-->
+    <update id="deletePcmImageFile" parameterType="map" >
+     /* smh.bas.dao.BAS05400Dao.deletePcmImageFile */
+    	DELETE  
+        FROM    CMD_ATCH_FILES
+        WHERE  ATCH_FILE_ID = (
+                SELECT A.ATCH_FILE_ID
+                  FROM CMD_ATCH_FILES_MPNGS A
+                 WHERE 1 = 1
+                   AND A.ATCH_SRC_KEY =#{PRODUCTDEFID}||'|'||#{PRODUCTDEFVERSION}
+        )
+        AND ATCH_FILE_GUID = #{FILEGUID}
+        
+    </update>
+    
+    
+    
+    
+
+</mapper>

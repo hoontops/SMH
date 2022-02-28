@@ -1,0 +1,4511 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.dfm.dao.DFM00200Dao">
+
+	<!--
+		설		명	: 품목별 Defect Map 조회 (필터 - 품목코드 팝업)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-21 
+		수  정   이  력	:
+	-->
+	<select id="selectDefectMapProductList" parameterType="map" resultType="hashmap">
+				-- id : GetDefectMapProductList
+				-- version : 10001
+				/* selectDefectMapProductList -  품목별 Defect Map 조회 (필터 - 품목코드 팝업) */
+				SELECT	A.PRODUCTDEFID 			AS P_PRODUCTDEFID
+						,	B.ITEMNAME					AS PROCESSDEFNAME
+						--,	A.PRODUCTDEFVERSION	AS P_PRODUCTDEFVERSION				-- [주석 처리 임시]]
+				FROM	QAM_DEFECTMAPMAXPANEL	A
+				LEFT JOIN	BAS_ITEMMASTER 			B	
+						ON	A.PRODUCTDEFID = B.ITEMID
+				WHERE	1=1			
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND		A.PRODUCTDEFID LIKE  '%' || UPPER(#{P_PRODUCTDEFID})|| '%'
+				</if>
+				GROUP BY
+						A.PRODUCTDEFID
+					,	B.ITEMNAME
+					--,	A.PRODUCTDEFVERSION
+				ORDER BY
+						A.PRODUCTDEFID
+	</select>
+	
+	
+	<!--
+		설		명	: 품목별 Defect Map - Rev 콤보값 조회
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-24 
+		수  정   이  력	:
+	-->
+	<select id="selectItemRevList" parameterType="map" resultType="hashmap">
+				
+				/* selectItemRevList -  품목별 Defect Map - Rev 콤보값 조회 */
+				SELECT   '' AS CODE 	
+					
+				   ,(
+					SELECT 	DICTIONARYNAME
+					  FROM 	CMD_DICTIONARY
+					 WHERE 	1 = 1
+					   AND 	DICTIONARYID = 'ALLVIEWS'        -- 전체조회
+					   AND 	LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					) AS NAME
+					
+					, (
+								SELECT		MAX(A.PRODUCTDEFVERSION) AS CODE                                   
+	                            FROM			QAM_DEFECTMAPMAXPANEL	A
+	                            LEFT JOIN	BAS_ITEMMASTER 			B	
+	                                    ON	A.PRODUCTDEFID = B.ITEMID
+	                            WHERE		1=1			
+	                                AND		A.PRODUCTDEFID = #{P_ITEMCODE}
+	                            --GROUP BY 	A.PRODUCTDEFVERSION		-- (21.07.28) (품목코드중 rev의 max값만) 수정
+							)  AS MAX_CODE
+				FROM DUAL
+				
+				UNION ALL
+				
+				SELECT		A.PRODUCTDEFVERSION 	AS CODE
+						,		A.PRODUCTDEFVERSION	AS NAME
+						,       A.PRODUCTDEFVERSION 	AS MAX_CODE
+				FROM			QAM_DEFECTMAPMAXPANEL	A
+				LEFT JOIN	BAS_ITEMMASTER 			B	
+						ON	A.PRODUCTDEFID = B.ITEMID
+				WHERE	1=1			
+					AND		A.PRODUCTDEFID = #{P_ITEMCODE}
+				GROUP BY
+								A.PRODUCTDEFVERSION
+				ORDER BY
+								CODE DESC, NAME DESC
+	</select>
+	
+	<!--
+		설		명	: 품목별 Defect Map - 필터 공정 콤보 조회
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-24 
+		수  정   이  력	:
+	-->
+	<select id="selectFilterProcComboList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectFilterProcComboList -  품목별 Defect Map - 필터 공정 콤보 조회 */
+			/* 기준정보 - 사양기준정보 - ROUTING AOI 층정보 나오는것 참조 */
+			
+			WITH T_AOI AS (
+				  SELECT OP.PLANTID
+						,OP.OPERATIONID
+						,OP.PROCESSSEGMENTID   	AS CODE    -- 공정ID
+						,PN.DICTIONARYNAME 		AS NAME    -- 공정명
+						,RT.MAINPRODUCTID
+						,RT.ENTERPRISEID
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID
+				
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID                                           
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT    PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY           PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE 						= 'Valid'
+				AND PN.DICTIONARYNAME 					LIKE '%AOI%'
+				
+				 -- 필터의 입력된 품목코드, Rev
+                AND RT.MAINPRODUCTID  					= #{P_ITEMCODE} 
+				AND RT.MAINPRODUCTVERSION  			= #{P_REV} 
+			)
+						   
+			SELECT 	''  AS CODE
+				   ,(
+					SELECT 	DICTIONARYNAME
+					  FROM 	CMD_DICTIONARY
+					 WHERE 	1 = 1
+					   AND 	DICTIONARYID 					= 'ALLVIEWS'        -- 전체조회
+					   AND 	LANGUAGETYPE 				= #{SESSION_LANGUAGETYPE}
+					) AS NAME
+			FROM DUAL
+		  UNION ALL
+			SELECT 	CODE 
+				 , 		NAME
+			  FROM 	T_AOI
+		   ORDER BY CODE DESC
+	</select>
+	
+	<!--
+		설		명	: 품목별 Defect Map - 필터 품목코드 미선택시 메인 조회
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-24 
+		수  정   이  력	:
+	-->
+	<select id="selectNoInputMainList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectNoInputMainList -  품목별 Defect Map - 필터 품목코드 미선택시 메인 조회 */
+			
+			-- AOI 공정만  (수량, 완료일시, AOI검사공정 정보)
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION          
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)      
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+                
+                -- 품목코드
+                
+                -- 공정
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+            
+              , NOINPUT_PRE_ITEM  AS (  
+                SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+                        ,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+                        ,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+                        ,       TPE.LOTID 
+                        ,       TPE.PROCESSSEGMENTID
+                        ,       TPE.PROCESSSEGMENTNAME
+                        ,       TPE.COL_VAL                
+                        --,       TO_CHAR(NVL(WORKENDTIME, SYSDATE), 'YYYY-MM-DD HH24:MI:SS')     AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+                        ,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')     AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+                        ,       WORKSTARTPCSQTY                                        AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	[값이 없어서 임시로 적용  -> 제거대기]
+                        ,       TPE.PRODUCTIONTYPE              -- 생산구분
+                FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+				LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+				ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+				AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+				AND	    CDE.LOTID 						= HRD.LOTID
+				AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+				AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+				AND	    CDE.LAYERID 					= HRD.LAYERID
+				AND	    CDE.PANELID 					= HRD.PANELID
+				AND	    CDE.DEGREE 						= HRD.DEGREE				
+				-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+				/*
+				INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+				ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+				AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+				AND	    CDE.LOTID 						= SUB.LOTID
+				AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+				AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+				AND	    CDE.LAYERID 					= SUB.LAYERID
+				*/
+				
+                INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+                ON      TPE.COL_VAL                 		= CDE.LAYERID
+                AND     TPE.LOTID                   		= CDE.LOTID
+				
+                LEFT JOIN	BAS_ITEMMASTER 		    BI		
+                ON	CDE.PRODUCTDEFID = BI.ITEMID
+                
+                AND CDE.PRODUCTDEFVERSION = BI.ITEMVERSION      -- (21.07.28) 버전 추가 (하나의 품목코드에 여러 REV 존재 할 경우)
+                	
+				WHERE	1=1
+				
+					
+					--AND	 	CDE.LOTID 						= 'M210429F004-1-FG-001-006'     -- lot id                		[값이 없어서 임시로 적용  -> 제거대기]
+					
+					--AND		CDE.PRODUCTDEFID 			= '1025445H1'
+					--AND		CDE.PRODUCTDEFVERSION 	= 'FA1'
+                    
+                    -- 조회기간(필수)
+						AND TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> #{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+						AND	TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  #{P_CONPERIOD_PERIODTO}		-- [NVL 값 제거  -> 제거대기]
+                    
+                    -- 생산구분
+					<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+						AND 	TPE.PRODUCTIONTYPE 			= #{P_PRODUCTIONTYPE}
+					</if>
+                    
+				 									
+					AND       CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+                
+             )
+             
+             SELECT     	PROCESSDEFNAME
+                    ,   		PRODUCTDEFID
+                    ,   		PRODUCTDEFVERSION
+                    ,   		LOTID
+                    ,   		PROCESSSEGMENTID
+                    ,   		PROCESSSEGMENTNAME
+                    ,   		WORKENDTIME
+                    ,   		COUNT(*)  AS  DEFECT_CNT
+                    ,   		MAX(WORKSTARTPCSQTY) AS TOTAL_PCSCOUNT
+                    ,   		'' AS CHK
+               FROM     NOINPUT_PRE_ITEM
+             GROUP BY  PROCESSDEFNAME, PRODUCTDEFID, PRODUCTDEFVERSION, LOTID, PROCESSSEGMENTID, PROCESSSEGMENTNAME, WORKENDTIME
+			
+	</select>
+	
+	
+	<!--
+		설		명	: 품목별 Defect Map - 품목코드 입력시 메인 조회
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-25 
+		수  정   이  력	:
+	-->
+	<select id="selectInputMainList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectInputMainList -  품목별 Defect Map - 품목코드 입력시 메인 조회 */
+			
+			-- AOI 공정만  (수량, 완료일시, AOI검사공정 정보)
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION      
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)          
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+				
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE 			= #{P_PRODUCTIONTYPE}
+				</if>
+                
+                -- 품목코드
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFID            		= #{P_PRODUCTDEFID}
+				</if>	
+                -- 품목 버전
+                <if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFVERSION       	= #{P_PRODUCTDEFVERSION}
+				</if>	
+                -- 공정
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND     LWR.PROCESSSEGMENTID        	= #{P_PROCESSSEGMENTID}
+				</if>	
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+            
+              , NOINPUT_PRE_ITEM  AS (  
+                SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+                        ,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+                        ,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+                        ,       TPE.LOTID 
+                        ,       TPE.PROCESSSEGMENTID
+                        ,       TPE.PROCESSSEGMENTNAME
+                        ,       TPE.COL_VAL                
+                        --,       TO_CHAR(NVL(WORKENDTIME, SYSDATE), 'YYYY-MM-DD HH24:MI:SS')     AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+                        ,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')     AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거]
+                        -- (21.07.06) 작업시작 수량 업는 경우 null인상태로 그대로 둠
+                        ,       WORKSTARTPCSQTY                                        AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	[값이 없어서 임시로 적용  -> 제거대기]
+                        ,       TPE.PRODUCTIONTYPE              -- 생산구분
+                FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+				LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+				ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+				AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+				AND	    CDE.LOTID 						= HRD.LOTID
+				AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+				AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+				AND	    CDE.LAYERID 					= HRD.LAYERID
+				AND	    CDE.PANELID 					= HRD.PANELID
+				AND	    CDE.DEGREE 						= HRD.DEGREE				
+				-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+				/*
+				INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+				ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+				AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+				AND	    CDE.LOTID 						= SUB.LOTID
+				AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+				AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+				AND	    CDE.LAYERID 					= SUB.LAYERID
+				*/
+                INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+                ON      TPE.COL_VAL                 		= CDE.LAYERID
+                AND     TPE.LOTID                   		= CDE.LOTID
+				
+                LEFT JOIN	BAS_ITEMMASTER 		    BI		
+                ON	CDE.PRODUCTDEFID = BI.ITEMID
+                
+                AND CDE.PRODUCTDEFVERSION = BI.ITEMVERSION      -- (21.07.28) 버전 추가
+                	
+				WHERE	1=1
+				
+					
+					--   AND	 	CDE.LOTID 						= 'M210429F004-1-FG-001-006'     -- lot id                		[값이 없어서 임시로 적용  -> 제거대기]
+					
+                    
+                    -- 조회기간(필수)
+					AND 	TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> 	#{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+					AND	TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  	#{P_CONPERIOD_PERIODTO}		-- [NVL 값 제거  -> 제거대기]
+                   
+                   								
+					AND       CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+                
+             )
+             
+             SELECT     	PROCESSDEFNAME
+                    ,   		PRODUCTDEFID
+                    ,   		PRODUCTDEFVERSION
+                    ,   		LOTID
+                    ,   		PROCESSSEGMENTID
+                    ,   		PROCESSSEGMENTNAME
+                    ,   		WORKENDTIME
+					,       COL_VAL     AS LAYER
+                    ,   		COUNT(*)  AS  DEFECT_CNT
+                    ,   		MAX(WORKSTARTPCSQTY) AS TOTAL_PCSCOUNT
+                    ,   		'' AS CHK
+               FROM     NOINPUT_PRE_ITEM
+             GROUP BY  PROCESSDEFNAME, PRODUCTDEFID, PRODUCTDEFVERSION, LOTID, PROCESSSEGMENTID, PROCESSSEGMENTNAME, WORKENDTIME, COL_VAL
+			 
+			 ORDER BY  PROCESSDEFNAME, PRODUCTDEFID, PRODUCTDEFVERSION, LOTID, PROCESSSEGMENTID, COL_VAL, WORKENDTIME
+			
+	</select>
+	
+	
+	<!--
+		설		명	: 품목별 Defect Map Line차트 범례 및 피벗 조건 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-05-26 
+		수  정   이  력	:
+	-->
+	<select id="selectProcesssegmentIdList" parameterType="map" resultType="hashmap">
+				/*selectProcesssegmentIdList - 품목별 Defect Map Line차트 범례 및 피벗 조건 조회 */
+				
+				WITH T_AOI AS (
+						  SELECT OP.PLANTID
+								,OP.OPERATIONID
+								,OP.PROCESSSEGMENTID   	AS CODE    -- 공정ID
+								,PN.DICTIONARYNAME 		AS NAME    -- 공정명
+								,RT.MAINPRODUCTID
+								,RT.ENTERPRISEID
+						  FROM   BAS_OPERATION OP
+						INNER JOIN BAS_ROUTING      RT  
+								ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+								AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID
+						
+						INNER JOIN BAS_PROCESSPATH  PP  
+								ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+								AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+								AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID                                           
+						LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT    PG  
+								ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+								AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+						LEFT OUTER JOIN CMD_DICTIONARY           PN  
+								ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+								AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						
+						-------------------------------------------------------------------------------
+		                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+		                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+		                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+				        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+				        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+						AND    PG.VALIDSTATE 					= 	'Valid'
+		                --------------------------------------------------------------------------------		
+								
+						WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+						
+						AND	OP.VALIDSTATE 						= 'Valid'
+						AND PN.DICTIONARYNAME 					LIKE '%AOI%'
+						
+						 -- 필터의 입력된 품목코드, Rev
+						<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+		                	AND RT.MAINPRODUCTID  					= #{P_PRODUCTDEFID} 
+		                </if>
+		                <if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString()) ">
+							AND RT.MAINPRODUCTVERSION  			= #{P_PRODUCTDEFVERSION}
+						</if>
+						
+						<if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+							AND OP.PROCESSSEGMENTID  			= #{P_PROCESSSEGMENTID}
+						</if>
+						 
+				)
+				
+				-------------------------------------------(21.07.23) 품목코드당 하나만 가져 오도록 GROUP
+                SELECT COLUMNS
+                    , NAME
+                    , COLUMNS_RATE
+                    , COLUMNS_RATE_MAX
+                 FROM (
+                -------------------------------------------(21.07.23) 품목코드당 하나만 가져 오도록 GROUP
+				
+				SELECT 	CODE    AS COLUMNS
+					 ,  NAME
+	                 ,  '"''' ||
+	                    CODE 
+	                    || '''_RATE"  AS RATE_'||CODE  AS COLUMNS_RATE
+	                 
+	                 -- (21.07.07) 조회 결과 GROUP 컬럼값 추가   
+                     , 'MAX(RATE_'||CODE||') AS RATE_'||CODE
+                        AS COLUMNS_RATE_MAX
+	                    
+				  FROM 	T_AOI
+	              /*
+	              -- [TEST용  -> 제거대기]
+	              UNION ALL
+	              SELECT 	'7012402'    AS COLUMNS
+					 ,  '내층 AOI검사'    AS NAME
+	                 ,  '"''' ||
+	                    '7012402' 
+	                    || '''_RATE"  AS RATE_'||'7012402'  AS COLUMNS_RATE
+				  FROM 	DUAL
+	              */
+			   ORDER BY COLUMNS 
+			   
+			   -------------------------------------------(21.07.23) 품목코드당 하나만 가져 오도록 GROUP
+               )
+               GROUP BY COLUMNS, NAME, COLUMNS_RATE, COLUMNS_RATE_MAX
+               ORDER BY COLUMNS
+               -------------------------------------------(21.07.23) 품목코드당 하나만 가져 오도록 GROUP
+			   
+	</select>
+	
+	
+	<!--
+		설		명	: 품목별 Defect Map - 품목코드 입력시 메인 차트 조회
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-26 
+		수  정   이  력	:
+	-->
+	<select id="selectInputMainChartList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectInputMainChartList -  품목별 Defect Map - 품목코드 입력시 메인 차트 조회 */
+			
+			-- AOI 공정만  (수량, 완료일시, AOI검사공정 정보)
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION     
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)           
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+						
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+				
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE 			= #{P_PRODUCTIONTYPE}
+				</if>
+                
+                -- 품목코드
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFID            		= #{P_PRODUCTDEFID}
+				</if>	
+                -- 품목 버전
+                <if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFVERSION       	= #{P_PRODUCTDEFVERSION}
+				</if>	
+                -- 공정
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND     LWR.PROCESSSEGMENTID        	= #{P_PROCESSSEGMENTID}
+				</if>	
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+            
+              , NOINPUT_PRE_ITEM  AS (  
+                SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+                        ,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+                        ,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+                        ,       TPE.LOTID 
+                        ,       TPE.PROCESSSEGMENTID
+                        ,       TPE.PROCESSSEGMENTNAME
+                        ,       TPE.COL_VAL                
+                        ,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')     		AS WORKENDTIME      				-- 완료 시간                 		
+                        ,       WORKSTARTPCSQTY                                        	AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	
+                        ,       TPE.PRODUCTIONTYPE              -- 생산구분
+                FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+				LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+				ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+				AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+				AND	    CDE.LOTID 						= HRD.LOTID
+				AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+				AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+				AND	    CDE.LAYERID 					= HRD.LAYERID
+				AND	    CDE.PANELID 					= HRD.PANELID
+				AND	    CDE.DEGREE 						= HRD.DEGREE				
+				-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+				/*
+				INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+				ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+				AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+				AND	    CDE.LOTID 						= SUB.LOTID
+				AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+				AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+				AND	    CDE.LAYERID 					= SUB.LAYERID
+				*/
+                INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+                ON      TPE.COL_VAL                 		= CDE.LAYERID
+                AND     TPE.LOTID                   		= CDE.LOTID
+				
+                LEFT JOIN	BAS_ITEMMASTER 		    BI		
+                ON	CDE.PRODUCTDEFID = BI.ITEMID
+                
+                AND CDE.PRODUCTDEFVERSION = BI.ITEMVERSION      -- (21.07.28) 버전 추가
+                	
+				WHERE	1=1
+									
+                    -- 조회기간(필수)
+					AND 	TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> 	#{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+					AND	TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  	#{P_CONPERIOD_PERIODTO}			-- [NVL 값 제거  -> 제거대기]
+                   
+                   								
+					AND       CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+                
+             )
+             
+             , T_PRE_RATE AS ( 
+             SELECT     	PROCESSDEFNAME
+                    ,   		PRODUCTDEFID
+                    ,   		PRODUCTDEFVERSION
+                    ,   		LOTID
+                    ,   		PROCESSSEGMENTID
+                    ,   		PROCESSSEGMENTNAME
+                    ,   		WORKENDTIME
+                    ,   		COUNT(*)  AS  DEFECT_CNT
+                    ,   		MAX(WORKSTARTPCSQTY) AS TOTAL_PCSCOUNT
+                    ,   		'' AS CHK                   
+               FROM     NOINPUT_PRE_ITEM
+             GROUP BY  PROCESSDEFNAME, PRODUCTDEFID, PRODUCTDEFVERSION, LOTID, PROCESSSEGMENTID, PROCESSSEGMENTNAME, WORKENDTIME        -- 품목 / Lot / 검사공정 / 완료일시 별로 계산
+            
+             ORDER BY  PROCESSDEFNAME, PRODUCTDEFID, PRODUCTDEFVERSION, LOTID, PROCESSSEGMENTID
+             
+             )
+			 
+			 
+			 -- (21.07.07) 추가 그룹해서 LOT 기준으로 
+			   SELECT 
+		                	LOTID   						AS TITLE
+		              ,  	${COLUMNS_RATE_MAX}  	
+		              --, 		LOTID ||CHR(13)||CHR(10)|| LISTAGG(SUB_TITLE, '\r\n') within group (order by LOTID) SUB_TITLE
+		              ,		LOTID ||CHR(13)||CHR(10)|| LISTAGG(SUB_TITLE, ''||chr(10)) within group (order by LOTID) SUB_TITLE
+		              , 		MIN(WORKENDTIME) AS WORKENDTIME
+               FROM 
+               (
+			 
+			 
+			 SELECT     TITLE
+					, 	CODE
+					, 	PROCESSSEGMENTNAME
+					,  ${COLUMNS_RATE}	
+					
+					, LOTID         		-- (21.07.07 추가)
+                    , SUB_TITLE     		-- (21.07.07 추가)
+                    , WORKENDTIME	-- (21.07.07 추가)
+						
+              FROM 
+              (
+               SELECT LOTID ||' | '|| WORKENDTIME ||' | '|| TO_CHAR(ROUND(((DEFECT_CNT / TOTAL_PCSCOUNT ) *100), 3),'FM9990.000') AS TITLE
+                    , PROCESSSEGMENTID
+					, PROCESSSEGMENTID AS CODE
+                    , PROCESSSEGMENTNAME
+                    , WORKENDTIME
+                    , TO_CHAR(ROUND(((DEFECT_CNT / TOTAL_PCSCOUNT ) *100), 3),'FM9990.000') AS RATE
+                    
+                    , LOTID -- (21.07.07 추가)
+                    , PROCESSSEGMENTNAME ||' | '|| WORKENDTIME ||' | '||
+                    	CASE WHEN 
+                        TO_CHAR(ROUND(((DEFECT_CNT / TOTAL_PCSCOUNT ) *100), 3),'FM9990.000') IS NULL
+                        THEN NULL
+                        ELSE
+                        TO_CHAR(ROUND(((DEFECT_CNT / TOTAL_PCSCOUNT ) *100), 3),'FM9990.000') ||'%'
+                        END
+                     AS SUB_TITLE  -- (21.07.07 추가)
+               FROM T_PRE_RATE
+               )               
+                PIVOT ( SUM(RATE)   		AS RATE
+		           FOR PROCESSSEGMENTID   
+		           IN(  ${COLUMNS} )
+	                         	
+                )
+             --ORDER BY WORKENDTIME
+             -- (21.07.07) 그룹핑, 정렬 순서 변경
+             )
+             GROUP BY   LOTID 
+             ORDER BY   WORKENDTIME 
+			
+	</select>
+	
+	<!--
+		설		명	: 품목별 Defect Map - 품목코드 선택 후 해석시 (Raw Data)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-26 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapRawDataList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProcDefectMapRawDataList -  품목별 Defect Map - 품목코드 선택 후 해석시 (Raw Data) */
+			
+			-- AOI 공정만  (수량, 완료일시, AOI검사공정 정보)
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION         
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)       
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE 			= #{P_PRODUCTIONTYPE}
+				</if>
+                
+                -- 품목코드
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFID            		= #{P_PRODUCTDEFID}
+				</if>	
+				
+                -- 품목 버전
+				<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.PRODUCTDEFVERSION = LMP.VALUE
+						)
+				</if>
+				
+                -- 공정
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND     LWR.PROCESSSEGMENTID        	= #{P_PROCESSSEGMENTID}
+				</if>	
+				-- 품목 버전
+				<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOTID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.LOTID = LMP.VALUE
+						)
+				</if>
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+			
+			-- [CS,SS 추가]
+            , T_LAST_LAYER AS (
+                SELECT MAX(PIS.LAYER) AS LAYER
+                    ,   MAX(PIS.ITEMID) AS ITEMID
+                    ,   MAX(PIS.ITEMVERSION) AS ITEMVERSION
+                    ,   MAX(PIS.ENTERPRISEID) AS ENTERPRISEID
+                FROM   BAS_ITEMMASTER IM
+                INNER JOIN BAS_PRODUCTITEMSPEC     PIS 
+                        ON  IM.ENTERPRISEID 		= PIS.ENTERPRISEID
+                        AND IM.ITEMID 			= PIS.ITEMID
+                        AND IM.ITEMVERSION 	= PIS.ITEMVERSION
+                WHERE 1 = 1 
+                    -- 품목코드
+					<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+						AND		IM.ITEMID = #{P_PRODUCTDEFID}
+					</if>
+					-- 품목 버전
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	IM.ITEMVERSION = LMP.VALUE
+							)
+					</if>
+                        AND     IM.ENTERPRISEID 	= #{ENTERPRISEID}
+                        AND     IM.VALIDSTATE     	= 'Valid'
+                        
+                        GROUP BY  PIS.LAYER 
+                    ,   PIS.ITEMID
+                    ,   PIS.ITEMVERSION
+                    ,   PIS.ENTERPRISEID
+                )
+            
+              , NOINPUT_PRE_ITEM  AS ( 
+			  
+			  
+			  
+						SELECT	MAP.EQUIPMENTTYPE           	-- 설비 타입
+						,	MAP.EQUIPMENTID                 		-- 설비 ID    
+						, 	MAP.LOTID                       			-- lot
+						, 	MAP.PRODUCTDEFID                		-- 품목코드
+						, 	MAP.PRODUCTDEFVERSION           	-- 품목버전
+						,	MAP.LAYERID                     			-- LAYER
+						,   MAP.LAYERNM                     			-- LAYER 명
+						,	MAP.PANELID                     			-- 판넬ID
+						,	MAP.DEGREE                      			-- 차수				
+						,	MAP.DEFECTNO                    			-- ROWNUM 
+						,	MAP.ARRAYX                      			-- BBT X
+						,	MAP.ARRAYY                      			-- BBT Y
+						,	MAP.X                           				-- X
+						,	MAP.Y                           				-- Y
+						,	MAP.DEFECTCODE                  		-- 불량코드           
+						,	MAP.DEFECTTYPE                  			-- 불량 타입
+						,	MAP.AOIDEFECTCODE               		-- AOI 불량
+						,	MAP.VRSDEFECTCODE               		-- VRS 불량
+						,	MAP.IMAGE                       			-- 이미지 불필요
+						,	TO_CHAR(MAP.EVENTTIME, 'YYYY-MM-DD HH24:MI:SS')		AS EVENTTIME        	-- 이벤트 시간
+						,	MAP.CREATEDTIME                 
+						------------------------------------------------------
+						,	COALESCE(AOI.GROUPCODE, AOI_NONE.GROUPCODE)						AS GROUPCODE
+						,	COALESCE(AOI.GROUPNAME, AOI_NONE.GROUPNAME)						AS GROUPNAME
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODEID, '9999')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)				-- 21.05.15 VRS 도 AOI처럼
+								ELSE COALESCE(BBT.CODEID, '9999') 
+							 END ) 												AS SUBCODE	
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODENAME, 'NONE')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리
+								ELSE COALESCE(BBT.CODENAME, 'NONE') 
+							 END ) 												AS SUBNAME                         
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)
+								WHEN 'HOLE' THEN COALESCE(HOLE.COLOR, '#000000')
+								WHEN 'VRS' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리 색상도 추가
+								ELSE COALESCE(BBT.COLOR, '#000000') 
+							END) 												AS COLOR
+						------------------------------------------------------
+
+						,   MAP.WORKSTARTPCSQTY												AS PCSCOUNT		    -- 검사수량
+						
+						
+					FROM	
+					(
+					
+					SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+							,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+							,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+							,       TPE.LOTID 
+							,       TPE.PROCESSSEGMENTID
+							,       TPE.PROCESSSEGMENTNAME
+							,       TPE.COL_VAL                
+							,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')     AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+							,       WORKSTARTPCSQTY                                        AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	[값이 없어서 임시로 적용  -> 제거대기]
+							,       TPE.PRODUCTIONTYPE              -- 생산구분
+							
+							,   CDE.EQUIPMENTTYPE
+							,	CDE.EQUIPMENTID
+							,	CDE.LAYERID
+							,   (
+									CASE WHEN CDE.LAYERID = '1L'
+										THEN    'CS'
+										WHEN CDE.LAYERID = TLL.LAYER
+										THEN    'SS'
+										ELSE CDE.LAYERID
+										END
+								)       AS LAYERNM
+							,	CDE.PANELID
+							,	CDE.PCSCOUNT
+							,	CDE.DEGREE
+							,	ROWNUM										AS DEFECTNO
+							,	CDE.ARRAYX
+							,	CDE.ARRAYY
+							,	CDE.X
+							,	CDE.Y
+							,	CDE.DEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN 
+										CASE CDE.VRSDEFECTCODE 
+											WHEN '0' THEN 'AOI'
+											ELSE 'VRS'
+										END
+									WHEN 'BBT' THEN 'BBT'
+									WHEN 'HOLE' THEN 'HOLE' 
+									WHEN 'VRS' THEN 'VRS'   
+								END) 										AS DEFECTTYPE
+							,	CDE.AOIDEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN
+										CASE CDE.VRSDEFECTCODE
+											WHEN '0' THEN CDE.AOIDEFECTCODE 
+											ELSE CDE.VRSDEFECTCODE 
+										END
+									ELSE CDE.VRSDEFECTCODE
+								END) 										AS VRSDEFECTCODE
+							,	CDE.IMAGE
+							,	CDE.EVENTTIME
+							,	CDE.CREATEDTIME
+							, 	CDE.PANELID AS MAX
+							
+							
+					FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+					LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+					ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+					AND	    CDE.LOTID 						= HRD.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= HRD.LAYERID
+					AND	    CDE.PANELID 					= HRD.PANELID
+					AND	    CDE.DEGREE 						= HRD.DEGREE				
+					-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+					/*
+					INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+					ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+					AND	    CDE.LOTID 						= SUB.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= SUB.LAYERID
+					*/
+					INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+					ON      TPE.COL_VAL                 		= CDE.LAYERID
+					AND     TPE.LOTID                   		= CDE.LOTID
+					AND     TPE.PRODUCTDEFID                   	= CDE.PRODUCTDEFID 
+					AND     TPE.PRODUCTDEFVERSION               = CDE.PRODUCTDEFVERSION
+					
+					
+					LEFT JOIN	BAS_ITEMMASTER 		    BI		
+					ON	CDE.PRODUCTDEFID 		= BI.ITEMID
+					AND	CDE.PRODUCTDEFVERSION 	= BI.ITEMVERSION
+					
+					-- (21.05.25) CS,SS 추가
+					LEFT OUTER JOIN T_LAST_LAYER                        TLL
+					ON    CDE.PRODUCTDEFID        	=   TLL.ITEMID
+					AND 	CDE.PRODUCTDEFVERSION   =   TLL.ITEMVERSION
+						
+					WHERE	1=1
+					
+						AND 	TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> 	#{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+						AND		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  	#{P_CONPERIOD_PERIODTO}		-- [NVL 값 제거  -> 제거대기]
+					   
+													
+						AND     CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+					
+				 ) MAP
+				LEFT OUTER JOIN 
+				(												
+					-- [변환 후]
+					SELECT	AOC.GROUPCODE
+						,	AOC.GROUPNAME
+						,	AOC.COLOR
+						,	AOC.SUBCODE
+						,	AOC.SUBNAME
+						,	EDC.DEFECTCODE
+						,	EDC.EQUIPMENTID
+					FROM	
+					(
+						-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+						SELECT	GRP.CODEID									AS GROUPCODE
+							,	GRP.GROUPNAME
+							,	GRP.DESCRIPTION 							AS COLOR
+							,	SUB.CODEID									AS SUBCODE
+							,	SUB.SUBNAME
+						FROM	
+						(
+							SELECT 	C.LOOKUP_CODE                           AS CODEID
+								,	C.DESCRIPTION
+								,	D.DICTIONARYNAME						AS GROUPNAME
+							FROM 	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					GRP
+						LEFT OUTER JOIN		
+						(
+							SELECT	C.LOOKUP_CODE                           AS CODEID
+								,	D.DICTIONARYNAME						AS SUBNAME
+								,	C.PARENTCODEID
+							FROM	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					) AOC
+					JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+																AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+																
+					AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+					
+				) 		AOI		ON		MAP.EQUIPMENTID = AOI.EQUIPMENTID
+								AND		MAP.VRSDEFECTCODE = AOI.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					-- [to-be 변환]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 									AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapBBTDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'BBT'
+					
+				)		BBT		ON 		MAP.EQUIPMENTID = BBT.EQUIPMENTID
+								AND 	MAP.DEFECTCODE = BBT.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					--[to-be 변경]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 									AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapHoleDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'HOLE'
+					
+				)		HOLE		ON 		MAP.EQUIPMENTID = HOLE.EQUIPMENTID
+									AND 	MAP.VRSDEFECTCODE = HOLE.DEFECTCODE
+									
+				-----------------------------------------------------
+			LEFT OUTER JOIN 
+			(												
+				-- [변환 후]
+				SELECT	DISTINCT AOC.GROUPCODE
+					,	AOC.GROUPNAME
+					,	AOC.COLOR
+					,	AOC.SUBCODE
+					,	AOC.SUBNAME
+					,	EDC.DEFECTCODE
+                    ,  'VRS'    AS EQUIPMENTTYPE		-- 무조건 연결됨.
+				FROM	
+				(
+					-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+                    SELECT	GRP.CODEID									AS GROUPCODE
+						,	GRP.GROUPNAME
+						,	GRP.DESCRIPTION 							AS COLOR
+						,	SUB.CODEID									AS SUBCODE
+						,	SUB.SUBNAME
+					FROM	
+					(
+						SELECT 	C.LOOKUP_CODE                           AS CODEID
+							,	C.DESCRIPTION
+							,	D.DICTIONARYNAME						AS GROUPNAME
+						FROM 	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+				  		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					GRP
+					LEFT OUTER JOIN		
+					(
+						SELECT	C.LOOKUP_CODE                           AS CODEID
+							,	D.DICTIONARYNAME						AS SUBNAME
+							,	C.PARENTCODEID
+						FROM	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+				   		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					
+					WHERE 1 = 1
+                      AND GRP.CODEID = '009'			-- 기타
+                      AND SUB.CODEID = '9019'			-- 기타
+					
+				) AOC
+				JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+					       	 								AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+					       	 								
+				AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+				
+			) 		AOI_NONE		ON		MAP.EQUIPMENTTYPE = AOI_NONE.EQUIPMENTTYPE
+			-----------------------------------------------------
+									
+									
+				WHERE 1=1
+				
+				ORDER BY	MAP.LOTID
+                        ,   MAP.LAYERID
+						,	MAP.PANELID 
+				
+			
+			)
+			
+			
+			
+			SELECT *
+               FROM NOINPUT_PRE_ITEM
+			
+			
+	</select>
+	
+	<!--
+		설		명	: 품목별 Defect Map - 품목코드 선택 후 해석시 (불량그룹 콤보)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-27 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapDefectGrpComboList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProcDefectMapDefectGrpComboList -  품목코드 선택 후 해석시 (불량그룹 콤보) */
+			
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION       
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)         
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE 				= #{P_PRODUCTIONTYPE}
+				</if>
+                
+                -- 품목코드
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFID            	= #{P_PRODUCTDEFID}
+				</if>	
+				
+                -- 품목 버전
+				<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.PRODUCTDEFVERSION = LMP.VALUE
+						)
+				</if>
+				
+                -- 공정
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND     LWR.PROCESSSEGMENTID        	= #{P_PROCESSSEGMENTID}
+				</if>	
+				-- 품목 버전
+				<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOTID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.LOTID = LMP.VALUE
+						)
+				</if>
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+			
+            
+              , NOINPUT_PRE_ITEM  AS ( 
+			  
+			  
+			  
+						SELECT	        DISTINCT 
+											''  				AS CHK
+                                ,			COALESCE(AOI.GROUPCODE, AOI_NONE.GROUPCODE)						AS code
+                                ,			COALESCE(AOI.GROUPNAME, AOI_NONE.GROUPNAME)					AS value
+                                ,        	''  				AS P_CODE
+						
+						
+					FROM	
+					(
+					
+					SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+							,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+							,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+							,       TPE.LOTID 
+							,       TPE.PROCESSSEGMENTID
+							,       TPE.PROCESSSEGMENTNAME
+							,       TPE.COL_VAL                
+							,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')     AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+							,       WORKSTARTPCSQTY                                        AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	[값이 없어서 임시로 적용  -> 제거대기]
+							,       TPE.PRODUCTIONTYPE              -- 생산구분
+							
+							,   CDE.EQUIPMENTTYPE
+							,	CDE.EQUIPMENTID
+							,	CDE.LAYERID
+							
+							,	CDE.PANELID
+							,	CDE.PCSCOUNT
+							,	CDE.DEGREE
+							,	ROWNUM										AS DEFECTNO
+							,	CDE.ARRAYX
+							,	CDE.ARRAYY
+							,	CDE.X
+							,	CDE.Y
+							,	CDE.DEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN 
+										CASE CDE.VRSDEFECTCODE 
+											WHEN '0' THEN 'AOI'
+											ELSE 'VRS'
+										END
+									WHEN 'BBT' THEN 'BBT'
+									WHEN 'HOLE' THEN 'HOLE' 
+									WHEN 'VRS' THEN 'VRS'   
+								END) 										AS DEFECTTYPE
+							,	CDE.AOIDEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN
+										CASE CDE.VRSDEFECTCODE
+											WHEN '0' THEN CDE.AOIDEFECTCODE 
+											ELSE CDE.VRSDEFECTCODE 
+										END
+									ELSE CDE.VRSDEFECTCODE
+								END) 										AS VRSDEFECTCODE
+							,	CDE.IMAGE
+							,	CDE.EVENTTIME
+							,	CDE.CREATEDTIME
+							, 	CDE.PANELID AS MAX
+							
+							
+					FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+					LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+					ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+					AND	    CDE.LOTID 						= HRD.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= HRD.LAYERID
+					AND	    CDE.PANELID 					= HRD.PANELID
+					AND	    CDE.DEGREE 						= HRD.DEGREE				
+					-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+					/*
+					INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+					ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+					AND	    CDE.LOTID 						= SUB.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= SUB.LAYERID
+					*/
+					INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+					ON      TPE.COL_VAL                 		= CDE.LAYERID
+					AND     TPE.LOTID                   		= CDE.LOTID
+					AND     TPE.PRODUCTDEFID                   	= CDE.PRODUCTDEFID 
+					AND     TPE.PRODUCTDEFVERSION               = CDE.PRODUCTDEFVERSION
+					
+					
+					LEFT JOIN	BAS_ITEMMASTER 		    BI		
+					ON	CDE.PRODUCTDEFID 		= BI.ITEMID
+					AND	CDE.PRODUCTDEFVERSION 	= BI.ITEMVERSION
+					
+						
+					WHERE	1=1
+					
+						AND 		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> 	#{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+						AND		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  	#{P_CONPERIOD_PERIODTO}		-- [NVL 값 제거  -> 제거대기]
+					   
+													
+						AND     CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+					
+				 ) MAP
+				LEFT OUTER JOIN 
+				(												
+					-- [변환 후]
+					SELECT	AOC.GROUPCODE
+						,	AOC.GROUPNAME
+						,	AOC.COLOR
+						,	AOC.SUBCODE
+						,	AOC.SUBNAME
+						,	EDC.DEFECTCODE
+						,	EDC.EQUIPMENTID
+					FROM	
+					(
+						-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+						SELECT	GRP.CODEID									AS GROUPCODE
+							,	GRP.GROUPNAME
+							,	GRP.DESCRIPTION 							AS COLOR
+							,	SUB.CODEID									AS SUBCODE
+							,	SUB.SUBNAME
+						FROM	
+						(
+							SELECT 	C.LOOKUP_CODE                           AS CODEID
+								,	C.DESCRIPTION
+								,	D.DICTIONARYNAME						AS GROUPNAME
+							FROM 	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					GRP
+						LEFT OUTER JOIN		
+						(
+							SELECT	C.LOOKUP_CODE                           AS CODEID
+								,	D.DICTIONARYNAME						AS SUBNAME
+								,	C.PARENTCODEID
+							FROM	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					) AOC
+					JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+																AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+																
+					AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+					
+				) 		AOI		ON		MAP.EQUIPMENTID = AOI.EQUIPMENTID
+								AND		MAP.VRSDEFECTCODE = AOI.DEFECTCODE
+								
+				-----------------------------------------------------
+			LEFT OUTER JOIN 
+			(												
+				-- [변환 후]
+				SELECT	DISTINCT AOC.GROUPCODE
+					,	AOC.GROUPNAME
+					,	AOC.COLOR
+					,	AOC.SUBCODE
+					,	AOC.SUBNAME
+					,	EDC.DEFECTCODE
+                    ,  'VRS'    AS EQUIPMENTTYPE		-- 무조건 연결됨.
+				FROM	
+				(
+					-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+                    SELECT	GRP.CODEID									AS GROUPCODE
+						,	GRP.GROUPNAME
+						,	GRP.DESCRIPTION 							AS COLOR
+						,	SUB.CODEID									AS SUBCODE
+						,	SUB.SUBNAME
+					FROM	
+					(
+						SELECT 	C.LOOKUP_CODE                           AS CODEID
+							,	C.DESCRIPTION
+							,	D.DICTIONARYNAME						AS GROUPNAME
+						FROM 	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+				  		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					GRP
+					LEFT OUTER JOIN		
+					(
+						SELECT	C.LOOKUP_CODE                           AS CODEID
+							,	D.DICTIONARYNAME						AS SUBNAME
+							,	C.PARENTCODEID
+						FROM	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+				   		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					
+					WHERE 1 = 1
+                      AND GRP.CODEID = '009'			-- 기타
+                      AND SUB.CODEID = '9019'			-- 기타
+					
+				) AOC
+				JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+					       	 								AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+					       	 								
+				AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+				
+			) 		AOI_NONE		ON		MAP.EQUIPMENTTYPE = AOI_NONE.EQUIPMENTTYPE
+			-----------------------------------------------------				
+								
+				
+				WHERE 1=1
+			
+			)
+			
+			
+			
+			SELECT       CHK
+                ,		 	code
+                ,		 	value
+                ,        	P_CODE
+               FROM NOINPUT_PRE_ITEM
+			   
+			UNION ALL
+              
+			SELECT 	    ''  AS CHK
+				,			''  AS code
+			   ,(
+				SELECT 	DICTIONARYNAME
+				  FROM 	CMD_DICTIONARY
+				 WHERE 	1 = 1
+				   AND 	DICTIONARYID 		= 'ALLVIEWS'        -- 전체조회
+				   AND 	LANGUAGETYPE 	=  #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+				)           		AS value
+				,       		''  	AS P_CODE
+            FROM 	DUAL
+            order by code desc   
+			
+	</select>
+	
+	
+	<!--
+		설		명	: 품목별 Defect Map - 품목코드 선택 후 해석시 (불량코드 콤보)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-27 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapDefectCodeComboList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProcDefectMapDefectCodeComboList -  품목코드 선택 후 해석시 (불량코드 콤보) */
+			
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION    
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)            
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE 			= #{P_PRODUCTIONTYPE}
+				</if>
+                
+                -- 품목코드
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFID            		= #{P_PRODUCTDEFID}
+				</if>	
+				
+                -- 품목 버전
+				<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.PRODUCTDEFVERSION = LMP.VALUE
+						)
+				</if>
+				
+                -- 공정
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND     LWR.PROCESSSEGMENTID        	= #{P_PROCESSSEGMENTID}
+				</if>	
+				-- 품목 버전
+				<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOTID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.LOTID = LMP.VALUE
+						)
+				</if>
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+			
+            
+              , NOINPUT_PRE_ITEM  AS ( 
+			  
+			  
+			  
+						SELECT	        DISTINCT
+                                        ''  AS CHK
+                                ,	(CASE MAP.EQUIPMENTTYPE
+                                        WHEN 'AOI' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)
+                                        WHEN 'VRS' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)
+                                        WHEN 'HOLE' THEN COALESCE(HOLE.CODEID, '9999')
+                                        ELSE COALESCE(BBT.CODEID, '9999') 
+                                     END ) 												AS CODE	
+                                ,	(CASE MAP.EQUIPMENTTYPE
+                                        WHEN 'AOI' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)
+                                        WHEN 'VRS' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)       -- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리
+                                        WHEN 'HOLE' THEN COALESCE(HOLE.CODENAME, 'NONE')
+                                        ELSE COALESCE(BBT.CODENAME, 'NONE') 
+                                     END ) 												AS VALUE
+                                ,     COALESCE(AOI.GROUPCODE, AOI_NONE.GROUPCODE)					AS P_CODE   
+						
+						
+					FROM	
+					(
+					
+					SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+							,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+							,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+							,       TPE.LOTID 
+							,       TPE.PROCESSSEGMENTID
+							,       TPE.PROCESSSEGMENTNAME
+							,       TPE.COL_VAL                
+							,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')     AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+							,       WORKSTARTPCSQTY                                        AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	[값이 없어서 임시로 적용  -> 제거대기]
+							,       TPE.PRODUCTIONTYPE              -- 생산구분
+							
+							,   CDE.EQUIPMENTTYPE
+							,	CDE.EQUIPMENTID
+							,	CDE.LAYERID
+							
+							,	CDE.PANELID
+							,	CDE.PCSCOUNT
+							,	CDE.DEGREE
+							,	ROWNUM										AS DEFECTNO
+							,	CDE.ARRAYX
+							,	CDE.ARRAYY
+							,	CDE.X
+							,	CDE.Y
+							,	CDE.DEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN 
+										CASE CDE.VRSDEFECTCODE 
+											WHEN '0' THEN 'AOI'
+											ELSE 'VRS'
+										END
+									WHEN 'BBT' THEN 'BBT'
+									WHEN 'HOLE' THEN 'HOLE' 
+									WHEN 'VRS' THEN 'VRS'   
+								END) 										AS DEFECTTYPE
+							,	CDE.AOIDEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN
+										CASE CDE.VRSDEFECTCODE
+											WHEN '0' THEN CDE.AOIDEFECTCODE 
+											ELSE CDE.VRSDEFECTCODE 
+										END
+									ELSE CDE.VRSDEFECTCODE
+								END) 										AS VRSDEFECTCODE
+							,	CDE.IMAGE
+							,	CDE.EVENTTIME
+							,	CDE.CREATEDTIME
+							, 	CDE.PANELID AS MAX
+							
+							
+					FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+					LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+					ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+					AND	    CDE.LOTID 						= HRD.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= HRD.LAYERID
+					AND	    CDE.PANELID 					= HRD.PANELID
+					AND	    CDE.DEGREE 						= HRD.DEGREE				
+					-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+					/*
+					INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+					ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+					AND	    CDE.LOTID 						= SUB.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= SUB.LAYERID
+					*/
+					INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+					ON      TPE.COL_VAL                 		= CDE.LAYERID
+					AND     TPE.LOTID                   		= CDE.LOTID
+					AND     TPE.PRODUCTDEFID                   	= CDE.PRODUCTDEFID 
+					AND     TPE.PRODUCTDEFVERSION               = CDE.PRODUCTDEFVERSION
+					
+					
+					LEFT JOIN	BAS_ITEMMASTER 		    BI		
+					ON	CDE.PRODUCTDEFID 		= BI.ITEMID
+					AND	CDE.PRODUCTDEFVERSION 	= BI.ITEMVERSION
+					
+						
+					WHERE	1=1
+					
+						AND 	TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> 	#{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+						AND		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  	#{P_CONPERIOD_PERIODTO}		-- [NVL 값 제거  -> 제거대기]
+					   
+													
+						AND     CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+					
+				 ) MAP
+				LEFT OUTER JOIN 
+				(												
+					-- [변환 후]
+					SELECT	AOC.GROUPCODE
+						,	AOC.GROUPNAME
+						,	AOC.COLOR
+						,	AOC.SUBCODE
+						,	AOC.SUBNAME
+						,	EDC.DEFECTCODE
+						,	EDC.EQUIPMENTID
+					FROM	
+					(
+						-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+						SELECT	GRP.CODEID									AS GROUPCODE
+							,	GRP.GROUPNAME
+							,	GRP.DESCRIPTION 							AS COLOR
+							,	SUB.CODEID									AS SUBCODE
+							,	SUB.SUBNAME
+						FROM	
+						(
+							SELECT 	C.LOOKUP_CODE                           AS CODEID
+								,	C.DESCRIPTION
+								,	D.DICTIONARYNAME						AS GROUPNAME
+							FROM 	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					GRP
+						LEFT OUTER JOIN		
+						(
+							SELECT	C.LOOKUP_CODE                           AS CODEID
+								,	D.DICTIONARYNAME						AS SUBNAME
+								,	C.PARENTCODEID
+							FROM	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					) AOC
+					JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+																AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+																
+					AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+					
+				) 		AOI		ON		MAP.EQUIPMENTID = AOI.EQUIPMENTID
+								AND		MAP.VRSDEFECTCODE = AOI.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					-- [to-be 변환]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 									AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapBBTDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'BBT'
+					
+				)		BBT		ON 		MAP.EQUIPMENTID = BBT.EQUIPMENTID
+								AND 	MAP.DEFECTCODE = BBT.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					--[to-be 변경]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 									AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapHoleDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'HOLE'
+					
+				)		HOLE		ON 		MAP.EQUIPMENTID = HOLE.EQUIPMENTID
+									AND 	MAP.VRSDEFECTCODE = HOLE.DEFECTCODE	
+									
+				-----------------------------------------------------
+			LEFT OUTER JOIN 
+			(												
+				-- [변환 후]
+				SELECT	DISTINCT AOC.GROUPCODE
+					,	AOC.GROUPNAME
+					,	AOC.COLOR
+					,	AOC.SUBCODE
+					,	AOC.SUBNAME
+					,	EDC.DEFECTCODE
+                    ,  'VRS'    AS EQUIPMENTTYPE		-- 무조건 연결됨.
+				FROM	
+				(
+					-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+                    SELECT	GRP.CODEID									AS GROUPCODE
+						,	GRP.GROUPNAME
+						,	GRP.DESCRIPTION 							AS COLOR
+						,	SUB.CODEID									AS SUBCODE
+						,	SUB.SUBNAME
+					FROM	
+					(
+						SELECT 	C.LOOKUP_CODE                           AS CODEID
+							,	C.DESCRIPTION
+							,	D.DICTIONARYNAME						AS GROUPNAME
+						FROM 	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+				  		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					GRP
+					LEFT OUTER JOIN		
+					(
+						SELECT	C.LOOKUP_CODE                           AS CODEID
+							,	D.DICTIONARYNAME						AS SUBNAME
+							,	C.PARENTCODEID
+						FROM	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+				   		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					
+					WHERE 1 = 1
+                      AND GRP.CODEID = '009'			-- 기타
+                      AND SUB.CODEID = '9019'			-- 기타
+					
+				) AOC
+				JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+					       	 								AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+					       	 								
+				AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+				
+			) 		AOI_NONE		ON		MAP.EQUIPMENTTYPE = AOI_NONE.EQUIPMENTTYPE
+			-----------------------------------------------------								
+				
+				WHERE 1=1
+			
+			)
+			
+			
+			
+			SELECT       CHK
+                ,		 code
+                ,		 value
+                ,        P_CODE
+               FROM NOINPUT_PRE_ITEM
+			   
+			UNION ALL
+           
+              
+			SELECT 	 	''  AS CHK
+			   ,       		''  AS code
+			   ,(
+				SELECT 	DICTIONARYNAME
+				  FROM 	CMD_DICTIONARY
+				 WHERE 	1 = 1
+				   AND 	DICTIONARYID 		= 'ALLVIEWS'        -- 전체조회
+				   AND 	LANGUAGETYPE 	=#{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+				) AS value
+				,       		'*'  AS P_CODE
+			FROM 	DUAL
+			order by code desc        
+			
+	</select>
+	
+	<!--
+		설		명	: 품목별 Defect Map - 품목코드 선택 후 해석시 (Defect List)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-26 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapDefectList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProcDefectMapDefectList -  품목별 Defect Map - 품목코드 선택 후 해석시 (Defect List) */
+			
+			-- AOI 공정만  (수량, 완료일시, AOI검사공정 정보)
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION  
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)              
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE 			= #{P_PRODUCTIONTYPE}
+				</if>
+                
+                -- 품목코드
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFID            		= #{P_PRODUCTDEFID}
+				</if>	
+				
+                -- 품목 버전
+				<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.PRODUCTDEFVERSION = LMP.VALUE
+						)
+				</if>
+				
+                -- 공정
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND     LWR.PROCESSSEGMENTID        	= #{P_PROCESSSEGMENTID}
+				</if>	
+				-- 품목 버전
+				<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOTID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.LOTID = LMP.VALUE
+						)
+				</if>
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+			
+			-- [CS,SS 추가]
+            , T_LAST_LAYER AS (
+                SELECT MAX(PIS.LAYER) AS LAYER
+                    ,   MAX(PIS.ITEMID) AS ITEMID
+                    ,   MAX(PIS.ITEMVERSION) AS ITEMVERSION
+                    ,   MAX(PIS.ENTERPRISEID) AS ENTERPRISEID
+                FROM   BAS_ITEMMASTER IM
+                INNER JOIN BAS_PRODUCTITEMSPEC     PIS 
+                        ON  IM.ENTERPRISEID 		= PIS.ENTERPRISEID
+                        AND IM.ITEMID 			= PIS.ITEMID
+                        AND IM.ITEMVERSION 	= PIS.ITEMVERSION
+                WHERE 1 = 1 
+                    -- 품목코드
+					<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+						AND		IM.ITEMID = #{P_PRODUCTDEFID}
+					</if>
+					-- 품목 버전
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	IM.ITEMVERSION = LMP.VALUE
+							)
+					</if>
+                        AND     IM.ENTERPRISEID 	= #{ENTERPRISEID}
+                        AND     IM.VALIDSTATE     	= 'Valid'
+                        GROUP BY  PIS.LAYER 
+				                    ,   PIS.ITEMID
+				                    ,   PIS.ITEMVERSION
+				                    ,   PIS.ENTERPRISEID
+                )
+            
+              , NOINPUT_PRE_ITEM  AS ( 
+			  
+			  
+			  
+						SELECT	MAP.EQUIPMENTTYPE           -- 설비 타입
+						,	MAP.EQUIPMENTID                 -- 설비 ID    
+						, 	MAP.LOTID                       -- lot
+						, 	MAP.PRODUCTDEFID                -- 품목코드
+						,   MAP.PROCESSDEFNAME              -- 품목명 (추가)
+						, 	MAP.PRODUCTDEFVERSION           -- 품목버전
+						,   MAP.PROCESSSEGMENTID            AS INPPROC		-- 검사공정(추가)
+                        ,   MAP.PROCESSSEGMENTNAME          AS INPPROCNM	-- 검사공정명(추가)
+						,	MAP.LAYERID                     -- LAYER
+						,   MAP.LAYERNM                     -- LAYER 명
+						,	MAP.PANELID                     -- 판넬ID
+						,	MAP.DEGREE                      -- 차수				
+						,	MAP.DEFECTNO                    -- ROWNUM 
+						,	MAP.ARRAYX                      -- BBT X
+						,	MAP.ARRAYY                      -- BBT Y
+						,	MAP.X                           -- X
+						,	MAP.Y                           -- Y
+						,	MAP.DEFECTCODE                  -- 불량코드           
+						,	MAP.DEFECTTYPE                  -- 불량 타입
+						,	MAP.AOIDEFECTCODE               -- AOI 불량
+						,	MAP.VRSDEFECTCODE               -- VRS 불량
+						,	MAP.IMAGE                       -- 이미지 불필요
+						,	TO_CHAR(MAP.EVENTTIME, 'YYYY-MM-DD HH24:MI:SS')		AS EVENTTIME        -- 이벤트 시간
+						,	MAP.CREATEDTIME                 
+						------------------------------------------------------
+						,	COALESCE(AOI.GROUPCODE, AOI_NONE.GROUPCODE)						AS GROUPCODE
+						,	COALESCE(AOI.GROUPNAME, AOI_NONE.GROUPNAME)						AS GROUPNAME
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODEID, '9999')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)				-- 21.05.15 VRS 도 AOI처럼
+								ELSE COALESCE(BBT.CODEID, '9999') 
+							 END ) 												AS SUBCODE	
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODENAME, 'NONE')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리
+								ELSE COALESCE(BBT.CODENAME, 'NONE') 
+							 END ) 												AS SUBNAME                         
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)
+								WHEN 'HOLE' THEN COALESCE(HOLE.COLOR, '#000000')
+								WHEN 'VRS' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리 색상도 추가
+								ELSE COALESCE(BBT.COLOR, '#000000') 
+							END) 												AS COLOR
+						------------------------------------------------------
+
+						,   MAP.WORKSTARTPCSQTY									AS PCSCOUNT		    -- 검사수량
+						,   MAP.OPERATIONSEQUENCE                   -- 공정 정렬 순서 (추가)
+						
+						
+					FROM	
+					(
+					
+					SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+							,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+							,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+							,       TPE.LOTID 
+							,       TPE.PROCESSSEGMENTID
+							,       TPE.PROCESSSEGMENTNAME
+							,       TPE.COL_VAL                
+							,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')     AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+							,       WORKSTARTPCSQTY                                        AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	[값이 없어서 임시로 적용  -> 제거대기]
+							,       TPE.PRODUCTIONTYPE              -- 생산구분
+							
+							,   CDE.EQUIPMENTTYPE
+							,	CDE.EQUIPMENTID
+							,	CDE.LAYERID
+							,   (
+									CASE WHEN CDE.LAYERID = '1L'
+										THEN    'CS'
+										WHEN CDE.LAYERID = TLL.LAYER
+										THEN    'SS'
+										ELSE CDE.LAYERID
+										END
+								)       AS LAYERNM
+							,	CDE.PANELID
+							,	CDE.PCSCOUNT
+							,	CDE.DEGREE
+							,	ROWNUM										AS DEFECTNO
+							,	CDE.ARRAYX
+							,	CDE.ARRAYY
+							,	CDE.X
+							,	CDE.Y
+							,	CDE.DEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN 
+										CASE CDE.VRSDEFECTCODE 
+											WHEN '0' THEN 'AOI'
+											ELSE 'VRS'
+										END
+									WHEN 'BBT' THEN 'BBT'
+									WHEN 'HOLE' THEN 'HOLE' 
+									WHEN 'VRS' THEN 'VRS'   
+								END) 										AS DEFECTTYPE
+							,	CDE.AOIDEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN
+										CASE CDE.VRSDEFECTCODE
+											WHEN '0' THEN CDE.AOIDEFECTCODE 
+											ELSE CDE.VRSDEFECTCODE 
+										END
+									ELSE CDE.VRSDEFECTCODE
+								END) 										AS VRSDEFECTCODE
+							,	CDE.IMAGE
+							,	CDE.EVENTTIME
+							,	CDE.CREATEDTIME
+							, 	CDE.PANELID AS MAX
+							
+							,   TPE.OPERATIONSEQUENCE                   -- 공정 정렬 순서 (추가)
+							
+							
+					FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+					LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+					ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+					AND	    CDE.LOTID 						= HRD.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= HRD.LAYERID
+					AND	    CDE.PANELID 					= HRD.PANELID
+					AND	    CDE.DEGREE 						= HRD.DEGREE				
+					-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+					/*
+					INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+					ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+					AND	    CDE.LOTID 						= SUB.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= SUB.LAYERID
+					*/
+					INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+					ON      TPE.COL_VAL                 		= CDE.LAYERID
+					AND     TPE.LOTID                   		= CDE.LOTID
+					AND     TPE.PRODUCTDEFID                   	= CDE.PRODUCTDEFID 
+					AND     TPE.PRODUCTDEFVERSION               = CDE.PRODUCTDEFVERSION
+					
+					
+					LEFT JOIN	BAS_ITEMMASTER 		    BI		
+					ON	CDE.PRODUCTDEFID 		= BI.ITEMID
+					AND	CDE.PRODUCTDEFVERSION 	= BI.ITEMVERSION
+					
+					-- (21.05.25) CS,SS 추가
+					LEFT OUTER JOIN T_LAST_LAYER                        TLL
+					ON    CDE.PRODUCTDEFID        	=   TLL.ITEMID
+					AND 	CDE.PRODUCTDEFVERSION   =   TLL.ITEMVERSION
+						
+					WHERE	1=1
+					
+						AND 	TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> 	#{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+						AND		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  	#{P_CONPERIOD_PERIODTO}		-- [NVL 값 제거  -> 제거대기]
+					   
+													
+						AND     CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+					
+				 ) MAP
+				LEFT OUTER JOIN 
+				(												
+					-- [변환 후]
+					SELECT	AOC.GROUPCODE
+						,	AOC.GROUPNAME
+						,	AOC.COLOR
+						,	AOC.SUBCODE
+						,	AOC.SUBNAME
+						,	EDC.DEFECTCODE
+						,	EDC.EQUIPMENTID
+					FROM	
+					(
+						-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+						SELECT	GRP.CODEID									AS GROUPCODE
+							,	GRP.GROUPNAME
+							,	GRP.DESCRIPTION 							AS COLOR
+							,	SUB.CODEID									AS SUBCODE
+							,	SUB.SUBNAME
+						FROM	
+						(
+							SELECT 	C.LOOKUP_CODE                           AS CODEID
+								,	C.DESCRIPTION
+								,	D.DICTIONARYNAME						AS GROUPNAME
+							FROM 	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					GRP
+						LEFT OUTER JOIN		
+						(
+							SELECT	C.LOOKUP_CODE                           AS CODEID
+								,	D.DICTIONARYNAME						AS SUBNAME
+								,	C.PARENTCODEID
+							FROM	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					) AOC
+					JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+																AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+																
+					AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+					
+				) 		AOI		ON		MAP.EQUIPMENTID = AOI.EQUIPMENTID
+								AND		MAP.VRSDEFECTCODE = AOI.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					-- [to-be 변환]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 									AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapBBTDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'BBT'
+					
+				)		BBT		ON 		MAP.EQUIPMENTID = BBT.EQUIPMENTID
+								AND 	MAP.DEFECTCODE = BBT.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					--[to-be 변경]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 									AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapHoleDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'HOLE'
+					
+				)		HOLE		ON 		MAP.EQUIPMENTID = HOLE.EQUIPMENTID
+									AND 	MAP.VRSDEFECTCODE = HOLE.DEFECTCODE
+									
+				-----------------------------------------------------
+			LEFT OUTER JOIN 
+			(												
+				-- [변환 후]
+				SELECT	DISTINCT AOC.GROUPCODE
+					,	AOC.GROUPNAME
+					,	AOC.COLOR
+					,	AOC.SUBCODE
+					,	AOC.SUBNAME
+					,	EDC.DEFECTCODE
+                    ,  'VRS'    AS EQUIPMENTTYPE		-- 무조건 연결됨.
+				FROM	
+				(
+					-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+                    SELECT	GRP.CODEID									AS GROUPCODE
+						,	GRP.GROUPNAME
+						,	GRP.DESCRIPTION 							AS COLOR
+						,	SUB.CODEID									AS SUBCODE
+						,	SUB.SUBNAME
+					FROM	
+					(
+						SELECT 	C.LOOKUP_CODE                           AS CODEID
+							,	C.DESCRIPTION
+							,	D.DICTIONARYNAME						AS GROUPNAME
+						FROM 	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+				  		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					GRP
+					LEFT OUTER JOIN		
+					(
+						SELECT	C.LOOKUP_CODE                           AS CODEID
+							,	D.DICTIONARYNAME						AS SUBNAME
+							,	C.PARENTCODEID
+						FROM	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+				   		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					
+					WHERE 1 = 1
+                      AND GRP.CODEID = '009'			-- 기타
+                      AND SUB.CODEID = '9019'			-- 기타
+					
+				) AOC
+				JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+					       	 								AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+					       	 								
+				AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+				
+			) 		AOI_NONE		ON		MAP.EQUIPMENTTYPE = AOI_NONE.EQUIPMENTTYPE
+			-----------------------------------------------------					
+									
+				WHERE 1=1
+				
+				ORDER BY	MAP.LAYERID
+						,	MAP.PANELID 
+				
+			
+			)
+			
+			  -- LOT별 LAYER별 감사수량 정보 수정
+            , T_TOTAL_PCS AS (
+            SELECT  INPPROC     --검사공정
+               ,    LAYERID
+               ,    SUM(PCSCOUNT) AS TOTAL_PCSCOUNT
+              FROM (
+                    SELECT  DISTINCT 
+                                INPPROC     --검사공정
+                           ,    LAYERID
+                           ,    LOTID
+                           ,    PCSCOUNT
+        
+                      FROM NOINPUT_PRE_ITEM
+              )
+              GROUP BY INPPROC, LAYERID
+              )
+			
+			
+			
+			SELECT 
+                    A.PRODUCTDEFID        	-- 품목코드
+                 ,  A.PROCESSDEFNAME      	-- 품목명
+                 --,  PRODUCTDEFVERSION  	-- 품목버전
+                 ,  A.INPPROC             		-- 검사공정
+                 ,  A.INPPROCNM           	-- 검사공정명
+                 --,  LAYERID
+                 --,  LAYERNM
+				 ,  A.GROUPCODE
+				 ,  A.GROUPNAME
+				 ,  A.SUBCODE
+				 ,  A.SUBNAME
+				 ,  A.OPERATIONSEQUENCE              AS ORD
+                 --,  MAX(PCSCOUNT)                   	AS INSPECTIONQTY		-- 검사수
+				 ,  COUNT(*) 								AS DEFECTCOUNT		    -- 불량수  (CDE.VRSDEFECTCODE != 0 이 아닌 조건 불필요해짐.. 불량은 0인경우 제외)
+                 ,  MAX(B.TOTAL_PCSCOUNT)           	AS INSPECTIONQTY		-- 검사수
+		    FROM NOINPUT_PRE_ITEM A
+            LEFT JOIN T_TOTAL_PCS B
+            ON A.INPPROC = B.INPPROC
+            AND A.LAYERID = B.LAYERID
+		  GROUP BY A.PRODUCTDEFID, A.PROCESSDEFNAME, A.INPPROC, A.INPPROCNM,  A.GROUPCODE, A.GROUPNAME, A.SUBCODE, A.SUBNAME, A.OPERATIONSEQUENCE
+		  ORDER BY A.OPERATIONSEQUENCE ,  A.GROUPCODE, A.SUBCODE -- 검사공정 정렬 기준 
+			
+			
+	</select>
+	
+	<!--
+		설		명	: 품목별 Defect Map 조회 - 불량그룹별 색상 정보
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-27 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapDefectColorList" parameterType="map" resultType="hashmap">
+			
+			/* selectProcDefectMapDefectColorList -  품목별 Defect Map 조회 - 불량그룹별 색상 정보 */
+			 SELECT
+					 A.LOOKUP_CODE          AS CODE
+					,A.DESCRIPTION         	AS COLOR -- 색상정보 
+				FROM	CMD_LOOKUP_VALUES A
+				WHERE 1=1
+					AND A.LOOKUP_TYPE 		= 'DefectMapDefectGroup'		-- 불량그룹 코드
+					AND A.ENABLED_FLAG 	= 'Y'
+				order by DISPLAYSEQUENCE asc
+	</select>
+	
+	<!--
+		설		명	: 품목별 Defect Map 조회 - 이미지 Layer 부분 기본 정보
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-28 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapLayerInfoList" parameterType="map" resultType="hashmap">	
+			
+			/* selectProcDefectMapLayerInfoList -  품목별 Defect Map 조회 -이미지 Layer 부분 기본 정보 */
+			-- LAYER 정보 조회 (마지막 층 정보) 기준정보 > 사양기준정보 > 품목사양정보 제품사양의 층수 정보 
+		   
+		   -------------------(21.07.23) REV 없이
+           SELECT  A.LAYER        AS LAYER
+                 , A.MAX_LAYER    AS MAX_LAYER
+                 , A.WIDTH         	AS WIDTH
+                 , A.HEIGHT        	AS HEIGHT
+                 --, A.ITEMVERSION        AS ITEMVERSION                 
+             FROM 
+             (
+          ---------------------------------------------------------------------------
+          
+		   SELECT PIS.LAYER		AS LAYER
+				, SUBSTR(PIS.LAYER, 1, INSTR(PIS.LAYER,'L')-1) 	AS MAX_LAYER
+				
+                 -- 이미지 등록시 등록한 가로 세로 정보로 설정  (PCS 이미지 등록에서 여러 버전으로 등록시.. 사이즈 같은지.. )
+                 , NVL(IMG.WIDTH, PIS.PNLSIZEYAXIS)
+                      AS WIDTH  							-- 가로 없는 경우 기본값 (1/2)
+				 , NVL(IMG.HEIGHT,PIS.PNLSIZEXAXIS)
+                       AS HEIGHT  							-- 세로 없는 경우 기본값 (1/2)
+                 , RANK() OVER (ORDER BY IM.ITEMVERSION DESC)       RANK   
+                 , IM.ITEMVERSION       
+			FROM   BAS_ITEMMASTER IM
+			INNER JOIN BAS_PRODUCTITEMSPEC     PIS 
+					ON  IM.ENTERPRISEID 		= PIS.ENTERPRISEID
+					AND IM.ITEMID 			= PIS.ITEMID
+					AND IM.ITEMVERSION 	= PIS.ITEMVERSION
+			-- [이미지정보의 넓이 조회 기본 LAYER 설정시 적용]
+			LEFT OUTER JOIN BAS_QCPCSIMAGE     IMG
+						 ON IM.ITEMID 			= IMG.PRODUCTDEFID
+						 AND IM.ITEMVERSION= IMG.PRODUCTDEFVERSION
+			WHERE 1 = 1
+			 <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+				AND		IM.ITEMID 			= #{P_PRODUCTDEFID} 					
+			</if>
+				AND IM.VALIDSTATE     		= 'Valid'
+			--GROUP BY   IM.ITEMID
+			----------------------------------------------------------------(21.07.23)
+	        ) A
+	        WHERE 1 = 1
+	          AND RANK = 1
+	          AND ROWNUM = 1
+			
+			    	
+	</select>
+	
+	<!--
+		설		명	: 품목별 Defect Map - 품목코드 선택 후 해석시 (차트 포인트 조회)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-28 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapDefectImgPointList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProcDefectMapDefectImgPointList -  품목별 Defect Map - 품목코드 선택 후 해석시 (차트 포인트 조회) */
+			
+			-- AOI 공정만  (수량, 완료일시, AOI검사공정 정보)
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION  
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)              
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+						
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE 				= #{P_PRODUCTIONTYPE}
+				</if>
+                
+                -- 품목코드
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFID            	= #{P_PRODUCTDEFID}
+				</if>	
+				
+                -- 품목 버전
+				<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.PRODUCTDEFVERSION = LMP.VALUE
+						)
+				</if>
+				
+                -- 공정
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND     LWR.PROCESSSEGMENTID        	= #{P_PROCESSSEGMENTID}
+				</if>	
+				-- 품목 버전
+				<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOTID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.LOTID = LMP.VALUE
+						)
+				</if>
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+			
+			-- [CS,SS 추가]
+            , T_LAST_LAYER AS (
+                SELECT MAX(PIS.LAYER) AS LAYER
+                    ,   MAX(PIS.ITEMID) AS ITEMID
+                    ,   MAX(PIS.ITEMVERSION) AS ITEMVERSION
+                    ,   MAX(PIS.ENTERPRISEID) AS ENTERPRISEID
+                FROM   BAS_ITEMMASTER IM
+                INNER JOIN BAS_PRODUCTITEMSPEC     PIS 
+                        ON  IM.ENTERPRISEID 		= PIS.ENTERPRISEID
+                        AND IM.ITEMID 			= PIS.ITEMID
+                        AND IM.ITEMVERSION 	= PIS.ITEMVERSION
+                WHERE 1 = 1 
+                    -- 품목코드
+					<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+						AND		IM.ITEMID = #{P_PRODUCTDEFID}
+					</if>
+					-- 품목 버전
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	IM.ITEMVERSION = LMP.VALUE
+							)
+					</if>
+                        AND     IM.ENTERPRISEID 	= #{ENTERPRISEID}
+                        AND     IM.VALIDSTATE     	= 'Valid'
+                        GROUP BY  PIS.LAYER 
+				                    ,   PIS.ITEMID
+				                    ,   PIS.ITEMVERSION
+				                    ,   PIS.ENTERPRISEID
+                )
+            
+              , NOINPUT_PRE_ITEM  AS ( 
+			  
+			  
+			  
+						SELECT	MAP.EQUIPMENTTYPE           	-- 설비 타입
+						,	MAP.EQUIPMENTID                 		-- 설비 ID    
+						, 	MAP.LOTID                       			-- lot
+						, 	MAP.PRODUCTDEFID                		-- 품목코드
+						,   MAP.PROCESSDEFNAME              		-- 품목명 (추가)
+						, 	MAP.PRODUCTDEFVERSION           	-- 품목버전
+						,   MAP.PROCESSSEGMENTID            		AS INPPROC		-- 검사공정(추가)
+                        ,   MAP.PROCESSSEGMENTNAME          	AS INPPROCNM	-- 검사공정명(추가)
+						,	MAP.LAYERID                     			-- LAYER
+						,   MAP.LAYERNM                     			-- LAYER 명
+						,	MAP.PANELID                     			-- 판넬ID
+						,	MAP.DEGREE                      			-- 차수				
+						,	MAP.DEFECTNO                    			-- ROWNUM 
+						,	MAP.ARRAYX                      			-- BBT X
+						,	MAP.ARRAYY                      			-- BBT Y
+						,	MAP.X                           				-- X
+						,	MAP.Y                           				-- Y
+						,	MAP.DEFECTCODE                  		-- 불량코드           
+						,	MAP.DEFECTTYPE                  			-- 불량 타입
+						,	MAP.AOIDEFECTCODE               		-- AOI 불량
+						,	MAP.VRSDEFECTCODE               		-- VRS 불량
+						,	MAP.IMAGE                       			-- 이미지 불필요
+						,	TO_CHAR(MAP.EVENTTIME, 'YYYY-MM-DD HH24:MI:SS')		AS EVENTTIME        -- 이벤트 시간
+						,	MAP.CREATEDTIME                 
+						------------------------------------------------------
+						,	COALESCE(AOI.GROUPCODE, AOI_NONE.GROUPCODE)						AS GROUPCODE
+						,	COALESCE(AOI.GROUPNAME, AOI_NONE.GROUPNAME)						AS GROUPNAME
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODEID, '9999')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)				-- 21.05.15 VRS 도 AOI처럼
+								ELSE COALESCE(BBT.CODEID, '9999') 
+							 END ) 												AS SUBCODE	
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODENAME, 'NONE')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리
+								ELSE COALESCE(BBT.CODENAME, 'NONE') 
+							 END ) 												AS SUBNAME                         
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)
+								WHEN 'HOLE' THEN COALESCE(HOLE.COLOR, '#000000')
+								WHEN 'VRS' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리 색상도 추가
+								ELSE COALESCE(BBT.COLOR, '#000000') 
+							END) 												AS COLOR
+						------------------------------------------------------
+
+						,   MAP.WORKSTARTPCSQTY												AS PCSCOUNT		    -- 검사수량
+						,   MAP.OPERATIONSEQUENCE                   -- 공정 정렬 순서 (추가)
+						
+						
+					FROM	
+					(
+					
+					SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+							,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+							,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+							,       TPE.LOTID 
+							,       TPE.PROCESSSEGMENTID
+							,       TPE.PROCESSSEGMENTNAME
+							,       TPE.COL_VAL                
+							,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')    	AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+							,       WORKSTARTPCSQTY                                        		AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	[값이 없어서 임시로 적용  -> 제거대기]
+							,       TPE.PRODUCTIONTYPE              								-- 생산구분
+							
+							,   CDE.EQUIPMENTTYPE
+							,	CDE.EQUIPMENTID
+							,	CDE.LAYERID
+							,   (
+									CASE WHEN CDE.LAYERID = '1L'
+										THEN    'CS'
+										WHEN CDE.LAYERID = TLL.LAYER
+										THEN    'SS'
+										ELSE CDE.LAYERID
+										END
+								)       AS LAYERNM
+							,	CDE.PANELID
+							,	CDE.PCSCOUNT
+							,	CDE.DEGREE
+							,	ROWNUM																	AS DEFECTNO
+							,	CDE.ARRAYX
+							,	CDE.ARRAYY
+							,	CDE.X
+							,	CDE.Y
+							,	CDE.DEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN 
+										CASE CDE.VRSDEFECTCODE 
+											WHEN '0' THEN 'AOI'
+											ELSE 'VRS'
+										END
+									WHEN 'BBT' THEN 'BBT'
+									WHEN 'HOLE' THEN 'HOLE' 
+									WHEN 'VRS' THEN 'VRS'   
+								END) 																			AS DEFECTTYPE
+							,	CDE.AOIDEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN
+										CASE CDE.VRSDEFECTCODE
+											WHEN '0' THEN CDE.AOIDEFECTCODE 
+											ELSE CDE.VRSDEFECTCODE 
+										END
+									ELSE CDE.VRSDEFECTCODE
+								END) 																			AS VRSDEFECTCODE
+							,	CDE.IMAGE
+							,	CDE.EVENTTIME
+							,	CDE.CREATEDTIME
+							, 	CDE.PANELID AS MAX
+							
+							,   TPE.OPERATIONSEQUENCE                   								-- 공정 정렬 순서 (추가)
+							
+							
+					FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+					LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+					ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+					AND	    CDE.LOTID 						= HRD.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= HRD.LAYERID
+					AND	    CDE.PANELID 					= HRD.PANELID
+					AND	    CDE.DEGREE 						= HRD.DEGREE				
+					-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+					/*
+					INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+					ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+					AND	    CDE.LOTID 						= SUB.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= SUB.LAYERID
+					*/
+					INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+					ON      TPE.COL_VAL                 		= CDE.LAYERID
+					AND     TPE.LOTID                   		= CDE.LOTID
+					AND     TPE.PRODUCTDEFID             	= CDE.PRODUCTDEFID 
+					AND     TPE.PRODUCTDEFVERSION     = CDE.PRODUCTDEFVERSION
+					
+					
+					LEFT JOIN	BAS_ITEMMASTER 		    BI		
+					ON	CDE.PRODUCTDEFID 				= BI.ITEMID
+					AND	CDE.PRODUCTDEFVERSION 		= BI.ITEMVERSION
+					
+					-- (21.05.25) CS,SS 추가
+					LEFT OUTER JOIN T_LAST_LAYER        TLL
+					ON    CDE.PRODUCTDEFID        		=   TLL.ITEMID
+					AND 	CDE.PRODUCTDEFVERSION   		=   TLL.ITEMVERSION
+						
+					WHERE	1=1
+					
+						AND 		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> 	#{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+						AND		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  	#{P_CONPERIOD_PERIODTO}		-- [NVL 값 제거  -> 제거대기]
+					   
+													
+						AND     CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+					
+				 ) MAP
+				LEFT OUTER JOIN 
+				(												
+					-- [변환 후]
+					SELECT	AOC.GROUPCODE
+						,	AOC.GROUPNAME
+						,	AOC.COLOR
+						,	AOC.SUBCODE
+						,	AOC.SUBNAME
+						,	EDC.DEFECTCODE
+						,	EDC.EQUIPMENTID
+					FROM	
+					(
+						-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+						SELECT	GRP.CODEID									AS GROUPCODE
+							,	GRP.GROUPNAME
+							,	GRP.DESCRIPTION 								AS COLOR
+							,	SUB.CODEID										AS SUBCODE
+							,	SUB.SUBNAME
+						FROM	
+						(
+							SELECT 	C.LOOKUP_CODE                        AS CODEID
+								,	C.DESCRIPTION
+								,	D.DICTIONARYNAME						AS GROUPNAME
+							FROM 	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					GRP
+						LEFT OUTER JOIN		
+						(
+							SELECT	C.LOOKUP_CODE                           	AS CODEID
+								,	D.DICTIONARYNAME							AS SUBNAME
+								,	C.PARENTCODEID
+							FROM	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					) AOC
+					JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+																AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+																
+					AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+					
+				) 		AOI		ON		MAP.EQUIPMENTID = AOI.EQUIPMENTID
+								AND		MAP.VRSDEFECTCODE = AOI.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					-- [to-be 변환]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 										AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapBBTDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'BBT'
+					
+				)		BBT		ON 		MAP.EQUIPMENTID = BBT.EQUIPMENTID
+								AND 	MAP.DEFECTCODE = BBT.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					--[to-be 변경]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 										AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapHoleDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'HOLE'
+					
+				)		HOLE		ON 		MAP.EQUIPMENTID = HOLE.EQUIPMENTID
+									AND 	MAP.VRSDEFECTCODE = HOLE.DEFECTCODE
+									
+				-----------------------------------------------------
+			LEFT OUTER JOIN 
+			(												
+				-- [변환 후]
+				SELECT	DISTINCT AOC.GROUPCODE
+					,	AOC.GROUPNAME
+					,	AOC.COLOR
+					,	AOC.SUBCODE
+					,	AOC.SUBNAME
+					,	EDC.DEFECTCODE
+                    ,  'VRS'    AS EQUIPMENTTYPE		-- 무조건 연결됨.
+				FROM	
+				(
+					-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+                    SELECT	GRP.CODEID									AS GROUPCODE
+						,	GRP.GROUPNAME
+						,	GRP.DESCRIPTION 							AS COLOR
+						,	SUB.CODEID									AS SUBCODE
+						,	SUB.SUBNAME
+					FROM	
+					(
+						SELECT 	C.LOOKUP_CODE                           AS CODEID
+							,	C.DESCRIPTION
+							,	D.DICTIONARYNAME						AS GROUPNAME
+						FROM 	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+				  		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					GRP
+					LEFT OUTER JOIN		
+					(
+						SELECT	C.LOOKUP_CODE                           AS CODEID
+							,	D.DICTIONARYNAME						AS SUBNAME
+							,	C.PARENTCODEID
+						FROM	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+				   		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					
+					WHERE 1 = 1
+                      AND GRP.CODEID = '009'			-- 기타
+                      AND SUB.CODEID = '9019'			-- 기타
+					
+				) AOC
+				JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+					       	 								AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+					       	 								
+				AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+				
+			) 		AOI_NONE		ON		MAP.EQUIPMENTTYPE = AOI_NONE.EQUIPMENTTYPE
+			-----------------------------------------------------
+									
+									
+				WHERE 1=1
+				
+				ORDER BY	MAP.LAYERID
+						,	MAP.PANELID 
+				
+			
+			)
+			
+			SELECT 
+                 EQUIPMENTTYPE
+				  , EQUIPMENTID
+				  , LOTID
+				  , PRODUCTDEFID
+				  , PRODUCTDEFVERSION
+				  , LAYERID
+				  , PANELID
+				  , degree
+				  , DEFECTNO
+				  , X 
+				  , Y 
+				  , VRSDEFECTCODE
+				  , GROUPCODE
+				  , SUBCODE
+				  , COLOR
+				  , INPPROC
+                 
+		    FROM NOINPUT_PRE_ITEM
+		    
+		    where 1 = 1
+		   
+				<if test="P_GROUPCODE != null and P_GROUPCODE !='' and !(P_GROUPCODE eq '*'.toString()) ">
+					AND		GROUPCODE IN (
+									SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+								     FROM (SELECT #{P_GROUPCODE} AS ORG_DATA FROM DUAL)
+									CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+									)
+				</if>
+				<if test="P_SUBCODE != null and P_SUBCODE !='' and !(P_SUBCODE eq '*'.toString()) ">
+					AND		SUBCODE IN (
+									SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+								     FROM (SELECT #{P_SUBCODE} AS ORG_DATA FROM DUAL)
+									CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+									)
+				</if>
+            
+		  ORDER BY layerid, panelid
+			
+			
+	</select>
+	
+	
+	<!--
+		설		명	: 품목별 Defect Map - 품목코드 선택 후 해석시 (Defect List) Layer 포함
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-26 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapDefectLayerList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProcDefectMapDefectLayerList -  품목별 Defect Map - 품목코드 선택 후 해석시 (Defect List) Layer 포함 */
+			
+			-- AOI 공정만  (수량, 완료일시, AOI검사공정 정보)
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION  
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)              
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE 			= #{P_PRODUCTIONTYPE}
+				</if>
+                
+                -- 품목코드
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFID            		= #{P_PRODUCTDEFID}
+				</if>	
+				
+                -- 품목 버전
+				<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.PRODUCTDEFVERSION = LMP.VALUE
+						)
+				</if>
+				
+                -- 공정
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND     LWR.PROCESSSEGMENTID        	= #{P_PROCESSSEGMENTID}
+				</if>	
+				-- 품목 버전
+				<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOTID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.LOTID = LMP.VALUE
+						)
+				</if>
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+			
+			-- [CS,SS 추가]
+            , T_LAST_LAYER AS (
+                SELECT MAX(PIS.LAYER) AS LAYER
+                    ,   MAX(PIS.ITEMID) AS ITEMID
+                    ,   MAX(PIS.ITEMVERSION) AS ITEMVERSION
+                    ,   MAX(PIS.ENTERPRISEID) AS ENTERPRISEID
+                FROM   BAS_ITEMMASTER IM
+                INNER JOIN BAS_PRODUCTITEMSPEC     PIS 
+                        ON  IM.ENTERPRISEID 		= PIS.ENTERPRISEID
+                        AND IM.ITEMID 			= PIS.ITEMID
+                        AND IM.ITEMVERSION 	= PIS.ITEMVERSION
+                WHERE 1 = 1 
+                    -- 품목코드
+					<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+						AND		IM.ITEMID = #{P_PRODUCTDEFID}
+					</if>
+					-- 품목 버전
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	IM.ITEMVERSION = LMP.VALUE
+							)
+					</if>
+                        AND     IM.ENTERPRISEID 	= #{ENTERPRISEID}
+                        AND     IM.VALIDSTATE     	= 'Valid'
+                        GROUP BY  PIS.LAYER 
+				                    ,   PIS.ITEMID
+				                    ,   PIS.ITEMVERSION
+				                    ,   PIS.ENTERPRISEID
+                )
+            
+              , NOINPUT_PRE_ITEM  AS ( 
+			  
+			  
+			  
+						SELECT	MAP.EQUIPMENTTYPE           -- 설비 타입
+						,	MAP.EQUIPMENTID                 -- 설비 ID    
+						, 	MAP.LOTID                       -- lot
+						, 	MAP.PRODUCTDEFID                -- 품목코드
+						,   MAP.PROCESSDEFNAME              -- 품목명 (추가)
+						, 	MAP.PRODUCTDEFVERSION           -- 품목버전
+						,   MAP.PROCESSSEGMENTID            AS INPPROC		-- 검사공정(추가)
+                        ,   MAP.PROCESSSEGMENTNAME          AS INPPROCNM	-- 검사공정명(추가)
+						,	MAP.LAYERID                     -- LAYER
+						,   MAP.LAYERNM                     -- LAYER 명
+						,	MAP.PANELID                     -- 판넬ID
+						,	MAP.DEGREE                      -- 차수				
+						,	MAP.DEFECTNO                    -- ROWNUM 
+						,	MAP.ARRAYX                      -- BBT X
+						,	MAP.ARRAYY                      -- BBT Y
+						,	MAP.X                           -- X
+						,	MAP.Y                           -- Y
+						,	MAP.DEFECTCODE                  -- 불량코드           
+						,	MAP.DEFECTTYPE                  -- 불량 타입
+						,	MAP.AOIDEFECTCODE               -- AOI 불량
+						,	MAP.VRSDEFECTCODE               -- VRS 불량
+						,	MAP.IMAGE                       -- 이미지 불필요
+						,	TO_CHAR(MAP.EVENTTIME, 'YYYY-MM-DD HH24:MI:SS')		AS EVENTTIME        -- 이벤트 시간
+						,	MAP.CREATEDTIME                 
+						------------------------------------------------------
+						,	COALESCE(AOI.GROUPCODE, AOI_NONE.GROUPCODE)						AS GROUPCODE
+						,	COALESCE(AOI.GROUPNAME, AOI_NONE.GROUPNAME)						AS GROUPNAME
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODEID, '9999')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)				-- 21.05.15 VRS 도 AOI처럼
+								ELSE COALESCE(BBT.CODEID, '9999') 
+							 END ) 												AS SUBCODE	
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODENAME, 'NONE')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리
+								ELSE COALESCE(BBT.CODENAME, 'NONE') 
+							 END ) 												AS SUBNAME                         
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)
+								WHEN 'HOLE' THEN COALESCE(HOLE.COLOR, '#000000')
+								WHEN 'VRS' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리 색상도 추가
+								ELSE COALESCE(BBT.COLOR, '#000000') 
+							END) 												AS COLOR
+						------------------------------------------------------
+
+						,   MAP.WORKSTARTPCSQTY									AS PCSCOUNT		    -- 검사수량
+						,   MAP.OPERATIONSEQUENCE                   -- 공정 정렬 순서 (추가)
+						
+						
+					FROM	
+					(
+					
+					SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+							,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+							,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+							,       TPE.LOTID 
+							,       TPE.PROCESSSEGMENTID
+							,       TPE.PROCESSSEGMENTNAME
+							,       TPE.COL_VAL                
+							,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')     AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+							,       WORKSTARTPCSQTY                                        AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	[값이 없어서 임시로 적용  -> 제거대기]
+							,       TPE.PRODUCTIONTYPE              -- 생산구분
+							
+							,   CDE.EQUIPMENTTYPE
+							,	CDE.EQUIPMENTID
+							,	CDE.LAYERID
+							,   (
+									CASE WHEN CDE.LAYERID = '1L'
+										THEN    'CS'
+										WHEN CDE.LAYERID = TLL.LAYER
+										THEN    'SS'
+										ELSE CDE.LAYERID
+										END
+								)       AS LAYERNM
+							,	CDE.PANELID
+							,	CDE.PCSCOUNT
+							,	CDE.DEGREE
+							,	ROWNUM										AS DEFECTNO
+							,	CDE.ARRAYX
+							,	CDE.ARRAYY
+							,	CDE.X
+							,	CDE.Y
+							,	CDE.DEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN 
+										CASE CDE.VRSDEFECTCODE 
+											WHEN '0' THEN 'AOI'
+											ELSE 'VRS'
+										END
+									WHEN 'BBT' THEN 'BBT'
+									WHEN 'HOLE' THEN 'HOLE' 
+									WHEN 'VRS' THEN 'VRS'   
+								END) 										AS DEFECTTYPE
+							,	CDE.AOIDEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN
+										CASE CDE.VRSDEFECTCODE
+											WHEN '0' THEN CDE.AOIDEFECTCODE 
+											ELSE CDE.VRSDEFECTCODE 
+										END
+									ELSE CDE.VRSDEFECTCODE
+								END) 										AS VRSDEFECTCODE
+							,	CDE.IMAGE
+							,	CDE.EVENTTIME
+							,	CDE.CREATEDTIME
+							, 	CDE.PANELID AS MAX
+							
+							,   TPE.OPERATIONSEQUENCE                   -- 공정 정렬 순서 (추가)
+							
+							
+					FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+					LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+					ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+					AND	    CDE.LOTID 						= HRD.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= HRD.LAYERID
+					AND	    CDE.PANELID 					= HRD.PANELID
+					AND	    CDE.DEGREE 						= HRD.DEGREE				
+					-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+					/*
+					INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+					ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+					AND	    CDE.LOTID 						= SUB.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= SUB.LAYERID
+					*/
+					INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+					ON      TPE.COL_VAL                 		= CDE.LAYERID
+					AND     TPE.LOTID                   		= CDE.LOTID
+					AND     TPE.PRODUCTDEFID                   	= CDE.PRODUCTDEFID 
+					AND     TPE.PRODUCTDEFVERSION               = CDE.PRODUCTDEFVERSION
+					
+					
+					LEFT JOIN	BAS_ITEMMASTER 		    BI		
+					ON	CDE.PRODUCTDEFID 		= BI.ITEMID
+					AND	CDE.PRODUCTDEFVERSION 	= BI.ITEMVERSION
+					
+					-- (21.05.25) CS,SS 추가
+					LEFT OUTER JOIN T_LAST_LAYER                        TLL
+					ON    CDE.PRODUCTDEFID        	=   TLL.ITEMID
+					AND 	CDE.PRODUCTDEFVERSION   =   TLL.ITEMVERSION
+						
+					WHERE	1=1
+					
+						AND 	TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> 	#{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+						AND		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  	#{P_CONPERIOD_PERIODTO}		-- [NVL 값 제거  -> 제거대기]
+					   
+													
+						AND     CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+					
+				 ) MAP
+				LEFT OUTER JOIN 
+				(												
+					-- [변환 후]
+					SELECT	AOC.GROUPCODE
+						,	AOC.GROUPNAME
+						,	AOC.COLOR
+						,	AOC.SUBCODE
+						,	AOC.SUBNAME
+						,	EDC.DEFECTCODE
+						,	EDC.EQUIPMENTID
+					FROM	
+					(
+						-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+						SELECT	GRP.CODEID									AS GROUPCODE
+							,	GRP.GROUPNAME
+							,	GRP.DESCRIPTION 							AS COLOR
+							,	SUB.CODEID									AS SUBCODE
+							,	SUB.SUBNAME
+						FROM	
+						(
+							SELECT 	C.LOOKUP_CODE                           AS CODEID
+								,	C.DESCRIPTION
+								,	D.DICTIONARYNAME						AS GROUPNAME
+							FROM 	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					GRP
+						LEFT OUTER JOIN		
+						(
+							SELECT	C.LOOKUP_CODE                           AS CODEID
+								,	D.DICTIONARYNAME						AS SUBNAME
+								,	C.PARENTCODEID
+							FROM	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					) AOC
+					JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+																AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+																
+					AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+					
+				) 		AOI		ON		MAP.EQUIPMENTID = AOI.EQUIPMENTID
+								AND		MAP.VRSDEFECTCODE = AOI.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					-- [to-be 변환]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 									AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapBBTDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'BBT'
+					
+				)		BBT		ON 		MAP.EQUIPMENTID = BBT.EQUIPMENTID
+								AND 	MAP.DEFECTCODE = BBT.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					--[to-be 변경]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 									AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapHoleDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'HOLE'
+					
+				)		HOLE		ON 		MAP.EQUIPMENTID = HOLE.EQUIPMENTID
+									AND 	MAP.VRSDEFECTCODE = HOLE.DEFECTCODE
+									
+				-----------------------------------------------------
+			LEFT OUTER JOIN 
+			(												
+				-- [변환 후]
+				SELECT	DISTINCT AOC.GROUPCODE
+					,	AOC.GROUPNAME
+					,	AOC.COLOR
+					,	AOC.SUBCODE
+					,	AOC.SUBNAME
+					,	EDC.DEFECTCODE
+                    ,  'VRS'    AS EQUIPMENTTYPE		-- 무조건 연결됨.
+				FROM	
+				(
+					-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+                    SELECT	GRP.CODEID									AS GROUPCODE
+						,	GRP.GROUPNAME
+						,	GRP.DESCRIPTION 							AS COLOR
+						,	SUB.CODEID									AS SUBCODE
+						,	SUB.SUBNAME
+					FROM	
+					(
+						SELECT 	C.LOOKUP_CODE                           AS CODEID
+							,	C.DESCRIPTION
+							,	D.DICTIONARYNAME						AS GROUPNAME
+						FROM 	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+				  		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					GRP
+					LEFT OUTER JOIN		
+					(
+						SELECT	C.LOOKUP_CODE                           AS CODEID
+							,	D.DICTIONARYNAME						AS SUBNAME
+							,	C.PARENTCODEID
+						FROM	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+				   		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					
+					WHERE 1 = 1
+                      AND GRP.CODEID = '009'			-- 기타
+                      AND SUB.CODEID = '9019'			-- 기타
+					
+				) AOC
+				JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+					       	 								AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+					       	 								
+				AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+				
+			) 		AOI_NONE		ON		MAP.EQUIPMENTTYPE = AOI_NONE.EQUIPMENTTYPE
+			-----------------------------------------------------
+				
+				WHERE 1=1
+				
+				ORDER BY	MAP.LAYERID
+						,	MAP.PANELID 
+				
+			
+			)
+			
+			  -- LOT별 LAYER별 감사수량 정보 수정
+            , T_TOTAL_PCS AS (
+            SELECT  INPPROC     --검사공정
+               ,    LAYERID
+               ,    SUM(PCSCOUNT) AS TOTAL_PCSCOUNT
+              FROM (
+                    SELECT  DISTINCT 
+                                INPPROC     --검사공정
+                           ,    LAYERID
+                           ,    LOTID
+                           ,    PCSCOUNT
+        
+                      FROM NOINPUT_PRE_ITEM
+              )
+              GROUP BY INPPROC, LAYERID
+              )
+			
+			
+			
+			SELECT 
+                    A.PRODUCTDEFID        	-- 품목코드
+                 ,  A.PROCESSDEFNAME      	-- 품목명
+                 --,  PRODUCTDEFVERSION  	-- 품목버전
+                 ,  A.INPPROC             		-- 검사공정
+                 ,  A.INPPROCNM           	-- 검사공정명
+                 ,  A.LAYERID
+                 --,  LAYERNM
+				 ,  A.GROUPCODE
+				 ,  A.GROUPNAME
+				 ,  A.SUBCODE
+				 ,  A.SUBNAME
+				 ,  A.OPERATIONSEQUENCE              AS ORD
+                 --,  MAX(PCSCOUNT)                   	AS INSPECTIONQTY		-- 검사수
+				 ,  COUNT(*) 								AS DEFECTCOUNT		    -- 불량수  (CDE.VRSDEFECTCODE != 0 이 아닌 조건 불필요해짐.. 불량은 0인경우 제외)
+                 ,  MAX(B.TOTAL_PCSCOUNT)           	AS INSPECTIONQTY		-- 검사수
+		    FROM NOINPUT_PRE_ITEM A
+            LEFT JOIN T_TOTAL_PCS B
+            ON A.INPPROC = B.INPPROC
+            AND A.LAYERID = B.LAYERID
+		  GROUP BY A.PRODUCTDEFID, A.PROCESSDEFNAME, A.INPPROC, A.INPPROCNM,  A.LAYERID, A.GROUPCODE, A.GROUPNAME, A.SUBCODE, A.SUBNAME, A.OPERATIONSEQUENCE
+		  ORDER BY A.OPERATIONSEQUENCE ,  A.LAYERID, A.GROUPCODE, A.SUBCODE -- 검사공정 정렬 기준 
+			
+			
+	</select>
+	
+	
+	<!--
+		설		명	: 품목별 Defect Map - 선택된 (이미지 설정된 Layer, Lot 정보에 따른 생성해야 할 판넬 정보 조회) 
+		생	성	자	: 김진현 
+		생	성	일	: 2021-05-31 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapPanelFilterList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProcDefectMapPanelFilterList -  품목별 Defect Map - 선택된 (이미지 설정된 Layer, Lot 정보에 따른 생성해야 할 판넬 정보 조회)  */
+			
+			-- AOI 공정만  (수량, 완료일시, AOI검사공정 정보)
+			WITH T_AOI AS (
+                    SELECT  OP.PLANTID
+						,   OP.OPERATIONID
+						,   OP.PROCESSSEGMENTID                       				-- 공정ID
+						,   PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    	-- 공정명
+						,   RT.MAINPRODUCTID
+						,   RT.ENTERPRISEID
+						,   OP.OPERATIONSEQUENCE          							-- [추가]
+                        ,   RT.MAINPRODUCTVERSION 
+                        ,   LWR.LOTID
+                        ,   LWR.PRODUCTDEFID                							-- 품목코드
+                        ,   LWR.PRODUCTDEFVERSION
+                        ,   LWR.WORKENDTIME
+                        ,   LWR.WORKENDUSER
+                        ,   LWR.WORKSTARTPCSQTY             						-- 작업시작PCS수량
+                        ,   PD.PRODUCTIONTYPE               							-- 생산구분
+				  FROM   BAS_OPERATION OP
+				INNER JOIN BAS_ROUTING      RT  
+						ON OP.ENTERPRISEID         			= RT.ENTERPRISEID
+						AND OP.ASSEMBLYROUTINGID   	= RT.ASSEMBLYROUTINGID				
+                -- [해당 부분 없음 lot가 안들어옴 품목별에서]
+                INNER JOIN PCM_LOTWORKRESULT            LWR
+				ON RT.MAINPRODUCTID  					= LWR.PRODUCTDEFID
+				AND RT.MAINPRODUCTVERSION  			= LWR.PRODUCTDEFVERSION  
+				AND OP.PROCESSSEGMENTID            	= LWR.PROCESSSEGMENTID      -- 공정이 같은것만 연결(21.05.27)              
+				INNER JOIN BAS_PROCESSPATH  PP  
+						ON  RT.MAINPRODUCTID        		= PP.PROCESSDEFID
+						AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+						AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID         
+                  
+                INNER JOIN BAS_PRODUCTDEFINITION                PD          -- 제품정보
+                        ON PD.PROCESSDEFID          		= PP.PROCESSDEFID      
+                        AND PD.PROCESSDEFVERSION    	= PP.PROCESSDEFVERSION        
+                        
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+						ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+						AND PG.ENTERPRISEID        			= OP.ENTERPRISEID
+				LEFT OUTER JOIN CMD_DICTIONARY          PN  
+						ON PN.DICTIONARYID        			= PG.PROCESSSEGMENTNAME
+						AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				-------------------------------------------------------------------------------
+                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+		        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+		        AND  PG.ENTERPRISEID 					=	#{ENTERPRISEID} 
+				AND    PG.VALIDSTATE 					= 	'Valid'
+                --------------------------------------------------------------------------------		
+						
+				WHERE RT.ENTERPRISEID 	 					= #{ENTERPRISEID} 
+				
+				AND	OP.VALIDSTATE                   		= 'Valid'
+				AND PN.DICTIONARYNAME               	LIKE '%AOI%'
+                
+                -- 생산구분
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE 				= #{P_PRODUCTIONTYPE}
+				</if>
+                
+                -- 품목코드
+                <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND     LWR.PRODUCTDEFID            	= #{P_PRODUCTDEFID}
+				</if>	
+				
+                -- 품목 버전
+				<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.PRODUCTDEFVERSION = LMP.VALUE
+						)
+				</if>
+				
+                -- 공정
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND     LWR.PROCESSSEGMENTID        	= #{P_PROCESSSEGMENTID}
+				</if>	
+				-- 품목 버전
+				<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOTID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	LWR.LOTID = LMP.VALUE
+						)
+				</if>
+            
+            )
+            
+            -- AOI 공정의 LAYER 정보
+			, T_PRE_EQUIPMENTHEADER AS (
+					 SELECT col_nm
+                        ,   col_val
+                        ,   OPERATIONID
+                        ,   PLANTID
+                        ,   PROCESSSEGMENTID                        		-- 공정ID
+                        ,   PROCESSSEGMENTNAME                      	-- 공정명
+                        ,   MAINPRODUCTID
+                        ,   ENTERPRISEID
+                        ,   OPERATIONSEQUENCE          					-- [추가]
+                        ,   MAINPRODUCTVERSION 
+                        ,   LOTID
+                        ,   PRODUCTDEFID                						-- 품목코드
+                        ,   PRODUCTDEFVERSION
+                        ,   WORKENDTIME
+                        ,   WORKENDUSER
+                        ,   WORKSTARTPCSQTY             					-- 작업시작PCS수량
+                        ,   PRODUCTIONTYPE             						-- 생산구분
+					   FROM (
+							  SELECT    OS.AOIQCLAYER
+                                    ,	OS.AOIQCLAYER2
+                                    ,   OS.OPERATIONID
+                                    ,   A.PLANTID
+                                    ,   A.PROCESSSEGMENTID           		-- 공정ID
+                                    ,   A.PROCESSSEGMENTNAME         	-- 공정명
+                                    ,   A.MAINPRODUCTID
+                                    ,   A.ENTERPRISEID
+                                    ,   A.OPERATIONSEQUENCE          		-- [추가]
+                                    ,   A.MAINPRODUCTVERSION 
+                                    ,   A.LOTID
+                                    ,   A.PRODUCTDEFID               		-- 품목코드
+                                    ,   A.PRODUCTDEFVERSION
+                                    ,   A.WORKENDTIME
+                                    ,   A.WORKENDUSER
+                                    ,   A.WORKSTARTPCSQTY            		-- 작업시작PCS수량     
+                                    ,   A.PRODUCTIONTYPE               		-- 생산구분
+									FROM   BAS_OPERATIONSPECVALUE OS
+									INNER JOIN T_AOI A
+											ON 	OS.OPERATIONID 	    	= A.OPERATIONID
+											AND	OS.ENTERPRISEID 			= A.ENTERPRISEID
+											AND OS.PLANTID       			= A.PLANTID
+                                            AND OS.PROCESSSEGMENTID 	= A.PROCESSSEGMENTID
+											)
+					UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+			)
+			
+			-- [CS,SS 추가]
+            , T_LAST_LAYER AS (
+                SELECT MAX(PIS.LAYER) AS LAYER
+                    ,   MAX(PIS.ITEMID) AS ITEMID
+                    ,   MAX(PIS.ITEMVERSION) AS ITEMVERSION
+                    ,   MAX(PIS.ENTERPRISEID) AS ENTERPRISEID
+                FROM   BAS_ITEMMASTER IM
+                INNER JOIN BAS_PRODUCTITEMSPEC     PIS 
+                        ON  IM.ENTERPRISEID 		= PIS.ENTERPRISEID
+                        AND IM.ITEMID 			= PIS.ITEMID
+                        AND IM.ITEMVERSION 	= PIS.ITEMVERSION
+                WHERE 1 = 1 
+                    -- 품목코드
+					<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+						AND		IM.ITEMID = #{P_PRODUCTDEFID}
+					</if>
+					-- 품목 버전
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	IM.ITEMVERSION = LMP.VALUE
+							)
+					</if>
+                        AND     IM.ENTERPRISEID 	= #{ENTERPRISEID}
+                        AND     IM.VALIDSTATE     	= 'Valid'
+                        GROUP BY  PIS.LAYER 
+				                    ,   PIS.ITEMID
+				                    ,   PIS.ITEMVERSION
+				                    ,   PIS.ENTERPRISEID
+                )
+            
+              , NOINPUT_PRE_ITEM  AS ( 
+			  
+			  
+			  
+						SELECT	MAP.EQUIPMENTTYPE           	-- 설비 타입
+						,	MAP.EQUIPMENTID                 		-- 설비 ID    
+						, 	MAP.LOTID                       			-- lot
+						, 	MAP.PRODUCTDEFID                		-- 품목코드
+						,   MAP.PROCESSDEFNAME              		-- 품목명 (추가)
+						, 	MAP.PRODUCTDEFVERSION           	-- 품목버전
+						,   MAP.PROCESSSEGMENTID            		AS INPPROC		-- 검사공정(추가)
+                        ,   MAP.PROCESSSEGMENTNAME          	AS INPPROCNM	-- 검사공정명(추가)
+						,	MAP.LAYERID                     			-- LAYER
+						,   MAP.LAYERNM                     			-- LAYER 명
+						,	MAP.PANELID                     			-- 판넬ID
+						,	MAP.DEGREE                      			-- 차수				
+						,	MAP.DEFECTNO                    			-- ROWNUM 
+						,	MAP.ARRAYX                      			-- BBT X
+						,	MAP.ARRAYY                      			-- BBT Y
+						,	MAP.X                           				-- X
+						,	MAP.Y                           				-- Y
+						,	MAP.DEFECTCODE                  		-- 불량코드           
+						,	MAP.DEFECTTYPE                  			-- 불량 타입
+						,	MAP.AOIDEFECTCODE               		-- AOI 불량
+						,	MAP.VRSDEFECTCODE               		-- VRS 불량
+						,	MAP.IMAGE                       			-- 이미지 불필요
+						,	TO_CHAR(MAP.EVENTTIME, 'YYYY-MM-DD HH24:MI:SS')		AS EVENTTIME        -- 이벤트 시간
+						,	MAP.CREATEDTIME                 
+						------------------------------------------------------
+						,	COALESCE(AOI.GROUPCODE, AOI_NONE.GROUPCODE)						AS GROUPCODE
+						,	COALESCE(AOI.GROUPNAME, AOI_NONE.GROUPNAME)						AS GROUPNAME
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODEID, '9999')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBCODE, AOI_NONE.SUBCODE)				-- 21.05.15 VRS 도 AOI처럼
+								ELSE COALESCE(BBT.CODEID, '9999') 
+							 END ) 												AS SUBCODE	
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)
+								WHEN 'HOLE' THEN COALESCE(HOLE.CODENAME, 'NONE')
+								WHEN 'VRS' THEN COALESCE(AOI.SUBNAME, AOI_NONE.SUBNAME)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리
+								ELSE COALESCE(BBT.CODENAME, 'NONE') 
+							 END ) 												AS SUBNAME                         
+						,	(CASE MAP.EQUIPMENTTYPE
+								WHEN 'AOI' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)
+								WHEN 'HOLE' THEN COALESCE(HOLE.COLOR, '#000000')
+								WHEN 'VRS' THEN COALESCE(AOI.COLOR, AOI_NONE.COLOR)       		-- [21.05.15] 추가 AOI에 VRS만 가져 오도록 설정 후 VRS도 AOI처럼 처리 색상도 추가
+								ELSE COALESCE(BBT.COLOR, '#000000') 
+							END) 												AS COLOR
+						------------------------------------------------------
+
+						,   MAP.WORKSTARTPCSQTY												AS PCSCOUNT		    -- 검사수량
+						,   MAP.OPERATIONSEQUENCE                   -- 공정 정렬 순서 (추가)
+						
+						
+					FROM	
+					(
+					
+					SELECT          CDE.PRODUCTDEFID            									-- 품목코드
+							,       BI.ITEMNAME					AS PROCESSDEFNAME       	-- 품목명
+							,       CDE.PRODUCTDEFVERSION       									-- 품목 버전
+							,       TPE.LOTID 
+							,       TPE.PROCESSSEGMENTID
+							,       TPE.PROCESSSEGMENTNAME
+							,       TPE.COL_VAL                
+							,       TO_CHAR(WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')    	AS WORKENDTIME      	-- 완료 시간                 		[값이 없어서 임시로 적용  -> 제거대기]
+							,       WORKSTARTPCSQTY                                        		AS WORKSTARTPCSQTY  				-- 작업시작PCS수량             	[값이 없어서 임시로 적용  -> 제거대기]
+							,       TPE.PRODUCTIONTYPE              								-- 생산구분
+							
+							,   CDE.EQUIPMENTTYPE
+							,	CDE.EQUIPMENTID
+							,	CDE.LAYERID
+							,   (
+									CASE WHEN CDE.LAYERID = '1L'
+										THEN    'CS'
+										WHEN CDE.LAYERID = TLL.LAYER
+										THEN    'SS'
+										ELSE CDE.LAYERID
+										END
+								)       AS LAYERNM
+							,	CDE.PANELID
+							,	CDE.PCSCOUNT
+							,	CDE.DEGREE
+							,	ROWNUM																	AS DEFECTNO
+							,	CDE.ARRAYX
+							,	CDE.ARRAYY
+							,	CDE.X
+							,	CDE.Y
+							,	CDE.DEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN 
+										CASE CDE.VRSDEFECTCODE 
+											WHEN '0' THEN 'AOI'
+											ELSE 'VRS'
+										END
+									WHEN 'BBT' THEN 'BBT'
+									WHEN 'HOLE' THEN 'HOLE' 
+									WHEN 'VRS' THEN 'VRS'   
+								END) 																			AS DEFECTTYPE
+							,	CDE.AOIDEFECTCODE
+							,	(CASE CDE.EQUIPMENTTYPE
+									WHEN 'AOI' THEN
+										CASE CDE.VRSDEFECTCODE
+											WHEN '0' THEN CDE.AOIDEFECTCODE 
+											ELSE CDE.VRSDEFECTCODE 
+										END
+									ELSE CDE.VRSDEFECTCODE
+								END) 																			AS VRSDEFECTCODE
+							,	CDE.IMAGE
+							,	CDE.EVENTTIME
+							,	CDE.CREATEDTIME
+							, 	CDE.PANELID AS MAX
+							
+							,   TPE.OPERATIONSEQUENCE                   								-- 공정 정렬 순서 (추가)
+							
+							
+					FROM	QAM_DEFECTMAPEQUIPMENTDETAIL				CDE
+					LEFT OUTER JOIN	 QAM_DEFECTMAPEQUIPMENTHEADER       HRD
+					ON	    CDE.EQUIPMENTTYPE 		    = HRD.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= HRD.EQUIPMENTID
+					AND	    CDE.LOTID 						= HRD.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= HRD.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION 	    = HRD.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= HRD.LAYERID
+					AND	    CDE.PANELID 					= HRD.PANELID
+					AND	    CDE.DEGREE 						= HRD.DEGREE				
+					-- LAY별 MAX PANELID가 필요 함 [21.05.12]
+					/*
+					INNER JOIN QAM_DEFECTMAPMAXPANEL					SUB
+					ON	    CDE.EQUIPMENTTYPE 		    = SUB.EQUIPMENTTYPE
+					AND 	CDE.EQUIPMENTID 					= SUB.EQUIPMENTID
+					AND	    CDE.LOTID 						= SUB.LOTID
+					AND 	CDE.PRODUCTDEFID 		    	= SUB.PRODUCTDEFID
+					AND 	CDE.PRODUCTDEFVERSION       = SUB.PRODUCTDEFVERSION
+					AND	    CDE.LAYERID 					= SUB.LAYERID
+					*/
+					INNER JOIN T_PRE_EQUIPMENTHEADER   TPE
+					ON      TPE.COL_VAL                 		= CDE.LAYERID
+					AND     TPE.LOTID                   		= CDE.LOTID
+					AND     TPE.PRODUCTDEFID             	= CDE.PRODUCTDEFID 
+					AND     TPE.PRODUCTDEFVERSION     = CDE.PRODUCTDEFVERSION
+					
+					
+					LEFT JOIN	BAS_ITEMMASTER 		    BI		
+					ON	CDE.PRODUCTDEFID 				= BI.ITEMID
+					AND	CDE.PRODUCTDEFVERSION 		= BI.ITEMVERSION
+					
+					-- (21.05.25) CS,SS 추가
+					LEFT OUTER JOIN T_LAST_LAYER        TLL
+					ON    CDE.PRODUCTDEFID        		=   TLL.ITEMID
+					AND 	CDE.PRODUCTDEFVERSION   		=   TLL.ITEMVERSION
+						
+					WHERE	1=1
+					
+						AND 		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[>=]]> 	#{P_CONPERIOD_PERIODFR}		-- [NVL 값 제거  -> 제거대기]
+						AND		TO_CHAR(WORKENDTIME,'yyyymmddhh24miss')		<![CDATA[<]]>  	#{P_CONPERIOD_PERIODTO}		-- [NVL 값 제거  -> 제거대기]
+					   
+													
+						AND     CDE.EQUIPMENTTYPE 				= 'VRS'			-- VRS만
+					
+				 ) MAP
+				LEFT OUTER JOIN 
+				(												
+					-- [변환 후]
+					SELECT	AOC.GROUPCODE
+						,	AOC.GROUPNAME
+						,	AOC.COLOR
+						,	AOC.SUBCODE
+						,	AOC.SUBNAME
+						,	EDC.DEFECTCODE
+						,	EDC.EQUIPMENTID
+					FROM	
+					(
+						-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+						SELECT	GRP.CODEID									AS GROUPCODE
+							,	GRP.GROUPNAME
+							,	GRP.DESCRIPTION 								AS COLOR
+							,	SUB.CODEID										AS SUBCODE
+							,	SUB.SUBNAME
+						FROM	
+						(
+							SELECT 	C.LOOKUP_CODE                        AS CODEID
+								,	C.DESCRIPTION
+								,	D.DICTIONARYNAME						AS GROUPNAME
+							FROM 	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					GRP
+						LEFT OUTER JOIN		
+						(
+							SELECT	C.LOOKUP_CODE                           	AS CODEID
+								,	D.DICTIONARYNAME							AS SUBNAME
+								,	C.PARENTCODEID
+							FROM	CMD_LOOKUP_VALUES									C
+							LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+							WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					) AOC
+					JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+																AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+																
+					AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+					
+				) 		AOI		ON		MAP.EQUIPMENTID = AOI.EQUIPMENTID
+								AND		MAP.VRSDEFECTCODE = AOI.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					-- [to-be 변환]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 										AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapBBTDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'BBT'
+					
+				)		BBT		ON 		MAP.EQUIPMENTID = BBT.EQUIPMENTID
+								AND 	MAP.DEFECTCODE = BBT.DEFECTCODE
+				LEFT OUTER JOIN
+				(
+					--[to-be 변경]
+					SELECT	C.LOOKUP_CODE AS CODEID
+						,	D.DICTIONARYNAME								AS CODENAME
+						,	C.DESCRIPTION 										AS COLOR
+						,   EDC.DEFECTCODE
+						,   EDC.EQUIPMENTID
+					FROM	CMD_LOOKUP_VALUES		C
+					LEFT OUTER JOIN		CMD_DICTIONARY			D	ON	C.DICTIONARYID = D.DICTIONARYID
+					LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+					WHERE	1=1
+					AND 	C.LOOKUP_TYPE = 'DefectMapHoleDefectCode'
+					AND		C.ENABLED_FLAG = 'Y'
+					AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					AND 	EDC.DEFECTCODECLASSID = 'HOLE'
+					
+				)		HOLE		ON 		MAP.EQUIPMENTID = HOLE.EQUIPMENTID
+									AND 	MAP.VRSDEFECTCODE = HOLE.DEFECTCODE
+									
+				-----------------------------------------------------
+			LEFT OUTER JOIN 
+			(												
+				-- [변환 후]
+				SELECT	DISTINCT AOC.GROUPCODE
+					,	AOC.GROUPNAME
+					,	AOC.COLOR
+					,	AOC.SUBCODE
+					,	AOC.SUBNAME
+					,	EDC.DEFECTCODE
+                    ,  'VRS'    AS EQUIPMENTTYPE		-- 무조건 연결됨.
+				FROM	
+				(
+					-- 색상 정보 없음 공통코드 DESCRIPTION 에 등록해야됨
+                    SELECT	GRP.CODEID									AS GROUPCODE
+						,	GRP.GROUPNAME
+						,	GRP.DESCRIPTION 							AS COLOR
+						,	SUB.CODEID									AS SUBCODE
+						,	SUB.SUBNAME
+					FROM	
+					(
+						SELECT 	C.LOOKUP_CODE                           AS CODEID
+							,	C.DESCRIPTION
+							,	D.DICTIONARYNAME						AS GROUPNAME
+						FROM 	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN		CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+				  		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					GRP
+					LEFT OUTER JOIN		
+					(
+						SELECT	C.LOOKUP_CODE                           AS CODEID
+							,	D.DICTIONARYNAME						AS SUBNAME
+							,	C.PARENTCODEID
+						FROM	CMD_LOOKUP_VALUES									C
+						LEFT OUTER JOIN 	CMD_DICTIONARY	D	ON 	C.DICTIONARYID = D.DICTIONARYID
+				   		WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+						AND		C.ENABLED_FLAG = 'Y'
+						AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					) 					SUB		ON GRP.CODEID = SUB.PARENTCODEID
+					
+					WHERE 1 = 1
+                      AND GRP.CODEID = '009'			-- 기타
+                      AND SUB.CODEID = '9019'			-- 기타
+					
+				) AOC
+				JOIN	BAS_EQUIPMENTDEFECTCODE		EDC		ON	AOC.GROUPCODE = EDC.DEFECTCODECLASSID
+					       	 								AND	AOC.SUBCODE = EDC.DEFECTITEMCODE
+					       	 								
+				AND 	EDC.DEFECTCODECLASSID NOT IN ('BBT','HOLE')         --(21.05.15 조건 추가)[VRS장비만]		-- AOI랑 VRS와 같이 처리 	       	 								
+				
+			) 		AOI_NONE		ON		MAP.EQUIPMENTTYPE = AOI_NONE.EQUIPMENTTYPE
+			-----------------------------------------------------					
+									
+				WHERE 1=1
+				
+				ORDER BY	MAP.LAYERID
+						,	MAP.PANELID 
+				
+			
+			)
+			
+			SELECT 
+					DISTINCT
+					EQUIPMENTTYPE
+				  , EQUIPMENTID
+				  , LOTID
+				  , PRODUCTDEFID
+				  , PRODUCTDEFVERSION
+				  , LAYERID
+				  , PANELID
+                 
+		    FROM NOINPUT_PRE_ITEM
+		    
+		    where 1 = 1
+		   
+				<if test="P_GROUPCODE != null and P_GROUPCODE !='' and !(P_GROUPCODE eq '*'.toString()) ">
+					AND		GROUPCODE IN (
+									SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+								     FROM (SELECT #{P_GROUPCODE} AS ORG_DATA FROM DUAL)
+									CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+									)
+				</if>
+				<if test="P_SUBCODE != null and P_SUBCODE !='' and !(P_SUBCODE eq '*'.toString()) ">
+					AND		SUBCODE IN (
+									SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+								     FROM (SELECT #{P_SUBCODE} AS ORG_DATA FROM DUAL)
+									CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+									)
+				</if>
+				<if test="P_LAYER != null and P_LAYER !='' and !(P_LAYER eq '*'.toString()) ">
+					AND		LAYERID = #{P_LAYER}
+				</if>
+            
+		 -- ORDER BY layerid, panelid  -- (21.06.11) 판넬 정보로 정렬 기준 변경
+		 ORDER BY  to_number(panelid)	
+			
+	</select>
+	
+	
+	
+    
+	 
+
+</mapper>

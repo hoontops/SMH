@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM08100Dao">
+
+	   <!--  -->
+    <select id="selectLotBoxPackingSendList" parameterType="map" resultType="hashmap">
+    	SELECT
+				LOT.LOTID
+			,	LOT.PRODUCTIONORDERID
+			,	LOT.LINENO
+			,	PDO.CUSTOMERID
+			,	CSM.CUSTOMERNAME
+			,	LOT.AREAID
+			,	COALESCE(DIC3.DICTIONARYNAME, AR.AREANAME)		AS AREANAME
+			,	LOT.PRODUCTDEFID
+			,	LOT.PRODUCTDEFVERSION
+			,	PRD.PRODUCTDEFNAME
+			,	LOT.PROCESSSEGMENTID
+			,	LOT.PROCESSSEGMENTVERSION
+			,	COALESCE(DIC.DICTIONARYNAME,PRS.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+			,	LOT.PCSQTY
+			,	LOT.PANELQTY
+			,	COALESCE((SELECT SUM(DEFECTQTY) FROM PCM_LOT WHERE PARENTLOTID=LOT.LOTID AND PROCESSSEGMENTID = LOT.PROCESSSEGMENTID AND ISDEFECTED='Y' ),0) AS DEFECTQTY
+			,	CEIL(COALESCE((SELECT SUM(DEFECTQTY) FROM PCM_LOT WHERE PARENTLOTID=LOT.LOTID AND PROCESSSEGMENTID = LOT.PROCESSSEGMENTID AND ISDEFECTED='Y' ) / PRD.PCSPNL,0)) AS DEFECTPNLQTY	
+			,	PRD.PCSPNL
+			,	PRP.PATHTYPE
+			,	LOT.PROCESSSTATE
+			,	LOT.LOTSTATE
+			,	LOT.RESOURCEID
+			,	RS.DESCRIPTION		AS RESOURCENAME
+			,	LOT.RECEIVETIME
+			,	LOT.USERSEQUENCE
+			,	LOT.LOTTYPE
+			,	DIC2.DICTIONARYNAME	AS LOTTYPENAME
+		FROM PCM_LOT	LOT
+		LEFT OUTER JOIN	BAS_PRODUCTDEFINITION	PRD	ON	LOT.PRODUCTDEFID = PRD.PRODUCTDEFID
+													AND	LOT.PRODUCTDEFVERSION = PRD.PRODUCTDEFVERSION
+		LEFT OUTER JOIN BAS_PROCESSPATH			PRP	ON	LOT.PROCESSDEFID = PRP.PROCESSDEFID
+													AND	LOT.PROCESSDEFVERSION = PRP.PROCESSDEFVERSION
+													AND LOT.PROCESSSEGMENTID = PRP.PROCESSSEGMENTID
+													AND PRP.VALIDSTATE='Valid'
+		LEFT OUTER JOIN BAS_RESOURCE			RS	ON	LOT.RESOURCEID = RS.RESOURCEID
+		LEFT OUTER JOIN BAS_PROCESSSEGMENT		PRS	ON	LOT.PROCESSSEGMENTID = PRS.PROCESSSEGMENTID
+													AND	LOT.PROCESSSEGMENTVERSION = PRS.PROCESSSEGMENTVERSION
+		LEFT OUTER JOIN CMD_DICTIONARY			DIC	ON	PRS.PROCESSSEGMENTNAME = DIC.DICTIONARYID
+													AND DIC.LANGUAGETYPE='ko-KR'
+		LEFT OUTER JOIN MFM_PRODUCTIONORDER		PDO	ON	LOT.PRODUCTIONORDERID = PDO.PRODUCTIONORDERID
+													AND	LOT.LINENO = PDO.LINENO
+		LEFT OUTER JOIN BAS_CUSTOMER			CSM	ON	PDO.CUSTOMERID = CSM.CUSTOMERID
+		LEFT OUTER JOIN CMD_LOOKUP_VALUES		COD	ON	LOT.LOTTYPE = COD.LOOKUP_CODE
+													AND	COD.LOOKUP_TYPE = 'ProductionType'
+		LEFT OUTER JOIN CMD_DICTIONARY			DIC2	ON	COD.DICTIONARYID = DIC2.DICTIONARYID
+														AND	DIC2.LANGUAGETYPE='ko-KR'
+		LEFT OUTER JOIN BAS_AREA				AR	ON	LOT.AREAID = AR.AREAID
+		LEFT OUTER JOIN CMD_DICTIONARY			DIC3	ON	AR.AREANAME = DIC3.DICTIONARYID
+														AND	DIC3.LANGUAGETYPE = 'ko-KR'
+		WHERE 1=1
+			AND		PRP.PATHTYPE IN	('End' , 'StartEnd')
+			AND 	LOT.AREAID ='162'
+			AND		LOT.LOTSTATE IN  ('InProduction', 'InTransit')
+			AND 	COALESCE(LOT.ISHOLD, 'N') = 'N'
+			AND 	COALESCE(LOT.ISLOCKING, 'N') = 'N'
+			AND		LOT.PROCESSSTATE IN ('WaitForSend','Run','Wait')									
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+        	AND		LOT.PRODUCTDEFID LIKE '%' || UPPER(#{PRODUCTDEFID}) ||'%'
+        	AND		LOT.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+        </if>
+    </select>
+    
+    
+     <select id="selectPackingSendList" parameterType="map" resultType="hashmap">
+    	SELECT
+    			TO_CHAR(BP.CREATEDTIME, 'YYYY-MM-DD HH24:mm:ss')		AS SENDDATE
+    		,	BP.DOCUMENTNO
+    		,	LOT.PRODUCTDEFID
+    		,	LOT.PRODUCTDEFVERSION
+    		,	PD.PRODUCTDEFNAME
+    		,	COALESCE(SUM(BP.QTY),0)	AS	QTY
+    		,	COALESCE(SUM(BP.DEFECTQTY),0)	AS	DEFECTQTY
+    	FROM	PCM_BOXPACKING	BP
+    	LEFT OUTER JOIN	PCM_LOT	LOT	ON	BP.LOTID = LOT.LOTID
+    	LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD	ON	LOT.PRODUCTDEFID = PD.PRODUCTDEFID
+    												AND	LOT.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+    	WHERE 1=1
+    		AND	TO_CHAR(BP.CREATEDTIME, 'YYYYMMDD') = #{SENDDATE}										
+		GROUP BY
+				BP.CREATEDTIME
+			,	BP.DOCUMENTNO
+			,	LOT.PRODUCTDEFID
+			,	LOT.PRODUCTDEFVERSION
+			,	PD.PRODUCTDEFNAME
+		ORDER BY BP.CREATEDTIME	DESC
+    </select>
+    
+     <select id="selectSendLotDetail" parameterType="map" resultType="hashmap">
+    	SELECT
+    			BP.DOCUMENTNO
+    		,	BP.LOTID
+    		,	LT.LOTSTATE
+    		,	COALESCE(BP.QTY,0)	AS PCSQTY
+    		,	CEIL(COALESCE(BP.QTY,0) / PD.PCSPNL)	AS PNLQTY
+    		,	COALESCE(BP.DEFECTQTY, 0)	AS DEFECTPCSQTY
+    		,	CEIL(COALESCE(BP.DEFECTQTY,0) / PD.PCSPNL )	AS DEFECTPNLQTY
+    		,	PD.PCSPNL
+    	FROM	PCM_BOXPACKING	BP
+    	LEFT OUTER JOIN	PCM_LOT	LT	ON	BP.LOTID = LT.LOTID
+    	LEFT OUTER JOIN	BAS_PRODUCTDEFINITION	PD	ON	LT.PRODUCTDEFID = PD.PRODUCTDEFID
+    												AND	LT.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+    	WHERE	1=1
+    		AND	BP.DOCUMENTNO = #{DOCUMENTNO}
+    	ORDER BY BP.LOTID
+    </select>
+       <!--  -->
+    <select id="selectBoxPackingDataList" parameterType="map" resultType="hashmap">
+    	SELECT						/*selectBoxPackingDataList*/
+			*
+		FROM PCM_BOXPACKING	
+		WHERE 1=1
+			AND	BOXNO = #{BOXNO}
+			AND	LOTID = #{LOTID}
+    </select>
+    
+           <!--  -->
+    <select id="selectDocumentNo" parameterType="map" resultType="hashmap">
+    	SELECT						/*selectDocumentNo*/
+			CASE WHEN
+					MAX(DOCUMENTNO) IS NULL
+				THEN	#{COND}||'-0001'
+				ELSE
+					#{COND} || '-' || LPAD(TO_CHAR(TO_NUMBER(SUBSTR(MAX(DOCUMENTNO),12,4))+1),4,'0')
+				END DOCUNO
+		FROM PCM_BOXPACKING	
+		WHERE 1=1
+			AND	SUBSTR(DOCUMENTNO,1,10) = #{COND}
+    </select>
+    
+    
+               <!--  -->
+    <select id="selectRoutingInfo" parameterType="map" resultType="hashmap">
+    	SELECT		/*selectRoutingInfo */
+    			PROCESSDEFID
+    		,	PROCESSDEFVERSION
+    		,	PATHSEQUENCE
+    		,	PATHTYPE
+    	FROM	BAS_PROCESSPATH
+    	WHERE	1=1
+    		AND	PROCESSDEFID = #{PROCESSDEFID}
+    		AND	PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    		AND	PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    		AND	USERSEQUENCE = #{USERSEQUENCE}
+    		AND VALIDSTATE='Valid'
+    </select>
+    
+    <select id="sendPCM_MAT_TRAN">
+    	CALL INF_PCM_PKG.SEND_PCM_MAT_TRAN()
+    </select>
+                   <!--  -->
+    <select id="selectNextRoutingInfo" parameterType="map" resultType="hashmap">
+    	SELECT		/*selectNextRoutingInfo */
+    			PROCESSPATHID
+    		,	PROCESSDEFID
+    		,	PROCESSDEFVERSION
+    		,	PATHSEQUENCE
+    		,	PLANTID
+    	FROM	BAS_PROCESSPATH
+    	WHERE	1=1
+    		AND	PROCESSDEFID = #{PROCESSDEFID}
+    		AND	PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    		AND	PATHSEQUENCE = #{PATHSEQUENCE}
+    		AND VALIDSTATE='Valid'
+    </select>
+    
+    <!-- updatePcmLotSendBoxPacking  -->
+    <update id="updatePcmLotSendBoxPacking" parameterType="map">
+    	UPDATE PCM_LOT	SET		/* updatePcmLotSendBoxPacking */
+    			PROCESSSTATE = #{PROCESSSTATE} 
+    		,	SENDTIME = #{SENDTIME}
+    		,	SENDUSER = #{SENDUSER}
+    		,	LASTTXNID = #{TXNID}
+    		,	LASTTXNHISTKEY = #{TXNHISTKEY}
+    		,	MODIFIER = #{MODIFIER}
+    		,	MODIFIEDTIME = SYSDATE
+    		,	LASTTXNUSER = #{TXNUSER}
+    		,	LASTTXNTIME = SYSDATE
+    	WHERE 1=1
+    		AND LOTID = #{LOTID}
+    </update>
+    
+	<!-- pcm_boxpacking Insert-->
+      <insert id="insertBoxPackingData" parameterType="map" >
+		INSERT INTO PCM_BOXPACKING (   		/* insertBoxPackingData */
+									BOXNO
+								,	LOTID
+								,	PROCESSDEFID
+								,	PROCESSDEFVERSION
+								,	PROCESSSEGMENTID
+								,	PROCESSSEGMENTVERSION
+								,	USERSEQUENCE
+								,	AREAID
+								,	DOCUMENTNO
+								,	QTY
+								,	DEFECTQTY
+								,	CREATOR
+								,	CREATEDTIME
+								,	LASTTXNHISTKEY
+								,	LASTTXNID
+								,	LASTTXNUSER
+								,	LASTTXNTIME
+		                           ) 
+		                         VALUES ( 
+		                         	#{BOXNO}
+								,	#{LOTID}
+								,	#{PROCESSDEFID}
+								,	#{PROCESSDEFVERSION}
+								,	#{PROCESSSEGMENTID}
+								,	#{PROCESSSEGMENTVERSION}
+								,	#{USERSEQUENCE}
+								,	#{AREAID}
+								,	#{BOXNO}
+								,	#{QTY}
+								,	#{DEFECTQTY}
+								,	#{CREATOR}
+								,	SYSDATE
+								,	#{TXNHISTKEY}
+								,	#{TXNID}
+								,	#{TXNUSER}
+								,	SYSDATE
+		                                    )                              
+     </insert>
+    
+	
+	
+	
+</mapper>

@@ -1,0 +1,2142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM01800Dao">
+
+    <select id="getEquipmentByArea2" parameterType="map" resultType="hashmap">
+			-- 
+			-- Id : getEquipmentByArea2
+			-- Version : 10031
+				SELECT DECODE(A.CNT,1,'1','0') AS CHK
+                      ,A.EQUIPMENTCLASSID
+                      ,A.EQUIPMENTID
+                      ,A.EQUIPMENTNAME
+                      ,'' TRACKINTIME
+                      ,'' TRACKOUTTIME
+                        ,	0					        AS PCSQTY
+                        ,	0						    AS PNLQTY
+                        ,	''				            AS RECIPEID
+                        ,	''				            AS RECIPEVERSION
+                        ,	''				            AS RECIPETYPE
+                        ,A.LOTCNT
+                        , (CASE WHEN A.LOTCNT > 0
+                                 THEN  'Run'
+                                 ELSE  'Idle'
+                           END)   AS STATE
+                FROM (
+                SELECT 
+                    EQ.EQUIPMENTCLASSID
+				,	EQ.EQUIPMENTID
+                , NVL(EN.DICTIONARYNAME, EQ.EQUIPMENTNAME)	AS EQUIPMENTNAME
+                ,(SELECT COUNT(LE.EQUIPMENTID) FROM PCM_LOTEQUIPMENT LE 
+                   WHERE 1=1
+                    AND LE.EQUIPMENTID = EQ.EQUIPMENTID
+													AND	LE.TRACKINTIME IS NOT NULL
+													AND	LE.TRACKOUTTIME IS NULL
+                          							AND  LE.WORKCOUNT = L.WORKCOUNT
+                   )                                        AS LOTCNT
+                ,   COUNT(L.LOTID) OVER(PARTITION BY L.LOTID) CNT
+                FROM	BAS_EQUIPMENT 				EQ
+                      , BAS_RESOURCE			RC	
+                       ,PCM_LOT          L
+                      ,CMD_DICTIONARY	EN	
+				WHERE	1 = 1 
+                    AND RC.ENTERPRISEID = EQ.ENTERPRISEID
+                    AND RC.PLANTID = EQ.PLANTID
+                    AND RC.AREAID = EQ.AREAID
+                    AND RC.EQUIPMENTCLASSID = EQ.EQUIPMENTCLASSID
+                    AND EQ.DETAILEQUIPMENTTYPE = 'Main'
+					AND L.PLANTID = EQ.PLANTID 
+					AND EQ.VALIDSTATE = 'Valid'
+                    AND EQ.AREAID = L.AREAID
+                    AND L.RESOURCEID = RC.RESOURCEID
+                    AND	EQ.EQUIPMENTNAME = EN.DICTIONARYID(+)
+					AND	#{LANGUAGETYPE} = EN.LANGUAGETYPE(+) 
+					AND		L.ENTERPRISEID = #{ENTERPRISEID}
+					AND		L.PLANTID = #{PLANTID}
+					AND		L.LOTID = #{LOTID}
+                    ) A
+			ORDER BY A.EQUIPMENTID
+    </select>
+
+    <!-- Process 4-Step Detail User Control에서 설비 탭의 데이터를 조회 한다. (Resource 변경).  -->
+    <select id="getEquipmentByArea1" parameterType="map" resultType="hashmap">
+			-- 
+			-- Id : GetEquipmentByArea1
+			-- Version : 10031
+			WITH USINGEQUIPMENT AS
+			(
+				SELECT
+						E.EQUIPMENTID
+					,	COUNT(LE.LOTID)			AS LOTCNT
+				FROM	PCM_LOT					L
+				INNER JOIN BAS_RESOURCE			RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+													AND	L.PLANTID = RC.PLANTID
+													AND	L.RESOURCEID = RC.RESOURCEID
+				INNER JOIN BAS_EQUIPMENT			E	ON	L.ENTERPRISEID = E.ENTERPRISEID
+													AND	L.PLANTID = E.PLANTID
+													AND	RC.AREAID = E.AREAID
+													AND	RC.EQUIPMENTCLASSID = E.EQUIPMENTCLASSID
+													AND	E.DETAILEQUIPMENTTYPE = #{DETAILEQUIPMENTTYPE}
+				LEFT OUTER JOIN	PCM_LOTEQUIPMENT	LE	ON	E.EQUIPMENTID = LE.EQUIPMENTID
+													AND	LE.TRACKINTIME IS NOT NULL
+													AND	LE.TRACKOUTTIME IS NULL
+                          							AND  LE.WORKCOUNT = L.WORKCOUNT
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND     E.VALIDSTATE = 'Valid'
+				GROUP BY E.EQUIPMENTID
+			)
+			SELECT
+			        (CASE WHEN LE.TRACKOUTTIME IS NULL AND LE.TRACKINTIME IS NOT NULL THEN 1 ELSE 0 END) AS CHK
+				,	E.EQUIPMENTCLASSID
+				,	E.EQUIPMENTID
+				,	NVL(EN.DICTIONARYNAME, E.EQUIPMENTNAME)	AS EQUIPMENTNAME
+				,	TO_CHAR(LE.TRACKINTIME, 'YYYY-MM-DD HH24:MI:SS')	AS TRACKINTIME
+				,	TO_CHAR(LE.TRACKOUTTIME, 'YYYY-MM-DD HH24:MI:SS')	AS TRACKOUTTIME
+				,	0					        AS PCSQTY
+				,	0						    AS PNLQTY
+				,	''				            AS RECIPEID
+				,	''				            AS RECIPEVERSION
+				,	''				            AS RECIPETYPE
+				,   E.STATE
+			FROM	PCM_LOT					L
+			INNER JOIN BAS_RESOURCE			RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+												AND	L.PLANTID = RC.PLANTID
+												AND	L.RESOURCEID = RC.RESOURCEID
+			INNER JOIN BAS_EQUIPMENT			E	ON	L.ENTERPRISEID = E.ENTERPRISEID
+												AND	L.PLANTID = E.PLANTID
+												AND	RC.AREAID = E.AREAID
+												AND	RC.EQUIPMENTCLASSID = E.EQUIPMENTCLASSID
+												AND	E.DETAILEQUIPMENTTYPE = #{DETAILEQUIPMENTTYPE}
+												AND	E.STATE NOT IN ('Down')
+			INNER JOIN BAS_EQUIPMENTEXT	EE	ON	E.EQUIPMENTID = EE.EQUIPMENTID
+												AND	EE.MANAGEMENTSTATE IN ('Demo', 'Lease', 'Normal')
+												AND	EE.EQUIPMENTID IS NOT NULL
+			LEFT JOIN PCM_LOTEQUIPMENT	LE	ON	L.LOTID = LE.LOTID
+												AND	L.PROCESSSEGMENTID = LE.PROCESSSEGMENTID
+												AND	L.PROCESSSEGMENTVERSION = LE.PROCESSSEGMENTVERSION
+												AND E.EQUIPMENTID = LE.EQUIPMENTID
+												AND  LE.WORKCOUNT = L.WORKCOUNT
+			LEFT OUTER JOIN CMD_DICTIONARY	EN	ON	E.EQUIPMENTNAME = EN.DICTIONARYID
+												AND	EN.LANGUAGETYPE = #{LANGUAGETYPE}
+			WHERE	1 = 1
+			AND		L.ENTERPRISEID = #{ENTERPRISEID}
+			AND		L.PLANTID = #{PLANTID}
+			AND		L.LOTID = #{LOTID}
+			AND     E.VALIDSTATE = 'Valid'
+			ORDER BY E.EQUIPMENTID					
+    </select>
+
+    <!-- Process 4-Step Detail User Control에서 설비 탭의 데이터를 조회 한다. (Resource 변경).  -->
+    <select id="getEquipmentByArea" parameterType="map" resultType="hashmap">
+			-- 
+			-- Id : GetEquipmentByArea
+			-- Version : 10031
+			WITH USINGEQUIPMENT AS
+			(
+				SELECT
+						E.EQUIPMENTID
+					,	COUNT(LE.LOTID)			AS LOTCNT
+				FROM	PCM_LOT					L
+				INNER JOIN BAS_RESOURCE			RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+													AND	L.PLANTID = RC.PLANTID
+													AND	L.RESOURCEID = RC.RESOURCEID
+				INNER JOIN BAS_EQUIPMENT			E	ON	L.ENTERPRISEID = E.ENTERPRISEID
+													AND	L.PLANTID = E.PLANTID
+													AND	RC.AREAID = E.AREAID
+													AND	RC.EQUIPMENTCLASSID = E.EQUIPMENTCLASSID
+													AND	E.DETAILEQUIPMENTTYPE = #{DETAILEQUIPMENTTYPE}
+				LEFT OUTER JOIN	PCM_LOTEQUIPMENT	LE	ON	E.EQUIPMENTID = LE.EQUIPMENTID
+													AND	LE.TRACKINTIME IS NOT NULL
+													AND	LE.TRACKOUTTIME IS NULL
+                          							AND  LE.WORKCOUNT = L.WORKCOUNT
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND     E.VALIDSTATE = 'Valid'
+				GROUP BY E.EQUIPMENTID
+			)
+			SELECT
+			        decode((select count(1) from USINGEQUIPMENT),1,'1','0') AS CHK
+				,	E.EQUIPMENTCLASSID
+				,	E.EQUIPMENTID
+				,	NVL(EN.DICTIONARYNAME, E.EQUIPMENTNAME)	AS EQUIPMENTNAME
+				,	TO_CHAR(LE.TRACKINTIME, 'YYYY-MM-DD HH24:MI:SS')	AS TRACKINTIME
+				,	TO_CHAR(LE.TRACKOUTTIME, 'YYYY-MM-DD HH24:MI:SS')	AS TRACKOUTTIME
+				,	0					        AS PCSQTY
+				,	0						    AS PNLQTY
+				,	''				            AS RECIPEID
+				,	''				            AS RECIPEVERSION
+				,	''				            AS RECIPETYPE
+				,   E.STATE
+			FROM	PCM_LOT					L
+			INNER JOIN BAS_RESOURCE			RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+												AND	L.PLANTID = RC.PLANTID
+												AND	L.RESOURCEID = RC.RESOURCEID
+			INNER JOIN BAS_EQUIPMENT			E	ON	L.ENTERPRISEID = E.ENTERPRISEID
+												AND	L.PLANTID = E.PLANTID
+												AND	RC.AREAID = E.AREAID
+												AND	RC.EQUIPMENTCLASSID = E.EQUIPMENTCLASSID
+												AND	E.DETAILEQUIPMENTTYPE = #{DETAILEQUIPMENTTYPE}
+												AND	E.STATE NOT IN ('Down')
+			INNER JOIN BAS_EQUIPMENTEXT	EE	ON	E.EQUIPMENTID = EE.EQUIPMENTID
+												AND	EE.MANAGEMENTSTATE IN ('Demo', 'Lease', 'Normal')
+												AND	EE.EQUIPMENTID IS NOT NULL
+			LEFT JOIN PCM_LOTEQUIPMENT	LE	ON	L.LOTID = LE.LOTID
+												AND	L.PROCESSSEGMENTID = LE.PROCESSSEGMENTID
+												AND	L.PROCESSSEGMENTVERSION = LE.PROCESSSEGMENTVERSION
+												AND E.EQUIPMENTID = LE.EQUIPMENTID
+												AND  LE.WORKCOUNT = L.WORKCOUNT
+			LEFT OUTER JOIN CMD_DICTIONARY	EN	ON	E.EQUIPMENTNAME = EN.DICTIONARYID
+												AND	EN.LANGUAGETYPE = #{LANGUAGETYPE}
+			WHERE	1 = 1
+			AND		L.ENTERPRISEID = #{ENTERPRISEID}
+			AND		L.PLANTID = #{PLANTID}
+			AND		L.LOTID = #{LOTID}
+			AND     E.VALIDSTATE = 'Valid'
+			ORDER BY E.EQUIPMENTID					
+    </select>
+        
+
+    <!-- 작업 시작, 작업 완료 시 설비 탭의 Recipe 리스트 조회  -->
+    <select id="getEquipmentRecipeList" parameterType="map" resultType="hashmap">
+				-- 
+				-- Id : GetEquipmentRecipeList
+				-- Version : 10001
+				WITH TEMPRECIPEINFO AS
+				(
+					SELECT
+							RM.EQUIPMENTID
+						,	RM.RECIPEID
+						,	RM.RECIPEVERSION
+						,	RM.DRAFTID
+						,	RM.PRODUCTTYPE
+					FROM	RMS_M_PRODUCTSEGMENTRECIPEMAP	RM
+					WHERE	1 = 1
+					AND		RM.PRODUCTID = #{PRODUCTID}
+					AND		RM.PRODUCTVERSION = #{PRODUCTVERSION}
+					AND		RM.SEGMENTID = #{SEGMENTID}
+					AND		RM.RESOURCEID = #{RESOURCEID}
+					AND		RM.EQUIPMENTID = #{EQUIPMENTID}
+					AND		RM.VALIDSTATE = 'Valid'
+					AND		INSTR( RM.PRODUCTTYPE, 'TEMP') <![CDATA[>]]> 0
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	ufn_selectStringToSplit(RM.LOTID, ',')	LOT
+								WHERE	LOT.VALUE = #{LOTID}
+							)
+				),	RECIPEINFO AS
+				(
+					SELECT
+							RM.EQUIPMENTID
+						,	RM.RECIPEID
+						,	RM.RECIPEVERSION
+						,	RM.DRAFTID
+						,	RM.PRODUCTTYPE
+					FROM	TEMPRECIPEINFO					RM
+					UNION ALL
+					SELECT
+							RM.EQUIPMENTID
+						,	RM.RECIPEID
+						,	RM.RECIPEVERSION
+						,	RM.DRAFTID
+						,	RM.PRODUCTTYPE
+					FROM	RMS_M_PRODUCTSEGMENTRECIPEMAP	RM
+					WHERE	1 = 1
+					AND		RM.PRODUCTID = #{PRODUCTID}
+					AND		RM.PRODUCTVERSION = #{PRODUCTVERSION}
+					AND		RM.SEGMENTID = #{SEGMENTID}
+					AND		RM.RESOURCEID = #{RESOURCEID}
+					AND		RM.EQUIPMENTID = #{EQUIPMENTID}
+					AND		RM.VALIDSTATE = 'Valid'
+					AND		INSTR( RM.PRODUCTTYPE, 'REGULAR') <![CDATA[>]]> 0 
+					AND		NOT EXISTS
+							(
+								SELECT	1
+								FROM	TEMPRECIPEINFO	RM
+							)
+				)
+				SELECT	
+						RM.EQUIPMENTID
+					,	RM.RECIPEID
+					,	RM.RECIPEVERSION
+					,	RM.RECIPENAME
+					,	RM.PRODUCTTYPE				AS RECIPETYPE
+				FROM
+				(
+					SELECT
+							RM.EQUIPMENTID
+						,	RM.RECIPEID
+						,	RM.RECIPEVERSION            	AS RECIPEVERSION
+						,	CASE WHEN NVL(PR.${RECIPENAME}, '') = '' THEN RM.RECIPEID
+								 ELSE PR.${RECIPENAME}
+							END						AS RECIPENAME
+						,	CASE WHEN L.LOTTYPE = 'Production' AND AP.APPROVALSTATE IS NULL THEN 'N'
+								 ELSE 'Y'
+							END						AS ISAPPROVAL
+						,	RM.PRODUCTTYPE
+					FROM	RECIPEINFO				RM
+					INNER JOIN RMS_M_PROCESSRECIPE	PR	ON	RM.EQUIPMENTID = PR.EQUIPMENTID
+														AND	RM.RECIPEID = PR.RECIPEID
+														AND	RM.RECIPEVERSION = PR.RECIPEVERSION
+					INNER JOIN PCM_LOT				L	ON	L.LOTID = #{LOTID}
+					LEFT OUTER JOIN COM_M_APPROVAL	AP	ON	RM.DRAFTID = AP.DRAFTID
+														AND	AP.APPROVALSTATE = 'Approved'
+				)	RM
+				WHERE	RM.ISAPPROVAL = 'Y'
+				ORDER BY RM.EQUIPMENTID, RM.RECIPEID	
+    </select>
+        
+    <!-- BOR에 등록된 치공구 품목 정보를 가져온다.,  -->
+    <select id="getDurableDEFByBOR" parameterType="map" resultType="hashmap">
+	    <choose>
+          	<when test="VERSION != null and VERSION =='10001' "> 			
+          	--MHYi 210501 Tool --> Durable 로 변경
+          	
+			-- Id : GetDurableDEFByBOR
+			-- Version : 10001			
+			SELECT	DISTINCT
+					DD.DURABLEDEFID
+				,	DD.DURABLEDEFVERSION
+				,	NVL(DDN.DICTIONARYNAME, DD.DURABLEDEFNAME)		AS DURABLEDEFNAME
+				,	DD.DURABLECLASSID
+				,	NVL(DCN.DICTIONARYNAME, DC.DURABLECLASSNAME)	AS DURABLECLASSNAME
+				,	DD.USEDLIMIT
+				,	DD.CLEANLIMIT
+               /* , (SELECT SUM(NVL(USEDCOUNT,0))   FROM TOM_DURABLELOT DBL WHERE DBL.DURABLEDEFID = DD.DURABLEDEFID AND DBL.DURABLEDEFVERSION = DD.DURABLEDEFVERSION	GROUP BY NVL(USEDCOUNT,0) ) AS USINGQTY */
+			FROM	PCM_LOT							L
+			INNER JOIN BAS_BILLOFRESOURCE			BOR	ON	L.ENTERPRISEID = BOR.ENTERPRISEID
+														AND	L.PLANTID = BOR.PLANTID
+														AND	L.PRODUCTDEFID = BOR.PRODUCTDEFID
+														AND	L.PRODUCTDEFVERSION = BOR.PRODUCTDEFVERSION
+														AND	L.PROCESSDEFID = BOR.PROCESSDEFID
+														AND	L.PROCESSDEFVERSION = BOR.PROCESSDEFVERSION
+														AND	L.PROCESSSEGMENTID = BOR.PROCESSSEGMENTID
+														AND	L.PROCESSSEGMENTVERSION = BOR.PROCESSSEGMENTVERSION
+														--MHYi 210501 Tool --> Durable 로 변경
+														--AND	BOR.RESOURCETYPE = 'Tool'
+														AND	BOR.RESOURCETYPE = 'Durable'
+														
+			INNER JOIN TOM_DURABLEDEFINITION	        DD	ON	1=1
+														AND	BOR.RESOURCEID = DD.DURABLEDEFID
+														AND	BOR.RESOURCEVERSION = DD.DURABLEDEFVERSION
+			LEFT  JOIN CMD_DICTIONARY                DDN ON  DD.DURABLEDEFNAME = DDN.DICTIONARYID
+								    AND DDN.LANGUAGETYPE = #{LANGUAGETYPE}
+			INNER JOIN TOM_DURABLECLASS              DC  ON  DD.DURABLECLASSID = DC.DURABLECLASSID
+			LEFT  JOIN CMD_DICTIONARY                DCN ON  DC.DURABLECLASSNAME = DCN.DICTIONARYID
+								    AND DCN.LANGUAGETYPE = #{LANGUAGETYPE}
+			WHERE	1 = 1
+			AND		L.ENTERPRISEID = #{ENTERPRISEID}
+			AND		L.PLANTID = #{PLANTID}
+			AND		L.LOTID = #{LOTID}
+          	</when>
+          	<when test="VERSION != null and VERSION =='10011' "> 
+			-- Id : GetDurableDEFByBOR
+			-- Version : 10011					
+			SELECT	DISTINCT
+					DD.DURABLEDEFID
+				,	DD.DURABLEDEFVERSION
+				,	NVL(DDN.DICTIONARYNAME, DD.DURABLEDEFNAME)		AS DURABLEDEFNAME
+				,	DD.DURABLECLASSID
+				,	NVL(DCN.DICTIONARYNAME, DC.DURABLECLASSNAME)	AS DURABLECLASSNAME
+				,	DD.USEDLIMIT
+				,	DD.CLEANLIMIT
+			FROM	PCM_LOT							L
+			INNER JOIN BAS_BILLOFRESOURCE			BOR	ON	L.ENTERPRISEID = BOR.ENTERPRISEID
+														AND	L.PLANTID = BOR.PLANTID
+														AND	L.PRODUCTDEFID = BOR.PRODUCTDEFID
+														AND	L.PRODUCTDEFVERSION = BOR.PRODUCTDEFVERSION
+														AND	L.SUBPROCESSDEFID = BOR.PROCESSDEFID
+														AND	L.SUBPROCESSDEFVERSION = BOR.PROCESSDEFVERSION
+														AND	L.PROCESSSEGMENTID = BOR.PROCESSSEGMENTID
+														AND	L.PROCESSSEGMENTVERSION = BOR.PROCESSSEGMENTVERSION
+														--MHYi 210501 Tool --> Durable 로 변경
+														--AND	BOR.RESOURCETYPE = 'Tool'
+														AND	BOR.RESOURCETYPE = 'Durable'
+			INNER JOIN TOM_DURABLEDEFINITION	        DD	ON	1=1
+														AND	BOR.RESOURCEID = DD.DURABLEDEFID
+														AND	BOR.RESOURCEVERSION = DD.DURABLEDEFVERSION
+			LEFT  JOIN CMD_DICTIONARY                DDN ON  DD.DURABLEDEFNAME = DDN.DICTIONARYID
+								    AND DDN.LANGUAGETYPE = #{LANGUAGETYPE}
+			INNER JOIN TOM_DURABLECLASS              DC  ON  DD.DURABLECLASSID = DC.DURABLECLASSID
+			LEFT  JOIN CMD_DICTIONARY                DCN ON  DC.DURABLECLASSNAME = DCN.DICTIONARYID
+								    AND DCN.LANGUAGETYPE = #{LANGUAGETYPE}
+			WHERE	1 = 1
+			AND		L.ENTERPRISEID = #{ENTERPRISEID}
+			AND		L.PLANTID = #{PLANTID}
+			AND		L.LOTID = #{LOTID}
+          	</when>	          	
+          	<otherwise>
+				
+          	</otherwise>
+	    </choose>		
+    </select>
+
+    <!-- 공정 관리 > 4-Step 설 명 : 공정 4-Step 상세 정보 탭의 작업 시작 시 사용 가능한 
+		치공구 리스트를 조회 한다.  -->
+    <select id="selectDurableListByProcessWorkStart" parameterType="map" resultType="hashmap">
+	    <choose>
+          	<when test="VERSION != null and VERSION =='10001' "> 
+			--
+			-- Id : SelectDurableListByProcessWorkStart
+			-- Version : 10001
+			SELECT
+			        '0'    AS CHK			
+				,	DL.DURABLEDEFID
+				,	DL.DURABLEDEFVERSION
+				,	NVL(DDN.DICTIONARYNAME, DD.DURABLEDEFNAME)	AS DURABLEDEFNAME
+				,	DL.DURABLELOTID
+				,	DL.USEDCOUNT
+				,	DL.TOTALUSEDCOUNT
+				,	DD.USEDLIMIT
+				,	DD.CLEANLIMIT
+				/*
+				,	CASE WHEN DD.DURABLECLASSID IN ('ToolType1','ToolType5','ToolType7') THEN CEIL((L.QTY / L.PANELPERQTY) * PD.PCSPNL) / DD.USEDFACTOR
+						 WHEN DD.DURABLECLASSID IN ('ToolTypeA') THEN L.PANELQTY
+						 ELSE 0
+					END	   AS USINGQTY
+				*/	
+				,	DECODE(NVL(DD.SUMMARY,0),0,0,ROUND(L.PCSQTY / DD.SUMMARY,2))    AS USINGQTY
+				,	''								AS EQUIPMENTID
+			FROM	PCM_LOT							L
+			INNER JOIN MFM_PRODUCTIONORDER			PO	ON	L.PLANTID = PO.PLANTID
+														AND	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+														AND	L.LINENO = PO.LINENO
+			INNER JOIN BAS_PRODUCTDEFINITION			PD	ON	L.PRODUCTDEFID = PD.PRODUCTDEFID
+														AND	L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+			INNER JOIN BAS_BILLOFRESOURCE			BOR	ON	L.ENTERPRISEID = BOR.ENTERPRISEID
+														AND	L.PLANTID = BOR.PLANTID
+														AND	L.PRODUCTDEFID = BOR.PRODUCTDEFID
+														AND	L.PRODUCTDEFVERSION = BOR.PRODUCTDEFVERSION
+														AND	L.PROCESSDEFID = BOR.PROCESSDEFID
+														AND	L.PROCESSDEFVERSION = BOR.PROCESSDEFVERSION
+														AND	L.PROCESSSEGMENTID = BOR.PROCESSSEGMENTID
+														AND	L.PROCESSSEGMENTVERSION = BOR.PROCESSSEGMENTVERSION
+														--MHYi 210501 Tool --> Durable 로 변경
+														--AND BOR.RESOURCETYPE = 'Tool'
+														AND BOR.RESOURCETYPE = 'Durable'
+			INNER JOIN TOM_DURABLELOT				DL	ON	L.ENTERPRISEID = DL.ENTERPRISEID
+														AND	L.PLANTID = DL.PLANTID
+														AND	L.AREAID = DL.AREAID
+														AND	BOR.RESOURCEID = DL.DURABLEDEFID
+														AND	BOR.RESOURCEVERSION = DL.DURABLEDEFVERSION
+														AND	NVL(DL.ISHOLD, 'N') = 'N' 
+														AND	EXISTS
+															(
+																SELECT	1
+																FROM	ufn_selectStringToSplit(#{DURABLESTATE}, ',')	T   
+																WHERE	DL.DURABLESTATE = T.VALUE
+															)
+			LEFT OUTER JOIN TOM_DURABLEDEFINITION	DD	ON	L.ENTERPRISEID = DD.ENTERPRISEID
+														AND	BOR.RESOURCEID = DD.DURABLEDEFID
+														AND	DL.DURABLEDEFVERSION = DD.DURABLEDEFVERSION
+			LEFT OUTER JOIN CMD_DICTIONARY			DDN	ON	DD.DURABLEDEFNAME = DDN.DICTIONARYID
+														AND	DDN.LANGUAGETYPE = #{LANGUAGETYPE}
+			WHERE	1 = 1
+			AND		L.ENTERPRISEID = #{ENTERPRISEID}
+			AND		L.PLANTID = #{PLANTID}
+			AND		L.LOTID = #{LOTID}
+          	</when>
+          	<when test="VERSION != null and VERSION =='10011' "> 
+			--
+			-- Id : SelectDurableListByProcessWorkStart
+			-- Version : 10001
+			SELECT
+			        '0'    AS CHK
+			    ,	DL.DURABLEDEFID
+				,	DL.DURABLEDEFVERSION
+				,	NVL(DDN.DICTIONARYNAME, DD.DURABLEDEFNAME)	AS DURABLEDEFNAME
+				,	DL.DURABLELOTID
+				,	DL.USEDCOUNT
+				,	DL.TOTALUSEDCOUNT
+				,	DD.USEDLIMIT
+				,	DD.CLEANLIMIT
+				,	CASE WHEN DD.DURABLECLASSID IN ('ToolType1') THEN CEIL((L.QTY / L.PANELPERQTY) * PD.PCSPNL) / DD.USEDFACTOR
+						 WHEN DD.DURABLECLASSID IN ('ToolType5') THEN L.QTY / DD.USEDFACTOR
+						 WHEN DD.DURABLECLASSID IN ('ToolTypeA') THEN L.PANELQTY
+						 ELSE 0
+					END								AS USINGQTY
+				,	''								AS EQUIPMENTID
+			FROM	PCM_LOT							L
+			INNER JOIN MFM_PRODUCTIONORDER			PO	ON	L.PLANTID = PO.PLANTID
+														AND	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+														AND	L.LINENO = PO.LINENO
+			INNER JOIN BAS_PRODUCTDEFINITION			PD	ON	L.PRODUCTDEFID = PD.PRODUCTDEFID
+														AND	L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+			INNER JOIN BAS_BILLOFRESOURCE			BOR	ON	L.ENTERPRISEID = BOR.ENTERPRISEID
+														AND	L.PLANTID = BOR.PLANTID
+														AND	L.PRODUCTDEFID = BOR.PRODUCTDEFID
+														AND	L.PRODUCTDEFVERSION = BOR.PRODUCTDEFVERSION
+														AND	L.SUBPROCESSDEFID = BOR.PROCESSDEFID
+														AND	L.SUBPROCESSDEFVERSION = BOR.PROCESSDEFVERSION
+														AND	L.PROCESSSEGMENTID = BOR.PROCESSSEGMENTID
+														AND	L.PROCESSSEGMENTVERSION = BOR.PROCESSSEGMENTVERSION
+			INNER JOIN TOM_DURABLELOT				DL	ON	L.ENTERPRISEID = DL.ENTERPRISEID
+														AND	L.PLANTID = DL.PLANTID
+														AND	L.AREAID = DL.AREAID
+														AND	BOR.RESOURCEID = DL.DURABLEDEFID
+														AND	NVL(DL.ISHOLD, 'N') = 'N'
+														AND	EXISTS
+															(
+																SELECT	1
+																FROM	ufn_selectStringToSplit(#{DURABLESTATE}, ',')	T 
+																WHERE	DL.DURABLESTATE = T.VALUE
+															)
+			LEFT OUTER JOIN TOM_DURABLEDEFINITION	DD	ON	L.ENTERPRISEID = DD.ENTERPRISEID
+														AND	L.PLANTID = DD.PLANTID
+														AND	BOR.RESOURCEID = DD.DURABLEDEFID
+														AND	DL.DURABLEDEFVERSION = DD.DURABLEDEFVERSION
+			LEFT OUTER JOIN CMD_DICTIONARY			DDN	ON	DD.DURABLEDEFNAME = DDN.DICTIONARYID
+														AND	DDN.LANGUAGETYPE = #{LANGUAGETYPE}
+			WHERE	1 = 1
+			AND		L.ENTERPRISEID = #{ENTERPRISEID}
+			AND		L.PLANTID = #{PLANTID}
+			AND		L.LOTID = #{LOTID}
+          	</when>	          	
+          	<otherwise>
+				
+          	</otherwise>
+	    </choose>		
+    </select>
+                     
+   <!-- 공정 관리 > 4-Step 설 명 : 공정 4-Step 상세 정보 탭의 작업 완료 시 사용 자재 리스트를 
+		조회 한다  -->
+    <select id="selectConsumableListByProcessWorkComplete" parameterType="map" resultType="hashmap">
+	    <choose>
+          	<when test="VERSION.equals('10001_ASIS') "> 
+				--
+				-- Id : SelectConsumableListByProcessWorkComplete
+				-- Version : 10001 (as-is)
+                      WITH P AS 
+                       (
+                        SELECT
+                                L.LOTID
+                            ,	PD.PLANTID
+                            ,	PD.PRODUCTDEFID
+                            ,	PD.PRODUCTDEFVERSION
+                            ,	PD.PRODUCTDEFID				AS MATERIALDEFID
+                            ,	PD.PRODUCTDEFVERSION		AS MATERIALDEFVERSION
+                            ,	PD.PRODUCTDEFNAME			AS MATERIALDEFNAME
+                            ,	PD.PROCESSDEFID
+                            ,	PD.PROCESSDEFVERSION
+                            ,	1           					AS QTY
+                            ,	PD.UNIT
+                            ,	1               				AS SEQUENCE
+                        FROM	PCM_LOT						L
+                        INNER JOIN MFM_PRODUCTIONORDER		PO	ON	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+                                                                AND	L.LINENO = PO.LINENO
+                        INNER JOIN BAS_PRODUCTDEFINITION		PD	ON	PO.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                                AND	PO.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                                                                AND	PO.PRODUCTDEFID = PD.PROCESSDEFID
+                                                                AND	PO.PRODUCTDEFVERSION = PD.PROCESSDEFVERSION
+                        WHERE	1 = 1
+    					AND		PD.PLANTID = #{PLANTID}
+    					AND		L.LOTID = #{LOTID}
+                        )
+                       , PP AS  
+                       (
+                        SELECT
+                                P.LOTID
+                            ,	BOM.PLANTID
+                            ,	BOM.PRODUCTDEFID
+                            ,	BOM.PRODUCTDEFVERSION
+                            ,	PD.PRODUCTDEFID				AS MATERIALDEFID
+                            ,	PD.PRODUCTDEFVERSION		AS MATERIALDEFVERSION
+                            ,	PD.PRODUCTDEFNAME			AS MATERIALDEFNAME
+                            ,	PD.PROCESSDEFID
+                            ,	PD.PROCESSDEFVERSION
+                            ,	P.QTY * BOM.QTY            AS QTY
+                            ,	PD.UNIT
+                            ,	BOM."sequence"
+                        FROM 
+                        (
+                        SELECT
+                                L.LOTID
+                            ,	PD.PLANTID
+                            ,	PD.PRODUCTDEFID
+                            ,	PD.PRODUCTDEFVERSION
+                            ,	PD.PRODUCTDEFID				AS MATERIALDEFID
+                            ,	PD.PRODUCTDEFVERSION		AS MATERIALDEFVERSION
+                            ,	PD.PRODUCTDEFNAME			AS MATERIALDEFNAME
+                            ,	PD.PROCESSDEFID
+                            ,	PD.PROCESSDEFVERSION
+                            ,	1           					AS QTY
+                            ,	PD.UNIT
+                            ,	1               				AS SEQUENCE
+                        FROM	PCM_LOT						L
+                        INNER JOIN MFM_PRODUCTIONORDER		PO	ON	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+                                                                AND	L.LINENO = PO.LINENO
+                        INNER JOIN BAS_PRODUCTDEFINITION		PD	ON	PO.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                                AND	PO.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                                                                AND	PO.PRODUCTDEFID = PD.PROCESSDEFID
+                                                                AND	PO.PRODUCTDEFVERSION = PD.PROCESSDEFVERSION
+                        WHERE	1 = 1
+    					AND		PD.PLANTID = #{PLANTID}
+    					AND		L.LOTID = #{LOTID}                   
+                        ) P
+                        INNER JOIN BAS_BILLOFMATERIAL		BOM	ON	P.PLANTID = BOM.PLANTID
+                                                                AND	P.MATERIALDEFID = BOM.PRODUCTDEFID
+                                                                AND	P.MATERIALDEFVERSION = BOM.PRODUCTDEFVERSION
+                                                                AND	P.PROCESSDEFID = BOM.PROCESSDEFID
+                                                                AND	P.PROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+                                                                AND	BOM.MATERIALTYPE = 'Product'
+                        INNER JOIN BAS_PRODUCTDEFINITION		PD	ON	BOM.PLANTID = PD.PLANTID
+                                                                AND	BOM.MATERIALDEFID = PD.PRODUCTDEFID
+                                                                AND	BOM.MATERIALDEFVERSION = PD.PRODUCTDEFVERSION  
+                        ) 
+    
+				SELECT
+						CL.AREAID
+					,	CL.WAREHOUSEID
+					,	(BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION)		AS KEYCOLUMN
+					,	CL.CONSUMABLEDEFID
+					,	CL.CONSUMABLEDEFVERSION
+					,	NVL(AMD.CONSUMABLEDEFNAME, CD.CONSUMABLEDEFNAME)	AS CONSUMABLEDEFNAME
+					,	CML.MATERIALLOTID					AS CONSUMABLELOTID
+					,	CL.CONSUMABLELOTQTY         	AS STOCKQTY
+					,	(CL.CONSUMABLELOTQTY - (NVL(T.CONSUMEDQTY, 0) - CML.CONSUMEDQTY))           	AS AVAILABLEQTY
+					,	LEAST(CL.CONSUMABLELOTQTY - (NVL(T.CONSUMEDQTY, 0) - CML.CONSUMEDQTY),
+							  ROUND((L.QTY * BOM.QTY * NVL(P.QTY, 1) *
+							  CASE WHEN BOM.MATERIALTYPE = 'Product' THEN CASE WHEN NVL(P.QTY, 1) * BOM.QTY != 1 THEN PD.PCSPNL
+							  												   ELSE 1 END
+							  	   ELSE 1
+							  END),  CASE WHEN BOM.MATERIALTYPE = 'Product' THEN 5 /*0 2021-06-09 최창선차장 요청, 반제품도 5자리 보여줌 */ ELSE 5 END),
+							  CML.CONSUMEDQTY)                    	AS INPUTQTY
+					,	LEAST(CL.CONSUMABLELOTQTY - (NVL(T.CONSUMEDQTY, 0) - CML.CONSUMEDQTY),
+							  ROUND((L.QTY * BOM.QTY * NVL(P.QTY, 1) *
+							  CASE WHEN BOM.MATERIALTYPE = 'Product' THEN CASE WHEN NVL(P.QTY, 1) * BOM.QTY != 1 THEN PD.PCSPNL
+							  												   ELSE 1 END
+							  	   ELSE 1
+							  END), CASE WHEN BOM.MATERIALTYPE = 'Product' THEN 5 /*0 2021-06-09 최창선차장 요청, 반제품도 5자리 보여줌 */ ELSE 5 END),
+							  CML.CONSUMEDQTY)     	AS ORGINPUTQTY
+					,	0                   					AS DEFECTQTY
+					,	(NVL(T.CONSUMEDQTY, 0) - CML.CONSUMEDQTY)                  AS LOTUSINGQTY
+					,	''            							AS CONSUMABLEDEFECT
+					,	CL.CONSUMABLESTATE
+				FROM	PCM_LOT								L
+				INNER JOIN BAS_BILLOFMATERIAL				BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+																AND	L.PLANTID = BOM.PLANTID
+																AND	L.PRODUCTDEFID = BOM.PRODUCTDEFID
+																AND	L.PRODUCTDEFVERSION = BOM.PRODUCTDEFVERSION
+																AND	L.PROCESSDEFID = BOM.PROCESSDEFID
+																AND	L.PROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+																AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+																AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+				INNER JOIN PCM_CONSUMEMATERIALLOT_TEMP		CML	ON	L.ENTERPRISEID = CML.ENTERPRISEID
+																AND	L.PLANTID = CML.PLANTID
+																AND	L.LOTID = CML.LOTID
+																AND	L.PROCESSSEGMENTID = CML.PROCESSSEGMENTID
+																AND	BOM.MATERIALDEFID = CML.MATERIALDEFID
+																AND	CML.MATERIALTYPE = #{MATERIALTYPE}
+				INNER JOIN MTM_CONSUMABLELOT					CL	ON	CML.ENTERPRISEID = CL.ENTERPRISEID
+																AND	CML.PLANTID = CL.PLANTID
+																AND	CML.WAREHOUSEID = CL.WAREHOUSEID
+																AND	CML.MATERIALLOTID = CL.CONSUMABLELOTID
+				LEFT OUTER JOIN BAS_PRODUCTDEFINITION		PD	ON	BOM.MATERIALDEFID = PD.PRODUCTDEFID
+																AND	BOM.MATERIALDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION		CD	ON	BOM.ENTERPRISEID = CD.ENTERPRISEID
+																AND	BOM.MATERIALDEFID = CD.CONSUMABLEDEFID
+																AND CL.CONSUMABLEDEFVERSION = CD.CONSUMABLEDEFVERSION																	
+				LEFT OUTER JOIN BAS_ALTERNATIVEMATERIAL		AM	ON	BOM.ENTERPRISEID = AM.ENTERPRISEID
+																AND	BOM.PLANTID = AM.PLANTID
+																AND	BOM.MATERIALDEFID = AM.ITEMID
+																AND	CL.CONSUMABLEDEFID = AM.ALTERNATIVEITEMID
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION		AMD	ON	AM.ENTERPRISEID = AMD.ENTERPRISEID
+																AND	AM.ALTERNATIVEITEMID = AMD.CONSUMABLEDEFID
+				LEFT OUTER JOIN 		(
+				                                         SELECT 
+				                                                PP.PLANTID
+				                                            ,	PP.PRODUCTDEFID
+				                                            ,	PP.PRODUCTDEFVERSION
+				                                            ,	PP.MATERIALDEFID
+				                                            ,	PP.MATERIALDEFVERSION
+				                                            ,	PP.MATERIALDEFNAME
+				                                            ,	PP.PROCESSDEFID
+				                                            ,	PP.PROCESSDEFVERSION
+				                                            ,	PP.QTY
+				                                            ,	PP.UNIT
+				                                            ,	PP."sequence"                    
+				                                        FROM P, PP
+				                                        WHERE P.PLANTID = PP.PLANTID
+				                                        START WITH  P.PLANTID = #{PLANTID}
+				                                                AND P.LOTID = #{LOTID}
+				                                        CONNECT BY NOCYCLE  P.PLANTID = PRIOR PP.PLANTID AND P.LOTID = PRIOR PP.LOTID
+				                                     )		P	ON	L.PRODUCTDEFID = P.MATERIALDEFID
+																AND	L.PRODUCTDEFVERSION = P.MATERIALDEFVERSION
+				LEFT OUTER JOIN (
+									SELECT
+											T.ENTERPRISEID
+										,	T.MATERIALLOTID
+										,	T.WAREHOUSEID
+										,	SUM(T.CONSUMEDQTY)			AS CONSUMEDQTY
+									FROM	PCM_CONSUMEMATERIALLOT_TEMP	T
+									WHERE	T.MATERIALTYPE = 'Consumable'
+									GROUP BY T.ENTERPRISEID
+											,T.MATERIALLOTID
+											,T.WAREHOUSEID
+								)							T	ON	CL.ENTERPRISEID = T.ENTERPRISEID
+																AND	CL.CONSUMABLELOTID = T.MATERIALLOTID
+																AND	CL.WAREHOUSEID = T.WAREHOUSEID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID} 
+          	</when>	    
+          	<when test="VERSION.equals('10001') ">
+         	 
+            -- Id : SelectConsumableListByProcessWorkComplete
+            -- Version : 10001(이명환부장)
+            WITH P AS(
+              SELECT
+                      L.LOTID
+                   ,    PD.PLANTID
+                   ,    PD.PRODUCTDEFID
+                   ,    PD.PRODUCTDEFVERSION
+                   ,    PD.PRODUCTDEFID             AS MATERIALDEFID
+                   ,    PD.PRODUCTDEFVERSION        AS MATERIALDEFVERSION
+                   ,    PD.PRODUCTDEFNAME           AS MATERIALDEFNAME
+                   ,    PD.PROCESSDEFID
+                   ,    PD.PROCESSDEFVERSION
+                   ,    1                               AS QTY
+                   ,    PD.UNIT
+                   ,    1                               AS SEQUENCE
+                FROM    PCM_LOT                     L
+               INNER JOIN MFM_PRODUCTIONORDER       PO  ON  L.PRODUCTIONORDERID       = PO.PRODUCTIONORDERID
+                                                       AND  L.LINENO                  = PO.LINENO
+               INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  PO.PRODUCTDEFID           = PD.PRODUCTDEFID
+                                                       AND  PO.PRODUCTDEFVERSION      = PD.PRODUCTDEFVERSION
+                                                       AND  PO.PRODUCTDEFID           = PD.PROCESSDEFID
+                                                       AND  PO.PRODUCTDEFVERSION      = PD.PROCESSDEFVERSION
+               WHERE    1               = 1
+                 AND    PD.PLANTID      = #{PLANTID}
+                 AND    L.LOTID         = #{LOTID}
+            )
+            , PP AS(
+              SELECT
+                       P.LOTID
+                   ,   BOM.PLANTID
+                   ,   BOM.PRODUCTDEFID
+                   ,   BOM.PRODUCTDEFVERSION
+                   ,   PD.PRODUCTDEFID              AS MATERIALDEFID
+                   ,   PD.PRODUCTDEFVERSION     AS MATERIALDEFVERSION
+                   ,   PD.PRODUCTDEFNAME            AS MATERIALDEFNAME
+                   ,   PD.PROCESSDEFID
+                   ,   PD.PROCESSDEFVERSION
+                   ,   P.QTY * BOM.QTY             AS QTY
+                   ,   PD.UNIT
+                   ,   BOM."sequence"
+                FROM(
+                      SELECT
+                              L.LOTID
+                          , PD.PLANTID
+                          , PD.PRODUCTDEFID
+                          , PD.PRODUCTDEFVERSION
+                          , PD.PRODUCTDEFID             AS MATERIALDEFID
+                          , PD.PRODUCTDEFVERSION        AS MATERIALDEFVERSION
+                          , PD.PRODUCTDEFNAME           AS MATERIALDEFNAME
+                          , PD.PROCESSDEFID
+                          , PD.PROCESSDEFVERSION
+                          , 1                               AS QTY
+                          , PD.UNIT
+                          , 1                               AS SEQUENCE
+                      FROM  PCM_LOT                     L
+                      INNER JOIN MFM_PRODUCTIONORDER    PO     ON   L.PRODUCTIONORDERID        = PO.PRODUCTIONORDERID
+                                                              AND   L.LINENO                   = PO.LINENO
+                      INNER JOIN BAS_PRODUCTDEFINITION  PD     ON   PO.PRODUCTDEFID            = PD.PRODUCTDEFID
+                                                              AND   PO.PRODUCTDEFVERSION       = PD.PRODUCTDEFVERSION
+                                                              AND   PO.PRODUCTDEFID            = PD.PROCESSDEFID
+                                                              AND   PO.PRODUCTDEFVERSION       = PD.PROCESSDEFVERSION
+                      WHERE 1                   = 1
+                      AND       PD.PLANTID      = #{PLANTID}
+                      AND       L.LOTID         = #{LOTID}
+                    ) P
+                INNER JOIN BAS_BILLOFMATERIAL   BOM    ON   P.PLANTID                  = BOM.PLANTID
+                                                      AND   P.MATERIALDEFID            = BOM.PRODUCTDEFID
+                                                      AND   P.MATERIALDEFVERSION       = BOM.PRODUCTDEFVERSION
+                                                      AND   P.PROCESSDEFID             = BOM.PROCESSDEFID
+                                                      AND   P.PROCESSDEFVERSION        = BOM.PROCESSDEFVERSION
+                                                      AND   BOM.MATERIALTYPE           = 'Product'
+                INNER JOIN BAS_PRODUCTDEFINITION  PD   ON   BOM.PLANTID                = PD.PLANTID
+                                                      AND   BOM.MATERIALDEFID          = PD.PRODUCTDEFID
+                                                      AND   BOM.MATERIALDEFVERSION     = PD.PRODUCTDEFVERSION
+            )
+            SELECT ARE.AREAID
+                 , ARE.WAREHOUSEID
+                 , (BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION)         KEYCOLUMN
+                 , BOM.MATERIALDEFID                                            CONSUMABLEDEFID
+                 , BOM.MATERIALDEFVERSION                                       CONSUMABLEDEFVERSION
+                 , NVL(AMD.CONSUMABLEDEFNAME, CD.CONSUMABLEDEFNAME)             CONSUMABLEDEFNAME
+                 , CL.ONHAND_QTY                                                STOCKQTY                        -- ERP재고수량
+                 , NVL(CL.ONHAND_QTY, 0) - NVL(CON.CONSUMEDQTY, 0)              AVAILABLEQTY                    -- 가용수량(ERP재고수량 - Lot사용수량)
+                 , 0                                                         AS DEFECTQTY
+                 , CON.CONSUMEDQTY                                           AS LOTUSINGQTY                     -- Lot사용수량
+                 ,  CL.LOT_NUMBER	                                          AS CONSUMABLELOTID
+                 --소요량
+                 , TRUNC(L.QTY * BOM.QTY * CASE WHEN BOM.MATERIALTYPE = 'Product' THEN CASE WHEN BOM.QTY != 1 THEN NVL(PD.PCSPNL, 1)
+                                                                                            ELSE 1 END
+                                                ELSE 1 END,
+                         CASE WHEN BOM.MATERIALTYPE = 'Product' THEN 5 /*0 2021-06-09 최창선차장 요청, 반제품도 5자리 보여줌 */ ELSE 5 END)                                  QTYOFREQUIREMENT
+
+                , (L.QTY * BOM.QTY * NVL(P.QTY, 1) *
+                          CASE WHEN BOM.MATERIALTYPE = 'Product' THEN CASE WHEN NVL(P.QTY, 1) * NVL(BOM.QTY, 0) != 1 THEN NVL(PD.PCSPNL, 0)
+                                                                           ELSE 1 END
+                               ELSE 1
+                          END)                                                                                      TEST1
+            --    , LEAST(CL.ONHAND_QTY - NVL(CON.CONSUMEDQTY, 0),
+            --              ROUND((L.QTY * BOM.QTY * NVL(P.QTY, 1) *
+            --              CASE WHEN BOM.MATERIALTYPE = 'Product' THEN CASE WHEN NVL(P.QTY, 1) * NVL(BOM.QTY, 0) != 1 THEN NVL(PD.PCSPNL, 0)
+            --                                                               ELSE 1 END
+            --                   ELSE 1
+            --              END),  CASE WHEN BOM.MATERIALTYPE = 'Product' THEN 0 ELSE 5 END),
+            --              NVL(CON.CONSUMEDQTY, 0))                        AS INPUTQTY
+
+                 -- 투입수량(자동계산 해야함)
+                   --가용수량 LESS THAN 소요량  이면 가용수량
+                 , CASE WHEN ( CON.CONSUMEDQTY <![CDATA[<]]> TRUNC(L.QTY * BOM.QTY * CASE WHEN BOM.MATERIALTYPE = 'Product' THEN CASE WHEN BOM.QTY != 1 THEN NVL(PD.PCSPNL, 1)
+                                                                                                                     ELSE 1 END
+                                                                         ELSE 1 END,
+                                                       CASE WHEN BOM.MATERIALTYPE = 'Product' THEN 5 /*0 2021-06-09 최창선차장 요청, 반제품도 5자리 보여줌 */ ELSE 5 END)
+                             ) THEN CON.CONSUMEDQTY
+                   -- 가용수량 LARGER  THAN OR EQUAL 소요량 이면 소요량
+                        ELSE (
+                               TRUNC(L.QTY * BOM.QTY * CASE WHEN BOM.MATERIALTYPE = 'Product' THEN CASE WHEN BOM.QTY != 1 THEN NVL(PD.PCSPNL, 1)
+                                                                                                        ELSE 1 END
+                                                       ELSE 1 END,
+                                     CASE WHEN BOM.MATERIALTYPE = 'Product' THEN 5 /*0 2021-06-09 최창선차장 요청, 반제품도 5자리 보여줌 */ ELSE 5 END)
+                             )
+                        END                                                         INPUTQTY
+
+                 , CASE WHEN ( CON.CONSUMEDQTY <![CDATA[<]]> TRUNC(L.QTY * BOM.QTY * CASE WHEN BOM.MATERIALTYPE = 'Product' THEN CASE WHEN BOM.QTY != 1 THEN NVL(PD.PCSPNL, 1)
+                                                                                                                     ELSE 1 END
+                                                                         ELSE 1 END,
+                                                       CASE WHEN BOM.MATERIALTYPE = 'Product' THEN 5 /*0 2021-06-09 최창선차장 요청, 반제품도 5자리 보여줌 */ ELSE 5 END)
+                             ) THEN CON.CONSUMEDQTY
+                        ELSE (
+                               TRUNC(L.QTY * BOM.QTY * CASE WHEN BOM.MATERIALTYPE = 'Product' THEN CASE WHEN BOM.QTY != 1 THEN NVL(PD.PCSPNL, 1)
+                                                                                                        ELSE 1 END
+                                                       ELSE 1 END,
+                                     CASE WHEN BOM.MATERIALTYPE = 'Product' THEN 5 /*0 2021-06-09 최창선차장 요청, 반제품도 5자리 보여줌 */ ELSE 5 END)
+                             )
+                        END                                                         ORGINPUTQTY
+                 , ''                                                        AS CONSUMABLEDEFECT
+                 -- MHYi 210507 공정관리  작업시작  자재 탭 소스에는 Scrapped 체크 하므로 업무 절차 정해지면 추가 할것
+                 ,  CASE WHEN CL.ONHAND_QTY = 0 THEN 'Consumed' ELSE 'Available' END                            CONSUMABLESTATE
+                 , L.LOTID
+                 , CL.LOT_NUMBER
+                 , CON.MATERIALLOTID
+			<if test="WORKCOMPLETE != null and WORKCOMPLETE !=''">
+               	,(SELECT SUM(CONSUMEDQTY)
+				        FROM   MTM_CONSUMEMATERIALLOT_V TV
+				        WHERE  1 = 1
+				        AND    CL.ENTERPRISEID = TV.ENTERPRISEID
+				        AND    CL.PLANTID = TV.PLANTID
+				        AND    CL.LOT_NUMBER = TV.MATERIALLOTID
+				        AND    CL.SUBINVENTORY_CODE = TV.WAREHOUSEID
+				        AND    TV.LOTID = #{LOTID}				        
+				        ) AS CURRENTLOTQTY
+               </if>
+              FROM  PCM_LOT                     L
+             INNER JOIN BAS_BILLOFMATERIAL      BOM          ON L.ENTERPRISEID            = BOM.ENTERPRISEID
+                                                            AND L.PLANTID                 = BOM.PLANTID
+                                                            AND L.PRODUCTDEFID            = BOM.PRODUCTDEFID
+                                                            AND L.PRODUCTDEFVERSION       = BOM.PRODUCTDEFVERSION
+                                                            AND L.PROCESSDEFID            = BOM.PROCESSDEFID
+                                                            AND L.PROCESSDEFVERSION       = BOM.PROCESSDEFVERSION
+                                                            AND L.PROCESSSEGMENTID        = BOM.PROCESSSEGMENTID
+                                                            AND L.PROCESSSEGMENTVERSION   = BOM.PROCESSSEGMENTVERSION
+             INNER JOIN BAS_AREA                  ARE        ON ARE.ENTERPRISEID          = L.ENTERPRISEID
+                                                            AND ARE.PLANTID               = L.PLANTID
+                                                            AND ARE.AREAID                = L.AREAID
+              LEFT OUTER JOIN IFC_MES_S_ONHAND_V@ERPPROD CL  ON CL.ENTERPRISEID           = L.ENTERPRISEID
+                                                            AND CL.PLANTID                = L.PLANTID
+                                                            AND CL.SUBINVENTORY_CODE      = ARE.WAREHOUSEID
+                                                            AND CL.ITEM_CODE              = DECODE(SUBSTR(CL.ITEM_CODE, 0, 1), '2', BOM.MATERIALDEFID || BOM.MATERIALDEFVERSION
+                                                                                                                                  , BOM.MATERIALDEFID)
+                                                            AND CL.BOM_ENABLED_FLAG       = 'Y'
+                                                            AND CL.LOT_NUMBER            IS NOT NULL
+        LEFT   OUTER JOIN (SELECT MATERIALDEFID
+                         ,MATERIALDEFVERSION
+                         ,MATERIALLOTID
+                         ,SUM(CONSUMEDQTY) AS CONSUMEDQTY
+                         ,WAREHOUSEID
+                         ,ENTERPRISEID
+                         ,PLANTID
+                   FROM   MTM_CONSUMEMATERIALLOT_V T2
+                   GROUP  BY MATERIALDEFID
+                            ,MATERIALDEFVERSION
+                            ,MATERIALLOTID
+                            ,WAREHOUSEID
+                            ,ENTERPRISEID
+                            ,PLANTID) CON
+ON     CL.ENTERPRISEID = CON.ENTERPRISEID
+AND    CL.PLANTID = CON.PLANTID
+AND    CL.LOT_NUMBER = CON.MATERIALLOTID
+AND    CL.SUBINVENTORY_CODE = CON.WAREHOUSEID
+              LEFT OUTER JOIN BAS_PRODUCTDEFINITION     PD   ON BOM.MATERIALDEFID         = PD.PRODUCTDEFID
+                                                            AND BOM.MATERIALDEFVERSION    = PD.PRODUCTDEFVERSION
+              LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION  CD   ON BOM.ENTERPRISEID          = CD.ENTERPRISEID
+                                                            AND BOM.MATERIALDEFID         = CD.CONSUMABLEDEFID
+                                                            AND BOM.MATERIALDEFVERSION    = CD.CONSUMABLEDEFVERSION
+              LEFT OUTER JOIN BAS_ALTERNATIVEMATERIAL   AM   ON BOM.ENTERPRISEID          = AM.ENTERPRISEID
+                                                            AND BOM.PLANTID               = AM.PLANTID
+                                                            AND BOM.MATERIALDEFID         = AM.ITEMID
+                                                            AND CL.ITEM_CODE              = AM.ALTERNATIVEITEMID
+              LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION  AMD  ON AM.ENTERPRISEID           = AMD.ENTERPRISEID
+                                                            AND AM.ALTERNATIVEITEMID      = AMD.CONSUMABLEDEFID
+              LEFT OUTER JOIN (
+                                     SELECT
+                                            PP.PLANTID
+                                        ,   PP.PRODUCTDEFID
+                                        ,   PP.PRODUCTDEFVERSION
+                                        ,   PP.MATERIALDEFID
+                                        ,   PP.MATERIALDEFVERSION
+                                        ,   PP.MATERIALDEFNAME
+                                        ,   PP.PROCESSDEFID
+                                        ,   PP.PROCESSDEFVERSION
+                                        ,   PP.QTY
+                                        ,   PP.UNIT
+                                        ,   PP."sequence"
+                                    FROM P, PP
+                                    WHERE P.PLANTID                               = PP.PLANTID
+                                    START WITH  P.PLANTID                         = #{PLANTID}
+                                           AND P.LOTID                            = #{LOTID}
+                                    CONNECT BY NOCYCLE  P.PLANTID                 = PRIOR PP.PLANTID AND P.LOTID = PRIOR PP.LOTID
+                              )     P        ON L.PRODUCTDEFID        = P.MATERIALDEFID
+                                            AND L.PRODUCTDEFVERSION   = P.MATERIALDEFVERSION
+             WHERE  1                     = 1
+               AND      L.ENTERPRISEID = #{ENTERPRISEID}
+               AND      L.PLANTID      = #{PLANTID}
+               AND      L.LOTID        = #{LOTID}
+               <if test="WORKCOMPLETE != null and WORKCOMPLETE !=''">
+               	AND CON.MATERIALLOTID IS NOT NULL
+				AND EXISTS (SELECT 1
+				        FROM   MTM_CONSUMEMATERIALLOT_V TV
+				        WHERE  1 = 1
+				        AND    CL.ENTERPRISEID = TV.ENTERPRISEID
+				        AND    CL.PLANTID = TV.PLANTID
+				        AND    CL.LOT_NUMBER = TV.MATERIALLOTID
+				        AND    CL.SUBINVENTORY_CODE = TV.WAREHOUSEID
+				        AND    TV.LOTID = #{LOTID}				        
+				        )
+               </if>
+            --   AND        L.ENTERPRISEID    = 'SMLINES'
+            --   AND        L.PLANTID         = 'IFC'
+            --   AND        L.LOTID           = 'M210429F007-1-FG-002-001'
+				
+          	</when>
+          	<when test="VERSION.equals('10011') "> 
+				--
+				-- Id : SelectConsumableListByProcessWorkComplete
+				-- Version : 10011
+				SELECT
+						CL.AREAID
+					,	CL.WAREHOUSEID
+					,	(BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION)    		AS KEYCOLUMN
+					,	CL.CONSUMABLEDEFID
+					,	CL.CONSUMABLEDEFVERSION
+					,	NVL(AMD.CONSUMABLEDEFNAME, CD.CONSUMABLEDEFNAME)	AS CONSUMABLEDEFNAME
+					,	CML.MATERIALLOTID					AS CONSUMABLELOTID
+					,	CL.CONSUMABLELOTQTY					AS STOCKQTY
+					,	CL.CONSUMABLELOTQTY - (NVL(T.CONSUMEDQTY, 0) - CML.CONSUMEDQTY)	AS AVAILABLEQTY
+					,	LEAST(CL.CONSUMABLELOTQTY - (NVL(T.CONSUMEDQTY, 0) - CML.CONSUMEDQTY), L.QTY * BOM.QTY, CML.CONSUMEDQTY)        	AS INPUTQTY
+					,	LEAST(CL.CONSUMABLELOTQTY - (NVL(T.CONSUMEDQTY, 0) - CML.CONSUMEDQTY), L.QTY * BOM.QTY, CML.CONSUMEDQTY)        	AS ORGINPUTQTY
+					,	0           							AS DEFECTQTY
+					,	NVL(T.CONSUMEDQTY, 0) - CML.CONSUMEDQTY	AS LOTUSINGQTY
+					,	''               						AS CONSUMABLEDEFECT
+					,	CL.CONSUMABLESTATE
+				FROM	PCM_LOT								L
+				INNER JOIN BAS_BILLOFMATERIAL				BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+																AND	L.PLANTID = BOM.PLANTID
+																AND	L.SUBPROCESSDEFID = BOM.PROCESSDEFID
+																AND	L.SUBPROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+																AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+																AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+																AND	BOM.MATERIALTYPE = #{MATERIALTYPE}
+				INNER JOIN PCM_CONSUMEMATERIALLOT_TEMP		CML	ON	L.ENTERPRISEID = CML.ENTERPRISEID
+																AND	L.PLANTID = CML.PLANTID
+																AND	L.LOTID = CML.LOTID
+																AND	L.PROCESSSEGMENTID = CML.PROCESSSEGMENTID
+																AND	BOM.MATERIALDEFID = CML.MATERIALDEFID
+																AND	CML.MATERIALTYPE = #{MATERIALTYPE}
+				INNER JOIN MTM_CONSUMABLELOT					CL	ON	CML.ENTERPRISEID = CL.ENTERPRISEID
+																AND	CML.PLANTID = CL.PLANTID
+																AND	CML.WAREHOUSEID = CL.WAREHOUSEID
+																AND	CML.MATERIALLOTID = CL.CONSUMABLELOTID
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION		CD	ON	BOM.ENTERPRISEID = CD.ENTERPRISEID
+																AND	BOM.MATERIALDEFID = CD.CONSUMABLEDEFID
+																AND CL.CONSUMABLEDEFVERSION = CD.CONSUMABLEDEFVERSION
+				LEFT OUTER JOIN BAS_ALTERNATIVEMATERIAL		AM	ON	BOM.ENTERPRISEID = AM.ENTERPRISEID
+																AND	BOM.PLANTID = AM.PLANTID
+																AND	BOM.MATERIALDEFID = AM.ITEMID
+																AND	CL.CONSUMABLEDEFID = AM.ALTERNATIVEITEMID
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION		AMD	ON	AM.ENTERPRISEID = AMD.ENTERPRISEID
+																AND	AM.ALTERNATIVEITEMID = AMD.CONSUMABLEDEFID
+				LEFT OUTER JOIN (
+									SELECT
+											T.ENTERPRISEID
+										,	T.MATERIALLOTID
+										,	T.WAREHOUSEID
+										,	SUM(T.CONSUMEDQTY)			AS CONSUMEDQTY
+									FROM	PCM_CONSUMEMATERIALLOT_TEMP	T
+									WHERE	T.MATERIALTYPE = 'Consumable'
+									GROUP BY T.ENTERPRISEID
+											,T.MATERIALLOTID
+											,T.WAREHOUSEID
+								)							T	ON	CL.ENTERPRISEID = T.ENTERPRISEID
+																AND	CL.CONSUMABLELOTID = T.MATERIALLOTID
+																AND	CL.WAREHOUSEID = T.WAREHOUSEID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+          	</when>	          	
+          	<otherwise>
+				
+          	</otherwise>
+	    </choose>		
+    </select>
+
+
+    <select id="selectConsumableListByProcessWorkStart" parameterType="map" resultType="hashmap">
+	    <choose>
+          	<when test="VERSION.equals('10001') ">
+			SELECT   /*+ ordered index(CD SF_CONSUMABLEDEFINITION_PK)*/ ARE.AREAID
+			          , ARE.WAREHOUSEID
+			          , BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION    AS KEYCOLUMN
+			                    ,   BOM.MATERIALDEFID                                            CONSUMABLEDEFID       
+			                    ,   BOM.MATERIALDEFVERSION                                       CONSUMABLEDEFVERSION 
+			          , CD.CONSUMABLEDEFNAME
+			          , CL.LOT_NUMBER
+			          , CL.LOT_NUMBER AS CONSUMABLELOTID					
+					  , CL.LOT_NUMBER AS MATERIALLOTID
+					  , CL.ONHAND_QTY                       AS STOCKQTY
+/*			          , NVL(T.CONSUMEDQTY, 0)               AS AVAILABLEQTY */
+			          , NVL(T.CONSUMEDQTY, 0)               AS LOTUSINGQTY
+			          , L.QTY * BOM.QTY  AS INPUTQTY
+			          , L.QTY * BOM.QTY  AS ORGINPUTQTY
+			          , 0                       AS DEFECTQTY
+/*			          , CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0)           AS LOTUSINGQTY */
+			          , CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0)           AS AVAILABLEQTY
+			          , ''                    AS CONSUMABLEDEFECT
+			          
+			                    , CASE WHEN CL.ONHAND_QTY = 0 THEN 'Consumed' ELSE '' END                            CONSUMABLESTATE
+                    , 'PCM02300'                                              AS  FROM_WHERE
+			        FROM  PCM_LOT   L
+			        INNER JOIN BAS_AREA           ARE  ON ARE.ENTERPRISEID          = L.ENTERPRISEID 
+			                                                            AND ARE.PLANTID               = L.PLANTID
+			                                                            AND ARE.AREAID                = L.AREAID       
+			        INNER JOIN BAS_BILLOFMATERIAL     BOM  ON L.ENTERPRISEID            = BOM.ENTERPRISEID
+			                              AND L.PLANTID                 = BOM.PLANTID
+			                              AND L.PRODUCTDEFID            = BOM.PRODUCTDEFID
+			                              AND L.PRODUCTDEFVERSION       = BOM.PRODUCTDEFVERSION
+			                              AND L.PROCESSDEFID            = BOM.PROCESSDEFID
+			                              AND L.PROCESSDEFVERSION       = BOM.PROCESSDEFVERSION
+			                              AND L.PROCESSSEGMENTID        = BOM.PROCESSSEGMENTID
+			                              AND L.PROCESSSEGMENTVERSION   = BOM.PROCESSSEGMENTVERSION
+			                              AND BOM.WIPSUPPLYTYPE != 'OperationPull'
+			        INNER JOIN IFC_MES_S_ONHAND_V@ERPPROD CL   
+			                               ON CL.ENTERPRISEID          = BOM.ENTERPRISEID
+			                              AND CL.PLANTID               = BOM.PLANTID 
+			                              AND CL.SUBINVENTORY_CODE     = ARE.WAREHOUSEID
+			                              AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 1, 1), '2', BOM.MATERIALDEFID || BOM.MATERIALDEFVERSION
+			                                                            , BOM.MATERIALDEFID ) 
+			       INNER JOIN BAS_CONSUMABLEDEFINITION CD  
+			                ON CD.ENTERPRISEID           = CL.ENTERPRISEID
+			               AND CD.PLANTID                = CL.PLANTID
+			               AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 1, 1), '2', CD.CONSUMABLEDEFID || CD.CONSUMABLEDEFVERSION, CD.CONSUMABLEDEFID)  
+			                                                                                                                                        
+			       LEFT OUTER JOIN BAS_ALTERNATIVEMATERIAL    AM   ON BOM.ENTERPRISEID          = AM.ENTERPRISEID
+			                              AND BOM.PLANTID               = AM.PLANTID
+			                              AND BOM.MATERIALDEFID         = AM.ITEMID
+			
+			LEFT   OUTER JOIN (SELECT MATERIALDEFID
+			                         ,MATERIALDEFVERSION
+			                         ,MATERIALLOTID
+			                         ,SUM(CONSUMEDQTY) AS CONSUMEDQTY
+			                         ,WAREHOUSEID
+			                         ,ENTERPRISEID
+			                         ,PLANTID
+			                   FROM   MTM_CONSUMEMATERIALLOT_V T2
+			                   GROUP  BY MATERIALDEFID
+			                            ,MATERIALDEFVERSION
+			                            ,MATERIALLOTID
+			                            ,WAREHOUSEID
+			                            ,ENTERPRISEID
+			                            ,PLANTID) T
+			ON     CL.ENTERPRISEID = T.ENTERPRISEID
+			AND    CL.PLANTID = T.PLANTID
+			AND    CL.LOT_NUMBER = T.MATERIALLOTID
+			AND    CL.SUBINVENTORY_CODE = T.WAREHOUSEID
+			                              
+			        WHERE 1 = 1
+							AND		L.ENTERPRISEID      = #{ENTERPRISEID}
+							AND		L.PLANTID           = #{PLANTID}
+							AND		L.LOTID             = #{LOTID}
+							and      exists  (SELECT  1
+	                                          FROM  PCM_LOT                PL
+	                                          INNER JOIN BAS_PROCESSPATH          PP  ON  PL.ENTERPRISEID = PP.ENTERPRISEID
+	                                                                  AND  PL.PLANTID = PP.PLANTID
+	                                                                  AND  PL.PROCESSDEFID = PP.PROCESSDEFID
+	                                                                  AND  PL.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+	                                                                  AND  PP.PATHTYPE LIKE 'Start%'
+	                                                                  AND	PP.VALIDSTATE = 'Valid'
+	                                          LEFT OUTER JOIN PCM_CONSUMEMATERIALLOT_TEMP  MLT  ON  PL.LOTID = MLT.LOTID
+	                                                                  AND  PP.PROCESSSEGMENTID = MLT.PROCESSSEGMENTID
+	                                                                  AND  MLT.MATERIALTYPE = 'Consumable'
+	                                          LEFT OUTER JOIN MTM_CONSUMEMATERIALLOT    CML  ON  PL.LOTID = CML.LOTID
+	                                                                  AND  PP.PROCESSSEGMENTID = CML.PROCESSSEGMENTID
+	                                                                  AND  CML.MATERIALTYPE = 'Consumable'
+	                                          INNER JOIN BAS_CONSUMABLEDEFINITION          CD  ON  COALESCE(CML.CONSUMABLEDEFID, MLT.MATERIALDEFID) = CD.CONSUMABLEDEFID
+	                                                                                          AND COALESCE(CML.CONSUMABLEDEFVERSION, MLT.MATERIALDEFVERSION) = CD.CONSUMABLEDEFVERSION
+	                                                                                          AND CD.CONSUMABLECLASSID = 'RawMaterial'
+	                                          WHERE  1 = 1
+	                                          AND    PL.LOTCREATEDTYPE = 'SplitRoll'
+	                                          
+	                                          AND    PL.PRODUCTDEFID = L.PRODUCTDEFID
+	                                          AND    PL.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+	                                          AND    (MLT.MATERIALLOTID IS NOT NULL OR CML.MATERIALLOTID IS NOT NULL)
+	                                         
+											 and    PL.LOTID = L.LOTID
+											                                         
+											 and    MLT.MATERIALLOTID = CL.LOT_NUMBER)
+											 
+											 
+UNION ALL
+
+SELECT   /*+ ordered index(CD SF_CONSUMABLEDEFINITION_PK) */ARE.AREAID
+			          , ARE.WAREHOUSEID
+			          , BOM.ALTITEM || '|' || BOM.ALTREVISION    AS KEYCOLUMN
+			                    ,   BOM.ALTITEM                                            CONSUMABLEDEFID       
+			                    ,   BOM.ALTREVISION                                       CONSUMABLEDEFVERSION 
+			          , CD.CONSUMABLEDEFNAME
+			          , CL.LOT_NUMBER
+			          , CL.LOT_NUMBER AS CONSUMABLELOTID					
+					  , CL.LOT_NUMBER AS MATERIALLOTID
+					  , CL.ONHAND_QTY                       AS STOCKQTY
+/*			          , NVL(T.CONSUMEDQTY, 0)               AS AVAILABLEQTY */
+			          , NVL(T.CONSUMEDQTY, 0)               AS LOTUSINGQTY
+			          , L.QTY * BOM.QTY  AS INPUTQTY
+			          , L.QTY * BOM.QTY  AS ORGINPUTQTY
+			          , 0                       AS DEFECTQTY
+/*			          , CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0)           AS LOTUSINGQTY*/
+			          , CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0)           AS AVAILABLEQTY
+			          , ''                    AS CONSUMABLEDEFECT
+			          
+			                    , CASE WHEN CL.ONHAND_QTY = 0 THEN 'Consumed' ELSE '' END                            CONSUMABLESTATE
+                    , 'PCM02300'                                              AS  FROM_WHERE
+			        FROM  PCM_LOT   L
+			        INNER JOIN BAS_AREA           ARE  ON ARE.ENTERPRISEID          = L.ENTERPRISEID 
+			                                                            AND ARE.PLANTID               = L.PLANTID
+			                                                            AND ARE.AREAID                = L.AREAID       
+			        INNER JOIN BAS_BILLOFMATERIAL     BOM  ON L.ENTERPRISEID            = BOM.ENTERPRISEID
+			                              AND L.PLANTID                 = BOM.PLANTID
+			                              AND L.PRODUCTDEFID            = BOM.PRODUCTDEFID
+			                              AND L.PRODUCTDEFVERSION       = BOM.PRODUCTDEFVERSION
+			                              AND L.PROCESSDEFID            = BOM.PROCESSDEFID
+			                              AND L.PROCESSDEFVERSION       = BOM.PROCESSDEFVERSION
+			                              AND L.PROCESSSEGMENTID        = BOM.PROCESSSEGMENTID
+			                              AND L.PROCESSSEGMENTVERSION   = BOM.PROCESSSEGMENTVERSION
+			                              AND BOM.WIPSUPPLYTYPE != 'OperationPull'
+			        INNER JOIN IFC_MES_S_ONHAND_V@ERPPROD CL   
+			                               ON CL.ENTERPRISEID          = BOM.ENTERPRISEID
+			                              AND CL.PLANTID               = BOM.PLANTID 
+			                              AND CL.SUBINVENTORY_CODE     = ARE.WAREHOUSEID
+			                              AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 1, 1), '2', BOM.ALTITEM || BOM.ALTREVISION
+			                                                            , BOM.ALTITEM ) 
+			       INNER JOIN BAS_CONSUMABLEDEFINITION CD  
+			                ON CD.ENTERPRISEID           = CL.ENTERPRISEID
+			               AND CD.PLANTID                = CL.PLANTID
+			               AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 1, 1), '2', CD.CONSUMABLEDEFID || CD.CONSUMABLEDEFVERSION, CD.CONSUMABLEDEFID)  
+			                                                                                                                                        
+			       LEFT OUTER JOIN BAS_ALTERNATIVEMATERIAL    AM   ON BOM.ENTERPRISEID          = AM.ENTERPRISEID
+			                              AND BOM.PLANTID               = AM.PLANTID
+			                              AND BOM.ALTITEM         = AM.ITEMID
+			
+			LEFT   OUTER JOIN (SELECT MATERIALDEFID
+			                         ,MATERIALDEFVERSION
+			                         ,MATERIALLOTID
+			                         ,SUM(CONSUMEDQTY) AS CONSUMEDQTY
+			                         ,WAREHOUSEID
+			                         ,ENTERPRISEID
+			                         ,PLANTID
+			                   FROM   MTM_CONSUMEMATERIALLOT_V T2
+			                   GROUP  BY MATERIALDEFID
+			                            ,MATERIALDEFVERSION
+			                            ,MATERIALLOTID
+			                            ,WAREHOUSEID
+			                            ,ENTERPRISEID
+			                            ,PLANTID) T
+			ON     CL.ENTERPRISEID = T.ENTERPRISEID
+			AND    CL.PLANTID = T.PLANTID
+			AND    CL.LOT_NUMBER = T.MATERIALLOTID
+			AND    CL.SUBINVENTORY_CODE = T.WAREHOUSEID
+			                              
+			        WHERE 1 = 1
+							AND		L.ENTERPRISEID      = #{ENTERPRISEID}
+							AND		L.PLANTID           = #{PLANTID}
+							AND		L.LOTID             = #{LOTID}
+							and      exists  (SELECT  1
+	                                          FROM  PCM_LOT                PL
+	                                          INNER JOIN BAS_PROCESSPATH          PP  ON  PL.ENTERPRISEID = PP.ENTERPRISEID
+	                                                                  AND  PL.PLANTID = PP.PLANTID
+	                                                                  AND  PL.PROCESSDEFID = PP.PROCESSDEFID
+	                                                                  AND  PL.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+	                                                                  AND  PP.PATHTYPE LIKE 'Start%'
+	                                                                  AND	PP.VALIDSTATE = 'Valid'
+	                                          LEFT OUTER JOIN PCM_CONSUMEMATERIALLOT_TEMP  MLT  ON  PL.LOTID = MLT.LOTID
+	                                                                  AND  PP.PROCESSSEGMENTID = MLT.PROCESSSEGMENTID
+	                                                                  AND  MLT.MATERIALTYPE = 'Consumable'
+	                                          LEFT OUTER JOIN MTM_CONSUMEMATERIALLOT    CML  ON  PL.LOTID = CML.LOTID
+	                                                                  AND  PP.PROCESSSEGMENTID = CML.PROCESSSEGMENTID
+	                                                                  AND  CML.MATERIALTYPE = 'Consumable'
+	                                          INNER JOIN BAS_CONSUMABLEDEFINITION          CD  ON  COALESCE(CML.CONSUMABLEDEFID, MLT.MATERIALDEFID) = CD.CONSUMABLEDEFID
+	                                                                                          AND COALESCE(CML.CONSUMABLEDEFVERSION, MLT.MATERIALDEFVERSION) = CD.CONSUMABLEDEFVERSION
+	                                                                                          AND CD.CONSUMABLECLASSID = 'RawMaterial'
+	                                          WHERE  1 = 1
+	                                          AND    PL.LOTCREATEDTYPE = 'SplitRoll'
+	                                          
+	                                          AND    PL.PRODUCTDEFID = L.PRODUCTDEFID
+	                                          AND    PL.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+	                                          AND    (MLT.MATERIALLOTID IS NOT NULL OR CML.MATERIALLOTID IS NOT NULL)
+	                                         
+											 and    PL.LOTID = L.LOTID
+											                                         
+											 and    MLT.MATERIALLOTID = CL.LOT_NUMBER)								
+          	</when>
+          	<when test="VERSION.equals('10011') "> 
+				--
+				-- Id : SelectConsumableListByProcessWorkComplete
+				-- Version : 10011
+				--
+				-- Id : GetConsumableLotByProcess
+				-- Version : 10011
+				SELECT
+						CL.AREAID
+					,	CL.WAREHOUSEID
+					,	(BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION)     	AS KEYCOLUMN
+					,	CL.CONSUMABLEDEFID
+					,	CL.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	CL.CONSUMABLELOTID
+					,	CL.CONSUMABLELOTQTY				AS STOCKQTY
+/*					,	NVL(T.CONSUMEDQTY, 0)	AS AVAILABLEQTY */
+					,	NVL(T.CONSUMEDQTY, 0)	AS LOTUSINGQTY
+					,	L.QTY * BOM.QTY	    AS INPUTQTY
+					,	L.QTY * BOM.QTY  	AS ORGINPUTQTY
+					,	0									AS DEFECTQTY
+/*					,	CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0)		AS LOTUSINGQTY */
+					,	CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0)		AS AVAILABLEQTY
+					,	''           						AS CONSUMABLEDEFECT
+					,	CL.CONSUMABLESTATE
+                    , 'PCM02300'                                              AS  FROM_WHERE
+				FROM	PCM_LOT							L
+				INNER JOIN BAS_AREA						A	ON	L.AREAID = A.AREAID
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+															AND	L.SUBPROCESSDEFID = BOM.PROCESSDEFID
+															AND	L.SUBPROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+															AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+															AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+				INNER JOIN MTM_CONSUMABLELOT				CL	ON	L.ENTERPRISEID = CL.ENTERPRISEID
+															AND	A.WAREHOUSEID = CL.WAREHOUSEID
+															AND	BOM.MATERIALDEFID = CL.CONSUMABLEDEFID
+															AND	BOM.MATERIALDEFVERSION = CL.CONSUMABLEDEFVERSION
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	CL.ENTERPRISEID = CD.ENTERPRISEID
+															AND	CL.CONSUMABLEDEFID = CD.CONSUMABLEDEFID
+															AND	CL.CONSUMABLEDEFVERSION = CD.CONSUMABLEDEFVERSION
+				LEFT OUTER JOIN (
+									SELECT
+											T.ENTERPRISEID
+										,	T.MATERIALLOTID
+										,	T.WAREHOUSEID
+										,	SUM(T.CONSUMEDQTY)			AS CONSUMEDQTY
+									FROM	PCM_CONSUMEMATERIALLOT_TEMP	T
+									WHERE	T.MATERIALTYPE = 'Consumable'
+									GROUP BY T.ENTERPRISEID
+											,T.MATERIALLOTID
+											,T.WAREHOUSEID
+								)						T	ON	CL.ENTERPRISEID = T.ENTERPRISEID
+															AND	CL.CONSUMABLELOTID = T.MATERIALLOTID
+															AND	CL.WAREHOUSEID = T.WAREHOUSEID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}	
+				AND		L.PLANTID = #{PLANTID}	
+				AND		L.LOTID = #{LOTID}	
+							and      exists  (SELECT  1
+	                                          FROM  PCM_LOT                PL
+	                                          INNER JOIN BAS_PROCESSPATH          PP  ON  PL.ENTERPRISEID = PP.ENTERPRISEID
+	                                                                  AND  PL.PLANTID = PP.PLANTID
+	                                                                  AND  PL.PROCESSDEFID = PP.PROCESSDEFID
+	                                                                  AND  PL.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+	                                                                  AND  PP.PATHTYPE LIKE 'Start%'
+	                                                                  AND	PP.VALIDSTATE = 'Valid'
+	                                          LEFT OUTER JOIN PCM_CONSUMEMATERIALLOT_TEMP  MLT  ON  PL.LOTID = MLT.LOTID
+	                                                                  AND  PP.PROCESSSEGMENTID = MLT.PROCESSSEGMENTID
+	                                                                  AND  MLT.MATERIALTYPE = 'Consumable'
+	                                          LEFT OUTER JOIN MTM_CONSUMEMATERIALLOT    CML  ON  PL.LOTID = CML.LOTID
+	                                                                  AND  PP.PROCESSSEGMENTID = CML.PROCESSSEGMENTID
+	                                                                  AND  CML.MATERIALTYPE = 'Consumable'
+	                                          INNER JOIN BAS_CONSUMABLEDEFINITION          CD  ON  COALESCE(CML.CONSUMABLEDEFID, MLT.MATERIALDEFID) = CD.CONSUMABLEDEFID
+	                                                                                          AND COALESCE(CML.CONSUMABLEDEFVERSION, MLT.MATERIALDEFVERSION) = CD.CONSUMABLEDEFVERSION
+	                                                                                          AND CD.CONSUMABLECLASSID = 'RawMaterial'
+	                                          WHERE  1 = 1
+	                                          AND    PL.LOTCREATEDTYPE = 'SplitRoll'
+	                                          
+	                                          AND    PL.PRODUCTDEFID = L.PRODUCTDEFID
+	                                          AND    PL.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+	                                          AND    (MLT.MATERIALLOTID IS NOT NULL OR CML.MATERIALLOTID IS NOT NULL)
+	                                         
+											 and    PL.LOTID = L.LOTID
+											                                         
+											 and    MLT.MATERIALLOTID = CL.Consumablelotid)		
+											 
+UNION ALL
+
+	SELECT
+						CL.AREAID
+					,	CL.WAREHOUSEID
+					,	(BOM.ALTITEM || '|' || BOM.ALTREVISION)     	AS KEYCOLUMN
+					,	CL.CONSUMABLEDEFID
+					,	CL.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	CL.CONSUMABLELOTID
+					,	CL.CONSUMABLELOTQTY				AS STOCKQTY
+/*					,	NVL(T.CONSUMEDQTY, 0)	AS AVAILABLEQTY */
+					,	NVL(T.CONSUMEDQTY, 0)	AS LOTUSINGQTY
+					,	L.QTY * BOM.QTY	    AS INPUTQTY
+					,	L.QTY * BOM.QTY  	AS ORGINPUTQTY
+					,	0									AS DEFECTQTY
+/*					,	CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0)		AS LOTUSINGQTY*/
+					,	CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0)		AS AVAILABLEQTY
+					,	''           						AS CONSUMABLEDEFECT
+					,	CL.CONSUMABLESTATE
+                    , 'PCM02300'                                              AS  FROM_WHERE
+				FROM	PCM_LOT							L
+				INNER JOIN BAS_AREA						A	ON	L.AREAID = A.AREAID
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+															AND	L.SUBPROCESSDEFID = BOM.PROCESSDEFID
+															AND	L.SUBPROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+															AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+															AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+				INNER JOIN MTM_CONSUMABLELOT				CL	ON	L.ENTERPRISEID = CL.ENTERPRISEID
+															AND	A.WAREHOUSEID = CL.WAREHOUSEID
+															AND	BOM.ALTITEM = CL.CONSUMABLEDEFID
+															AND	BOM.ALTREVISION = CL.CONSUMABLEDEFVERSION
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	CL.ENTERPRISEID = CD.ENTERPRISEID
+															AND	CL.CONSUMABLEDEFID = CD.CONSUMABLEDEFID
+															AND	CL.CONSUMABLEDEFVERSION = CD.CONSUMABLEDEFVERSION
+				LEFT OUTER JOIN (
+									SELECT
+											T.ENTERPRISEID
+										,	T.MATERIALLOTID
+										,	T.WAREHOUSEID
+										,	SUM(T.CONSUMEDQTY)			AS CONSUMEDQTY
+									FROM	PCM_CONSUMEMATERIALLOT_TEMP	T
+									WHERE	T.MATERIALTYPE = 'Consumable'
+									GROUP BY T.ENTERPRISEID
+											,T.MATERIALLOTID
+											,T.WAREHOUSEID
+								)						T	ON	CL.ENTERPRISEID = T.ENTERPRISEID
+															AND	CL.CONSUMABLELOTID = T.MATERIALLOTID
+															AND	CL.WAREHOUSEID = T.WAREHOUSEID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}	
+				AND		L.PLANTID = #{PLANTID}	
+				AND		L.LOTID = #{LOTID}	
+							and      exists  (SELECT  1
+	                                          FROM  PCM_LOT                PL
+	                                          INNER JOIN BAS_PROCESSPATH          PP  ON  PL.ENTERPRISEID = PP.ENTERPRISEID
+	                                                                  AND  PL.PLANTID = PP.PLANTID
+	                                                                  AND  PL.PROCESSDEFID = PP.PROCESSDEFID
+	                                                                  AND  PL.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+	                                                                  AND  PP.PATHTYPE LIKE 'Start%'
+	                                                                  AND	PP.VALIDSTATE = 'Valid'
+	                                          LEFT OUTER JOIN PCM_CONSUMEMATERIALLOT_TEMP  MLT  ON  PL.LOTID = MLT.LOTID
+	                                                                  AND  PP.PROCESSSEGMENTID = MLT.PROCESSSEGMENTID
+	                                                                  AND  MLT.MATERIALTYPE = 'Consumable'
+	                                          LEFT OUTER JOIN MTM_CONSUMEMATERIALLOT    CML  ON  PL.LOTID = CML.LOTID
+	                                                                  AND  PP.PROCESSSEGMENTID = CML.PROCESSSEGMENTID
+	                                                                  AND  CML.MATERIALTYPE = 'Consumable'
+	                                          INNER JOIN BAS_CONSUMABLEDEFINITION          CD  ON  COALESCE(CML.CONSUMABLEDEFID, MLT.MATERIALDEFID) = CD.CONSUMABLEDEFID
+	                                                                                          AND COALESCE(CML.CONSUMABLEDEFVERSION, MLT.MATERIALDEFVERSION) = CD.CONSUMABLEDEFVERSION
+	                                                                                          AND CD.CONSUMABLECLASSID = 'RawMaterial'
+	                                          WHERE  1 = 1
+	                                          AND    PL.LOTCREATEDTYPE = 'SplitRoll'
+	                                          
+	                                          AND    PL.PRODUCTDEFID = L.PRODUCTDEFID
+	                                          AND    PL.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+	                                          AND    (MLT.MATERIALLOTID IS NOT NULL OR CML.MATERIALLOTID IS NOT NULL)
+	                                         
+											 and    PL.LOTID = L.LOTID
+											                                         
+											 and    MLT.MATERIALLOTID = CL.Consumablelotid)		
+			</when>	 
+          	<otherwise>
+				
+          	</otherwise>
+	    </choose>		
+    </select>                      
+   <!-- 공정 관리 > 4-Step 설 명 : 공정 4-Step 상세 정보 탭의 자재 BOM 기준 항목 리스트를 
+		조회 한다.  -->
+    <select id="selectStandardRequirementByProcess" parameterType="map" resultType="hashmap">
+	    <choose>
+          	<when test="VERSION.equals('10001') "> 
+				--
+				-- Id : SelectStandardRequirementByProcess
+				-- Version : 10001
+				SELECT
+						BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION	AS KEYCOLUMN
+					,	CD.CONSUMABLEDEFID
+					,	CD.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	BOM.QTY                 			AS STANDARDREQUIREMENTQTY
+					,	(L.QTY * BOM.QTY)             	AS REQUIREMENTQTY
+		          ,BOM.ALTITEM 
+		          ,BOM.ALTREVISION
+				FROM	PCM_LOT						L
+				INNER JOIN BAS_BILLOFMATERIAL		BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+														AND	L.PRODUCTDEFID = BOM.PRODUCTDEFID
+														AND	L.PRODUCTDEFVERSION = BOM.PRODUCTDEFVERSION
+														AND	L.PROCESSDEFID = BOM.PROCESSDEFID
+														AND	L.PROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+														AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+														AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+														AND	BOM.WIPSUPPLYTYPE != 'OperationPull'
+				INNER JOIN BAS_AREA					A	ON	L.AREAID = A.AREAID
+														AND  NVL(A.ISSUBCONTRACT, 'N') = 'N'
+				INNER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	BOM.ENTERPRISEID = CD.ENTERPRISEID
+														AND	BOM.MATERIALDEFID = CD.CONSUMABLEDEFID
+														AND	BOM.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION
+														AND	CD.ISLOTMNG = 'Y'
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				ORDER BY BOM."sequence" ASC
+          	</when>
+          	<when test="VERSION.equals('10011') "> 
+				--
+				-- Id : SelectStandardRequirementByProcess
+				-- Version : 10011
+				SELECT
+						BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION	AS KEYCOLUMN
+					,	CD.CONSUMABLEDEFID
+					,	CD.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	BOM.QTY                 			AS STANDARDREQUIREMENTQTY
+					,	(L.QTY * BOM.QTY)             	AS REQUIREMENTQTY
+		          ,BOM.ALTITEM 
+		          ,BOM.ALTREVISION
+				FROM	PCM_LOT						L
+				INNER JOIN BAS_BILLOFMATERIAL		BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+														AND	L.SUBPROCESSDEFID = BOM.PROCESSDEFID
+														AND	L.SUBPROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+														AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+														AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+														AND	BOM.WIPSUPPLYTYPE != 'OperationPull'
+				INNER JOIN BAS_AREA					A	ON	L.AREAID = A.AREAID
+														AND  NVL(A.ISSUBCONTRACT, 'N') = 'N'
+				INNER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	BOM.ENTERPRISEID = CD.ENTERPRISEID
+														AND	BOM.MATERIALDEFID = CD.CONSUMABLEDEFID
+														AND	BOM.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION
+														AND	CD.ISLOTMNG = 'Y'
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				ORDER BY BOM."sequence" ASC
+          	</when>	          	
+          	<otherwise>
+				
+          	</otherwise>
+	    </choose>		
+    </select>
+                           
+   <!-- Process 4-Step Detail User Control에서 자재 LOT 정보를 조회 한다.  -->
+    <select id="getConsumableLotByProcess" parameterType="map" resultType="hashmap">
+	    <choose>
+          	<when test="VERSION.equals('10001') ">
+         	 
+				--
+				-- Id : GetConsumableLotByProcess
+				-- Version : 10001
+
+/*
+--MHYi 2105071054 자재 테이블 변경
+--데이터 검증 되면 삭제 해주세요 ============================================================				
+*/				
+
+SELECT   ARE.AREAID
+          , ARE.WAREHOUSEID
+          , BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION    AS KEYCOLUMN
+                    ,   BOM.MATERIALDEFID                                            CONSUMABLEDEFID       
+                    ,   BOM.MATERIALDEFVERSION                                       CONSUMABLEDEFVERSION 
+          , CD.CONSUMABLEDEFNAME
+          , CL.LOT_NUMBER
+          , CL.LOT_NUMBER AS CONSUMABLELOTID					
+		  , CL.LOT_NUMBER AS MATERIALLOTID
+          , CL.ONHAND_QTY                                         AS STOCKQTY
+          , (CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0))               AS AVAILABLEQTY
+          , (LEAST(L.QTY * BOM.QTY, GREATEST(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0), 0)))  AS INPUTQTY
+          , (LEAST(L.QTY * BOM.QTY, GREATEST(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0), 0)))  AS ORGINPUTQTY
+          , 0                       AS DEFECTQTY
+          , NVL(T.CONSUMEDQTY, 0)           AS LOTUSINGQTY
+          , ''                    AS CONSUMABLEDEFECT
+          
+                    , CASE WHEN CL.ONHAND_QTY = 0 THEN 'Consumed' ELSE '' END                            CONSUMABLESTATE
+                    , 'PCM01800'                                              AS  FROM_WHERE
+        FROM  PCM_LOT   L
+        INNER JOIN BAS_AREA           ARE  ON ARE.ENTERPRISEID          = L.ENTERPRISEID 
+                                                            AND ARE.PLANTID               = L.PLANTID
+                                                            AND ARE.AREAID                = L.AREAID       
+        INNER JOIN BAS_BILLOFMATERIAL     BOM  ON L.ENTERPRISEID            = BOM.ENTERPRISEID
+                              AND L.PLANTID                 = BOM.PLANTID
+                              AND L.PRODUCTDEFID            = BOM.PRODUCTDEFID
+                              AND L.PRODUCTDEFVERSION       = BOM.PRODUCTDEFVERSION
+                              AND L.PROCESSDEFID            = BOM.PROCESSDEFID
+                              AND L.PROCESSDEFVERSION       = BOM.PROCESSDEFVERSION
+                              AND L.PROCESSSEGMENTID        = BOM.PROCESSSEGMENTID
+                              AND L.PROCESSSEGMENTVERSION   = BOM.PROCESSSEGMENTVERSION
+                              AND BOM.WIPSUPPLYTYPE != 'OperationPull'
+        INNER JOIN IFC_MES_S_ONHAND_V@ERPPROD CL   
+                               ON CL.ENTERPRISEID          = BOM.ENTERPRISEID
+                              AND CL.PLANTID               = BOM.PLANTID 
+                              AND CL.SUBINVENTORY_CODE     = ARE.WAREHOUSEID
+                              AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 1, 1), '2', BOM.MATERIALDEFID || BOM.MATERIALDEFVERSION
+                                                            , BOM.MATERIALDEFID ) 
+       INNER JOIN BAS_CONSUMABLEDEFINITION CD  
+                ON CD.ENTERPRISEID           = CL.ENTERPRISEID
+               AND CD.PLANTID                = CL.PLANTID
+               AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 1, 1), '2', CD.CONSUMABLEDEFID || CD.CONSUMABLEDEFVERSION, CD.CONSUMABLEDEFID)  
+                                                                                                                                        
+       LEFT OUTER JOIN BAS_ALTERNATIVEMATERIAL    AM   ON BOM.ENTERPRISEID          = AM.ENTERPRISEID
+                              AND BOM.PLANTID               = AM.PLANTID
+                              AND BOM.MATERIALDEFID         = AM.ITEMID
+
+LEFT   OUTER JOIN (SELECT MATERIALDEFID
+                         ,MATERIALDEFVERSION
+                         ,MATERIALLOTID
+                         ,SUM(CONSUMEDQTY) AS CONSUMEDQTY
+                         ,WAREHOUSEID
+                         ,ENTERPRISEID
+                         ,PLANTID
+                   FROM   MTM_CONSUMEMATERIALLOT_V T2
+                   GROUP  BY MATERIALDEFID
+                            ,MATERIALDEFVERSION
+                            ,MATERIALLOTID
+                            ,WAREHOUSEID
+                            ,ENTERPRISEID
+                            ,PLANTID) T
+ON     CL.ENTERPRISEID = T.ENTERPRISEID
+AND    CL.PLANTID = T.PLANTID
+AND    CL.LOT_NUMBER = T.MATERIALLOTID
+AND    CL.SUBINVENTORY_CODE = T.WAREHOUSEID
+                              
+        WHERE 1 = 1
+				AND		L.ENTERPRISEID      = #{ENTERPRISEID}
+				AND		L.PLANTID           = #{PLANTID}
+				AND		L.LOTID             = #{LOTID}
+				AND		CL.LOT_NUMBER       = #{CONSUMABLELOTID}
+				
+			
+UNION ALL
+
+SELECT   ARE.AREAID
+          , ARE.WAREHOUSEID
+          , BOM.ALTITEM || '|' || BOM.ALTREVISION    AS KEYCOLUMN
+                    ,   BOM.ALTITEM                                            CONSUMABLEDEFID       
+                    ,   BOM.ALTREVISION                                       CONSUMABLEDEFVERSION 
+          , CD.CONSUMABLEDEFNAME
+          , CL.LOT_NUMBER
+          , CL.LOT_NUMBER AS CONSUMABLELOTID					
+		  , CL.LOT_NUMBER AS MATERIALLOTID
+          , CL.ONHAND_QTY                                         AS STOCKQTY
+          , (CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0))               AS AVAILABLEQTY
+          , (LEAST(L.QTY * BOM.QTY, GREATEST(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0), 0)))  AS INPUTQTY
+          , (LEAST(L.QTY * BOM.QTY, GREATEST(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0), 0)))  AS ORGINPUTQTY
+          , 0                       AS DEFECTQTY
+          , NVL(T.CONSUMEDQTY, 0)           AS LOTUSINGQTY
+          , ''                    AS CONSUMABLEDEFECT
+          
+                    , CASE WHEN CL.ONHAND_QTY = 0 THEN 'Consumed' ELSE '' END                            CONSUMABLESTATE
+                    , 'PCM01800'                                              AS  FROM_WHERE
+        FROM  PCM_LOT   L
+        INNER JOIN BAS_AREA           ARE  ON ARE.ENTERPRISEID          = L.ENTERPRISEID 
+                                                            AND ARE.PLANTID               = L.PLANTID
+                                                            AND ARE.AREAID                = L.AREAID       
+        INNER JOIN BAS_BILLOFMATERIAL     BOM  ON L.ENTERPRISEID            = BOM.ENTERPRISEID
+                              AND L.PLANTID                 = BOM.PLANTID
+                              AND L.PRODUCTDEFID            = BOM.PRODUCTDEFID
+                              AND L.PRODUCTDEFVERSION       = BOM.PRODUCTDEFVERSION
+                              AND L.PROCESSDEFID            = BOM.PROCESSDEFID
+                              AND L.PROCESSDEFVERSION       = BOM.PROCESSDEFVERSION
+                              AND L.PROCESSSEGMENTID        = BOM.PROCESSSEGMENTID
+                              AND L.PROCESSSEGMENTVERSION   = BOM.PROCESSSEGMENTVERSION
+                              AND BOM.WIPSUPPLYTYPE != 'OperationPull'
+        INNER JOIN IFC_MES_S_ONHAND_V@ERPPROD CL   
+                               ON CL.ENTERPRISEID          = BOM.ENTERPRISEID
+                              AND CL.PLANTID               = BOM.PLANTID 
+                              AND CL.SUBINVENTORY_CODE     = ARE.WAREHOUSEID
+                              AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 1, 1), '2', BOM.ALTITEM || BOM.ALTREVISION
+                                                            , BOM.ALTITEM ) 
+       INNER JOIN BAS_CONSUMABLEDEFINITION CD  
+                ON CD.ENTERPRISEID           = CL.ENTERPRISEID
+               AND CD.PLANTID                = CL.PLANTID
+               AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 1, 1), '2', CD.CONSUMABLEDEFID || CD.CONSUMABLEDEFVERSION, CD.CONSUMABLEDEFID)  
+                                                                                                                                        
+       LEFT OUTER JOIN BAS_ALTERNATIVEMATERIAL    AM   ON BOM.ENTERPRISEID          = AM.ENTERPRISEID
+                              AND BOM.PLANTID               = AM.PLANTID
+                              AND BOM.ALTITEM         = AM.ITEMID
+
+LEFT   OUTER JOIN (SELECT MATERIALDEFID
+                         ,MATERIALDEFVERSION
+                         ,MATERIALLOTID
+                         ,SUM(CONSUMEDQTY) AS CONSUMEDQTY
+                         ,WAREHOUSEID
+                         ,ENTERPRISEID
+                         ,PLANTID
+                   FROM   MTM_CONSUMEMATERIALLOT_V T2
+                   GROUP  BY MATERIALDEFID
+                            ,MATERIALDEFVERSION
+                            ,MATERIALLOTID
+                            ,WAREHOUSEID
+                            ,ENTERPRISEID
+                            ,PLANTID) T
+ON     CL.ENTERPRISEID = T.ENTERPRISEID
+AND    CL.PLANTID = T.PLANTID
+AND    CL.LOT_NUMBER = T.MATERIALLOTID
+AND    CL.SUBINVENTORY_CODE = T.WAREHOUSEID
+                              
+        WHERE 1 = 1
+				AND		L.ENTERPRISEID      = #{ENTERPRISEID}
+				AND		L.PLANTID           = #{PLANTID}
+				AND		L.LOTID             = #{LOTID}
+				AND		CL.LOT_NUMBER       = #{CONSUMABLELOTID}
+
+          	</when>
+          	<when test="VERSION.equals('10011') "> 
+				--
+				-- Id : GetConsumableLotByProcess
+				-- Version : 10011
+				SELECT
+						CL.AREAID
+					,	CL.WAREHOUSEID
+					,	(BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION)     	AS KEYCOLUMN
+					,	CL.CONSUMABLEDEFID
+					,	CL.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	CL.CONSUMABLELOTID
+					,	CL.CONSUMABLELOTQTY				AS STOCKQTY
+					,	CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0)	AS AVAILABLEQTY
+					,	LEAST(L.QTY * BOM.QTY, GREATEST(CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0), 0))	    AS INPUTQTY
+					,	LEAST(L.QTY * BOM.QTY, GREATEST(CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0), 0))  	AS ORGINPUTQTY
+					,	0									AS DEFECTQTY
+					,	NVL(T.CONSUMEDQTY, 0)		AS LOTUSINGQTY
+					,	''           						AS CONSUMABLEDEFECT
+					,	CL.CONSUMABLESTATE
+                    , 'PCM01800'                                              AS  FROM_WHERE
+				FROM	PCM_LOT							L
+				INNER JOIN BAS_AREA						A	ON	L.AREAID = A.AREAID
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+															AND	L.SUBPROCESSDEFID = BOM.PROCESSDEFID
+															AND	L.SUBPROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+															AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+															AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+				INNER JOIN MTM_CONSUMABLELOT				CL	ON	L.ENTERPRISEID = CL.ENTERPRISEID
+															AND	A.WAREHOUSEID = CL.WAREHOUSEID
+															AND	BOM.MATERIALDEFID = CL.CONSUMABLEDEFID
+															AND	BOM.MATERIALDEFVERSION = CL.CONSUMABLEDEFVERSION
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	CL.ENTERPRISEID = CD.ENTERPRISEID
+															AND	CL.CONSUMABLEDEFID = CD.CONSUMABLEDEFID
+															AND	CL.CONSUMABLEDEFVERSION = CD.CONSUMABLEDEFVERSION
+				LEFT OUTER JOIN (
+									SELECT
+											T.ENTERPRISEID
+										,	T.MATERIALLOTID
+										,	T.WAREHOUSEID
+										,	SUM(T.CONSUMEDQTY)			AS CONSUMEDQTY
+									FROM	PCM_CONSUMEMATERIALLOT_TEMP	T
+									WHERE	T.MATERIALTYPE = 'Consumable'
+									GROUP BY T.ENTERPRISEID
+											,T.MATERIALLOTID
+											,T.WAREHOUSEID
+								)						T	ON	CL.ENTERPRISEID = T.ENTERPRISEID
+															AND	CL.CONSUMABLELOTID = T.MATERIALLOTID
+															AND	CL.WAREHOUSEID = T.WAREHOUSEID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}	
+				AND		L.PLANTID = #{PLANTID}	
+				AND		L.LOTID = #{LOTID}	
+				AND		CL.CONSUMABLELOTID = #{CONSUMABLELOTID}				
+          	</when>	          	
+          	<otherwise>
+				
+          	</otherwise>
+	    </choose>		
+    </select>
+               
+   <!-- Process 4-Step Detail User Control에서 입력한 자재 LOT 보다 먼저 생성된 LOT 정보를 조회 한다.  -->
+    <select id="getPriorityConsumableLotByProcess" parameterType="map" resultType="hashmap">
+		--
+		-- Id : GetPriorityConsumableLotByProcess
+		-- Version : 10001
+
+/*
+--MHYi 2105071054 자재 테이블 변경
+--데이터 검증 되면 삭제 해주세요 ============================================================				
+*/
+<!-- 		SELECT
+				*
+		FROM	MTM_CONSUMABLELOT		CL
+		INNER JOIN MTM_CONSUMABLELOT		CLT	ON	CL.ENTERPRISEID = CLT.ENTERPRISEID
+											AND	CL.PLANTID = CLT.PLANTID
+											AND	CL.AREAID = CLT.AREAID
+											AND	CL.WAREHOUSEID = CLT.WAREHOUSEID
+											AND	CL.CONSUMABLEDEFID = CLT.CONSUMABLEDEFID
+											AND	CL.CONSUMABLEDEFVERSION = CLT.CONSUMABLEDEFVERSION
+											AND	CL.CREATEDTIME > CLT.CREATEDTIME
+											AND	CLT.CONSUMABLESTATE = 'Available'
+		WHERE	1 = 1
+		AND		CL.ENTERPRISEID = #{ENTERPRISEID}	
+		AND		CL.PLANTID = #{PLANTID}	
+		AND		CL.AREAID = #{AREAID}	
+		AND		CL.CONSUMABLELOTID = #{CONSUMABLELOTID}	
+		AND		CL.CONSUMABLEDEFID = #{CONSUMABLEDEFID}	
+		AND		CL.CONSUMABLEDEFVERSION = #{CONSUMABLEDEFVERSION}	
+		AND		CL.CONSUMABLESTATE = 'Available'
+ -->
+
+		SELECT CML.*
+		  FROM MTM_CONSUMEMATERIALLOT CML
+		 INNER JOIN BAS_AREA               ARE     ON ARE.ENTERPRISEID          = CML.ENTERPRISEID 
+		                                          AND ARE.PLANTID               = CML.PLANTID
+		                                          AND ARE.AREAID                = CML.AREAID
+		 INNER JOIN IFC_MES_S_ONHAND_V@ERPPROD  CL ON CL.ENTERPRISEID           = ARE.ENTERPRISEID
+		                                          AND CL.PLANTID                = ARE.PLANTID  
+		                                          AND CL.SUBINVENTORY_CODE      = ARE.WAREHOUSEID   
+		                                          AND CL.LOT_NUMBER             = CML.MATERIALLOTID
+		 WHERE CML.ENTERPRISEID     = #{ENTERPRISEID}	
+		   AND CML.PLANTID          = #{PLANTID}	
+		   AND ARE.AREAID           = #{AREAID}	
+		   AND CML.MATERIALLOTID    = #{CONSUMABLELOTID}	
+		   AND CML.CONSUMABLEDEFID   = #{CONSUMABLEDEFID}	
+		   AND CML.CONSUMABLEDEFVERSION = #{CONSUMABLEDEFVERSION}	
+		   AND CL.ONHAND_QTY        <![CDATA[>]]> 0
+
+
+			
+    </select>
+    
+    <!-- Process 4-Step Detail User Control에서 대체 LOT 정보를 조회 한다.  -->
+    <select id="getConsumableAlternativeLotByProcess" parameterType="map" resultType="hashmap">
+	    <choose>
+          	<when test="VERSION.equals('10001') ">
+/*
+--MHYi 2105071054 자재 테이블 변경
+*/
+
+				--
+				-- Id : GetConsumableAlternativeLotByProcess
+				-- Version : 10001
+<!-- 				SELECT
+						CL.AREAID
+					,	CL.WAREHOUSEID
+					,	BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION		AS KEYCOLUMN
+					,	CL.CONSUMABLEDEFID
+					,	CL.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	CL.CONSUMABLELOTID
+					,	CL.CONSUMABLELOTQTY				AS STOCKQTY
+					,	CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0)	AS AVAILABLEQTY
+					,	LEAST(L.QTY * BOM.QTY, GREATEST(CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0), 0))	AS INPUTQTY
+					,	LEAST(L.QTY * BOM.QTY, GREATEST(CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0), 0))	AS ORGINPUTQTY
+					,	0            						AS DEFECTQTY
+					,	NVL(T.CONSUMEDQTY, 0)		AS LOTUSINGQTY
+					,	''								AS CONSUMABLEDEFECT
+					,	CL.CONSUMABLESTATE
+				FROM	PCM_LOT							L
+				INNER JOIN BAS_AREA						A	ON	L.AREAID = A.AREAID
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+															AND	L.PLANTID = BOM.PLANTID
+															AND	L.PRODUCTDEFID = BOM.PRODUCTDEFID
+															AND	L.PRODUCTDEFVERSION = BOM.PRODUCTDEFVERSION
+															AND	L.PROCESSDEFID = BOM.PROCESSDEFID
+															AND	L.PROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+															AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+															AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+				INNER JOIN BAS_ALTERNATIVEMATERIAL		AM	ON	BOM.ENTERPRISEID = AM.ENTERPRISEID
+															AND	BOM.PLANTID = AM.PLANTID
+															AND	BOM.MATERIALDEFID = AM.ITEMID
+				INNER JOIN MTM_CONSUMABLELOT				CL	ON	AM.ENTERPRISEID = CL.ENTERPRISEID
+															AND	AM.PLANTID = CL.PLANTID
+															AND	A.WAREHOUSEID = CL.WAREHOUSEID
+															AND	AM.ALTERNATIVEITEMID = CL.CONSUMABLEDEFID
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	CL.ENTERPRISEID = CD.ENTERPRISEID
+															AND	CL.PLANTID = CD.PLANTID
+															AND	CL.CONSUMABLEDEFID = CD.CONSUMABLEDEFID
+				LEFT OUTER JOIN (
+									SELECT
+											T.ENTERPRISEID
+										,	T.MATERIALLOTID
+										,	T.WAREHOUSEID
+										,	SUM(T.CONSUMEDQTY)			AS CONSUMEDQTY
+									FROM	PCM_CONSUMEMATERIALLOT_TEMP	T
+									WHERE	T.MATERIALTYPE = 'Consumable'
+									GROUP BY T.ENTERPRISEID
+											,T.MATERIALLOTID
+											,T.WAREHOUSEID
+								)						T	ON	CL.ENTERPRISEID = T.ENTERPRISEID
+															AND	CL.CONSUMABLELOTID = T.MATERIALLOTID
+															AND	CL.WAREHOUSEID = T.WAREHOUSEID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND		CL.CONSUMABLELOTID = #{CONSUMABLELOTID}
+ -->
+                --
+				-- Id : GetConsumableAlternativeLotByProcess
+				-- Version : 10001
+				SELECT
+						ARE.AREAID
+					,	ARE.WAREHOUSEID
+					,	BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION		AS KEYCOLUMN
+                    ,   BOM.MATERIALDEFID                                            CONSUMABLEDEFID       
+                    ,   BOM.MATERIALDEFVERSION                                       CONSUMABLEDEFVERSION 
+					,	CD.CONSUMABLEDEFNAME
+					,	CL.LOT_NUMBER
+					,	CL.LOT_NUMBER	AS CONSUMABLELOTID
+				    ,	CL.LOT_NUMBER AS MATERIALLOTID
+					,	CL.ONHAND_QTY                                    			AS STOCKQTY
+					,	(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0))				        AS AVAILABLEQTY
+					,	(LEAST(L.QTY * BOM.QTY, GREATEST(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0), 0)))	AS INPUTQTY
+					,	(LEAST(L.QTY * BOM.QTY, GREATEST(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0), 0)))	AS ORGINPUTQTY
+					,	0            						AS DEFECTQTY
+					,	NVL(T.CONSUMEDQTY, 0)		        AS LOTUSINGQTY
+					,	''								    AS CONSUMABLEDEFECT
+					-- MHYi 210507 공정관리 >> 작업시작 > 자재 탭 소스에는 Scrapped 체크 하므로 업무 절차 정해지면 추가 할것
+                    ,	CASE WHEN CL.ONHAND_QTY = 0 THEN 'Consumed' ELSE '' END                            CONSUMABLESTATE
+				FROM	PCM_LOT							L
+				INNER JOIN BAS_AREA						ARE	 ON	ARE.ENTERPRISEID          = L.ENTERPRISEID 
+                                                            AND ARE.PLANTID               = L.PLANTID
+                                                            AND ARE.AREAID                = L.AREAID       
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	 ON	L.ENTERPRISEID            = BOM.ENTERPRISEID
+															AND	L.PLANTID                 = BOM.PLANTID
+															AND	L.PRODUCTDEFID            = BOM.PRODUCTDEFID
+															AND	L.PRODUCTDEFVERSION       = BOM.PRODUCTDEFVERSION
+															AND	L.PROCESSDEFID            = BOM.PROCESSDEFID
+															AND	L.PROCESSDEFVERSION       = BOM.PROCESSDEFVERSION
+															AND	L.PROCESSSEGMENTID        = BOM.PROCESSSEGMENTID
+															AND	L.PROCESSSEGMENTVERSION   = BOM.PROCESSSEGMENTVERSION
+				INNER JOIN BAS_ALTERNATIVEMATERIAL		AM	 ON	BOM.ENTERPRISEID          = AM.ENTERPRISEID
+															AND	BOM.PLANTID               = AM.PLANTID
+															AND	BOM.MATERIALDEFID         = AM.ITEMID
+				INNER JOIN IFC_MES_S_ONHAND_V@ERPPROD	CL	 ON	CL.ENTERPRISEID          = AM.ENTERPRISEID
+                                                            AND CL.PLANTID               = AM.PLANTID 
+															AND	CL.SUBINVENTORY_CODE     = ARE.WAREHOUSEID
+                                                            AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 0, 1), '2', AM.ITEMID || AM.ITEMVERSION
+												                                                                                 , AM.ITEMID)
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION CD	 ON	CL.ENTERPRISEID           = CD.ENTERPRISEID
+															AND	CL.PLANTID                = CD.PLANTID
+															--AND	CL.CONSUMABLEDEFID        = CD.CONSUMABLEDEFID
+                                                            AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 0, 1), '2', CD.CONSUMABLEDEFID || CD.CONSUMABLEDEFVERSION
+												                                                                                 , CD.CONSUMABLEDEFID)
+				LEFT OUTER JOIN MTM_CONSUMEMATERIALLOT_V T	 ON	CL.ENTERPRISEID       = T.ENTERPRISEID
+                                                            AND CL.PLANTID            = T.PLANTID 
+															AND	CL.LOT_NUMBER         = T.MATERIALLOTID
+															AND	CL.SUBINVENTORY_CODE  = T.WAREHOUSEID
+															AND L.LOTID = T.LOTID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID      = #{PLANTID}
+				AND		L.LOTID        = #{LOTID}
+				AND		CL.LOT_NUMBER = #{CONSUMABLELOTID}
+				
+				/* 2021-06-10 대체자재 관련 로직 추가. 최성민 */
+				UNION ALL
+				
+			SELECT
+						ARE.AREAID
+					,	ARE.WAREHOUSEID
+					,	BOM.ALTITEM || '|' || BOM.ALTREVISION		AS KEYCOLUMN
+                    ,   BOM.ALTITEM                                            CONSUMABLEDEFID       
+                    ,   BOM.ALTREVISION                                       CONSUMABLEDEFVERSION 
+					,	CD.CONSUMABLEDEFNAME
+					,	CL.LOT_NUMBER
+					,	CL.LOT_NUMBER	AS CONSUMABLELOTID
+				    ,	CL.LOT_NUMBER AS MATERIALLOTID
+					,	CL.ONHAND_QTY                                    			AS STOCKQTY
+					,	(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0))				        AS AVAILABLEQTY
+					,	(LEAST(L.QTY * BOM.QTY, GREATEST(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0), 0)))	AS INPUTQTY
+					,	(LEAST(L.QTY * BOM.QTY, GREATEST(CL.ONHAND_QTY - NVL(T.CONSUMEDQTY, 0), 0)))	AS ORGINPUTQTY
+					,	0            						AS DEFECTQTY
+					,	NVL(T.CONSUMEDQTY, 0)		        AS LOTUSINGQTY
+					,	''								    AS CONSUMABLEDEFECT
+					-- MHYi 210507 공정관리 >> 작업시작 > 자재 탭 소스에는 Scrapped 체크 하므로 업무 절차 정해지면 추가 할것
+                    ,	CASE WHEN CL.ONHAND_QTY = 0 THEN 'Consumed' ELSE '' END                            CONSUMABLESTATE
+				FROM	PCM_LOT							L
+				INNER JOIN BAS_AREA						ARE	 ON	ARE.ENTERPRISEID          = L.ENTERPRISEID 
+                                                            AND ARE.PLANTID               = L.PLANTID
+                                                            AND ARE.AREAID                = L.AREAID       
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	 ON	L.ENTERPRISEID            = BOM.ENTERPRISEID
+															AND	L.PLANTID                 = BOM.PLANTID
+															AND	L.PRODUCTDEFID            = BOM.PRODUCTDEFID
+															AND	L.PRODUCTDEFVERSION       = BOM.PRODUCTDEFVERSION
+															AND	L.PROCESSDEFID            = BOM.PROCESSDEFID
+															AND	L.PROCESSDEFVERSION       = BOM.PROCESSDEFVERSION
+															AND	L.PROCESSSEGMENTID        = BOM.PROCESSSEGMENTID
+															AND	L.PROCESSSEGMENTVERSION   = BOM.PROCESSSEGMENTVERSION
+				INNER JOIN BAS_ALTERNATIVEMATERIAL		AM	 ON	BOM.ENTERPRISEID          = AM.ENTERPRISEID
+															AND	BOM.PLANTID               = AM.PLANTID
+															AND	BOM.ALTITEM         = AM.ITEMID
+				INNER JOIN IFC_MES_S_ONHAND_V@ERPPROD	CL	 ON	CL.ENTERPRISEID          = AM.ENTERPRISEID
+                                                            AND CL.PLANTID               = AM.PLANTID 
+															AND	CL.SUBINVENTORY_CODE     = ARE.WAREHOUSEID
+                                                            AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 0, 1), '2', AM.ITEMID || AM.ITEMVERSION
+												                                                                                 , AM.ITEMID)
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION CD	 ON	CL.ENTERPRISEID           = CD.ENTERPRISEID
+															AND	CL.PLANTID                = CD.PLANTID
+															--AND	CL.CONSUMABLEDEFID        = CD.CONSUMABLEDEFID
+                                                            AND CL.ITEM_CODE             = DECODE(SUBSTR(CL.ITEM_CODE, 0, 1), '2', CD.CONSUMABLEDEFID || CD.CONSUMABLEDEFVERSION
+												                                                                                 , CD.CONSUMABLEDEFID)
+				LEFT OUTER JOIN MTM_CONSUMEMATERIALLOT_V T	 ON	CL.ENTERPRISEID       = T.ENTERPRISEID
+                                                            AND CL.PLANTID            = T.PLANTID 
+															AND	CL.LOT_NUMBER         = T.MATERIALLOTID
+															AND	CL.SUBINVENTORY_CODE  = T.WAREHOUSEID
+															AND L.LOTID = T.LOTID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID      = #{PLANTID}
+				AND		L.LOTID        = #{LOTID}
+				AND		CL.LOT_NUMBER = #{CONSUMABLELOTID}
+				
+          	</when>
+          	<when test="VERSION.equals('10011') "> 
+				--
+				-- Id : GetConsumableAlternativeLotByProcess
+				-- Version : 10011
+				SELECT
+						CL.AREAID
+					,	CL.WAREHOUSEID
+					,	BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION		AS KEYCOLUMN
+					,	CL.CONSUMABLEDEFID
+					,	CL.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	CL.CONSUMABLELOTID
+					,	CL.CONSUMABLELOTQTY				AS STOCKQTY
+					,	CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0)	AS AVAILABLEQTY
+					,	LEAST(L.QTY * BOM.QTY, GREATEST(CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0), 0))	AS INPUTQTY
+					,	LEAST(L.QTY * BOM.QTY, GREATEST(CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0), 0))	AS ORGINPUTQTY
+					,	0           						AS DEFECTQTY
+					,	NVL(T.CONSUMEDQTY, 0)		AS LOTUSINGQTY
+					,	''								AS CONSUMABLEDEFECT
+					,	CL.CONSUMABLESTATE
+				FROM	PCM_LOT							L
+				INNER JOIN BAS_AREA						A	ON	L.AREAID = A.AREAID
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+															AND	L.PLANTID = BOM.PLANTID
+															AND	L.SUBPROCESSDEFID = BOM.PROCESSDEFID
+															AND	L.SUBPROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+															AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+															AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+				INNER JOIN BAS_ALTERNATIVEMATERIAL		AM	ON	BOM.ENTERPRISEID = AM.ENTERPRISEID
+															AND	BOM.PLANTID = AM.PLANTID
+															AND	BOM.MATERIALDEFID = AM.ITEMID
+				INNER JOIN MTM_CONSUMABLELOT				CL	ON	AM.ENTERPRISEID = CL.ENTERPRISEID
+															AND	AM.PLANTID = CL.PLANTID
+															AND	A.WAREHOUSEID = CL.WAREHOUSEID
+															AND	AM.ALTERNATIVEITEMID = CL.CONSUMABLEDEFID
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	CL.ENTERPRISEID = CD.ENTERPRISEID
+															AND	CL.PLANTID = CD.PLANTID
+															AND	CL.CONSUMABLEDEFID = CD.CONSUMABLEDEFID
+				LEFT OUTER JOIN (
+									SELECT
+											T.ENTERPRISEID
+										,	T.MATERIALLOTID
+										,	T.WAREHOUSEID
+										,	SUM(T.CONSUMEDQTY)			AS CONSUMEDQTY
+									FROM	PCM_CONSUMEMATERIALLOT_TEMP	T
+									WHERE	T.MATERIALTYPE = 'Consumable'
+									GROUP BY T.ENTERPRISEID
+											,T.MATERIALLOTID
+											,T.WAREHOUSEID
+								)						T	ON	CL.ENTERPRISEID = T.ENTERPRISEID
+															AND	CL.CONSUMABLELOTID = T.MATERIALLOTID
+															AND	CL.WAREHOUSEID = T.WAREHOUSEID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND		CL.CONSUMABLELOTID = #{CONSUMABLELOTID}		
+				
+				/* 2021-06-10 대체자재 관련 로직 추가. 최성민 */
+				UNION ALL
+				
+				SELECT
+						CL.AREAID
+					,	CL.WAREHOUSEID
+					,	BOM.ALTITEM || '|' || BOM.ALTREVISION		AS KEYCOLUMN
+					,	CL.CONSUMABLEDEFID
+					,	CL.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	CL.CONSUMABLELOTID
+					,	CL.CONSUMABLELOTQTY				AS STOCKQTY
+					,	CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0)	AS AVAILABLEQTY
+					,	LEAST(L.QTY * BOM.QTY, GREATEST(CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0), 0))	AS INPUTQTY
+					,	LEAST(L.QTY * BOM.QTY, GREATEST(CL.CONSUMABLELOTQTY - NVL(T.CONSUMEDQTY, 0), 0))	AS ORGINPUTQTY
+					,	0           						AS DEFECTQTY
+					,	NVL(T.CONSUMEDQTY, 0)		AS LOTUSINGQTY
+					,	''								AS CONSUMABLEDEFECT
+					,	CL.CONSUMABLESTATE
+				FROM	PCM_LOT							L
+				INNER JOIN BAS_AREA						A	ON	L.AREAID = A.AREAID
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+															AND	L.PLANTID = BOM.PLANTID
+															AND	L.SUBPROCESSDEFID = BOM.PROCESSDEFID
+															AND	L.SUBPROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+															AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+															AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+				INNER JOIN BAS_ALTERNATIVEMATERIAL		AM	ON	BOM.ENTERPRISEID = AM.ENTERPRISEID
+															AND	BOM.PLANTID = AM.PLANTID
+															AND	BOM.ALTITEM = AM.ITEMID
+				INNER JOIN MTM_CONSUMABLELOT				CL	ON	AM.ENTERPRISEID = CL.ENTERPRISEID
+															AND	AM.PLANTID = CL.PLANTID
+															AND	A.WAREHOUSEID = CL.WAREHOUSEID
+															AND	AM.ALTERNATIVEITEMID = CL.CONSUMABLEDEFID
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	CL.ENTERPRISEID = CD.ENTERPRISEID
+															AND	CL.PLANTID = CD.PLANTID
+															AND	CL.CONSUMABLEDEFID = CD.CONSUMABLEDEFID
+				LEFT OUTER JOIN (
+									SELECT
+											T.ENTERPRISEID
+										,	T.MATERIALLOTID
+										,	T.WAREHOUSEID
+										,	SUM(T.CONSUMEDQTY)			AS CONSUMEDQTY
+									FROM	PCM_CONSUMEMATERIALLOT_TEMP	T
+									WHERE	T.MATERIALTYPE = 'Consumable'
+									GROUP BY T.ENTERPRISEID
+											,T.MATERIALLOTID
+											,T.WAREHOUSEID
+								)						T	ON	CL.ENTERPRISEID = T.ENTERPRISEID
+															AND	CL.CONSUMABLELOTID = T.MATERIALLOTID
+															AND	CL.WAREHOUSEID = T.WAREHOUSEID
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND		CL.CONSUMABLELOTID = #{CONSUMABLELOTID}		
+				
+          	</when>	          	
+          	<otherwise>
+				
+          	</otherwise>
+	    </choose>		
+    </select>
+                      
+   <!-- 공정 관리 > 공정작업 > 공정 4-Step 설 명 : 공정 4-Step (작업 시작, 작업 완료)   -->
+    <select id="selectEquipmentRecipe" parameterType="map" resultType="hashmap">
+	    <choose>
+          	<when test="VERSION.equals('10001') "> 
+				--
+				-- Id : SelectEquipmentRecipe
+				-- Version : 10001
+				SELECT
+						RM.EQUIPMENTID
+					,	NVL(EN.DICTIONARYNAME, E.EQUIPMENTNAME)	AS EQUIPMENTNAME
+					,	RM.RECIPEID
+					,	RM.RECIPEVERSION
+					,	PR.${RECIPENAME}				        AS RECIPENAME
+					,	RPS.PARAMETERID
+					,	RP.${PARAMETERNAME}				AS PARAMETERNAME
+					,	RPS.LSL
+					,	RPS.TARGET
+					,	RPS.USL
+					,	RPS.VALIDATIONTYPE
+				FROM	RMS_M_PRODUCTSEGMENTRECIPEMAP		RM
+				INNER JOIN RMS_M_PROCESSRECIPEPARAMETERSPEC	RPS	ON	RM.EQUIPMENTID = RPS.EQUIPMENTID
+																AND	RM.RECIPEID = RPS.RECIPEID
+																AND	RM.RECIPEVERSION = RPS.RECIPEVERSION
+				INNER JOIN RMS_M_PROCESSRECIPE				PR	ON	RM.EQUIPMENTID = PR.EQUIPMENTID
+																AND	RM.RECIPEID = PR.RECIPEID
+																AND	RM.RECIPEVERSION = PR.RECIPEVERSION
+				INNER JOIN RMS_M_RECIPEPARAMETER			RP	ON	RPS.EQUIPMENTID = RP.EQUIPMENTID
+																AND	RPS.PARAMETERID = RP.PARAMETERID
+				INNER JOIN BAS_EQUIPMENT						E	ON	RM.EQUIPMENTID = E.EQUIPMENTID
+				LEFT OUTER JOIN CMD_DICTIONARY				EN	ON	E.EQUIPMENTNAME = EN.DICTIONARYID
+																AND	EN.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE	1 = 1
+				AND		RM.PRODUCTID = #{PRODUCTID}
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	ufn_selectStringToSplit(#{EQUIPMENTID}, ',')	EQP  
+							WHERE RM.EQUIPMENTID = EQP.VALUE
+						)
+				ORDER BY EQUIPMENTID, RECIPEID		
+          	</when>
+          	<when test="VERSION.equals('10011') "> 
+				--
+				-- Id : SelectEquipmentRecipe
+				-- Version : 10011
+				SELECT
+						RM.EQUIPMENTID
+					,	NVL(EN.DICTIONARYNAME, E.EQUIPMENTNAME)	AS EQUIPMENTNAME
+					,	RM.RECIPEID
+					,	RM.RECIPEVERSION             			AS RECIPEVERSION
+					,	PR.${RECIPENAME}						AS RECIPENAME
+					,	RPS.PARAMETERID
+					,	RP.${PARAMETERNAME}				AS PARAMETERNAME
+					,	RPS.LSL
+					,	RPS.TARGET
+					,	RPS.USL
+					,	RPS.VALIDATIONTYPE
+					,	RP.DATATYPE
+					,	''           							AS VALUE
+				FROM	RMS_M_REWORKSEGMENTRECIPEMAP		RM
+				INNER JOIN RMS_M_PROCESSRECIPEPARAMETERSPEC	RPS	ON	RM.EQUIPMENTID = RPS.EQUIPMENTID
+																AND	RM.RECIPEID = RPS.RECIPEID
+																AND	RM.RECIPEVERSION = RPS.RECIPEVERSION
+				INNER JOIN RMS_M_PROCESSRECIPE				PR	ON	RM.EQUIPMENTID = PR.EQUIPMENTID
+																AND	RM.RECIPEID = PR.RECIPEID
+																AND	RM.RECIPEVERSION = PR.RECIPEVERSION
+				INNER JOIN RMS_M_RECIPEPARAMETER			RP	ON	RPS.EQUIPMENTID = RP.EQUIPMENTID
+																AND	RPS.PARAMETERID = RP.PARAMETERID
+				INNER JOIN BAS_EQUIPMENT						E	ON	RM.EQUIPMENTID = E.EQUIPMENTID
+				LEFT OUTER JOIN CMD_DICTIONARY				EN	ON	E.EQUIPMENTNAME = EN.DICTIONARYID
+																AND	EN.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE	1 = 1
+				AND		RM.PROCESSDEFID = #{PROCESSDEFID}
+				AND		RM.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+				AND		RM.SEGMENTID  = #{SEGMENTID}
+				AND		RM.RESOURCEID = #{RESOURCEID}
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	ufn_selectStringToSplit(#{EQUIPMENTID}, ',')	EQP 
+							WHERE RM.EQUIPMENTID = EQP.VALUE
+						)
+				<if test="RECIPEIDVERSION != null and RECIPEIDVERSION !=''"> 
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	ufn_selectStringToSplitDouble(#{RECIPEIDVERSION}, ',', '|')	RP  
+							WHERE	RM.RECIPEID = RP.VALUE1
+							AND		(RM.RECIPEVERSION  = RP.VALUE2 OR RP.VALUE2 = '')
+						)
+				</if>
+				AND		RM.VALIDSTATE = 'Valid'
+				ORDER BY RM.EQUIPMENTID, RM.RECIPEID		
+          	</when>	          	
+          	<otherwise>
+				
+          	</otherwise>
+	    </choose>		
+    </select>
+                      
+                                                 
+</mapper>

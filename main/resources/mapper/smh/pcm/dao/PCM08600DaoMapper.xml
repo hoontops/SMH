@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM08600Dao">
+<!-- 공정관리물류창고 출고 -->    
+
+    <!-- 공정관리물류창고 출고 조회 -->
+    <select id="selectOutSourceWarehouseShipment" parameterType="map" resultType="hashmap">
+    		--
+            -- GetOutsourcedWarehouseShipment
+            -- Version:10001    		
+    		SELECT
+                        SLT.ENTERPRISEID
+                    ,   SLT.PLANTID
+                    ,   OLT.LOTHISTKEY           AS LOTHISTKEY
+                    ,   OLT.RECEIPTSEQUENCE
+                    ,   SLT.LOTID
+                    ,   SLT.LOTTYPE
+                    ,   SLT.PRODUCTDEFID
+                    ,   SLT.PRODUCTDEFVERSION
+                    ,   PRD.PRODUCTDEFNAME
+                    ,   SLT.PROCESSSEGMENTID
+                    ,   DIC.DICTIONARYNAME       AS PROCESSSEGMENTNAME
+                    ,   SLH.USERSEQUENCE
+                    ,   HST.PREVPROCESSSEGMENTID AS PREVPROCESSSEGMENTID
+                    --,   DCC.DICTIONARYNAME       AS PREVPROCESSSEGMENTNAME
+                    ,   PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(SLT.LOTID, SLH.USERSEQUENCE, 'P')       AS PREVPROCESSSEGMENTNAME
+                    ,   SLH.AREAID
+                    ,   DAC.DICTIONARYNAME       AS  AREANAME
+                    ,   HST.PREVAREAID           AS PREVAREAID
+                    --,   DAP.DICTIONARYNAME       AS PREVAREANAME
+                    ,   PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(SLT.LOTID, SLH.USERSEQUENCE, 'A')       AS PREVAREANAME
+                    
+                    --,   HST.PCSQTY               AS PCSQTY                    
+                    --,	CASE WHEN NVL(HST.PCSQTY,0) = 0 THEN
+		            -- 				NVL(SLH.SENDPCSQTY,0)           
+		            -- 			ELSE
+		            -- 				NVL(HST.PCSQTY,0)           
+		            -- 	END AS PCSQTY
+		            --,	NVL(SLH.SENDPCSQTY,0) AS PCSQTY
+		            ,	TO_NUMBER(PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(SLT.LOTID, SLH.USERSEQUENCE, 'Q1')) AS PCSQTY
+		             		
+                    ,   HST.ARRAYQTY             AS ARRAYQTY
+                    
+                    --,   HST.PANELQTY             AS PANELQTY                    
+                    --,   CASE WHEN NVL(HST.PANELQTY,0) = 0 THEN
+		            -- 			    NVL(SLH.SENDPANELQTY,0)           
+		            -- 			ELSE
+		            -- 			   	NVL(HST.PANELQTY,0)
+		            -- 	END AS PANELQTY
+		            --,	NVL(SLH.SENDPANELQTY,0) AS PANELQTY
+		            ,	TO_NUMBER(PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(SLT.LOTID, SLH.USERSEQUENCE, 'Q2')) AS PANELQTY
+		             	    
+                    ,   CASE WHEN PRD.PCSMM =0         THEN 0
+                             WHEN HST.PCSQTY  IS NULL  THEN 0
+                             ELSE HST.PCSQTY / PRD.PCSMM
+                        END                       AS  OSPMM
+                    ,   SLT.LOTSTATE
+                    ,   SLT.PROCESSSTATE
+                    ,   SLT.ISHOLD
+                    ,   SLT.ISLOCKING
+                    ,   SAC.OWNTYPE
+                    ,   TO_CHAR(OLT.RECEIPTDATE,'YYYY-MM-DD HH24:MI:SS') AS RECEIPTDATE                    
+                    ,   OLT.RECEIPTUSER
+                    ,   URR.USER_NM               AS RECEIPTUSERNAME 
+                    ,   OLT.SENDUSER AS SENDUSER
+                    ,   CASE WHEN OLT.SENDDATE IS  NULL  THEN 'OK'
+                             ELSE 'OUT' END        AS SHIPOKCHECK
+                    , 	'0' AS CHK
+                FROM    OSM_OSPRECEIPTSENDLOT                OLT
+                INNER      JOIN BAS_PLANT                    SPL   ON    SPL.PLANTID                = OLT.PLANTID 
+                INNER      JOIN PCM_LOT                      SLT   ON    SLT.LOTID                  = OLT.LOTID 
+                INNER      JOIN PCM_LOTWORKRESULT            SLH   ON    SLH.TXNHISTKEY             = OLT.LOTHISTKEY
+                                                                  AND   SLH.LOTID                   = OLT.LOTID  
+                LEFT OUTER JOIN PCM_LOTHISTORY               HST   ON    HST.LOTID                  = SLH.LOTID
+                                                                  AND   HST.TXNHISTKEY              = SLH.PREVSENDLOTHISTKEY
+                LEFT OUTER JOIN BAS_PRODUCTDEFINITION        PRD   ON    PRD.PRODUCTDEFID           = SLH.PRODUCTDEFID          --제품
+                                                                  AND   PRD.PRODUCTDEFVERSION       = SLH.PRODUCTDEFVERSION
+                LEFT OUTER JOIN BAS_PROCESSSEGMENT           PRS   ON    PRS.PROCESSSEGMENTID       = SLH.PROCESSSEGMENTID
+                                                                  AND   PRS.PROCESSSEGMENTVERSION   = SLH.PROCESSSEGMENTVERSION
+                LEFT OUTER JOIN CMD_DICTIONARY               DIC   ON    DIC.DICTIONARYID           = PRS.PROCESSSEGMENTNAME
+                                                                  AND   DIC.LANGUAGETYPE            = #{LANGUAGETYPE}                                  
+                LEFT OUTER JOIN BAS_PROCESSSEGMENT           PSP   ON    PSP.PROCESSSEGMENTID       = HST.PREVPROCESSSEGMENTID
+                                                                  AND   PSP.PROCESSSEGMENTVERSION   = HST.PREVPROCESSSEGMENTVERSION
+                LEFT OUTER JOIN CMD_DICTIONARY               DCC   ON    DCC.DICTIONARYID           = PSP.PROCESSSEGMENTNAME
+                                                                  AND   DCC.LANGUAGETYPE            = #{LANGUAGETYPE}                                         
+                LEFT OUTER JOIN BAS_AREA                     SAC   ON    SAC.AREAID                 = SLT.AREAID
+                LEFT OUTER JOIN CMD_DICTIONARY               DAC   ON    DAC.DICTIONARYID           = SAC.AREANAME
+                                                                  AND   DAC.LANGUAGETYPE            = #{LANGUAGETYPE}                                   
+                LEFT OUTER JOIN BAS_AREA                     SAP   ON    SAP.AREAID                 = HST.PREVAREAID     
+                LEFT OUTER JOIN CMD_DICTIONARY               DAP   ON    DAP.DICTIONARYID           = SAP.AREANAME
+                                                                  AND   DAP.LANGUAGETYPE            = #{LANGUAGETYPE}                                       
+                LEFT OUTER JOIN CMD_USERS                    URR   ON    URR.USER_ID                = OLT.RECEIPTUSER
+                WHERE 1=1
+                -- AND OLT.SENDDATE        IS        NULL 
+                <if test = "P_LOTID != null and P_LOTID !='' ">
+                    AND SLT.LOTID = #{P_LOTID}
+                </if>
+                <if test="P_SHIPOKCHECK != null and P_SHIPOKCHECK !='' and (P_SHIPOKCHECK eq 'Y'.toString()) ">
+                    AND OLT.SENDDATE IS NULL
+                	-- AND OLT.CHECKDATE IS NOT NULL
+                </if>
+                AND SLT.PLANTID = #{P_PLANTID}
+                 
+                <if test = "P_AREAID != null and P_AREAID !='' ">
+                    AND SLT.AREAID = #{P_AREAID}
+                </if>
+                <if test = "P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                    AND SLT.PROCESSSEGMENTID = #{P_PROCESSSEGMENTID}
+                </if>
+                <if test = "P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                    AND SLT.PRODUCTDEFID = #{P_PRODUCTDEFID}
+                </if>
+                <if test = "P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' ">
+                    AND SLT.PRODUCTDEFVERSION = #{P_PRODUCTDEFVERSION}
+                </if>
+                <if test = "P_RECEIPTDATEFR != null and P_RECEIPTDATEFR !='' ">
+                    AND OLT.RECEIPTDATE <![CDATA[>=]]> TO_TIMESTAMP( #{P_RECEIPTDATEFR} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS')
+                </if>
+                <if test = "P_RECEIPTDATETO != null and P_RECEIPTDATETO !='' ">
+                    AND OLT.RECEIPTDATE <![CDATA[<]]>  TO_TIMESTAMP( #{P_RECEIPTDATETO} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS')
+                </if>
+                
+    </select>
+    
+    <select id="selectOutsourcedWarehouseShipmentCheck" parameterType="map" resultType="hashmap">
+  		--
+		-- GetOutsourcedWarehouseShipmentCheck
+		-- Version:10001
+		SELECT
+				OLT.ENTERPRISEID
+			,	OLT.PLANTID
+			,	OLT.LOTID
+			,	OLT.RECEIPTDATE
+			,	OLT.RECEIPTUSER
+			,	OLT.RECEIPTSEQUENCE
+			,	CASE WHEN OLT.SENDDATE IS  NULL  THEN 'OK'
+			         ELSE 'OUT' 
+			    END          AS SHIPOKCHECK
+		FROM	OSM_OSPRECEIPTSENDLOT	OLT	 
+		WHERE	1=1
+		AND		OLT.LOTID             = #{P_LOTID}
+		AND		OLT.LOTHISTKEY        = #{P_LOTHISTKEY}
+		AND		OLT.RECEIPTSEQUENCE   = #{P_RECEIPTSEQUENCE}
+		--AND	OLT.SENDDATE        IS        NULL
+		--AND   OLT.CHECKDATE       IS  NOT   NULL
+	</select>
+    
+    <update id="updateOutsourcedWarehouseShipment" parameterType="map">
+         UPDATE OSM_OSPRECEIPTSENDLOT
+         SET
+					SENDDATE 		= SYSDATE			--2021-05-26 BY PHW
+				,	SENDUSER 		= #{CREATOR}		--2021-05-26 BY PHW
+				,	SENDAREAID 	= #{AREAID}
+				
+				,	VALIDSTATE 		= #{VALIDSTATE}
+				,	LASTTXNID 		= #{LASTTXNID}
+				,	CREATOR 		= #{CREATOR}
+				,	CREATEDTIME 	= SYSDATE
+				,	MODIFIER 		= #{MODIFIER}
+				,	MODIFIEDTIME 	= SYSDATE
+		WHERE
+			LOTHISTKEY = #{LOTHISTKEY}
+		AND LOTID = #{LOTID}
+		AND RECEIPTSEQUENCE = #{RECEIPTSEQUENCE}
+    </update>
+    
+    <update id="updateLotStatusChange" parameterType="map">
+         UPDATE PCM_LOT
+         SET
+					LOTSTATE 	= #{LOTSTATUS}
+				,	CREATOR 	= #{CREATOR}
+				,	CREATEDTIME = SYSDATE
+				,	MODIFIER 	= #{MODIFIER}
+				,	MODIFIEDTIME= SYSDATE
+		WHERE
+			LOTID  = #{LOTID}
+    </update>
+    
+
+</mapper>

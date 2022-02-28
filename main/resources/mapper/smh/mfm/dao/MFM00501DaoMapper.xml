@@ -1,0 +1,707 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM00501Dao">
+	
+	<!-- 공정부하 대비 실적 조회 -->
+	<select id="selectLoadPredictionPerRecordTotalList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectLoadPredictionPerRecord
+				-- Version : 10001
+				WITH WORKRESULT AS
+                (
+                    -- 실적현황
+                    SELECT 
+                            REL.LOADTOPSEGMENTCLASSID       -- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID    -- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID     -- 공정부하 소공정그룹 ID
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS4_TOTAL}) THEN LWR.SENDPANELQTY ELSE 0 END), 0) AS G4_TOTALQTY
+                        ${SELECT_COLUMNS4}
+                        
+                    FROM    PCM_LOTWORKRESULT        		LWR	--LOT 작업실적
+                    INNER JOIN BAS_LOADSEGMENTREL    	REL 	ON  LWR.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                    INNER JOIN BAS_PRODUCTDEFINITION 	PD  	ON  LWR.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        						AND LWR.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                    INNER JOIN BAS_PLANT             			PLT 	ON  LWR.PLANTID = PLT.PLANTID
+                    LEFT OUTER JOIN PCM_LOT				 	L 		ON LWR.LOTID = L.LOTID
+                    WHERE   1 = 1
+                    AND     LWR.SENDTIME <![CDATA[>=]]> TO_DATE(     TO_CHAR(TO_DATE(#{P_SEARCHDATE}, 'YYYYMMDD'),	'YYYY-MM-DD') || ' ' || NVL(PLT.WORKTIME,'08:30:00'), 'YYYY-MM-DD HH24:MI:SS') --현재일자08:30~익일08:30
+                    AND     LWR.SENDTIME <![CDATA[<]]>  TO_DATE(      TO_CHAR(TO_DATE(#{P_SEARCHDATE}, 'YYYYMMDD')+1,	'YYYY-MM-DD') || ' ' || NVL(PLT.WORKTIME,'08:30:00'),	'YYYY-MM-DD HH24:MI:SS')
+                    AND     LWR.PLANTID = #{P_PLANTID}
+                    
+                    AND		L.LOTSTATE IN ('InProduction', 'InTransit', 'Finished')
+					AND		COALESCE(L.ISDEFECTED, 'N') = 'N'
+					AND		COALESCE(L.ISHOLD, 'N') = 'N'
+					AND		COALESCE(L.LOTCREATEDTYPE, ' ')  <![CDATA[<>]]>  'Return'
+					AND	COALESCE(LWR.RESULTTYPE, 'NORMAL')	NOT IN ('SKIP')
+                    
+                    <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+                                WHERE   LWR.PROCESSSEGMENTID = PMP.VALUE
+                            )
+                    </if>
+                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')   MAP
+                                WHERE   LWR.PRODUCTDEFID = MAP.VALUE1
+                                AND     (LWR.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+                            )
+                    </if>
+                    GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID
+                )
+                , LOADSEGMENT AS
+                (
+                    --예상부하
+                    SELECT
+                            REL.LOADTOPSEGMENTCLASSID       -- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID    -- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID     -- 공정부하 소공정그룹 ID
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS3_TOTAL}) THEN LPD.LOADQTY ELSE 0 END), 0) AS G3_TOTALQTY
+                        ${SELECT_COLUMNS3}
+                        
+                    FROM        BAS_LOADSEGMENTPERDATE   LPD		--공정부하
+                    INNER JOIN  BAS_LOADSEGMENTREL       REL 	ON  LPD.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                    INNER JOIN  BAS_PRODUCTDEFINITION    PD  	ON  LPD.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                            					AND LPD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                    WHERE   1 = 1
+                    AND     LPD.ACTIONDATE = TO_CHAR(TO_DATE(#{P_SEARCHDATE},'YYYYMMDD'),'YYYY-MM-DD')||' 00:00'
+                    AND     LPD.PREDICDATE = TO_CHAR(TO_DATE(#{P_SEARCHDATE},'YYYYMMDD'),'YYYY-MM-DD')
+                    AND     LPD.LOADTYPE = 'SixDay'
+                    AND     LPD.PLANTID = #{P_PLANTID}
+                    
+                    AND 		NVL(PD.ISLOADMNG, 'N') = 'Y'          
+                    AND 		NVL(PD.VALIDSTATELOAD, 'X') = 'Valid'
+                    
+                    <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+                                WHERE   LPD.PROCESSSEGMENTID = PMP.VALUE
+                            )
+                    </if>
+                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')  MAP
+                                WHERE   LPD.PRODUCTDEFID = MAP.VALUE1
+                                AND     (LPD.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+                            )
+                    </if>
+                    GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID
+                )
+                , BASEWIP AS
+                (
+                    -- 기초재공
+                    SELECT     
+                            REL.LOADTOPSEGMENTCLASSID           -- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID        -- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID         -- 공정부하 소공정그룹 ID
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS1_TOTAL}) THEN WSD.PANELQTY ELSE 0 END), 0) AS G1_TOTALQTY
+                        ${SELECT_COLUMNS1}
+                        
+                    FROM    PCM_WIPSUMMARYPERDAILY   WSD		--일자별 재공 집계
+                    INNER JOIN  BAS_LOADSEGMENTREL   REL 	ON  WSD.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                    INNER JOIN BAS_PRODUCTDEFINITION PD  	ON  WSD.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        					AND WSD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                    WHERE   1 = 1
+                    AND     WSD.TXNTIME = TO_CHAR(TO_DATE(#{P_SEARCHDATE},'YYYYMMDD')-1, 'YYYY-MM-DD')
+                    AND     WSD.PLANTID = #{P_PLANTID}
+                    <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+                                WHERE   WSD.PROCESSSEGMENTID = PMP.VALUE
+                            )
+                    </if>
+                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')   MAP
+                                WHERE   WSD.PRODUCTDEFID = MAP.VALUE1
+                                AND     (WSD.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+                            )
+                    </if>
+                    GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID
+                )
+                , LASTWIP AS
+                (
+                    --기말재공
+                    SELECT 
+                            REL.LOADTOPSEGMENTCLASSID       -- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID    -- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID     -- 공정부하 소공정그룹 ID
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS2_TOTAL}) THEN WSD.PANELQTY ELSE 0 END), 0) AS G2_TOTALQTY
+                        ${SELECT_COLUMNS2}
+                        
+                    FROM    PCM_WIPSUMMARYPERDAILY   WSD		--일자별 재공 집계
+                    INNER JOIN  BAS_LOADSEGMENTREL   REL 	ON  WSD.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                    INNER JOIN BAS_PRODUCTDEFINITION PD  	ON  WSD.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        					AND WSD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                    WHERE   1 = 1
+                    AND     WSD.TXNTIME = TO_CHAR(TO_DATE(#{P_SEARCHDATE},'YYYYMMDD'),'YYYY-MM-DD')
+                    AND     WSD.PLANTID = #{P_PLANTID}
+                    <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+                                WHERE   WSD.PROCESSSEGMENTID = PMP.VALUE
+                            )
+                    </if>
+                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')   MAP
+                                WHERE   WSD.PRODUCTDEFID = MAP.VALUE1
+                                AND     (WSD.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+                            )
+                    </if>
+                    GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID
+                )
+                
+                , CURRWIP AS
+                (
+                SELECT   REL.LOADTOPSEGMENTCLASSID       -- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID    -- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID     -- 공정부하 소공정그룹 ID
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS2_TOTAL}) THEN L.PANELQTY ELSE 0 END), 0) AS G2_TOTALQTY
+                        ${SELECT_COLUMNS22}
+                             
+                        FROM PCM_LOT                    L
+                        INNER JOIN  BAS_LOADSEGMENTREL   REL 	ON  L.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                        INNER JOIN BAS_PRODUCTDEFINITION    PD    ON L.PRODUCTDEFID      			= PD.PRODUCTDEFID
+                        															AND L.PRODUCTDEFVERSION 		= PD.PRODUCTDEFVERSION
+                        WHERE   1 = 1
+                        AND     L.LOTSTATE          IN ('InProduction', 'InTransit')
+                        
+						AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+						AND     COALESCE(L.ISHOLD, 'N') = 'N'
+						AND	   COALESCE(L.LOTCREATEDTYPE, ' ') <![CDATA[<>]]> 'Return'				--(21.06.17) 추가
+                        
+                        <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+	                        AND     EXISTS
+	                            (
+	                                SELECT  1
+	                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+	                                WHERE   L.PROCESSSEGMENTID = PMP.VALUE
+	                            )
+	                    </if>
+	                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+	                        AND     EXISTS
+	                            (
+	                                SELECT  1
+	                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')   MAP
+	                                WHERE   L.PRODUCTDEFID = MAP.VALUE1
+	                                AND     (L.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+	                            )
+	                    </if>
+	                                            
+                        GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID
+                )
+                
+                , SUMMARY AS
+                (
+                    SELECT 
+                                NVL(WR.LOADTOPSEGMENTCLASSID, NVL(LS.LOADTOPSEGMENTCLASSID, NVL(BW.LOADTOPSEGMENTCLASSID, LW.LOADTOPSEGMENTCLASSID))) AS LOADTOPSEGMENTCLASSID                   -- 공정부하 대공정그룹 ID
+                            ,   NVL(WR.LOADMIDDLESEGMENTCLASSID, NVL(LS.LOADMIDDLESEGMENTCLASSID, NVL(BW.LOADMIDDLESEGMENTCLASSID, LW.LOADMIDDLESEGMENTCLASSID))) AS LOADMIDDLESEGMENTCLASSID    -- 공정부하 중공정그룹 ID
+                            ,   NVL(WR.LOADSMALLSEGMENTCLASSID, NVL(LS.LOADSMALLSEGMENTCLASSID, NVL(BW.LOADSMALLSEGMENTCLASSID, LW.LOADSMALLSEGMENTCLASSID))) AS LOADSMALLSEGMENTCLASSID         -- 공정부하 소공정그룹 ID
+                            
+                            , NVL(BW.G1_TOTALQTY,0) AS G1_TOTALQTY		--기초
+                            ${SELECT_PREPARE1}
+                            
+                            ${SELECT_PREPARE_TOTAL2}
+                            ${SELECT_PREPARE2}
+                            
+                            , NVL(LS.G3_TOTALQTY,0) AS G3_TOTALQTY		--예상부하
+                            ${SELECT_PREPARE3}
+                            
+                            , NVL(WR.G4_TOTALQTY,0) AS G4_TOTALQTY		--실적
+                            ${SELECT_PREPARE4}
+                            
+                    FROM            WORKRESULT  WR
+                    FULL OUTER JOIN LOADSEGMENT 	LS  	ON  WR.LOADTOPSEGMENTCLASSID = LS.LOADTOPSEGMENTCLASSID
+                                                    					AND WR.LOADMIDDLESEGMENTCLASSID = LS.LOADMIDDLESEGMENTCLASSID
+                                                    					AND WR.LOADSMALLSEGMENTCLASSID = LS.LOADSMALLSEGMENTCLASSID
+                    FULL OUTER JOIN BASEWIP     		BW  	ON  NVL(WR.LOADTOPSEGMENTCLASSID, LS.LOADTOPSEGMENTCLASSID) = BW.LOADTOPSEGMENTCLASSID
+                                                    					AND NVL(WR.LOADMIDDLESEGMENTCLASSID, LS.LOADMIDDLESEGMENTCLASSID) = BW.LOADMIDDLESEGMENTCLASSID
+                                                    					AND NVL(WR.LOADSMALLSEGMENTCLASSID, LS.LOADSMALLSEGMENTCLASSID) = BW.LOADSMALLSEGMENTCLASSID
+                    FULL OUTER JOIN LASTWIP     		LW  	ON  NVL(WR.LOADTOPSEGMENTCLASSID, NVL(LS.LOADTOPSEGMENTCLASSID, BW.LOADTOPSEGMENTCLASSID)) = LW.LOADTOPSEGMENTCLASSID
+                                                    					AND NVL(WR.LOADMIDDLESEGMENTCLASSID, NVL(LS.LOADMIDDLESEGMENTCLASSID, BW.LOADMIDDLESEGMENTCLASSID)) = LW.LOADMIDDLESEGMENTCLASSID
+                                                    					AND NVL(WR.LOADSMALLSEGMENTCLASSID, NVL(LS.LOADSMALLSEGMENTCLASSID, BW.LOADSMALLSEGMENTCLASSID)) = LW.LOADSMALLSEGMENTCLASSID
+					FULL OUTER JOIN CURRWIP     		CU  	ON  NVL(WR.LOADTOPSEGMENTCLASSID, NVL(LS.LOADTOPSEGMENTCLASSID, BW.LOADTOPSEGMENTCLASSID)) = CU.LOADTOPSEGMENTCLASSID
+                                                    					AND NVL(WR.LOADMIDDLESEGMENTCLASSID, NVL(LS.LOADMIDDLESEGMENTCLASSID, BW.LOADMIDDLESEGMENTCLASSID)) = CU.LOADMIDDLESEGMENTCLASSID
+                                                    					AND NVL(WR.LOADSMALLSEGMENTCLASSID, NVL(LS.LOADSMALLSEGMENTCLASSID, BW.LOADSMALLSEGMENTCLASSID)) = CU.LOADSMALLSEGMENTCLASSID                                         					
+                )
+                SELECT
+                        S.LOADTOPSEGMENTCLASSID                                                                         -- 공정부하 대공정그룹 ID
+                    ,   NVL(MAX(TD.DICTIONARYNAME), MAX(TOP.LOADSEGMENTCLASSNAME)) AS LOADTOPSEGMENTCLASSNAME      -- 공정부하 대공정그룹명
+                    ,   S.LOADMIDDLESEGMENTCLASSID                                                                                                                                          -- 공정부하 중공정그룹 ID
+                    ,   CASE WHEN S.LOADMIDDLESEGMENTCLASSID IS NOT NULL THEN NVL(MAX(MD.DICTIONARYNAME), MAX(MID.LOADSEGMENTCLASSNAME)) ELSE NULL END AS LOADMIDDLESEGMENTCLASSNAME   -- 공정부하 중공정그룹명
+                    ,   CASE    WHEN S.LOADMIDDLESEGMENTCLASSID IS NULL THEN 'TOTAL'
+                                WHEN S.LOADSMALLSEGMENTCLASSID IS NULL THEN 'SUBTOTAL'
+                                ELSE S.LOADSMALLSEGMENTCLASSID
+                        END AS LOADSMALLSEGMENTCLASSID                                      -- 공정부하 소공정그룹 ID
+                    ,   CASE    WHEN S.LOADSMALLSEGMENTCLASSID IS NOT NULL THEN MAX(SD.DICTIONARYNAME)
+                                ELSE
+                                    (
+                                        SELECT ED.DICTIONARYNAME FROM CMD_DICTIONARY ED
+                                        WHERE ED.DICTIONARYID = CASE    WHEN S.LOADMIDDLESEGMENTCLASSID IS NULL THEN 'TOTAL'
+                                                                        WHEN S.LOADSMALLSEGMENTCLASSID IS NULL THEN 'SUBTOTAL'
+                                                                END
+                                        AND ED.LANGUAGETYPE = #{LANGUAGETYPE}
+                                    )
+                        END AS LOADSMALLSEGMENTCLASSNAME                                    -- 공정부하 소공정그룹명
+                    
+                    ,	SUM(S.G1_TOTALQTY) AS G1_TOTALQTY               			-- 기초 합계
+                    ${SELECT_SUM1}
+                    
+                    ,	SUM(S.G2_TOTALQTY) AS G2_TOTALQTY               			-- 기말 합계
+                    ${SELECT_SUM2}
+                    
+                    ,	SUM(S.G3_TOTALQTY) AS G3_TOTALQTY               			-- 예상부하 합계
+                    ${SELECT_SUM3}
+                    
+                    ,	SUM(S.G4_TOTALQTY) AS G4_TOTALQTY               			-- 실적 합계
+                    ${SELECT_SUM4}
+                    
+                    ,	SUM(S.G4_TOTALQTY) - SUM(S.G3_TOTALQTY) AS G5_TOTALQTY   -- 차이 합계
+                    ${SELECT_DIFF4}
+                   
+                    ,   CASE WHEN S.LOADMIDDLESEGMENTCLASSID IS NULL THEN 2 ELSE 1 END AS MIDDLEDISPLAYSEQUENCE
+                    ,   CASE WHEN S.LOADSMALLSEGMENTCLASSID IS NULL THEN 2 ELSE 1 END AS SMALLDISPLAYSEQUENCE
+                FROM    SUMMARY     S
+                INNER JOIN      BAS_LOADSEGMENTCLASS     	 TOP  	ON  TOP.LOADSEGMENTCLASSID = S.LOADTOPSEGMENTCLASSID
+                LEFT OUTER JOIN BAS_LOADSEGMENTCLASS     	 MID  	ON  MID.LOADSEGMENTCLASSID = S.LOADMIDDLESEGMENTCLASSID
+                LEFT OUTER JOIN BAS_LOADSEGMENTCLASS     	 SML  	ON  SML.LOADSEGMENTCLASSID = S.LOADSMALLSEGMENTCLASSID
+                LEFT OUTER JOIN CMD_DICTIONARY           		 TD   	ON  TD.DICTIONARYID = TOP.LOADSEGMENTCLASSNAME
+                                                                						AND TD.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT OUTER JOIN CMD_DICTIONARY           		 MD   	ON  MD.DICTIONARYID = MID.LOADSEGMENTCLASSNAME
+                                                                						AND MD.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT OUTER JOIN CMD_DICTIONARY           		 SD   	ON  SD.DICTIONARYID = SML.LOADSEGMENTCLASSNAME
+                                                                						AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+                WHERE   NVL(S.G3_TOTALQTY, 0) > 0
+                OR      NVL(S.G4_TOTALQTY, 0) > 0
+                OR      NVL(S.G2_TOTALQTY, 0) > 0
+                OR      NVL(S.G1_TOTALQTY, 0) > 0
+                GROUP BY ROLLUP(S.LOADTOPSEGMENTCLASSID, S.LOADMIDDLESEGMENTCLASSID, S.LOADSMALLSEGMENTCLASSID)
+                HAVING GROUPING(S.LOADTOPSEGMENTCLASSID) = 0
+                ORDER BY S.LOADTOPSEGMENTCLASSID, MIDDLEDISPLAYSEQUENCE, S.LOADMIDDLESEGMENTCLASSID, SMALLDISPLAYSEQUENCE, S.LOADSMALLSEGMENTCLASSID
+	</select>
+	
+	<!-- 공정부하 대비 실적 조회 : 상세
+		참조 SITE : http://www.gurubee.net/lecture/2679 
+	-->
+	<select id="selectLoadPredictionPerRecordList" parameterType="map" resultType="hashmap">
+				--
+                -- Id : SelectLoadPredictionPerRecord
+                -- Version : 10001                 
+                WITH WORKRESULT AS
+                (
+                    -- 실적현황
+                    SELECT 
+                            REL.LOADTOPSEGMENTCLASSID       	-- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID    	-- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID     	-- 공정부하 소공정그룹 ID
+                        ,   LWR.PROCESSSEGMENTID            		-- 표준공정 ID
+                        ,   LWR.PROCESSSEGMENTVERSION       	-- 표준공정 버전
+                        ,   LWR.PRODUCTDEFID                		-- 품목 ID
+                        ,   LWR.PRODUCTDEFVERSION           		-- 품목 버전
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS4_TOTAL}) THEN LWR.SENDPANELQTY ELSE 0 END), 0) AS G4_TOTALQTY
+                        ${SELECT_COLUMNS4}
+                        
+                    FROM    PCM_LOTWORKRESULT        LWR
+                    INNER JOIN BAS_LOADSEGMENTREL    REL 		ON  LWR.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                    INNER JOIN BAS_PRODUCTDEFINITION PD  		ON  LWR.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        						AND LWR.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                    INNER JOIN BAS_PLANT             		PLT 		ON  LWR.PLANTID = PLT.PLANTID
+                    LEFT OUTER JOIN PCM_LOT				 	L 		ON LWR.LOTID = L.LOTID
+                    WHERE   1 = 1
+                    
+                    	<if test="P_TOPSEGMENTCLASSID != null and P_TOPSEGMENTCLASSID !='' ">
+                       			AND     REL.LOADTOPSEGMENTCLASSID = #{P_TOPSEGMENTCLASSID}
+                       	</if>
+                       	<if test="P_MIDDLESEGMENTCLASSID != null and P_MIDDLESEGMENTCLASSID !='' ">
+                       			AND     REL.LOADMIDDLESEGMENTCLASSID = #{P_MIDDLESEGMENTCLASSID}
+                       	</if>
+						<if test="P_SMALLSEGMENTCLASSID != null and P_SMALLSEGMENTCLASSID !='' ">
+                       			AND     LSR.LOADSMALLSEGMENTCLASSID = #{P_SMALLSEGMENTCLASSID}
+                       	</if>
+                                 
+                    AND     LWR.SENDTIME <![CDATA[>=]]> TO_DATE(     TO_CHAR(TO_DATE(#{P_SEARCHDATE}, 'YYYYMMDD'),	'YYYY-MM-DD') || ' ' || NVL(PLT.WORKTIME,'08:30:00'), 'YYYY-MM-DD HH24:MI:SS') --현재일자08:30~익일08:30
+                    AND     LWR.SENDTIME <![CDATA[<]]>  TO_DATE(      TO_CHAR(TO_DATE(#{P_SEARCHDATE}, 'YYYYMMDD')+1,	'YYYY-MM-DD') || ' ' || NVL(PLT.WORKTIME,'08:30:00'),	'YYYY-MM-DD HH24:MI:SS')
+                    AND     LWR.PLANTID = #{P_PLANTID}
+                    
+                    AND		L.LOTSTATE IN ('InProduction', 'InTransit', 'Finished')
+					AND		COALESCE(L.ISDEFECTED, 'N') = 'N'
+					AND		COALESCE(L.ISHOLD, 'N') = 'N'
+					AND		COALESCE(L.LOTCREATEDTYPE, ' ')  <![CDATA[<>]]>  'Return'
+					AND	COALESCE(LWR.RESULTTYPE, 'NORMAL')	NOT IN ('SKIP')
+					
+                    <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+                                WHERE   LWR.PROCESSSEGMENTID = PMP.VALUE
+                            )
+                    </if>
+                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')   MAP
+                                WHERE   LWR.PRODUCTDEFID = MAP.VALUE1
+                                AND     (LWR.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+                            )
+                    </if>
+                    GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID, LWR.PROCESSSEGMENTID, LWR.PROCESSSEGMENTVERSION, LWR.PRODUCTDEFID, LWR.PRODUCTDEFVERSION
+                )
+                , LOADSEGMENT AS
+                (
+                    --예상부하
+                    SELECT
+                            REL.LOADTOPSEGMENTCLASSID       -- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID    -- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID     -- 공정부하 소공정그룹 ID
+                        ,   LPD.PROCESSSEGMENTID            -- 표준공정 ID
+                        ,   LPD.PROCESSSEGMENTVERSION       -- 표준공정 버전
+                        ,   LPD.PRODUCTDEFID                -- 품목 ID
+                        ,   LPD.PRODUCTDEFVERSION           -- 품목 버전2
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS3_TOTAL}) THEN LPD.LOADQTY ELSE 0 END), 0) AS G3_TOTALQTY
+                        ${SELECT_COLUMNS3}
+                        
+                    FROM        BAS_LOADSEGMENTPERDATE   LPD
+                    INNER JOIN  BAS_LOADSEGMENTREL       REL 	ON  LPD.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                    INNER JOIN  BAS_PRODUCTDEFINITION    PD  	ON  LPD.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                            					AND LPD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                    WHERE   1 = 1
+                    
+                    	<if test="P_TOPSEGMENTCLASSID != null and P_TOPSEGMENTCLASSID !='' ">
+                       			AND     REL.LOADTOPSEGMENTCLASSID = #{P_TOPSEGMENTCLASSID}
+                       	</if>
+                       	<if test="P_MIDDLESEGMENTCLASSID != null and P_MIDDLESEGMENTCLASSID !='' ">
+                       			AND     REL.LOADMIDDLESEGMENTCLASSID = #{P_MIDDLESEGMENTCLASSID}
+                       	</if>
+						<if test="P_SMALLSEGMENTCLASSID != null and P_SMALLSEGMENTCLASSID !='' ">
+                       			AND     REL.LOADSMALLSEGMENTCLASSID = #{P_SMALLSEGMENTCLASSID}
+                       	</if>
+                    
+                    AND     LPD.ACTIONDATE = TO_CHAR(TO_DATE(#{P_SEARCHDATE},'YYYY-MM-DD'),'YYYY-MM-DD')||' 00:00'
+                    AND     LPD.PREDICDATE = TO_CHAR(TO_DATE(#{P_SEARCHDATE},'YYYY-MM-DD'),'YYYY-MM-DD')
+                    AND     LPD.LOADTYPE = 'SixDay'
+                    AND     LPD.PLANTID = #{P_PLANTID}
+                    <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+                                WHERE   LPD.PROCESSSEGMENTID = PMP.VALUE
+                            )
+                    </if>
+                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')   MAP
+                                WHERE   LPD.PRODUCTDEFID = MAP.VALUE1
+                                AND     (LPD.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+                            )
+                    </if>
+                    GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID, LPD.PROCESSSEGMENTID, LPD.PROCESSSEGMENTVERSION, LPD.PRODUCTDEFID, LPD.PRODUCTDEFVERSION
+                )
+                , BASEWIP AS
+                (
+                    -- 기초재공
+                    SELECT     
+                            REL.LOADTOPSEGMENTCLASSID           -- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID        -- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID         -- 공정부하 소공정그룹 ID
+                        ,   WSD.PROCESSSEGMENTID                -- 표준공정 ID
+                        ,   WSD.PROCESSSEGMENTVERSION           -- 표준공정 버전
+                        ,   WSD.PRODUCTDEFID                    -- 품목 ID
+                        ,   WSD.PRODUCTDEFVERSION               -- 품목 버전
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS1_TOTAL}) THEN WSD.PANELQTY ELSE 0 END), 0) AS G1_TOTALQTY
+                        ${SELECT_COLUMNS1}
+						
+                        
+                    FROM    PCM_WIPSUMMARYPERDAILY   WSD
+                    INNER JOIN  BAS_LOADSEGMENTREL   REL 	ON  WSD.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                    INNER JOIN BAS_PRODUCTDEFINITION PD  	ON  WSD.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        					AND WSD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                    WHERE   1 = 1
+                    
+                    	<if test="P_TOPSEGMENTCLASSID != null and P_TOPSEGMENTCLASSID !='' ">
+                       			AND     REL.LOADTOPSEGMENTCLASSID = #{P_TOPSEGMENTCLASSID}
+                       	</if>
+                       	<if test="P_MIDDLESEGMENTCLASSID != null and P_MIDDLESEGMENTCLASSID !='' ">
+                       			AND     REL.LOADMIDDLESEGMENTCLASSID = #{P_MIDDLESEGMENTCLASSID}
+                       	</if>
+						<if test="P_SMALLSEGMENTCLASSID != null and P_SMALLSEGMENTCLASSID !='' ">
+                       			AND     REL.LOADSMALLSEGMENTCLASSID = #{P_SMALLSEGMENTCLASSID}
+                       	</if>                    
+                    
+                    AND     WSD.TXNTIME = TO_CHAR(TO_DATE(#{P_SEARCHDATE},'YYYY-MM-DD')-1,'YYYY-MM-DD')
+                    AND     WSD.PLANTID = #{P_PLANTID}
+                    <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+                                WHERE   WSD.PROCESSSEGMENTID = PMP.VALUE
+                            )
+                    </if>
+                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')   MAP
+                                WHERE   WSD.PRODUCTDEFID = MAP.VALUE1
+                                AND     (WSD.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+                            )
+                    </if>
+                    GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID, WSD.PROCESSSEGMENTID, WSD.PROCESSSEGMENTVERSION, WSD.PRODUCTDEFID, WSD.PRODUCTDEFVERSION
+                )
+                , LASTWIP AS
+                (
+                    --기말재공
+                    SELECT 
+                            REL.LOADTOPSEGMENTCLASSID       	-- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID    	-- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID     	-- 공정부하 소공정그룹 ID
+                        ,   WSD.PROCESSSEGMENTID            		-- 표준공정 ID
+                        ,   WSD.PROCESSSEGMENTVERSION       	-- 표준공정 버전
+                        ,   WSD.PRODUCTDEFID                		-- 품목 ID
+                        ,   WSD.PRODUCTDEFVERSION           		-- 품목 버전
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS2_TOTAL}) THEN WSD.PANELQTY ELSE 0 END), 0) AS G2_TOTALQTY
+                        ${SELECT_COLUMNS2}
+                        
+                    FROM    PCM_WIPSUMMARYPERDAILY   WSD
+                    INNER JOIN  BAS_LOADSEGMENTREL   REL 	ON  WSD.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                    INNER JOIN BAS_PRODUCTDEFINITION PD  	ON  WSD.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        					AND WSD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                    WHERE   1 = 1
+                    
+                    	<if test="P_TOPSEGMENTCLASSID != null and P_TOPSEGMENTCLASSID !='' ">
+                       			AND     REL.LOADTOPSEGMENTCLASSID = #{P_TOPSEGMENTCLASSID}
+                       	</if>
+                       	<if test="P_MIDDLESEGMENTCLASSID != null and P_MIDDLESEGMENTCLASSID !='' ">
+                       			AND     REL.LOADMIDDLESEGMENTCLASSID = #{P_MIDDLESEGMENTCLASSID}
+                       	</if>
+						<if test="P_SMALLSEGMENTCLASSID != null and P_SMALLSEGMENTCLASSID !='' ">
+                       			AND     REL.LOADSMALLSEGMENTCLASSID = #{P_SMALLSEGMENTCLASSID}
+                       	</if>                   
+                    
+                    AND     WSD.TXNTIME = TO_CHAR(TO_DATE(#{P_SEARCHDATE},'YYYY-MM-DD'),'YYYY-MM-DD')
+                    AND     WSD.PLANTID = #{P_PLANTID}
+                    <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+                                WHERE   WSD.PROCESSSEGMENTID = PMP.VALUE
+                            )
+                    </if>
+                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                        AND     EXISTS
+                            (
+                                SELECT  1
+                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')   MAP
+                                WHERE   WSD.PRODUCTDEFID = MAP.VALUE1
+                                AND     (WSD.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+                            )
+                    </if>
+                    GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID, 
+                    			  WSD.PROCESSSEGMENTID, WSD.PROCESSSEGMENTVERSION, WSD.PRODUCTDEFID, WSD.PRODUCTDEFVERSION
+                )
+                
+                , CURRWIP AS
+                (
+                SELECT   REL.LOADTOPSEGMENTCLASSID       -- 공정부하 대공정그룹 ID
+                        ,   REL.LOADMIDDLESEGMENTCLASSID    -- 공정부하 중공정그룹 ID
+                        ,   REL.LOADSMALLSEGMENTCLASSID     -- 공정부하 소공정그룹 ID
+                        ,   L.PROCESSSEGMENTID            		-- 표준공정 ID
+                        ,   L.PROCESSSEGMENTVERSION       	-- 표준공정 버전
+                        ,   L.PRODUCTDEFID                		-- 품목 ID
+                        ,   L.PRODUCTDEFVERSION           		-- 품목 버전
+                        
+                        ,	ROUND(SUM(CASE WHEN PD.PRODUCTDEFCLASSGROUPNAME IN (${SELECT_COLUMNS2_TOTAL}) THEN L.PANELQTY ELSE 0 END), 0) AS G2_TOTALQTY
+                        ${SELECT_COLUMNS22}
+                             
+                        FROM PCM_LOT                    L
+                        INNER JOIN  BAS_LOADSEGMENTREL   REL 	ON  L.PROCESSSEGMENTID = REL.PROCESSSEGMENTID
+                        INNER JOIN BAS_PRODUCTDEFINITION    PD    ON L.PRODUCTDEFID      			= PD.PRODUCTDEFID
+                        															AND L.PRODUCTDEFVERSION 		= PD.PRODUCTDEFVERSION
+                        WHERE   1 = 1
+                        AND     L.LOTSTATE          IN ('InProduction', 'InTransit')
+                        
+						AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+						AND     COALESCE(L.ISHOLD, 'N') = 'N'
+						AND	   COALESCE(L.LOTCREATEDTYPE, ' ') <![CDATA[<>]]> 'Return'				--(21.06.17) 추가
+												
+						<if test="P_TOPSEGMENTCLASSID != null and P_TOPSEGMENTCLASSID !='' ">
+                       			AND     REL.LOADTOPSEGMENTCLASSID = #{P_TOPSEGMENTCLASSID}
+                       	</if>
+                       	<if test="P_MIDDLESEGMENTCLASSID != null and P_MIDDLESEGMENTCLASSID !='' ">
+                       			AND     REL.LOADMIDDLESEGMENTCLASSID = #{P_MIDDLESEGMENTCLASSID}
+                       	</if>
+						<if test="P_SMALLSEGMENTCLASSID != null and P_SMALLSEGMENTCLASSID !='' ">
+                       			AND     REL.LOADSMALLSEGMENTCLASSID = #{P_SMALLSEGMENTCLASSID}
+                       	</if>
+                        
+                        <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+	                        AND     EXISTS
+	                            (
+	                                SELECT  1
+	                                FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      PMP
+	                                WHERE   L.PROCESSSEGMENTID = PMP.VALUE
+	                            )
+	                    </if>
+	                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+	                        AND     EXISTS
+	                            (
+	                                SELECT  1
+	                                FROM    ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')   MAP
+	                                WHERE   L.PRODUCTDEFID = MAP.VALUE1
+	                                AND     (L.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+	                            )
+	                    </if>
+	                                            
+                        GROUP BY REL.LOADTOPSEGMENTCLASSID, REL.LOADMIDDLESEGMENTCLASSID, REL.LOADSMALLSEGMENTCLASSID
+				                        ,   L.PROCESSSEGMENTID
+				                        ,   L.PROCESSSEGMENTVERSION
+				                        ,   L.PRODUCTDEFID
+				                        ,   L.PRODUCTDEFVERSION
+                )
+                
+                , SUMMARY AS
+                (
+                    SELECT 
+                                NVL(WR.LOADTOPSEGMENTCLASSID, NVL(LS.LOADTOPSEGMENTCLASSID, NVL(BW.LOADTOPSEGMENTCLASSID, LW.LOADTOPSEGMENTCLASSID))) AS LOADTOPSEGMENTCLASSID                   -- 공정부하 대공정그룹 ID
+                            ,   NVL(WR.LOADMIDDLESEGMENTCLASSID, NVL(LS.LOADMIDDLESEGMENTCLASSID, NVL(BW.LOADMIDDLESEGMENTCLASSID, LW.LOADMIDDLESEGMENTCLASSID))) AS LOADMIDDLESEGMENTCLASSID    -- 공정부하 중공정그룹 ID
+                            ,   NVL(WR.LOADSMALLSEGMENTCLASSID, NVL(LS.LOADSMALLSEGMENTCLASSID, NVL(BW.LOADSMALLSEGMENTCLASSID, LW.LOADSMALLSEGMENTCLASSID))) AS LOADSMALLSEGMENTCLASSID         -- 공정부하 소공정그룹 ID
+                            ,   NVL(WR.PROCESSSEGMENTID, NVL(LS.PROCESSSEGMENTID, NVL(BW.PROCESSSEGMENTID, LW.PROCESSSEGMENTID))) AS PROCESSSEGMENTID                                            -- 표준공정 ID
+                            ,   NVL(WR.PROCESSSEGMENTVERSION, NVL(LS.PROCESSSEGMENTVERSION, NVL(BW.PROCESSSEGMENTVERSION, LW.PROCESSSEGMENTVERSION))) AS PROCESSSEGMENTVERSION                   -- 표준공정 버전
+                            ,   NVL(WR.PRODUCTDEFID, NVL(LS.PRODUCTDEFID, NVL(BW.PRODUCTDEFID, LW.PRODUCTDEFID))) AS PRODUCTDEFID                                                                -- 품목 ID
+                            ,   NVL(WR.PRODUCTDEFVERSION, NVL(LS.PRODUCTDEFVERSION, NVL(BW.PRODUCTDEFVERSION, LW.PRODUCTDEFVERSION))) AS PRODUCTDEFVERSION                                       -- 품목 버전
+                            
+                            , NVL(BW.G1_TOTALQTY,0) AS G1_TOTALQTY 		--기초
+                            ${SELECT_PREPARE1}
+                            
+                            ${SELECT_PREPARE_TOTAL2}
+                            ${SELECT_PREPARE2}
+                            
+                            , NVL(LS.G3_TOTALQTY,0) AS G3_TOTALQTY		--예상부하
+                            ${SELECT_PREPARE3}
+                            
+                            , NVL(WR.G4_TOTALQTY,0) AS G4_TOTALQTY		--실적
+                            ${SELECT_PREPARE4}
+                            
+                    FROM            WORKRESULT  WR
+                    FULL OUTER JOIN LOADSEGMENT LS  	ON  WR.PRODUCTDEFID = LS.PRODUCTDEFID
+                                                    				AND WR.PRODUCTDEFVERSION = LS.PRODUCTDEFVERSION
+                                                    				AND WR.PROCESSSEGMENTID = LS.PROCESSSEGMENTID
+                                                    				AND WR.PROCESSSEGMENTVERSION = LS.PROCESSSEGMENTVERSION
+                    FULL OUTER JOIN BASEWIP     BW  	ON  NVL(WR.PRODUCTDEFID, LS.PRODUCTDEFID) = BW.PRODUCTDEFID
+                                                    				AND NVL(WR.PRODUCTDEFVERSION, LS.PRODUCTDEFVERSION) = BW.PRODUCTDEFVERSION
+                                                    				AND NVL(WR.PROCESSSEGMENTID, LS.PROCESSSEGMENTID) = BW.PROCESSSEGMENTID
+                                                    				AND NVL(WR.PROCESSSEGMENTVERSION, LS.PROCESSSEGMENTVERSION) = BW.PROCESSSEGMENTVERSION
+                    FULL OUTER JOIN LASTWIP     LW  		ON  NVL(WR.PRODUCTDEFID, NVL(LS.PRODUCTDEFID, BW.PRODUCTDEFID)) = LW.PRODUCTDEFID
+                                                    				AND NVL(WR.PRODUCTDEFVERSION, NVL(LS.PRODUCTDEFVERSION, BW.PRODUCTDEFVERSION)) = LW.PRODUCTDEFVERSION
+                                                    				AND NVL(WR.PROCESSSEGMENTID, NVL(LS.PROCESSSEGMENTID, BW.PROCESSSEGMENTID)) = LW.PROCESSSEGMENTID
+                                                    				AND NVL(WR.PROCESSSEGMENTVERSION, NVL(LS.PROCESSSEGMENTVERSION, BW.PROCESSSEGMENTVERSION)) = LW.PROCESSSEGMENTVERSION
+					FULL OUTER JOIN CURRWIP   CU  		ON  NVL(WR.PRODUCTDEFID, NVL(LS.PRODUCTDEFID, BW.PRODUCTDEFID)) = CU.PRODUCTDEFID
+                                                    				AND NVL(WR.PRODUCTDEFVERSION, NVL(LS.PRODUCTDEFVERSION, BW.PRODUCTDEFVERSION)) = CU.PRODUCTDEFVERSION
+                                                    				AND NVL(WR.PROCESSSEGMENTID, NVL(LS.PROCESSSEGMENTID, BW.PROCESSSEGMENTID)) = CU.PROCESSSEGMENTID
+                                                    				AND NVL(WR.PROCESSSEGMENTVERSION, NVL(LS.PROCESSSEGMENTVERSION, BW.PROCESSSEGMENTVERSION)) = CU.PROCESSSEGMENTVERSION                                   				
+                )
+                SELECT
+                        S.LOADTOPSEGMENTCLASSID                                                                         -- 공정부하 대공정그룹 ID
+                    ,   NVL(MAX(TD.DICTIONARYNAME), MAX(TOP.LOADSEGMENTCLASSNAME)) AS LOADTOPSEGMENTCLASSNAME      -- 공정부하 대공정그룹명
+                    ,   S.LOADMIDDLESEGMENTCLASSID                                                                                                                                          -- 공정부하 중공정그룹 ID
+                    ,   CASE WHEN S.LOADMIDDLESEGMENTCLASSID IS NOT NULL THEN NVL(MAX(MD.DICTIONARYNAME), MAX(MID.LOADSEGMENTCLASSNAME)) ELSE NULL END AS LOADMIDDLESEGMENTCLASSNAME   -- 공정부하 중공정그룹명
+                    ,   S.LOADSMALLSEGMENTCLASSID                                                                                                                                           -- 공정부하 소공정그룹 ID
+                    ,   CASE WHEN S.LOADSMALLSEGMENTCLASSID IS NOT NULL THEN NVL(MAX(SD.DICTIONARYNAME), MAX(SML.LOADSEGMENTCLASSNAME)) ELSE NULL END AS LOADSMALLSEGMENTCLASSNAME     -- 공정부하 소공정그룹명
+                    ,   S.PROCESSSEGMENTID                                                                                                                                  -- 표준공정 ID
+                    ,   CASE WHEN S.PROCESSSEGMENTID IS NOT NULL THEN NVL(MAX(SGD.DICTIONARYNAME), MAX(SEG.PROCESSSEGMENTNAME)) ELSE NULL END AS PROCESSSEGMENTNAME    -- 표준공정명
+                    ,   CASE    WHEN S.LOADMIDDLESEGMENTCLASSID IS NULL THEN 'TOTAL'
+                                WHEN S.PRODUCTDEFID IS NULL THEN 'SUBTOTAL'
+                                ELSE S.PRODUCTDEFID
+                        END AS PRODUCTDEFID                                                     -- 품목 ID
+                    ,   S.PRODUCTDEFVERSION                                                     -- 품목 버전
+                    ,	PD.PRIORITY
+                    ,   CASE    WHEN S.PRODUCTDEFID IS NOT NULL THEN MAX(PD.PRODUCTDEFNAME) 
+                                ELSE
+                                    (
+                                        SELECT ED.DICTIONARYNAME FROM CMD_DICTIONARY ED
+                                        WHERE ED.DICTIONARYID = CASE    WHEN S.LOADMIDDLESEGMENTCLASSID IS NULL THEN 'TOTAL'
+                                                                        WHEN S.PRODUCTDEFID IS NULL THEN 'SUBTOTAL'
+                                                                END
+                                        AND ED.LANGUAGETYPE = #{LANGUAGETYPE}
+                                    )
+                        END AS PRODUCTDEFNAME                                          -- 품목명
+                    
+                    ,	SUM(S.G1_TOTALQTY) AS G1_TOTALQTY               			-- 기초 합계
+                    ${SELECT_SUM1}
+                    
+                    ,	SUM(S.G2_TOTALQTY) AS G2_TOTALQTY               			-- 기말 합계
+                    ${SELECT_SUM2}
+                    
+                    ,	SUM(S.G3_TOTALQTY) AS G3_TOTALQTY               			-- 예상부하 합계
+                    ${SELECT_SUM3}
+                    
+                    ,	SUM(S.G4_TOTALQTY) AS G4_TOTALQTY               			-- 실적 합계
+                    ${SELECT_SUM4}
+                    
+                    ,	SUM(S.G4_TOTALQTY) - SUM(S.G3_TOTALQTY) AS G5_TOTALQTY   -- 차이 합계
+                    ${SELECT_DIFF4}
+                   
+                    ,   CASE WHEN S.LOADMIDDLESEGMENTCLASSID IS NULL THEN 2 ELSE 1 END AS MIDDLEDISPLAYSEQUENCE
+                    ,   CASE WHEN S.PROCESSSEGMENTID IS NULL THEN 2 ELSE 1 END AS SEGMENTDISPLAYSEQUENCE
+                FROM    SUMMARY     S
+                INNER JOIN      BAS_LOADSEGMENTCLASS     	 TOP  		ON  TOP.LOADSEGMENTCLASSID = S.LOADTOPSEGMENTCLASSID
+                LEFT OUTER JOIN BAS_LOADSEGMENTCLASS     	 MID  		ON  MID.LOADSEGMENTCLASSID = S.LOADMIDDLESEGMENTCLASSID
+                LEFT OUTER JOIN BAS_LOADSEGMENTCLASS     	 SML  		ON  SML.LOADSEGMENTCLASSID = S.LOADSMALLSEGMENTCLASSID
+                LEFT OUTER JOIN BAS_PROCESSSEGMENT       	 SEG  		ON  SEG.PROCESSSEGMENTID = S.PROCESSSEGMENTID
+                LEFT OUTER JOIN BAS_PRODUCTDEFINITION    	 PD   		ON  PD.PRODUCTDEFID = S.PRODUCTDEFID
+                                                                							AND PD.PRODUCTDEFVERSION = S.PRODUCTDEFVERSION
+                LEFT OUTER JOIN CMD_DICTIONARY           		 TD   		ON  TD.DICTIONARYID = TOP.LOADSEGMENTCLASSNAME
+                                                                							AND TD.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT OUTER JOIN CMD_DICTIONARY           		 MD   		ON  MD.DICTIONARYID = MID.LOADSEGMENTCLASSNAME
+                                                                							AND MD.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT OUTER JOIN CMD_DICTIONARY           		 SD   		ON  SD.DICTIONARYID = SML.LOADSEGMENTCLASSNAME
+                                                                							AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT OUTER JOIN CMD_DICTIONARY           		 SGD  		ON  SGD.DICTIONARYID = SEG.PROCESSSEGMENTNAME
+                                                                							AND SGD.LANGUAGETYPE = #{LANGUAGETYPE}
+                WHERE   NVL(S.G3_TOTALQTY, 0) > 0
+                OR      NVL(S.G4_TOTALQTY, 0) > 0
+                OR      NVL(S.G2_TOTALQTY, 0) > 0
+                OR      NVL(S.G1_TOTALQTY, 0) > 0
+                GROUP BY ROLLUP(S.LOADTOPSEGMENTCLASSID, S.LOADMIDDLESEGMENTCLASSID, S.LOADSMALLSEGMENTCLASSID, S.PROCESSSEGMENTID, PD.PRIORITY, S.PRODUCTDEFID, S.PRODUCTDEFVERSION)
+                HAVING
+                    (GROUPING_ID(S.LOADTOPSEGMENTCLASSID) = 0 AND GROUPING_ID(S.LOADMIDDLESEGMENTCLASSID) = 1)    -- 총계
+                    OR (GROUPING_ID(S.LOADSMALLSEGMENTCLASSID) = 0 AND GROUPING_ID(S.PROCESSSEGMENTID) = 1)       -- 소계
+                    OR (GROUPING_ID(S.LOADTOPSEGMENTCLASSID, S.LOADMIDDLESEGMENTCLASSID, S.LOADSMALLSEGMENTCLASSID, S.PROCESSSEGMENTID, PD.PRIORITY, S.PRODUCTDEFID, S.PRODUCTDEFVERSION) = 0) -- 일반
+                ORDER BY S.LOADTOPSEGMENTCLASSID, MIDDLEDISPLAYSEQUENCE, S.LOADMIDDLESEGMENTCLASSID, S.LOADSMALLSEGMENTCLASSID, SEGMENTDISPLAYSEQUENCE, S.PROCESSSEGMENTID, PD.PRIORITY, S.PRODUCTDEFID, S.PRODUCTDEFVERSION						
+	</select>	
+	
+</mapper>

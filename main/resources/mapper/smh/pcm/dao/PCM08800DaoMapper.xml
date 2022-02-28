@@ -1,0 +1,504 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM08800Dao">
+<!-- 물류창고 출고 조회 발행 -->    
+
+    <!-- 물류창고 출고 조회 발행 -->
+    <select id="selectIssueOutboundWarehouseList" parameterType="map" resultType="hashmap">
+         -- 
+         -- GetIssueOutboundWarehouseInquiry
+         -- Version:10001
+         WITH WLQ AS
+             (
+                 SELECT
+                 		 LOTSTATE, PROCESSSTATE
+                     ,   RST.LOTHISTKEY 
+                     ,   RST.LOTID
+                     ,   RST.RECEIPTSEQUENCE
+                     ,   RST.PLANTID
+                     ,   RST.AREAID
+                     ,   RST.LOTTYPE
+                     ,   TO_CHAR(RST.RECEIPTDATE,'YYYY-MM-DD HH24:MI:SS') AS RECEIPTDATE
+                     ,   RST.RECEIPTUSER
+                     ,   RST.CHECKDATE
+                     ,   RST.CHECKUSER
+                     ,   TO_CHAR(RST.SENDDATE,'YYYY-MM-DD HH24:MI:SS') AS SENDDATE
+                     ,   RST.SENDUSER
+                     ,   NVL(RST.PRINTCOUNT,0) AS PRINTCOUNT
+                     ,   RST.PRINTDATE
+                     ,   RST.PRINTUSER
+                     ,   MIN(RST.PATHSEQUENCE)  AS PATHMIN
+                     ,   MAX(RST.PATHSEQUENCE)  AS PATHMAX
+                     ,   MIN(RST.USERSEQUENCE)  AS USERMIN
+                     ,   MAX(RST.USERSEQUENCE)  AS USERMAX
+                 FROM
+                     (  
+                         SELECT   
+                                 SLT.LOTSTATE, SLT.PROCESSSTATE
+                             ,   OSL.LOTHISTKEY 
+                             ,   OSL.LOTID
+                             ,   OSL.RECEIPTSEQUENCE
+                             ,   OSL.PLANTID
+                             ,   SLT.LOTTYPE
+                             ,   OSS.PATHSEQUENCE
+                             ,   OSS.USERSEQUENCE
+                             ,   OSS.PROCESSSEGMENTID
+                             ,   OSS.PROCESSSEGMENTVERSION
+                             ,   OSS.AREAID               AS AREAID
+                             ,   OSL.RECEIPTDATE
+                             ,   OSL.RECEIPTUSER
+                             ,   OSL.CHECKDATE 
+                             ,   OSL.CHECKUSER
+                             ,   OSL.SENDDATE
+                             ,   OSL.SENDUSER
+                             ,   OSL.PRINTCOUNT
+                             ,   OSL.PRINTDATE
+                             ,   OSL.PRINTUSER
+                             ,   ROW_NUMBER() OVER(PARTITION BY OSS.LOTHISTKEY, OSS.LOTID, OSS.RECEIPTSEQUENCE ORDER BY OSS.LOTHISTKEY, OSS.LOTID, OSS.RECEIPTSEQUENCE,OSS.PATHSEQUENCE) AS RN3
+                             ,   ROW_NUMBER() OVER(ORDER BY OSS.LOTHISTKEY, OSS.LOTID, OSS.RECEIPTSEQUENCE,OSS.PATHSEQUENCE) AS RN1
+                             ,   ROW_NUMBER() OVER(ORDER BY OSS.AREAID,OSS.LOTHISTKEY, OSS.LOTID, OSS.RECEIPTSEQUENCE,OSS.PATHSEQUENCE) AS RN2
+                         FROM   OSM_OSPRECEIPTSENDLOT             OSL
+                         INNER JOIN PCM_LOT                       SLT   ON  SLT.LOTID            = OSL.LOTID  
+                         INNER JOIN BAS_PLANT                     SPL   ON  SPL.PLANTID          = OSL.PLANTID 
+                         INNER JOIN OSM_OSPRECEIPTSENDLOTSEGMENT  OSS   ON  OSS.LOTHISTKEY       = OSL.LOTHISTKEY 
+                                                                       AND OSS.LOTID            = OSL.LOTID
+                                                                       AND OSS.RECEIPTSEQUENCE  = OSL.RECEIPTSEQUENCE
+                                                                       AND OSS.AREAID           = OSL.SENDAREAID
+                         WHERE   1=1
+                         AND     OSL.PLANTID        = #{P_PLANTID}
+                         <if test = "P_ETCLOTID != null and P_ETCLOTID !='' ">
+                             AND      OSL.LOTID = #{P_ETCLOTID}
+                         </if>
+                         AND     OSL.SENDDATE        IS  NOT   NULL
+                         <if test="P_LOTTYPE != null and P_LOTTYPE !='' and !(P_LOTTYPE eq '*'.toString()) ">
+                             AND      SLT.LOTTYPE = #{P_LOTTYPE}
+                         </if>
+                         <if test = "P_RECEIPTDATE_PERIODFR != null and P_RECEIPTDATE_PERIODFR !='' ">
+                             AND     OSL.RECEIPTDATE <![CDATA[>=]]> TO_DATE( #{P_RECEIPTDATE_PERIODFR} || ' '|| SPL.WORKTIME,'YYYYMMDD HH24:MI:SS') 
+                         </if>
+                         <if test = "P_RECEIPTDATE_PERIODTO != null and P_RECEIPTDATE_PERIODTO !='' ">
+                             AND     OSL.RECEIPTDATE <![CDATA[<]]>  TO_DATE( #{P_RECEIPTDATE_PERIODTO} || ' '|| SPL.WORKTIME,'YYYYMMDD HH24:MI:SS') 
+                         </if>
+                         <if test = "P_RECEIPTUSER != null and P_RECEIPTUSER !='' ">
+                             AND      OSL.RECEIPTUSER = #{P_RECEIPTUSER}
+                         </if>
+                         <if test = "P_SENDDATE_PERIODFR != null and P_SENDDATE_PERIODFR !='' ">
+                             AND     OSL.SENDDATE <![CDATA[>=]]> TO_DATE( #{P_SENDDATE_PERIODFR} || ' '|| SPL.WORKTIME,'YYYYMMDD HH24:MI:SS') 
+                         </if>
+                         <if test = "P_SENDDATE_PERIODTO != null and P_SENDDATE_PERIODTO !='' ">
+                             AND     OSL.SENDDATE <![CDATA[<]]>  TO_DATE( #{P_SENDDATE_PERIODTO} || ' '|| SPL.WORKTIME,'YYYYMMDD HH24:MI:SS') 
+                         </if>
+                         <if test = "P_SENDUSER != null and P_SENDUSER !='' ">
+                             AND      OSL.SENDUSER = #{P_SENDUSER}
+                         </if>
+                     )   RST
+                 GROUP BY    RST.RN1-RN2
+                 		 ,	RST.LOTSTATE, RST.PROCESSSTATE
+                         ,   RST.LOTHISTKEY 
+                         ,   RST.LOTID
+                         ,   RST.RECEIPTSEQUENCE
+                         ,   RST.PLANTID
+                         ,   RST.AREAID
+                         ,   RST.LOTTYPE
+                         ,   RST.RECEIPTDATE
+                         ,   RST.RECEIPTUSER
+                         ,   RST.CHECKDATE
+                         ,   RST.CHECKUSER
+                         ,   RST.SENDDATE
+                         ,   RST.SENDUSER
+                         ,   RST.PRINTCOUNT
+                         ,   RST.PRINTDATE
+                         ,   RST.PRINTUSER                               
+             )
+         SELECT 
+         		 LOTSTATE
+         	 , 	 PROCESSSTATE
+             ,    ENTERPRISEID
+             ,   PLANTID
+             ,   LOTHISTKEY
+             ,   RECEIPTSEQUENCE
+             ,   LOTID
+             ,   LOTTYPE
+             ,   PRODUCTDEFID
+             ,   PRODUCTDEFVERSION
+             ,   PRODUCTDEFNAME
+             ,   PROCESSDEFID
+             ,   PROCESSDEFVERSION
+             ,   PROCESSSEGMENTID
+             ,   PROCESSSEGMENTNAME
+             ,   PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(LOTID, USERSEQUENCE, 'P') AS PREVPROCESSSEGMENTNAME
+             ,   AREAID
+             ,   AREANAME
+             --,   PREVAREAID
+             ,   PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(LOTID, USERSEQUENCE, 'A') AS PREVAREANAME
+             ,   TO_NUMBER(PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(LOTID, USERSEQUENCE, 'Q1')) AS PCSQTY
+             --,   ARRAYQTY
+             ,   TO_NUMBER(PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(LOTID, USERSEQUENCE, 'Q2')) AS PANELQTY
+             --,   OSPMM
+             ,   OWNTYPE
+             ,   RECEIPTDATE
+             ,   RECEIPTUSER
+             ,   RECEIPTUSERNAME 
+             ,   CHECKDATE
+             ,   CHECKUSER
+             ,   CHECKUSERNAME 
+             ,   SENDDATE
+             ,   SENDUSER
+             ,   OSPPRTSENDUSERNAME 
+             ,   PRINTDATE
+             ,   PRINTUSER
+             ,   PRINTCOUNT
+             ,   PRINTUSERNAME 
+             ,   USERSEQUENCENAME
+             ,   PATHSEQUENCESTART 
+             ,   PATHSEQUENCEEND
+             ,   WORKTIME
+             ,   CHK
+             ,	 PRINTCNT
+             ,	 USERSEQUENCE
+         FROM (
+		         SELECT
+		         		 WLQ.LOTSTATE, WLQ.PROCESSSTATE
+		             ,   LWS.ENTERPRISEID
+		             ,   LWS.PLANTID
+		             ,   LWS.TXNHISTKEY                        AS LOTHISTKEY
+		             ,   WLQ.RECEIPTSEQUENCE
+		             ,   LWS.LOTID
+		             ,   WLQ.LOTTYPE
+		             ,   LWS.PRODUCTDEFID
+		             ,   LWS.PRODUCTDEFVERSION
+		             ,   PRD.PRODUCTDEFNAME
+		             ,   LWS.PROCESSDEFID
+		             ,   LWS.PROCESSDEFVERSION
+		             ,   LWS.PROCESSSEGMENTID
+		             ,   DIC.DICTIONARYNAME                     		AS PROCESSSEGMENTNAME
+		             --, LWS.PROCESSSEGMENTID                   		AS PREVPROCESSSEGMENTID
+		             --,   DCC.DICTIONARYNAME                    		AS PREVPROCESSSEGMENTNAME
+		             ,   'X'                    	AS PREVPROCESSSEGMENTNAME
+		             ,   LWS.AREAID
+		             ,   DAR.DICTIONARYNAME                     		AS AREANAME
+		             --,   HST.PREVAREAID                         	  	AS PREVAREAID		             
+		             --,   DAP.DICTIONARYNAME          				AS PREVAREANAME
+		             ,   'X'                     	AS PREVAREANAME
+		             
+		             --,   CASE WHEN NVL(HST.PCSQTY,0) = 0 THEN
+		             --				NVL(LWS.SENDPCSQTY,0)           
+		             --			ELSE
+		             --				NVL(HST.PCSQTY,0)           
+		             --	END 									AS PCSQTY
+		             
+		             ,   NVL(LWS.SENDPCSQTY,0) 			AS PCSQTY
+		             
+		             --LOTSTATE :: InProduction, InTransit, Finished 
+		             --PROCESSSTATE :: WaitForReceive, WaitForSend, Wait
+		             
+		             --,   NVL(HST.ARRAYQTY,0)         	AS ARRAYQTY
+		             
+		             --,   CASE WHEN NVL(HST.PANELQTY,0) = 0 THEN
+		             --			    NVL(LWS.SENDPANELQTY,0)           
+		             --			ELSE
+		             --			   	NVL(HST.PANELQTY,0)
+		             --	 END 									AS PANELQTY
+		             
+		             ,	 NVL(LWS.SENDPANELQTY,0) 		AS PANELQTY
+		             
+		             --,   CASE WHEN PRD.PCSMM =0         THEN 0
+		             --         WHEN HST.PCSQTY  IS NULL  THEN 0
+		             --         ELSE ROUND(HST.PCSQTY / PRD.PCSMM		,2)
+		             --    END                                       AS  OSPMM
+		             ,   SAC.OWNTYPE
+		             ,   WLQ.RECEIPTDATE
+		             ,   WLQ.RECEIPTUSER
+		             ,   URR.USER_NM                              AS RECEIPTUSERNAME 
+		             ,   WLQ.CHECKDATE
+		             ,   WLQ.CHECKUSER
+		             ,   URC.USER_NM                              AS CHECKUSERNAME 
+		             ,   WLQ.SENDDATE
+		             ,   WLQ.SENDUSER
+		             ,   URS.USER_NM                              AS OSPPRTSENDUSERNAME 
+		             ,   WLQ.PRINTDATE
+		             ,   WLQ.PRINTUSER
+		             ,   WLQ.PRINTCOUNT
+		             ,   URP.USER_NM                              AS PRINTUSERNAME 
+		             ,   WLQ.USERMIN ||' ~ '||  WLQ.USERMAX        AS USERSEQUENCENAME
+		             ,   WLQ.PATHMIN                               AS PATHSEQUENCESTART 
+		             ,   WLQ.PATHMAX                               AS PATHSEQUENCEEND
+		             ,   SPL.WORKTIME
+		             ,   '0' AS CHK
+		             ,	0 AS PRINTCNT
+		             ,  LWS.USERSEQUENCE
+		         FROM                                        WLQ
+		         INNER JOIN  PCM_LOTWORKRESULT                LWS   ON    LWS.TXNHISTKEY            = WLQ.LOTHISTKEY
+		                                                           AND   LWS.LOTID                 = WLQ.LOTID
+		         INNER JOIN BAS_PROCESSPATH                   SPH   ON    SPH.PROCESSDEFID          = LWS.PROCESSDEFID
+		                                                           AND   SPH.PROCESSDEFVERSION     = LWS.PROCESSDEFVERSION
+		                                                           AND   SPH.PROCESSSEGMENTID      = LWS.PROCESSSEGMENTID
+		                                                           AND   SPH.PROCESSSEGMENTVERSION = LWS.PROCESSSEGMENTVERSION
+		                                                           AND   SPH.VALIDSTATE            = 'Valid'
+		         INNER JOIN FN_AREA(#{USERID})       SAC   ON    SAC.AREAID                = WLQ.AREAID
+		         LEFT OUTER JOIN CMD_DICTIONARY              DAR   ON    DAR.DICTIONARYID          = SAC.AREANAME
+		                                                           AND   DAR.LANGUAGETYPE          = #{LANGUAGETYPE}  
+		         LEFT OUTER JOIN BAS_PRODUCTDEFINITION       PRD   ON    PRD.PRODUCTDEFID          = LWS.PRODUCTDEFID          --제품
+		                                                           AND   PRD.PRODUCTDEFVERSION     = LWS.PRODUCTDEFVERSION
+		         LEFT OUTER JOIN BAS_PROCESSSEGMENT           PRS   ON    PRS.PROCESSSEGMENTID      = LWS.PROCESSSEGMENTID
+		                                                           AND   PRS.PROCESSSEGMENTVERSION = LWS.PROCESSSEGMENTVERSION
+		         LEFT OUTER JOIN CMD_DICTIONARY              DIC   ON    DIC.DICTIONARYID          = PRS.PROCESSSEGMENTNAME
+		                                                           AND   DIC.LANGUAGETYPE          = #{LANGUAGETYPE}
+		         LEFT OUTER JOIN CMD_USERS                     URR   ON    URR.USER_ID                = WLQ.RECEIPTUSER     
+		         LEFT OUTER JOIN CMD_USERS                     URC   ON    URC.USER_ID                = WLQ.CHECKUSER
+		         LEFT OUTER JOIN CMD_USERS                     URS   ON    URS.USER_ID                = WLQ.SENDUSER     
+		         LEFT OUTER JOIN CMD_USERS                     URP   ON    URP.USER_ID                = WLQ.PRINTUSER
+		         LEFT OUTER JOIN BAS_PLANT                    SPL   ON    SPL.PLANTID               = WLQ.PLANTID
+		          
+		         WHERE 1=1
+		         <if test = "P_AREAID != null and P_AREAID !='' ">
+		             AND      LWS.AREAID = #{P_AREAID}
+		         </if>
+		         <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+		             AND      LWS.PRODUCTDEFID = #{P_PRODUCTDEFID}
+		         </if>
+		         <if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' ">
+		             AND      LWS.PRODUCTDEFVERSION = #{P_PRODUCTDEFVERSION}
+		         </if>
+		         ORDER BY WLQ.SENDDATE DESC
+		        )
+		   --WHERE PCSQTY>0 AND PANELQTY>0
+    </select>
+    
+    <select id="selectOspreceiptsendlot" parameterType="map" resultType="hashmap">
+  		SELECT
+				OLT.LOTID,
+				OLT.LOTHISTKEY,
+				OLT.RECEIPTSEQUENCE,
+				OLT.PRINTCOUNT,
+				OLT.SENDUSER
+		FROM	OSM_OSPRECEIPTSENDLOT	OLT	 
+		WHERE	1=1
+		AND		OLT.LOTID             = #{LOTID}
+		AND		OLT.LOTHISTKEY        = #{LOTHISTKEY}
+		AND		OLT.RECEIPTSEQUENCE   = #{RECEIPTSEQUENCE}
+	</select>
+    
+    <update id="updateOspreceiptsendlotsegmentInsertData" parameterType="map" >
+		UPDATE OSM_OSPRECEIPTSENDLOT
+         SET
+					PRINTCOUNT 	= #{PRINTCOUNT}
+				,	PRINTNO 	= #{PRINTNO}
+				,	PRINTDATE	= SYSDATE
+				,	PRINTUSER	= #{PRINTUSER}
+				
+				,	VALIDSTATE 	= #{VALIDSTATE}
+				,	LASTTXNID 	= #{LASTTXNID}
+					
+				,	MODIFIER 	= #{MODIFIER}
+				,	MODIFIEDTIME= SYSDATE
+		WHERE
+			LOTID  = #{LOTID}
+		AND LOTHISTKEY  = #{LOTHISTKEY} 
+		AND RECEIPTSEQUENCE  = #{RECEIPTSEQUENCE}
+	</update>
+    
+    <select id="selectIssueOutboundWarehouseInquiryOutputslipList" parameterType="map" resultType="hashmap">
+        --
+        -- GetIssueOutboundWarehouseInquiryOutputslip
+        -- Version:10001
+        WITH WLP AS
+            (
+                SELECT
+                        OLT.LOTHISTKEY 
+                    ,   OLT.LOTID 
+                    ,   OLT.RECEIPTSEQUENCE
+                    ,   CLW.PRODUCTDEFID  
+                    ,   CLW.PRODUCTDEFVERSION
+                    ,   SPD.PRODUCTDEFNAME
+                    ,   CLW.SENDPCSQTY AS PCSQTY
+                    ,   CLW.SENDPANELQTY AS PNLQTY
+                    ,   URS.USER_NM                              AS SENDUSERNAME 
+                    ,   VND.VENDORNAME
+                    ,   OLT.PRINTNO
+                    ,   OLT.PLANTID
+                    ,   NVL(SPLIT_PART(LISTAGG(DIC.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY DIC.DICTIONARYNAME),',',1),'') AS PROCESSSEGMENTNAME_01
+                    ,   NVL(SPLIT_PART(LISTAGG(DIC.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY DIC.DICTIONARYNAME),',',2),'') AS PROCESSSEGMENTNAME_02
+                    ,   NVL(SPLIT_PART(LISTAGG(DIC.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY DIC.DICTIONARYNAME),',',3),'') AS PROCESSSEGMENTNAME_03
+                    ,   NVL(SPLIT_PART(LISTAGG(DIC.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY DIC.DICTIONARYNAME),',',4),'') AS PROCESSSEGMENTNAME_04
+                    ,   NVL(SPLIT_PART(lISTAGG(DIC.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY DIC.DICTIONARYNAME),',',5),'') AS PROCESSSEGMENTNAME_05
+                FROM            OSM_OSPRECEIPTSENDLOT  OLT
+                INNER JOIN PCM_LOTWORKRESULT             CLW  ON  CLW.TXNHISTKEY             = OLT.LOTHISTKEY
+                                                                  AND CLW.LOTID                  = OLT.LOTID
+                INNER JOIN BAS_PRODUCTDEFINITION         SPD  ON  SPD.PRODUCTDEFID           = CLW.PRODUCTDEFID  
+                                                                  AND SPD.PRODUCTDEFVERSION      = CLW.PRODUCTDEFVERSION
+                INNER JOIN OSM_OSPRECEIPTSENDLOTSEGMENT  OSS  ON  OSS.LOTHISTKEY             = OLT.LOTHISTKEY 
+                                                                  AND OSS.LOTID                  = OLT.LOTID 
+                                                                  AND OSS.RECEIPTSEQUENCE        = OLT.RECEIPTSEQUENCE
+                                                                  AND OSS.PATHSEQUENCE          <![CDATA[>=]]> #{P_PATHSEQUENCESTART}
+                                                                  AND OSS.PATHSEQUENCE          <![CDATA[<=]]> #{P_PATHSEQUENCEEND}
+                LEFT OUTER JOIN BAS_PROCESSSEGMENT            PRS  ON  PRS.PROCESSSEGMENTID       = OSS.PROCESSSEGMENTID
+                                                                  AND PRS.PROCESSSEGMENTVERSION  = OSS.PROCESSSEGMENTVERSION
+                LEFT OUTER JOIN CMD_DICTIONARY                DIC  ON  DIC.DICTIONARYID           = PRS.PROCESSSEGMENTNAME
+                                                                  AND DIC.LANGUAGETYPE           = #{LANGUAGETYPE}     
+                LEFT OUTER JOIN CMD_USERS                      URS  ON  URS.USER_ID                 = OLT.PRINTUSER 
+                INNER JOIN BAS_AREA                      SAA  ON  SAA.AREAID                 = OLT.SENDAREAID
+                LEFT OUTER JOIN BAS_VENDOR                    VND  ON  VND.VENDORID               = SAA.VENDORID
+                                                                  AND VND.PLANTID                = SAA.PLANTID     
+                WHERE   1=1
+                AND     OLT.LOTHISTKEY       = #{P_LOTHISTKEY}
+                AND     OLT.LOTID            = #{P_LOTID}
+                AND     OLT.RECEIPTSEQUENCE  = #{P_RECEIPTSEQUENCE}
+                GROUP BY    OLT.LOTHISTKEY 
+                        ,   OLT.LOTID 
+                        ,   OLT.RECEIPTSEQUENCE
+                        ,   CLW.PRODUCTDEFID  
+                        ,   CLW.PRODUCTDEFVERSION
+                        ,   SPD.PRODUCTDEFNAME
+                        ,   CLW.SENDPCSQTY
+                        ,   CLW.SENDPANELQTY 
+                        ,   URS.USER_NM 
+                        ,   VND.VENDORNAME 
+                        ,   OLT.PRINTNO  
+                        ,   OLT.PLANTID 
+            ),
+            WLQ AS
+            (
+                SELECT
+                        MTS.LOTHISTKEY
+                    ,   MTS.LOTID
+                    ,   MTS.RECEIPTSEQUENCE
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMABLEDEFNAME, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',1),'') AS CONSUMABLEDEFNAME_01
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMABLEDEFNAME, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',2),'') AS CONSUMABLEDEFNAME_02
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMABLEDEFNAME, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',3),'') AS CONSUMABLEDEFNAME_03
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMABLEDEFNAME, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',4),'') AS CONSUMABLEDEFNAME_04
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMABLEDEFNAME, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',5),'') AS CONSUMABLEDEFNAME_05
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMABLEDEFNAME, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',6),'') AS CONSUMABLEDEFNAME_06
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMABLEDEFNAME, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',7),'') AS CONSUMABLEDEFNAME_07
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMABLEDEFNAME, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',8),'') AS CONSUMABLEDEFNAME_08
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMABLEDEFNAME, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',9),'') AS CONSUMABLEDEFNAME_09
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMEDQTY, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',1),'') AS CONSUMEDQTY_01
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMEDQTY, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',2),'') AS CONSUMEDQTY_02
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMEDQTY, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',3),'') AS CONSUMEDQTY_03
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMEDQTY, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',4),'') AS CONSUMEDQTY_04
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMEDQTY, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',5),'') AS CONSUMEDQTY_05
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMEDQTY, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',6),'') AS CONSUMEDQTY_06
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMEDQTY, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',7),'') AS CONSUMEDQTY_07
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMEDQTY, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',8),'') AS CONSUMEDQTY_08
+                    ,   NVL(SPLIT_PART(LISTAGG(MTS.CONSUMEDQTY, ',') WITHIN GROUP(ORDER BY MTS.CONSUMABLEDEFNAME),',',9),'') AS CONSUMEDQTY_09
+                FROM
+                    (
+                        SELECT
+                                OLT.LOTHISTKEY
+                             ,  OLT.LOTID
+                             ,  OLT.RECEIPTSEQUENCE
+                             ,  MIA.ITEMNAME             AS CONSUMABLEDEFNAME
+                             ,  SUM( CLW.SENDPCSQTY * SBM.QTY ) AS CONSUMEDQTY
+                        FROM       OSM_OSPRECEIPTSENDLOT OLT
+                        INNER JOIN PCM_LOTWORKRESULT     CLW  ON   CLW.TXNHISTKEY            = OLT.LOTHISTKEY
+                                                             AND  CLW.LOTID                 = OLT.LOTID
+                        INNER JOIN BAS_PRODUCTDEFINITION SPD  ON   SPD.PRODUCTDEFID          = CLW.PRODUCTDEFID  
+                                                             AND  SPD.PRODUCTDEFVERSION     = CLW.PRODUCTDEFVERSION
+                        INNER JOIN BAS_PROCESSPATH      PPH   ON   PPH.PROCESSDEFID          = SPD.PROCESSDEFID
+                                                             AND  PPH.PROCESSDEFVERSION     = SPD.PROCESSDEFVERSION
+                                                             AND  PPH.PATHSEQUENCE          <![CDATA[>=]]> #{P_PATHSEQUENCESTART}
+                                                             AND  PPH.PATHSEQUENCE          <![CDATA[<=]]> #{P_PATHSEQUENCEEND}
+                        INNER JOIN BAS_BILLOFMATERIAL SBM     ON   SBM.PRODUCTDEFID           = SPD.PRODUCTDEFID
+                                                             AND  SBM.PRODUCTDEFVERSION      = SPD.PRODUCTDEFVERSION
+                                                             AND  SBM.PROCESSDEFID           = PPH.PROCESSDEFID
+                                                             AND  SBM.PROCESSDEFVERSION      = PPH.PROCESSDEFVERSION
+                                                             AND  SBM.PROCESSSEGMENTID       = PPH.PROCESSSEGMENTID
+                                                             AND  SBM.PROCESSSEGMENTVERSION  = PPH.PROCESSSEGMENTVERSION    
+                        INNER JOIN BAS_ITEMMASTER    MIA      ON   MIA.ENTERPRISEID           = OLT.ENTERPRISEID
+                                                             AND  MIA.ITEMID                 = SBM.MATERIALDEFID
+                                                             AND  MIA.ITEMVERSION            = SBM.MATERIALDEFVERSION
+                        WHERE   1=1
+                        AND     OLT.LOTHISTKEY       = #{P_LOTHISTKEY}
+                        AND     OLT.LOTID            = #{P_LOTID}
+                        AND     OLT.RECEIPTSEQUENCE  = #{P_RECEIPTSEQUENCE}
+                        GROUP BY OLT.LOTHISTKEY
+                                ,   OLT.LOTID  
+                                ,   OLT.RECEIPTSEQUENCE
+                                ,   MIA.ITEMNAME   
+                     )  MTS
+                 GROUP BY    MTS.LOTHISTKEY
+                           , MTS.LOTID
+                           , MTS.RECEIPTSEQUENCE
+                    )                            
+            SELECT 
+                    WLP.LOTHISTKEY 
+                ,   WLP.LOTID 
+                ,   WLP.PLANTID 
+                ,   WLP.PRODUCTDEFID  
+                ,   WLP.PRODUCTDEFVERSION
+                ,   WLP.PRODUCTDEFNAME
+                ,   WLP.PCSQTY   AS PCSQTY
+                ,   WLP.PNLQTY   AS PNLQTY
+                ,   WLP.VENDORNAME   
+                ,   WLP.PRINTNO 
+                ,   WLP.SENDUSERNAME 
+                ,   TO_CHAR(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS') AS RELEASEDATE --발행일자
+                ,   WLP.PROCESSSEGMENTNAME_01
+                ,   WLP.PROCESSSEGMENTNAME_02
+                ,   WLP.PROCESSSEGMENTNAME_03
+                ,   WLP.PROCESSSEGMENTNAME_04
+                ,   WLP.PROCESSSEGMENTNAME_05
+                ,   NVL(WLQ.CONSUMABLEDEFNAME_01,'') AS CONSUMABLEDEFNAME_01
+                ,   NVL(WLQ.CONSUMABLEDEFNAME_02,'') AS CONSUMABLEDEFNAME_02
+                ,   NVL(WLQ.CONSUMABLEDEFNAME_03,'') AS CONSUMABLEDEFNAME_03
+                ,   NVL(WLQ.CONSUMABLEDEFNAME_04,'') AS CONSUMABLEDEFNAME_04
+                ,   NVL(WLQ.CONSUMABLEDEFNAME_05,'') AS CONSUMABLEDEFNAME_05
+                ,   NVL(WLQ.CONSUMABLEDEFNAME_06,'') AS CONSUMABLEDEFNAME_06
+                ,   NVL(WLQ.CONSUMABLEDEFNAME_07,'') AS CONSUMABLEDEFNAME_07
+                ,   NVL(WLQ.CONSUMABLEDEFNAME_08,'') AS CONSUMABLEDEFNAME_08
+                ,   NVL(WLQ.CONSUMABLEDEFNAME_09,'') AS CONSUMABLEDEFNAME_09
+                ,   WLQ.CONSUMEDQTY_01  AS CONSUMEDQTY_01
+                ,   WLQ.CONSUMEDQTY_02  AS CONSUMEDQTY_02
+                ,   WLQ.CONSUMEDQTY_03  AS CONSUMEDQTY_03
+                ,   WLQ.CONSUMEDQTY_04  AS CONSUMEDQTY_04
+                ,   WLQ.CONSUMEDQTY_05  AS CONSUMEDQTY_05
+                ,   WLQ.CONSUMEDQTY_06  AS CONSUMEDQTY_06
+                ,   WLQ.CONSUMEDQTY_07  AS CONSUMEDQTY_07
+                ,   WLQ.CONSUMEDQTY_08  AS CONSUMEDQTY_08
+                ,   WLQ.CONSUMEDQTY_09  AS CONSUMEDQTY_09
+                ,	' ' AS SPACE00
+                ,	TO_CHAR(SYSDATE, 'YYYY-MM-DD HH24:MI:SS') AS SPACE01
+            FROM            WLP
+            LEFT OUTER JOIN WLQ ON   WLQ.LOTHISTKEY  = WLP.LOTHISTKEY
+                                AND  WLQ.LOTID       = WLP.LOTID
+    </select >
+    
+    <!-- 전표 출력용 테이블 INSERT -->
+	<update id="insertOutSlipdata" parameterType="map" >
+		INSERT INTO OSM_OSPRECEIPTSENDLOTPRINT
+				(
+				UUID,
+				LOTHISTKEY,
+				LOTID,
+				RECEIPTSEQUENCE,
+				PATHSEQUENCESTART,
+				PATHSEQUENCEEND,
+				LANG				
+				) VALUES (				
+				#{UUID},
+				#{LOTHISTKEY},
+				#{LOTID},
+				#{RECEIPTSEQUENCE},
+				#{PATHSEQUENCESTART},
+				#{PATHSEQUENCEEND},
+				#{SESSION_LANGUAGETYPE}
+				)
+	</update>    
+    
+    <select id="selectOutSlipdata" parameterType="map" resultType="hashmap">
+    	SELECT 
+    			UUID,
+				LOTHISTKEY,
+				LOTID,
+				RECEIPTSEQUENCE,
+				PATHSEQUENCESTART,
+				PATHSEQUENCEEND,
+				ROWNUM AS SKIPNO,
+				LANG
+    	FROM OSM_OSPRECEIPTSENDLOTPRINT
+    	WHERE UUID = #{P_UUID}
+    </select >
+
+</mapper>

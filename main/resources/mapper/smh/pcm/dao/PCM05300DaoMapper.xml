@@ -1,0 +1,478 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM05300Dao">
+
+	
+	<select id="selectAbnormalOccurenceList" parameterType="map" resultType="hashmap">
+		/* "SelectAbnormalOccurenceList" 10001 */
+	   WITH ABNORMALLIST AS 
+	      (
+	          --NCR - 약품분석
+	                  SELECT 'NCR' AS ABNORMALTYPE
+	                       , CASE WHEN LL.LOCKINGSTATUS = 'Y' THEN 'LOCK'
+	                              WHEN LL.LOCKINGSTATUS = 'N' THEN '-'            
+	                         END                                                                     AS LOTPROCESS
+	                       , CASE WHEN AL.ISLOCKING = 'Y' AND LL.LOCKINGSTATUS = 'Y' THEN 'Stop'
+	                              WHEN AL.ISLOCKING = 'N' THEN 'Run'
+	                              WHEN LL.LOCKINGSTATUS = 'N' THEN 'Complete' 
+	                         END                                                                     AS STATE
+	                       , L.PRODUCTDEFID                                                          AS PRODUCTDEFID
+	                       , L.PRODUCTDEFVERSION                                                     AS PRODUCTDEFVERSION
+	                       , PD.PRODUCTDEFNAME                                                       AS PRODUCTDEFNAME
+	                       , AL.LOTID                                                                AS LOTID
+	                       , ''                                                                      AS JOBTYPE
+	                       , ''                                                                      AS USERSEQUENCE
+	                       , ''                                                                      AS PROCESSSEGMENTID
+	                       , ''                                                                      AS PROCESSSEGMENTVERSION
+	                       , AO.PLANTID                                                              AS PLANTID
+	                       , ''                                                                      AS AREAID
+	                       , NULL                                                                    AS PCS
+	                       , NULL                                                                    AS PNL
+	                       , TO_CHAR(AL.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')                        AS OCCURDATE
+	                       , RC.REASONCODECLASSID                                                    AS REASONCODECLASSID
+	                       , D.DICTIONARYNAME                                                        AS REASONCODECLASS
+	                       , AL.REASONCODEID                                                         AS REASONCODEID
+	                       , D2.DICTIONARYNAME                                                       AS REASONCODE
+	                       , AL.CREATOR                                                              AS CREATOR
+	                       , U1.USER_NM                                                              AS CREATEUSER
+	                       , AL.DESCRIPTION                                                          AS REMARK
+	                       , LL.USERSEQUENCE                                                         AS STOPUSERSEQUENCE
+	                       , LL.PROCESSSEGMENTID                                                     AS STOPPROCESSSEGMENTID
+	                       , LL.PROCESSSEGMENTVERSION                                                AS STOPPROCESSSEGMENTVERSION
+	                       , LL.PLANTID                                                              AS STOPPLANTID
+	                       , LL.AREAID                                                               AS STOPAREAID
+	                       , TO_CHAR(LL.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS STOPDATE
+	                       , CASE WHEN LL.LOCKINGSTATUS = 'Y' THEN NULL 
+	                              ELSE CASE WHEN AL.ISLOCKING = 'N' THEN NULL 
+	                                        ELSE TO_CHAR(LL.TXNTIME, 'YYYY-MM-DD HH24:MI:SS') 
+	                                   END 
+	                         END                                                                     AS STOPRELEASEDATE
+	                       , (LL.TXNTIME - LL.CREATEDTIME) * 24 * 60 * 60                            AS STAYINGTIME
+	                       , TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD HH24:MI:SS')                         AS LOTINPUTDATE
+	                       , NULL                                                                    AS CUM_LEADTIME
+	                       , L.LOTTYPE                                                               AS LOTTYPE
+	                    FROM QAM_ABNORMALOCCURRENCE        AO
+	         LEFT OUTER JOIN QAM_AFFECTLOT                 AL  ON AO.ABNOCRNO            = AL.ABNOCRNO
+	                                                          AND AO.ABNOCRTYPE          = AL.ABNOCRTYPE
+	                                                          AND AO.ABNOCRTYPE          IN ('ChemicalAnalysisInspection', 'SubassemblyInspection', 'RawInspection', 'ArrivalRawMaterialInspection')
+	              INNER JOIN PCM_LOT                      L    ON AL.LOTID               = L.LOTID
+	                                                          AND NVL(L.ISDEFECTED, 'N')                             = 'N' 
+	         LEFT OUTER JOIN BAS_REASONCODE               RC  ON AL.REASONCODEID         = RC.REASONCODEID
+	         LEFT OUTER JOIN BAS_REASONCODECLASS         RCC  ON RC.REASONCODECLASSID    = RCC.REASONCODECLASSID
+	         LEFT OUTER JOIN CMD_DICTIONARY                D  ON RCC.REASONCODECLASSNAME = D.DICTIONARYID
+	                                                         AND D.LANGUAGETYPE          = #{LANGUAGETYPE}
+	         LEFT OUTER JOIN CMD_DICTIONARY               D2  ON RC.REASONCODENAME       = D2.DICTIONARYID
+	                                                         AND D2.LANGUAGETYPE         = #{LANGUAGETYPE}
+	         LEFT OUTER JOIN PCM_LOTLOCKING               LL  ON AL.LOTID                = LL.LOTID
+	                                                         AND AL.LOCKINGTXNHISTKEY    = LL.TXNHISTKEY
+	              INNER JOIN BAS_PRODUCTDEFINITION        PD  ON L.PRODUCTDEFID          = PD.PRODUCTDEFID
+	                                                         AND L.PRODUCTDEFVERSION     = PD.PRODUCTDEFVERSION
+	              INNER JOIN BAS_PROCESSDEFINITION       PSD  ON LL.PROCESSDEFID         = PSD.PROCESSDEFID
+	                                                         AND LL.PROCESSDEFVERSION    = PSD.PROCESSDEFVERSION                                            
+	         LEFT OUTER JOIN CMD_USERS                     U1 ON AL.CREATOR              = U1.USER_ID
+	                   WHERE 1 = 1
+	                     AND AO.PLANTID = #{PLANTID}
+	         <if test="PERIODFR != null and PERIODFR !='' and PERIODTO != null and PERIODTO !='' "> 
+	                     AND AL.CREATEDTIME >= #{PERIODFR}
+	                     AND AL.CREATEDTIME <![CDATA[<]]>  #{PERIODTO}
+	        </if>
+	        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+	                   AND L.PRODUCTDEFID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                                 FROM (SELECT  #{PRODUCTDEFID} AS ORG_DATA FROM DUAL)
+	                                           CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                          )
+	        </if>
+	        <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+	                    AND  L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	        </if> 
+	        <if test="PRODUCTNAME != null and PRODUCTNAME !='' "> 
+	                    AND PD.PRODUCTDEFNAME LIKE  <![CDATA['%'||]]> #{PRODUCTNAME}<![CDATA[||'%']]> 
+	        </if>
+	        <if test="LOTID != null and LOTID !='' "> 
+	                  
+	                  AND AL.LOTID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                        FROM (SELECT  #{LOTID} AS ORG_DATA FROM DUAL)
+	                                  CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                   )                             
+	         </if> 
+	         <if test="STOPAREAID != null and STOPAREAID !='' "> 
+	                   AND LL.AREAID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                                 FROM (SELECT  #{STOPAREAID} AS ORG_DATA FROM DUAL)
+	                                           CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                      )
+	         </if>                   
+	             UNION ALL
+	             --NCR - 약품분석 외
+	                SELECT 'NCR'                                                                                                      AS ABNORMALTYPE
+	                     , CASE WHEN LL.LOCKINGSTATUS = 'Y' THEN 'LOCK'                                 
+	                            WHEN LL.LOCKINGSTATUS = 'N' THEN '-'                                                
+	                       END                                                                                                        AS LOTPROCESS
+	                     , CASE WHEN AL.ISLOCKING = 'Y' AND LL.LOCKINGSTATUS = 'Y' THEN 'Stop'                                 
+	                            WHEN AL.ISLOCKING = 'N' THEN 'Run'                                 
+	                            WHEN LL.LOCKINGSTATUS = 'N' THEN 'Complete'                                     
+	                       END                                                                                                        AS STATE
+	                     , AO.PRODUCTDEFID                                                                                            AS PRODUCTDEFID
+	                     , AO.PRODUCTDEFVERSION                                                                                       AS PRODUCTDEFVERSION
+	                     , PD.PRODUCTDEFNAME                                                                                          AS PRODUCTDEFNAME
+	                     , AO.LOTID                                                                                                   AS LOTID
+	                     , PSD.PROCESSDEFTYPE                                                                                         AS JOBTYPE
+	                     , AO.USERSEQUENCE                                                                                            AS USERSEQUENCE
+	                     , AO.PROCESSSEGMENTID                                                                                        AS PROCESSSEGMENTID
+	                     , AO.PROCESSSEGMENTVERSION                                                                                   AS PROCESSSEGMENTVERSION
+	                     , AO.PLANTID                                                                                                 AS PLANTID
+	                     , AO.AREAID                                                                                                  AS AREAID
+	                     , NVL(LWR.SENDPCSQTY, NVL(LWR.WORKENDPCSQTY, NVL(LWR.WORKSTARTPCSQTY, NVL(LWR.RECEIVEPCSQTY, 0))))           AS PCS
+	                     , NVL(LWR.SENDPANELQTY, NVL(LWR.WORKENDPANELQTY, NVL(LWR.WORKSTARTPANELQTY, NVL(LWR.RECEIVEPANELQTY, 0))))   AS PNL
+	                     , TO_CHAR(AO.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')                                                           AS OCCURDATE
+	                     , RC.REASONCODECLASSID                                                                                       AS REASONCODECLASSID
+	                     , D.DICTIONARYNAME                                                                                           AS REASONCODECLASS
+	                     , AO.REASONCODEID                                                                                            AS REASONCODEID
+	                     , D2.DICTIONARYNAME                                                                                          AS REASONCODE
+	                     , AO.CREATOR                                                                                                 AS CREATOR
+	                     , U1.USER_NM                                                                                                AS CREATEUSER
+	                     , AO.DESCRIPTION                                                                                             AS REMARK
+	                     , LL.USERSEQUENCE                                                                                            AS STOPUSERSEQUENCE
+	                     , LL.PROCESSSEGMENTID                                                                                        AS STOPPROCESSSEGMENTID
+	                     , LL.PROCESSSEGMENTVERSION                                                                                   AS STOPPROCESSSEGMENTVERSION
+	                     , LL.PLANTID                                                                                                 AS STOPPLANTID
+	                     , LL.AREAID                                                                                                  AS STOPAREAID
+	                     , TO_CHAR(LL.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')                                                           AS STOPDATE
+	                     , CASE WHEN LL.LOCKINGSTATUS = 'Y' THEN NULL 
+	                            ELSE CASE WHEN AL.ISLOCKING = 'N' THEN NULL 
+	                                      ELSE TO_CHAR(LL.TXNTIME, 'YYYY-MM-DD HH24:MI:SS') 
+	                                 END 
+	                       END                                                                                                        AS STOPRELEASEDATE
+	                     , (LL.TXNTIME - LL.CREATEDTIME) * 24 * 60 * 60                                                               AS STAYINGTIME
+	                     , TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD HH24:MI:SS')                                                            AS LOTINPUTDATE
+	                     , (NVL(LWR.RECEIVELEADTIME, 0) + NVL(LWR.WORKSTARTLEADTIME, 0) + 
+	                        NVL(LWR.WORKENDLEADTIME, 0) + NVL(LWR.SENDLEADTIME, 0))                                                   AS CUM_LEADTIME
+	                     , L.LOTTYPE
+	                  FROM QAM_ABNORMALOCCURRENCE   AO
+	       LEFT OUTER JOIN QAM_AFFECTLOT            AL  ON AO.ABNOCRNO              = AL.ABNOCRNO
+	                                                   AND AO.ABNOCRTYPE            = AL.ABNOCRTYPE
+	                                                   AND AO.LOTID                 = AL.LOTID
+	            INNER JOIN PCM_LOTWORKRESULT       LWR  ON AO.LOTID                 = LWR.LOTID
+	                                                   AND AO.PRODUCTDEFID          = LWR.PRODUCTDEFID
+	                                                   AND AO.PRODUCTDEFVERSION     = LWR.PRODUCTDEFVERSION
+	                                                   AND AO.PROCESSSEGMENTID      = LWR.PROCESSSEGMENTID
+	                                                   AND AO.PROCESSSEGMENTVERSION = LWR.PROCESSSEGMENTVERSION
+	                                                   AND LWR.WORKCOUNT            = 0
+	            INNER JOIN BAS_PROCESSDEFINITION   PSD  ON LWR.PROCESSDEFID         = PSD.PROCESSDEFID
+	                                                   AND LWR.PROCESSDEFVERSION    = PSD.PROCESSDEFVERSION
+	       LEFT OUTER JOIN BAS_REASONCODE           RC  ON AO.REASONCODEID          = RC.REASONCODEID
+	       LEFT OUTER JOIN BAS_REASONCODECLASS     RCC  ON RC.REASONCODECLASSID     = RCC.REASONCODECLASSID
+	       LEFT OUTER JOIN CMD_DICTIONARY            D  ON RCC.REASONCODECLASSNAME  = D.DICTIONARYID
+	                                                   AND D.LANGUAGETYPE           = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN CMD_DICTIONARY           D2  ON RC.REASONCODENAME        = D2.DICTIONARYID
+	                                                   AND D2.LANGUAGETYPE          = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN PCM_LOT                   L  ON AO.LOTID                 = L.LOTID
+	       LEFT OUTER JOIN PCM_LOTLOCKING           LL  ON AL.LOTID                 = LL.LOTID
+	                                                   AND AL.LOCKINGTXNHISTKEY     = LL.TXNHISTKEY
+	       LEFT OUTER JOIN BAS_PRODUCTDEFINITION    PD  ON AO.PRODUCTDEFID          = PD.PRODUCTDEFID
+	                                                   AND AO.PRODUCTDEFVERSION     = PD.PRODUCTDEFVERSION
+	       LEFT OUTER JOIN CMD_USERS                U1  ON AO.CREATOR               = U1.USER_ID                                          
+	                 WHERE  AO.PLANTID = #{PLANTID}
+	                   AND NVL(L.ISDEFECTED, 'N') = 'N'
+	        <if test="PERIOD_PERIODFR != null and PERIOD_PERIODFR !='' and PERIOD_PERIODTO != null and PERIOD_PERIODTO !='' "> 
+	                   AND AO.CREATEDTIME >= #{PERIOD_PERIODFR}
+	                   AND AO.CREATEDTIME <![CDATA[<]]>  #{PERIOD_PERIODTO}
+	        </if>
+	        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+	                   AND AO.PRODUCTDEFID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                                 FROM (SELECT  #{PRODUCTDEFID} AS ORG_DATA FROM DUAL)
+	                                           CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                          )
+	        </if>
+	        <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+	                   AND AO.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	        </if>
+	        <if test="PRODUCTNAME != null and PRODUCTNAME !='' "> 
+	                    AND PD.PRODUCTDEFNAME LIKE  <![CDATA['%'||]]> #{PRODUCTNAME}<![CDATA[||'%']]> 
+	        </if>
+	        <if test="LOTID != null and LOTID !='' "> 
+	                  
+	                  AND AO.LOTID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                        FROM (SELECT  #{LOTID} AS ORG_DATA FROM DUAL)
+	                                  CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                   )                             
+	         </if>
+	         <if test="OCCURAREAID != null and OCCURAREAID !='' "> 
+	                   AND AO.AREAID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                             FROM (SELECT  #{OCCURAREAID} AS ORG_DATA FROM DUAL)
+	                                       CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                      )
+	         </if>      
+	         <if test="STOPAREAID != null and STOPAREAID !='' "> 
+	                   AND LL.AREAID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                                 FROM (SELECT  #{STOPAREAID} AS ORG_DATA FROM DUAL)
+	                                           CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                      )
+	         </if>           
+	             UNION ALL
+	                SELECT 'LOCK'                                                                                                       AS ABNORMALTYPE
+	                     , CASE WHEN LL.LOCKINGSTATUS = 'Y' THEN 'LOCK'
+	                            WHEN LL.LOCKINGSTATUS = 'N' THEN '-'   
+	                       END                                                                                                          AS LOTPROCESS
+	                     , CASE WHEN LL.LOCKINGSTATUS = 'Y' THEN 'Stop'
+	                            WHEN LL.LOCKINGSTATUS = 'N' THEN 'Complete' 
+	                       END                                                                                                          AS STATE
+	                     , LL.PRODUCTDEFID                                                                                              AS PRODUCTDEFID
+	                     , LL.PRODUCTDEFVERSION                                                                                         AS PRODUCTDEFVERSION
+	                     , PD.PRODUCTDEFNAME                                                                                            AS PRODUCTDEFNAME
+	                     , LL.LOTID                                                                                                     AS LOTID
+	                     , PSD.PROCESSDEFTYPE              AS JOBTYPE
+	                     , LL.USERSEQUENCE                 AS USERSEQUENCE
+	                     , LL.PROCESSSEGMENTID             AS PROCESSSEGMENTID
+	                     , LL.PROCESSSEGMENTVERSION        AS PROCESSSEGMENTVERSION
+	                     , LL.PLANTID                      AS PLANTID
+	                     , LL.AREAID                       AS AREAID
+	                     , NVL(LWR.SENDPCSQTY, NVL(LWR.WORKENDPCSQTY, NVL(LWR.WORKSTARTPCSQTY, NVL(LWR.RECEIVEPCSQTY, 0))))             AS PCS
+	                     , NVL(LWR.SENDPANELQTY, NVL(LWR.WORKENDPANELQTY, NVL(LWR.WORKSTARTPANELQTY, NVL(LWR.RECEIVEPANELQTY, 0))))     AS PNL
+	                     , TO_CHAR(LL.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')                                                             AS OCCURDATE
+	                     , RC.REASONCODECLASSID                                                                                         AS REASONCODECLASSID
+	                     , D.DICTIONARYNAME                                                                                             AS REASONCODECLASS
+	                     , LL.LOCKINGCODE                                                                                               AS LOCKINGCODE
+	                     , D2.DICTIONARYNAME                                                                                            AS REASONCODE
+	                     , LL.CREATOR                                                                                                   AS CREATOR
+	                     , U1.USER_NM                                                                                                  AS CREATEUSER
+	                     , LL.COMMENTS                                                                                                  AS REMARK
+	                     , LL.USERSEQUENCE                                                                                              AS STOPUSERSEQUENCE
+	                     , LL.PROCESSSEGMENTID                                                                                          AS STOPPROCESSSEGMENTID
+	                     , LL.PROCESSSEGMENTVERSION                                                                                     AS STOPPROCESSSEGMENTVERSION
+	                     , LL.PLANTID                                                                                                   AS STOPPLANTID
+	                     , LL.AREAID                                                                                                    AS STOPAREAID
+	                     , TO_CHAR(LL.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')                                                             AS STOPDATE
+	                     , CASE WHEN LL.LOCKINGSTATUS = 'Y' THEN NULL ELSE TO_CHAR(LL.TXNTIME, 'YYYY-MM-DD HH24:MI:SS') END             AS STOPRELEASEDATE
+	                     , (LL.TXNTIME - LL.CREATEDTIME) * 24 * 60 * 60                                                                 AS STAYINGTIME
+	                     , TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD HH24:MI:SS')                                                              AS LOTINPUTDATE
+	                     , (NVL(LWR.RECEIVELEADTIME, 0) + NVL(LWR.WORKSTARTLEADTIME, 0) + 
+	                        NVL(LWR.WORKENDLEADTIME, 0) + NVL(LWR.SENDLEADTIME, 0))                                                     AS CUM_LEADTIME
+	                     , L.LOTTYPE
+	                  FROM PCM_LOTLOCKING           LL
+	            INNER JOIN PCM_LOTWORKRESULT       LWR ON LL.LOTID                 = LWR.LOTID
+	                                                  AND LL.PRODUCTDEFID          = LWR.PRODUCTDEFID
+	                                                  AND LL.PRODUCTDEFVERSION     = LWR.PRODUCTDEFVERSION
+	                                                  AND LL.PROCESSSEGMENTID      = LWR.PROCESSSEGMENTID
+	                                                  AND LL.PROCESSSEGMENTVERSION = LWR.PROCESSSEGMENTVERSION
+	                                                  AND LWR.WORKCOUNT            = 0
+	            INNER JOIN BAS_PROCESSDEFINITION   PSD ON LL.PROCESSDEFID          = PSD.PROCESSDEFID
+	                                                  AND LL.PROCESSDEFVERSION     = PSD.PROCESSDEFVERSION
+	       LEFT OUTER JOIN BAS_REASONCODE           RC ON LL.LOCKINGCODE           = RC.REASONCODEID
+	       LEFT OUTER JOIN BAS_REASONCODECLASS     RCC ON RC.REASONCODECLASSID     = RCC.REASONCODECLASSID
+	       LEFT OUTER JOIN CMD_DICTIONARY            D ON RCC.REASONCODECLASSNAME  = D.DICTIONARYID
+	                                                  AND D.LANGUAGETYPE           = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN CMD_DICTIONARY           D2 ON RC.REASONCODENAME        = D2.DICTIONARYID
+	                                                  AND D2.LANGUAGETYPE          = #{LANGUAGETYPE}
+	            INNER JOIN PCM_LOT                  L  ON LL.LOTID                 = L.LOTID
+	                                                  AND NVL(L.ISDEFECTED, 'N')   = 'N'
+	            INNER JOIN BAs_PRODUCTDEFINITION   PD  ON LL.PRODUCTDEFID          = PD.PRODUCTDEFID
+	                                                  AND LL.PRODUCTDEFVERSION     = PD.PRODUCTDEFVERSION
+	       LEFT OUTER JOIN CMD_USERS               U1  ON LL.CREATOR               = U1.USER_ID
+	                 WHERE LL.PLANTID = #{PLANTID}
+	        <if test="PERIODFR != null and PERIODFR !='' and PERIODTO != null and PERIODTO !='' "> 
+	                   AND LL.CREATEDTIME >= #{PERIODFR}
+	                   AND LL.CREATEDTIME <![CDATA[<]]>  #{PERIODTO}
+	        </if>
+	        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+	                   AND LL.PRODUCTDEFID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                                 FROM (SELECT  #{PRODUCTDEFID} AS ORG_DATA FROM DUAL)
+	                                           CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                          )
+	        </if>
+	        <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+	                    AND  LL.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	        </if> 
+	        <if test="PRODUCTNAME != null and PRODUCTNAME !='' "> 
+	                    AND PD.PRODUCTDEFNAME LIKE  <![CDATA['%'||]]> #{PRODUCTNAME}<![CDATA[||'%']]> 
+	        </if>        
+	        <if test="LOTID != null and LOTID !='' "> 
+	                  
+	                  AND  LL.LOTID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                        FROM (SELECT  #{LOTID} AS ORG_DATA FROM DUAL)
+	                                  CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                   )                             
+	         </if>
+	         <if test="OCCURAREAID != null and OCCURAREAID !='' "> 
+	                   AND LL.AREAID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                             FROM (SELECT  #{OCCURAREAID} AS ORG_DATA FROM DUAL)
+	                                       CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                      )
+	         </if>      
+	         <if test="STOPAREAID != null and STOPAREAID !='' "> 
+	                    AND LL.AREAID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                                 FROM (SELECT  #{STOPAREAID} AS ORG_DATA FROM DUAL)
+	                                           CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                      )
+	         </if>          
+	             UNION ALL
+	                SELECT 'HOLD'                                                                                                      AS ABNORMALTYPE
+	                     , CASE WHEN LH.HOLDSTATUS = 'Y' THEN 'HOLD'                                   
+	                            WHEN LH.HOLDSTATUS = 'N' THEN '-'   END                                                                AS LOTPROCESS
+	                     , CASE WHEN LH.HOLDSTATUS = 'Y' THEN 'Stop'                                   
+	                            WHEN LH.HOLDSTATUS = 'N' THEN 'Complete' END                                                           AS STATE
+	                     , LWR.PRODUCTDEFID                                                                                            AS PRODUCTDEFID
+	                     , LWR.PRODUCTDEFVERSION                                                                                       AS PRODUCTDEFVERSION
+	                     , PD.PRODUCTDEFNAME                                                                                           AS PRODUCTDEFNAME
+	                     , LH.LOTID                                                                                                    AS LOTID
+	                     , PSD.PROCESSDEFTYPE                                                                                          AS JOBTYPE
+	                     , LWR.USERSEQUENCE                                                                                            AS USERSEQUENCE
+	                     , LH.PROCESSSEGMENTID                                                                                         AS PROCESSSEGMENTID
+	                     , LH.PROCESSSEGMENTVERSION                                                                                    AS PROCESSSEGMENTVERSION
+	                     , LWR.PLANTID                                                                                                 AS PLANTID
+	                     , LH.AREAID                                                                                                   AS AREAID
+	                     , NVL(LWR.SENDPCSQTY, NVL(LWR.WORKENDPCSQTY, NVL(LWR.WORKSTARTPCSQTY, NVL(LWR.RECEIVEPCSQTY, 0))))            AS PCS
+	                     , NVL(LWR.SENDPANELQTY, NVL(LWR.WORKENDPANELQTY, NVL(LWR.WORKSTARTPANELQTY, NVL(LWR.RECEIVEPANELQTY, 0))))    AS PNL
+	                     , TO_CHAR(LH.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')                                                            AS OCCURDATE
+	                     , RC.REASONCODECLASSID                                                                                        AS REASONCODECLASSID
+	                     , D.DICTIONARYNAME                                                                                            AS REASONCODECLASS
+	                     , LH.HOLDCODE                                                                                                 AS HOLDCODE
+	                     , D2.DICTIONARYNAME                                                                                           AS REASONCODE
+	                     , LH.CREATOR                                                                                                  AS CREATOR
+	                     , U1.USER_NM                                                                                                 AS CREATEUSER
+	                     , LH.HOLDCOMMENT                                                                                              AS REMARK
+	                     , LWR.USERSEQUENCE                                                                                            AS STOPUSERSEQUENCE
+	                     , LWR.PROCESSSEGMENTID                                                                                        AS STOPPROCESSSEGMENTID
+	                     , LWR.PROCESSSEGMENTVERSION                                                                                   AS STOPPROCESSSEGMENTVERSION
+	                     , ''                                                                                                          AS STOPPLANTID
+	                     , LH.AREAID                                                                                                   AS STOPAREAID
+	                     , TO_CHAR(LH.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')                                                            AS STOPDATE
+	                     , TO_CHAR(LH.RELEASEDATE, 'YYYY-MM-DD HH24:MI:SS')                                                            AS STOPRELEASEDATE
+	                     , (LH.RELEASEDATE - LH.CREATEDTIME) * 24 * 60 * 60                                                            AS STAYINGTIME
+	                     , TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD HH24:MI:SS')                                                             AS LOTINPUTDATE
+	                     , (NVL(LWR.RECEIVELEADTIME, 0) + NVL(LWR.WORKSTARTLEADTIME, 0) + 
+	                        NVL(LWR.WORKENDLEADTIME, 0) + NVL(LWR.SENDLEADTIME, 0))                                                    AS CUM_LEADTIME
+	                     , L.LOTTYPE                                                                                                   AS LOTTYPE
+	                  FROM PCM_LOTHOLD               LH
+	            INNER JOIN BAS_AREA                  BA  ON LH.AREAID = BA.AREAID
+	            INNER JOIN PCM_LOTWORKRESULT        LWR ON  LH.LOTID = LWR.LOTID
+	                                                   AND LH.PROCESSDEFID = LWR.PROCESSDEFID
+	                                                   AND LH.PROCESSDEFVERSION = LWR.PROCESSDEFVERSION
+	                                                   AND LH.PROCESSSEGMENTID = LWR.PROCESSSEGMENTID
+	                                                   AND LH.PROCESSSEGMENTVERSION = LWR.PROCESSSEGMENTVERSION
+	                                                   AND LWR.WORKCOUNT = 0
+	          INNER JOIN BAS_PROCESSDEFINITION      PSD ON LH.PROCESSDEFID = PSD.PROCESSDEFID
+	                                                   AND LH.PROCESSDEFVERSION = PSD.PROCESSDEFVERSION
+	     LEFT OUTER JOIN BAS_REASONCODE              RC ON LH.HOLDCODE = RC.REASONCODEID
+	     LEFT OUTER JOIN BAS_REASONCODECLASS        RCC ON RC.REASONCODECLASSID = RCC.REASONCODECLASSID
+	     LEFT OUTER JOIN CMD_DICTIONARY               D ON RCC.REASONCODECLASSNAME = D.DICTIONARYID
+	                                                   AND D.LANGUAGETYPE = #{LANGUAGETYPE}
+	     LEFT OUTER JOIN CMD_DICTIONARY              D2 ON RC.REASONCODENAME = D2.DICTIONARYID
+	                                                   AND D2.LANGUAGETYPE = #{LANGUAGETYPE}
+	          INNER JOIN PCM_LOT                      L ON LH.LOTID = L.LOTID
+	                                                   AND NVL(L.ISDEFECTED, 'N') = 'N'
+	          INNER JOIN BAS_PRODUCTDEFINITION       PD ON LWR.PRODUCTDEFID = PD.PRODUCTDEFID
+	                                                   AND LWR.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+	     LEFT OUTER JOIN CMD_USERS                   U1 ON LH.CREATOR = U1.USER_ID
+	               WHERE BA.PLANTID = #{PLANTID}
+	      <if test="PERIODFR != null and PERIODFR !='' and PERIODTO != null and PERIODTO !='' "> 
+	                 AND LH.CREATEDTIME >= #{PERIODFR}
+	                 AND LH.CREATEDTIME <![CDATA[<]]>  #{PERIODTO}
+	      </if>
+	      <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+	                 AND LWR.PRODUCTDEFID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                                 FROM (SELECT  #{PRODUCTDEFID} AS ORG_DATA FROM DUAL)
+	                                           CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                            )
+	      </if>
+	      <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+	                  AND LWR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	   </if> 
+	     
+	      <if test="PRODUCTNAME != null and PRODUCTNAME !='' "> 
+	                  AND PD.PRODUCTDEFNAME LIKE  <![CDATA['%'||]]> #{PRODUCTNAME}<![CDATA[||'%']]> 
+	      </if>
+	      <if test="LOTID != null and LOTID !='' "> 
+	               
+	                  AND  LH.LOTID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                              FROM (SELECT  #{LOTID} AS ORG_DATA FROM DUAL)
+	                                        CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                    )                             
+	      </if>
+	      <if test="OCCURAREAID != null and OCCURAREAID !='' "> 
+	                    AND  LH.AREAID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                              FROM (SELECT  #{OCCURAREAID} AS ORG_DATA FROM DUAL)
+	                                        CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                       )
+	      </if>      
+	      <if test="STOPAREAID != null and STOPAREAID !='' "> 
+	                 AND  LH.AREAID IN (  SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS AREAID
+	                                              FROM (SELECT  #{STOPAREAID} AS ORG_DATA FROM DUAL)
+	                                        CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+	                                   )
+	      </if>           
+	      )
+	                 SELECT D1.DICTIONARYNAME                  AS ABNORMALTYPE
+	                      , NVL(D2.DICTIONARYNAME, '-')        AS LOTPROCESS
+	                      , AOL.STATE                          AS STATE
+	                      , D3.DICTIONARYNAME                  AS STATUS
+	                      , AOL.PRODUCTDEFID                   AS PRODUCTDEFID
+	                      , AOL.PRODUCTDEFNAME                 AS PRODUCTDEFNAME
+	                      , AOL.LOTID                          AS LOTID
+	                      , AOL.JOBTYPE                        AS JOBTYPE
+	                      , AOL.USERSEQUENCE                   AS USERSEQUENCE
+	                      , D4.DICTIONARYNAME                  AS PROCESSSEGMENTNAME
+	                      , AOL.PLANTID                        AS SITE
+	                      , NVL(D5.DICTIONARYNAME,AOL.AREAID)  AS AREANAME
+	                      , AOL.PCS                            AS PCS
+	                      , AOL.PNL                            AS PNL
+	                      , AOL.OCCURDATE
+	                      , AOL.REASONCODECLASS
+	                      , AOL.REASONCODE
+	                      , AOL.CREATEUSER
+	                      , AOL.REMARK
+	                      , AOL.STOPUSERSEQUENCE
+	                      , D6.DICTIONARYNAME      AS STOPPROCESSSEGMENTNAME
+	                      , AOL.STOPPLANTID        AS STOPSITE
+	                      , D7.DICTIONARYNAME      AS STOPAREA
+	                      , AOL.STOPDATE
+	                      , AOL.STOPRELEASEDATE
+	                      , (AOL.STAYINGTIME / 3600)  AS STAYINGTIME
+	                      , AOL.LOTINPUTDATE
+	                      , (AOL.CUM_LEADTIME / (3600 * 24)) AS CUM_LEADTIME
+	                      , D8.DICTIONARYNAME       AS LOTPRODUCTTYPE
+	                  FROM  ABNORMALLIST         AOL
+	       LEFT OUTER JOIN CMD_LOOKUP_VALUES   C1  ON  AOL.ABNORMALTYPE              = C1.LOOKUP_CODE
+	                                              AND  C1.LOOKUP_TYPE                = 'LotAbnormalOccurrenceType'
+	       LEFT OUTER JOIN CMD_DICTIONARY      D1  ON  C1.DICTIONARYID               = D1.DICTIONARYID
+	                                              AND  D1.LANGUAGETYPE               = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN CMD_LOOKUP_VALUES   C2  ON  AOL.LOTPROCESS                = C2.LOOKUP_CODE
+	                                              AND  C2.LOOKUP_TYPE                = 'LotProcessType'
+	       LEFT OUTER JOIN CMD_DICTIONARY      D2  ON  C2.DICTIONARYID               = D2.DICTIONARYID
+	                                              AND  D2.LANGUAGETYPE               = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN CMD_LOOKUP_VALUES   C3  ON  AOL.STATE                     = C3.LOOKUP_CODE
+	                                              AND  C3.LOOKUP_TYPE                = 'LotCurrentState'
+	       LEFT OUTER JOIN CMD_DICTIONARY      D3  ON  C3.DICTIONARYID               = D3.DICTIONARYID
+	                                              AND  D3.LANGUAGETYPE               = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN BAS_PROCESSSEGMENT  PS1 ON  AOL.PROCESSSEGMENTID          = PS1.PROCESSSEGMENTID
+	                                              AND  AOL.PROCESSSEGMENTVERSION     = PS1.PROCESSSEGMENTVERSION
+	       LEFT OUTER JOIN CMD_DICTIONARY      D4  ON  PS1.PROCESSSEGMENTNAME        = D4.DICTIONARYID
+	                                              AND  D4.LANGUAGETYPE               = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN BAS_AREA           AR1  ON  AOL.AREAID                    = AR1.AREAID
+	       LEFT OUTER JOIN CMD_DICTIONARY      D5  ON  AR1.AREANAME                  = D5.DICTIONARYID
+	                                              AND  D5.LANGUAGETYPE               = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN BAS_PROCESSSEGMENT  PS2 ON  AOL.STOPPROCESSSEGMENTID      = PS2.PROCESSSEGMENTID                                
+	                                              AND  AOL.STOPPROCESSSEGMENTVERSION = PS2.PROCESSSEGMENTVERSION
+	       LEFT OUTER JOIN CMD_DICTIONARY      D6  ON  PS2.PROCESSSEGMENTNAME        = D6.DICTIONARYID
+	                                              AND  D6.LANGUAGETYPE               = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN BAS_AREA           AR2  ON  AOL.STOPAREAID                = AR2.AREAID
+	       LEFT OUTER JOIN CMD_DICTIONARY      D7  ON  AR2.AREANAME                  = D7.DICTIONARYID
+	                                              AND  D7.LANGUAGETYPE               = #{LANGUAGETYPE}
+	       LEFT OUTER JOIN CMD_LOOKUP_VALUES   C4  ON  AOL.LOTTYPE                   = C4.LOOKUP_CODE
+	                                              AND  C4.LOOKUP_TYPE                = 'ProductionType'
+	       LEFT OUTER JOIN CMD_DICTIONARY      D8  ON  C4.DICTIONARYID               = D8.DICTIONARYID
+	                                              AND  D8.LANGUAGETYPE               = #{LANGUAGETYPE}
+	                 WHERE 1 = 1
+	      <if test="OCCURTYPE != null and OCCURTYPE !='' and !(OCCURTYPE eq '*'.toString())">
+	                   AND AOL.ABNORMALTYPE = #{OCCURTYPE}
+	      </if>
+	      <if test="PROCESSTYPE != null and PROCESSTYPE !='' and !(PROCESSTYPE eq '*'.toString())">
+	                   AND AOL.LOTPROCESS = #{PROCESSTYPE}
+	      </if>
+	      <if test="STATE != null and STATE !='' and !(STATE eq '*'.toString())">
+	                   AND AOL.STATE = #{STATE}
+	      </if>
+	              ORDER BY AOL.PRODUCTDEFID, AOL.PRODUCTDEFNAME, AOL.LOTID 
+	</select>
+</mapper>

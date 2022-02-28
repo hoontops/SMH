@@ -1,0 +1,303 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS04800Dao">
+
+    <!-- 기준정보 > 품질관리 > 자주검사기준정보 > 자주검사기준정보 조회 -->
+    <select id="selectGetSelfInspectionList" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04800Dao.selectGetSelfInspectionList */
+        SELECT #{INSPECTIONDEFID} AS INSPECTIONDEFID
+             , '*' AS INSPECTIONDEFVERSION
+             , '*' AS INSPITEMID
+             , '*' AS INSPITEMVERSION
+             , 'QCSegmentID' AS RESOURCETYPE
+             , '*' AS RESOURCEID
+             , '*' AS RESOURCEVERSION
+             , QSD.QCSEGMENTID    AS PROCESSSEGID
+             , DIC.DICTIONARYNAME AS PROCESSSEGNAME
+             , '*' AS PROCESSEGVERSION
+             , QSD.ENTERPRISEID
+             , REL.PLANTID
+             , REL.VALIDTYPE
+             , REL.UNIT
+             , REL.SEQUENCE
+             , REL.TANKSIZE
+             , REL.CALCULATIONTYPE
+             , REL.ANALYSISCONST
+             , REL.FOMULATYPE
+             , REL.QTYCONST
+             , REL.SPECCLASSID
+             , REL.SPECSEQUENCE
+             , REL.ISINSPECTIONREQUIRED
+             , REL.INSPECTORDEGREE
+             , REL.ISAQL
+             , REL.AQLINSPECTIONLEVEL
+             , REL.AQLDEFECTLEVEL
+             , REL.AQLDECISIONDEGREE
+             , REL.AQLCYCLE
+             , REL.ISNCR
+             , REL.NCRINSPECTIONQTY
+             , REL.NCRCYCLE
+             , REL.NCRDECISIONDEGREE
+             , REL.NCRDEFECTRATE
+             , REL.NCRLOTSIZE
+             , REL.QTYUNIT
+             , REL.INSPECTIONUNIT
+             , REL.DESCRIPTION
+             , REL.VALIDSTATE
+             , CU.USER_NM                            AS CREATOR
+             , TO_CHAR(REL.CREATEDTIME, 'YYYYMMDDHH24MISS')  AS CREATEDTIME
+             , MU.USER_NM                            AS MODIFIER
+             , TO_CHAR(REL.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+          FROM            QAM_QCSEGMENTDEFINITION QSD
+          LEFT JOIN       BAS_INSPECTIONITEMREL   REL  ON  REL.ENTERPRISEID    = QSD.ENTERPRISEID
+                                                       AND REL.PROCESSSEGID    = QSD.QCSEGMENTID
+                                                       AND REL.INSPECTIONDEFID = #{INSPECTIONDEFID}
+          LEFT JOIN       CMD_DICTIONARY          DIC  ON  DIC.DICTIONARYID    = QSD.QCSEGMENTNAME
+                                                       AND DIC.LANGUAGETYPE    = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_USERS               CU   ON  REL.CREATOR         = CU.USER_ID
+          LEFT OUTER JOIN CMD_USERS               MU   ON  REL.MODIFIER        = MU.USER_ID
+         WHERE 1=1
+        <if test="QCSEGMENTID != null and QCSEGMENTID !='' ">
+           AND QSD.PLANTID = #{PLANTID}
+        </if>        
+        <if test="INSPECTIONDEFID eq 'SelfInspectionTake'.toString() ">
+           AND NVL(QSD.RECEIPTFLAG, 'N') = 'Y'
+        </if>
+        <!-- 2021.05.13 TOBE Modify
+        <if test="INSPECTIONDEFID eq 'SelfInspectionShip'.toString() ">
+           AND NVL(QSD.RECEIPTFLAG, 'N') = 'N'           
+        </if>
+        -->
+           AND QSD.VALIDSTATE = 'Valid'
+        ORDER BY QSD.QCSEGMENTID
+    </select>
+
+    <!-- 기준정보 > 품질관리 > 자주검사 > 자주검사 리스트 -->
+    <select id="selectGetSelfInspectionPopup" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04800Dao.selectGetSelfInspectionPopup */
+        SELECT QSD.QCSEGMENTID
+             , DIC.DICTIONARYNAME                                     AS QCSEGMENTNAME
+             , CASE WHEN NVL(SD.SPECSEQUENCE,'') = '' THEN 'N' ELSE 'Y'end AS ISSPEC
+             , IIR.ISINSPECTIONREQUIRED
+             , IIR.ISAQL
+             , IIR.AQLINSPECTIONLEVEL
+             , IIR.AQLDEFECTLEVEL
+             , IIR.AQLDECISIONDEGREE
+             , IIR.AQLCYCLE
+             , IIR.ISNCR
+             , IIR.NCRINSPECTIONQTY
+             , IIR.NCRCYCLE
+             , IIR.NCRDECISIONDEGREE
+             , IIR.NCRDEFECTRATE
+             , IIR.NCRLOTSIZE
+             , IIR.INSPECTIONUNIT
+             , IIR.VALIDSTATE
+          FROM            QAM_QCSEGMENTDEFINITION  QSD
+          LEFT OUTER JOIN CMD_DICTIONARY           DIC  ON   DIC.DICTIONARYID         = QSD.QCSEGMENTNAME
+                                                        AND  DIC.LANGUAGETYPE         = #{LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_INSPECTIONITEMREL    IIR  ON   IIR.INSPECTIONDEFID      = CASE WHEN QSD.QCSEGMENTID = '160' THEN 'SelfInspectionTake'
+                                                                                        ELSE 'SelfInspectionShip'  END
+                                                        AND  IIR.INSPECTIONDEFVERSION = '*'
+                                                        AND  IIR.INSPITEMID           = '*'
+                                                        AND  IIR.INSPITEMVERSION      = '*'
+                                                        AND  IIR.RESOURCETYPE         = '*'
+                                                        AND  IIR.RESOURCEID           = '*'
+                                                        AND  IIR.RESOURCEVERSION      = '*'
+                                                        AND  IIR.PROCESSSEGID         = QSD.QCSEGMENTID
+                                                        AND  IIR.PROCESSEGVERSION     = '*'
+          LEFT OUTER JOIN   BAS_SPECDETAIL         SD   ON   IIR.SPECSEQUENCE         = SD.SPECSEQUENCE
+                                                        AND  IIR.SPECCLASSID          = SD.SPECCLASSID
+         WHERE QSD.ENTERPRISEID = #{ENTERPRISEID}
+           AND CASE WHEN QSD.QCSEGMENTID = '160' THEN 'SelfInspectionTake'
+               ELSE 'SelfInspectionShip'
+               END = #{INSPECTIONDEFID}
+        <if test="QCSEGMENTID != null and QCSEGMENTID !='' and !(QCSEGMENTID eq '*'.toString()) ">
+           AND QSD.QCSEGMENTID = #{QCSEGMENTID}
+        </if>
+        <if test="QCSEGMENTNAME != null and QCSEGMENTNAME !='' and !(QCSEGMENTNAME eq '*'.toString()) ">
+           AND DIC.DICTIONARYNAME = #{QCSEGMENTNAME}
+        </if>
+           AND QSD.VALIDSTATE = 'Valid'
+    </select>
+
+    <!-- inspectionPoint 테이블을 조회 -->
+    <select id="selectInspectionPointByRelInfo" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04800Dao.selectInspectionPointByRelInfo */
+        SELECT IP.INSPECTIONPOINTID
+             , IP.INSPITEMID
+             , IP.INSPITEMVERSION
+             , IP.INSPECTIONDEFID
+             , IP.INSPECTIONDEFVERSION
+             , IP.RESOURCEID
+             , IP.RESOURCEVERSION
+             , IP.RESOURCETYPE
+             , IP.INSPECTIONPOINTNAME
+             , IP.INSPECTIONQTY
+             , IP.POINTQTY
+             , IP.PLANTID
+             , IP.ENTERPRISEID
+             , IP.CREATEDTIME
+             , IP.MODIFIEDTIME
+             , IP.VALIDSTATE
+             , CU.USER_NM                     AS CREATOR
+             , MU.USER_NM                     AS MODIFIER            
+          FROM            BAS_INSPECTIONPOINT  IP
+          LEFT OUTER JOIN CMD_USERS            CU ON  IP.CREATOR            = CU.USER_ID
+          LEFT OUTER JOIN CMD_USERS            MU ON  IP.MODIFIER           = MU.USER_ID
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES    C  ON  IP.INSPECTIONPOINTNAME = C.LOOKUP_CODE
+                                                  AND C.LOOKUP_TYPE         = 'InspectionPointName'
+          LEFT OUTER JOIN CMD_DICTIONARY       CD ON  C.DICTIONARYID        = CD.DICTIONARYID
+                                                  AND CD.LANGUAGETYPE       = #{LANGUAGETYPE} 
+         WHERE 1 = 1
+           AND IP.INSPITEMID            = #{INSPITEMID}
+           AND IP.INSPITEMVERSION       = #{INSPITEMVERSION}
+           AND IP.INSPECTIONDEFID       = #{INSPECTIONDEFID}
+           AND IP.INSPECTIONDEFVERSION  = #{INSPECTIONDEFVERSION}
+           AND IP.RESOURCEID            = #{RESOURCEID}
+           AND IP.RESOURCETYPE          = #{RESOURCETYPE}
+           AND IP.RESOURCEVERSION       = #{RESOURCEVERSION}
+           AND IP.validstate            = #{VALIDSTATE}
+        <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+           AND IP.ENTERPRISEID          = #{ENTERPRISEID}
+        </if>
+        
+        <if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+           AND IP.PLANTID               = #{PLANTID}
+        </if>
+           AND IP.VALIDSTATE = 'Valid'
+    </select>
+
+    <!-- inspectionPoint 체크 -->
+    <select id="selectBasInspectionPointChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04800Dao.selectBasInspectionPointChk */
+        SELECT 1
+          FROM BAS_INSPECTIONPOINT
+         WHERE INSPECTIONPOINTID             = #{INSPECTIONPOINTID}          /*검사 데이터 수집 위치 ID*/
+           AND INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+           AND INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+           AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+           AND RESOURCETYPE                  = #{RESOURCETYPE}               /*자원유형*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*자원 ID*/
+           AND RESOURCEVERSION               = #{RESOURCEVERSION}            /*자원 Version*/
+    </select>
+
+    <!-- 검사방법목록 수정 -->
+    <update id="updateSelfInspectionitemrel" parameterType="map">
+		UPDATE /* smh.bas.dao.BAS04800Dao.updateSelfInspectionitemrel */ BAS_INSPECTIONITEMREL
+		   SET ISAQL                         = #{ISAQL}                      /*AQL여부*/
+             , ISNCR                         = #{ISNCR}                      /*NCR여부*/
+             , NCRINSPECTIONQTY              = NVL(#{NCRINSPECTIONQTY}, NCRINSPECTIONQTY) /*검사수량*/
+             , NCRCYCLE                      = #{NCRCYCLE}                   /*NCR주기*/
+             , NCRLOTSIZE                    = NVL(#{NCRLOTSIZE}, NCRLOTSIZE)/*Lot Size*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+         WHERE INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+           AND INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+           AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*자원 ID*/
+           AND RESOURCEVERSION               = #{RESOURCEVERSION}            /*자원 Version*/
+           AND PROCESSSEGID                  = #{PROCESSSEGID}               /*공정ID*/
+           AND PROCESSEGVERSION              = #{PROCESSEGVERSION}           /*공정Version*/
+    </update> 
+
+    <!-- 검사Point 등록 -->
+    <insert id="insertBasInspectionPoint" parameterType="map">
+        INSERT /* smh.bas.dao.BAS04800Dao.insertBasInspectionPoint */ INTO BAS_INSPECTIONPOINT
+        (     INSPECTIONPOINTID             /*검사 데이터 수집 위치 ID*/
+            , INSPITEMID                    /*검사 항목 ID*/
+            , INSPITEMVERSION               /*검사 항목 Version*/
+            , INSPECTIONDEFID               /*검사 정의 ID*/
+            , INSPECTIONDEFVERSION          /*검사 정의 Version*/
+            , RESOURCETYPE                  /*자원유형*/
+            , RESOURCEID                    /*자원 ID*/
+            , RESOURCEVERSION               /*자원 Version*/
+            , INSPECTIONPOINTNAME           /*검사 데이터 수집 위치명*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , INSPECTIONQTY                 /*시료수*/
+            , POINTQTY                      /*검사포인트수*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+        )VALUES(
+              BAS_COMMON_PKG.FN_GET_NUMBER(#{IDCLASSID}, #{PREFIX}, #{CREATOR}) /*검사 데이터 수집 위치 ID(IDCLASSID:Inspectionpoint)*/
+            , #{INSPITEMID}                   /*검사 항목 ID*/
+            , #{INSPITEMVERSION}              /*검사 항목 Version*/
+            , #{INSPECTIONDEFID}              /*검사 정의 ID*/
+            , #{INSPECTIONDEFVERSION}         /*검사 정의 Version*/
+            , #{RESOURCETYPE}                 /*자원유형*/
+            , #{RESOURCEID}                   /*자원 ID*/
+            , #{RESOURCEVERSION}              /*자원 Version*/
+            , #{INSPECTIONPOINTNAME}          /*검사 데이터 수집 위치명*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{INSPECTIONQTY}                /*시료수*/
+            , #{POINTQTY}                     /*검사포인트수*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+        )
+    </insert>
+    
+    <!-- 검사Point 수정 -->
+    <update id="updateBasInspectionPoint" parameterType="map">
+        UPDATE /* smh.bas.dao.BAS04800Dao.updateBasInspectionPoint */ BAS_INSPECTIONPOINT
+           SET INSPECTIONPOINTNAME           = #{INSPECTIONPOINTNAME}        /*검사 데이터 수집 위치명*/
+             , ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+             , PLANTID                       = #{PLANTID}                    /*Site ID*/
+             , INSPECTIONQTY                 = #{INSPECTIONQTY}              /*시료수*/
+             , POINTQTY                      = #{POINTQTY}                   /*검사포인트수*/
+             , DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+         WHERE INSPECTIONPOINTID             = #{INSPECTIONPOINTID}          /*검사 데이터 수집 위치 ID*/
+           AND INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+           AND INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+           AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+           AND RESOURCETYPE                  = #{RESOURCETYPE}               /*자원유형*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*자원 ID*/
+           AND RESOURCEVERSION               = #{RESOURCEVERSION}            /*자원 Version*/
+    </update> 
+
+    <!-- 검사Point 수정 -->
+    <delete id="deleteBasInspectionPoint" parameterType="map">
+        /* smh.bas.dao.BAS04800Dao.deleteBasInspectionPoint */ 
+        DELETE FROM BAS_INSPECTIONPOINT
+         WHERE INSPECTIONPOINTID             = #{INSPECTIONPOINTID}          /*검사 데이터 수집 위치 ID*/
+           AND INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+           AND INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+           AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+           AND RESOURCETYPE                  = #{RESOURCETYPE}               /*자원유형*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*자원 ID*/
+           AND RESOURCEVERSION               = #{RESOURCEVERSION}            /*자원 Version*/
+    </delete> 
+</mapper>

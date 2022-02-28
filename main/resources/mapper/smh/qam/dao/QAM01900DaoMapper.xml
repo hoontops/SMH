@@ -1,0 +1,2551 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM01900Dao">
+
+    <!--
+         desc    : 불량품 폐기취소 화면의 불량 Lot을 불량코드별로 조회한다.
+    -->
+    <select id="selectLotDefectCodeList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectLotDefectCodeList*/
+        WITH CTE_PL AS                                                      /*부모 Lot의 제약조건 테이블*/
+        (
+            SELECT A.LOTID
+                 , B.LOTID                            AS  PARENTLOTID
+                 , B.PROCESSDEFID                                           /*부모 Lot의 현재 라우팅ID*/
+                 , B.PROCESSDEFVERSION                                      /*부모 Lot의 현재 라우팅Version*/
+                 , B.PROCESSSEGMENTID                                       /*부모 Lot의 현재 공정ID*/
+                 , B.PROCESSSEGMENTVERSION                                  /*부모 Lot의 현재 공정Version*/
+                 , B.PROCESSSTATE                                           /*부모 Lot의 현재 공정 진행상태*/
+                 , B.LOTSTATE                                               /*부모 Lot의 현재 Lot상태*/
+              FROM       PCM_LOT       A
+              INNER JOIN PCM_LOT       B  ON   B.LOTID = A.PARENTLOTID
+             WHERE  1 = 1
+        ),
+        CTE_CNT AS
+        (
+            SELECT LOTID
+                 , COUNT(*)         AS DEFECTCODECOUNT
+                 , SUM(DEFECTQTY)   AS SUMLOTDEFECTQTY
+              FROM PCM_LOTDEFECT
+            GROUP BY LOTID
+        ),
+        <!--2021.08.10 TOBE Modify 불량LOT이 발생한 시점의 공정진행상태를 보여주도록 변경 
+        CTE_PROCESSSTATENAME AS
+        (
+            SELECT CASE WHEN LOOKUP_CODE = 'Receive' THEN 'Wait'
+                        WHEN LOOKUP_CODE = 'WorkStart' THEN 'Run'
+                        WHEN LOOKUP_CODE = 'WorkEnd' THEN 'WaitForSend'
+                        ELSE LOOKUP_CODE
+                    END                                            AS PROCESSSTATE
+                 ,  B.DICTIONARYNAME                               AS PROCESSSTATENAME
+              FROM            CMD_LOOKUP_VALUES A
+              LEFT OUTER JOIN CMD_DICTIONARY    B  ON   B.DICTIONARYID = A.DICTIONARYID
+                                                   AND  B.LANGUAGETYPE = #{LANGUAGETYPE}
+             WHERE LOOKUP_TYPE = 'WipProcessState'
+        ), -->
+        REASONPRODUCT AS
+        (
+            SELECT CONSUMABLEDEFID         AS REASONCONSUMABLEDEFID
+                 , CONSUMABLEDEFVERSION    AS REASONCONSUMABLEDEFVERSION
+                 , CONSUMABLEDEFNAME       AS REASONCONSUMABLEDEFNAME
+              FROM BAS_CONSUMABLEDEFINITION
+             WHERE 1 = 1
+            UNION
+            SELECT PRODUCTDEFID
+                 , PRODUCTDEFVERSION
+                 , PRODUCTDEFNAME
+              FROM BAS_PRODUCTDEFINITION
+             WHERE 1 = 1
+        )
+        SELECT TO_CHAR(LD.CREATEDTIME, 'YYYYMMDDHH24MISS')                      AS PROCESSDATE               /*처리일시*/
+             , LD.PRODUCTDEFID                                                                               /*품목 ID*/
+             , LD.PRODUCTDEFVERSION                                                                          /*품목 Version*/
+             , PD.PRODUCTDEFNAME                                                                             /*품목명*/
+             , LD.ENTERPRISEID                                                                               /*회사 ID*/
+             , LD.PLANTID                                                                                    /*Site ID*/
+             , LD.USERSEQUENCE                                                                               /*공정수순*/
+             , LD.PROCESSSEGMENTID                                                                           /*공정 ID*/
+             , LD.PROCESSSEGMENTVERSION                                                                      /*공정 Version*/
+             , PSD.DICTIONARYNAME                                               AS PROCESSSEGMENTNAME        /*공정명*/
+             , LD.AREAID                                                                                     /*작업장 ID*/
+             , AD.DICTIONARYNAME                                                AS AREANAME                  /*작업장명*/
+             , L.PARENTLOTID                                                                                 /*부모 Lot No*/
+             , LD.LOTID                                                                                      /*Lot No*/
+             , LD.TXNHISTKEY                                                                                 /*Txn HistKey*/
+             , LD.DEFECTCODE                                                                                 /*불량코드*/
+             , DCD.DICTIONARYNAME                                               AS DEFECTNAME                /*불량명*/
+             , LD.QCSEGMENTID                                                                                /*품질공정 ID*/
+             , QSD.DICTIONARYNAME                                               AS QCSEGMENTNAME             /*품질공정명*/
+             , LD.DEFECTQTY                                                     AS DEFECTPCSQTY              /*불량 PCS수량*/
+             , CASE WHEN L.PANELPERQTY IS NULL OR L.PANELPERQTY = 0 THEN 0
+               ELSE ROUND(LD.DEFECTQTY / L.PANELPERQTY, 0)
+               END                                                              AS DEFECTPNLQTY              /*불량 PNL수량*/
+             , NVL(L.PANELPERQTY, 0)                                            AS PANELPERQTY               /*PNL당 PCS수량*/
+             , NVL(L.DEFECTUNIT, L.UNIT)                                        AS UOM                       /*UOM 단위(불량처리단위)*/
+             , LD.REASONCONSUMABLEDEFID                                                                      /*원인품목 ID*/
+             , LD.REASONCONSUMABLEDEFVERSION                                                                 /*원인품목 Version*/
+             , RSD.REASONCONSUMABLEDEFNAME                                                                   /*원인품목명*/
+             , LD.REASONCONSUMABLELOTID                                                                      /*원인자재 Lot No*/
+             , LD.REASONSEGMENTID                                                                            /*원인공정 ID*/
+             , RPS.PROCESSSEGMENTVERSION                                        AS REASONSEGMENTVERSION      /*원인공정 Version*/
+             , RPD.DICTIONARYNAME                                               AS REASONSEGMENTNAME         /*원인공정명*/
+             , LD.REASONAREAID                                                                               /*원인작업장 ID*/
+             , RAD.DICTIONARYNAME                                               AS REASONAREANAME            /*원인작업장명*/
+             , CASE WHEN LDR.ISUNKNOWN IS NULL THEN 'N'
+               ELSE LDR.ISUNKNOWN
+               END                                                              AS ISUNKNOWN                 /*원인불명*/
+             , L.LOTTYPE                                                                                     /*양산구분 ID*/
+             , LTD.DICTIONARYNAME                                               AS LOTTYPENAME               /*양산구분명*/
+             , CASE WHEN LDO.OUTBOUNDQTY IS NULL THEN 0
+               ELSE LDO.OUTBOUNDQTY
+               END                                                              AS OUTBOUNDQTY               /*반출수량*/
+             , LDI.RECEIVEAREAID                                                                             /*인수작업장 ID*/
+             , RED.DICTIONARYNAME                                               AS RECEIVEAREANAME           /*인수작업장명*/
+             , TO_CHAR(LDR.DEFINETIME, 'YYYYMMDDHH24MISS')                      AS DEFINETIME                /*확정일시*/
+             , CASE WHEN LDR.STATUS IN ('Confirm','DeadlineComplete') THEN 'Y'
+               ELSE 'N'
+               END                                                              AS STATUS                    /*확정상태*/
+             , CNT.DEFECTCODECOUNT                                                                           /*Lot별 불량코드갯수*/
+             , CNT.SUMLOTDEFECTQTY                                                                           /*Lot별 불량수량*/
+             , CASE WHEN ORM.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+                         AND  ORM.PROCESSSEGMENTVERSION = L.PROCESSSEGMENTVERSION
+                         AND  ORM.PROCESSSTATE = L.PROCESSSTATE
+                         AND  ORM.LOTSTATE = 'InProduction' THEN 'Y'
+               ELSE 'N'
+               END                                                              AS ISORIGINALLOTMERGE        /*OriginalLotMerge 가능여부*/
+             , CASE WHEN ORM.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+                   AND  ORM.PROCESSSEGMENTVERSION = L.PROCESSSEGMENTVERSION
+                   AND  ORM.PROCESSSTATE = L.PROCESSSTATE
+                   AND  ORM.LOTSTATE = 'InProduction' THEN 'Y'
+               ELSE 'N'
+               END                                                              AS ISORIGINALLOTMERGECODE    /*OriginalLotMerge 가능여부 코드*/
+             , NULL                                                             AS MERGECHECK                /*OriginalLotMerge 가능여부에 따른 Check*/
+             , 0                                                                AS CANCELPCSQTY              /*취소 PCS수량*/
+             , 0                                                                AS CANCELPNLQTY              /*취소 PNL수량*/
+             , NULL                                                             AS ROUTINGTYPE               /*Routing Type*/
+             , LDC.CANCELREASONCODE                                             AS CANCELCODE                /*취소사유코드*/
+             , LDC.PROCESSDEFID                                                 AS INPUTPROCESSDEFID         /*투입 라우팅 ID*/
+             , LDC.PROCESSDEFVERSION                                            AS INPUTPROCESSDEFVERSION    /*투입 라우팅 Version*/
+             , PC.PROCESSDEFNAME                                                AS INPUTPROCESSDEFNAME       /*투입 라우팅명*/
+             , LDC.USERSEQUENCE                                                 AS INPUTUSERSEQUENCE         /*투입 공정수순*/
+             , LDC.PROCESSSEGMENTID                                             AS INPUTSEGMENTID            /*투입 공정 ID*/
+             , LDC.PROCESSSEGMENTVERSION                                        AS INPUTSEGMENTVERSION       /*투입 공정 Verison*/
+             , IPD.DICTIONARYNAME                                               AS INPUTSEGMENTNAME          /*투입 공정명*/
+             , LDC.AREAID                                                       AS INPUTAREAID               /*투입 작업장 ID*/
+             , IAD.DICTIONARYNAME                                               AS INPUTAREANAME             /*투입 작업장명*/
+             , NULL                                                             AS INPUTRESOURCEID           /*투입 Resource ID 컬럼 세팅*/
+             , NULL                                                             AS INPUTRESOURCENAME         /*투입 Resource명 컬럼 세팅*/
+             , LDC.REPAIRLOTNO                                                                               /*Repair Lot No*/
+             , NULL                                                             AS INPUTPROCESSPATHID        /*투입 라우팅 상세 ID 컬럼 세팅*/
+             , NULL                                                             AS RETURNPROCESSDEFID        /*재작업 후 라우팅 ID 컬럼 세팅*/
+             , NULL                                                             AS RETURNPROCESSDEFVERSION   /*재작업 후 라우팅 Version 컬럼 세팅*/
+             , NULL                                                             AS RETURNPROCESSPATHID       /*재작업 후 라우팅 상세 정의 ID 컬럼 세팅*/
+             , NULL                                                             AS RETURNUSERSEQUENCE        /*재작업 후 공정수순 컬럼 세팅*/
+             , NULL                                                             AS RETURNSEGMENTID           /*재작업 후 공정 ID 컬럼 세팅*/
+             , NULL                                                             AS RETURNSEGMENTVERSION      /*재작업 후 공정 Version 컬럼 세팅*/
+             , NULL                                                             AS RETURNSEGMENTNAME         /*재작업 후 공정명 컬럼 세팅*/
+             , NULL                                                             AS RETURNAREAID              /*재작업 후 작업장 ID 세팅*/
+             , NULL                                                             AS RETURNAREANAME            /*재작업 후 작업장명 컬럼 세팅*/
+             , NULL                                                             AS RETURNRESOURCEID          /*재작업 후 Resource ID 컬럼 세팅*/
+             , NULL                                                             AS RETURNRESOURCENAME        /*재작업 후 Resource명 컬럼 세팅*/
+             , NULL                                                             AS DESCRIPTION               /*비고*/
+             , L.WORKCOUNT                                                                                   /*Lot Work Count*/
+             , ORM.PROCESSDEFID                                                 AS PARENTPROCESSDEFID        /*부모 Lot의 라우팅 ID*/
+             , ORM.PROCESSDEFVERSION                                            AS PARENTPROCESSDEFVERSION   /*부모 Lot의 라우팅  Version*/
+             , PL.DESCRIPTION                                                   AS ISMIGRATION               /*MIG 데이터여부*/
+             , L.PROCESSPATHSTACK                                                                            /*현재 불량의 ProcessPathId*/
+             , NULL                                                             AS CHK
+             , LD.QCSEGMENTID||LD.DEFECTCODE                                    AS JOINCODE
+             , DCD.DICTIONARYNAME||'-'||QSD.DICTIONARYNAME                      AS JOINNAME
+             , CTT.DICTIONARYNAME                                               AS OCCURREDSTEPNAME
+             <!--2021.08.10 TOBE Modify 불량LOT이 발생한 시점의 공정진행상태를 보여주도록 변경  
+             , L.PROCESSSTATE                                                                                /*Lot의 공정진행상태*/
+             , PSN.PROCESSSTATENAME                                                                          /*Lot의 공정진행상태명*/ -->
+             , QAM_COMMON_PKG.GET_DEFECTPROCESSSTATENAME(LD.OCCURREDSTEP,#{LANGUAGETYPE})
+                                                                                AS PROCESSSTATENAME          /*불량발생시점의 공정진행상태*/
+          FROM            PCM_LOTDEFECT            LD
+          INNER JOIN      PCM_LOT                  L    ON   L.LOTID                        = LD.LOTID
+                                                        AND  L.ISDEFECTED                   = 'Y'
+          INNER JOIN      PCM_LOT                  PL   ON   PL.LOTID                       = L.PARENTLOTID
+          LEFT OUTER JOIN QAM_QCLOTDEFECTINBOUND   LDI  ON   LDI.LOTID                      = LD.LOTID
+          LEFT OUTER JOIN QAM_QCLOTDEFECTRESULT    LDR  ON   LDR.LOTID                      = LD.LOTID
+                                                        AND  LDR.TXNHISTKEY                 = LD.TXNHISTKEY
+          LEFT OUTER JOIN QAM_QCLOTDEFECTOUTBOUND  LDO  ON   LDO.LOTID                      = LD.LOTID
+                                                        AND  LDO.TXNHISTKEY                 = LD.TXNHISTKEY
+          INNER JOIN      BAS_PRODUCTDEFINITION    PD   ON   PD.PRODUCTDEFID                = LD.PRODUCTDEFID
+                                                        AND  PD.PRODUCTDEFVERSION           = LD.PRODUCTDEFVERSION
+          INNER JOIN      BAS_PROCESSSEGMENT       PS   ON   PS.PROCESSSEGMENTID            = LD.PROCESSSEGMENTID
+                                                        AND  PS.PROCESSSEGMENTVERSION       = LD.PROCESSSEGMENTVERSION
+          INNER JOIN      BAS_AREA                 A    ON   A.AREAID                       = LD.AREAID
+          LEFT OUTER JOIN BAS_DEFECTCODE           DC   ON   DC.DEFECTCODE                  = LD.DEFECTCODE
+          LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION  QS   ON   QS.QCSEGMENTID                 = LD.QCSEGMENTID
+          LEFT OUTER JOIN REASONPRODUCT            RSD  ON   RSD.REASONCONSUMABLEDEFID      = LD.REASONCONSUMABLEDEFID
+                                                        AND  RSD.REASONCONSUMABLEDEFVERSION = LD.REASONCONSUMABLEDEFVERSION
+          LEFT OUTER JOIN BAS_PROCESSSEGMENT       RPS  ON   RPS.PROCESSSEGMENTID           = LD.REASONSEGMENTID
+          LEFT OUTER JOIN BAS_AREA                 RA   ON   RA.AREAID                      = LD.REASONAREAID
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES        LTC  ON   LTC.LOOKUP_CODE                = L.LOTTYPE
+                                                        AND  LTC.LOOKUP_TYPE                = 'ProductionType'
+          LEFT OUTER JOIN BAS_AREA                 REA  ON   REA.AREAID                     = LDI.RECEIVEAREAID
+          INNER JOIN      CTE_PL                   ORM  ON   ORM.LOTID                      = LD.LOTID
+          LEFT OUTER JOIN QAM_QCLOTDEFECTCANCEL    LDC  ON   LDC.LOTID                      = LD.LOTID
+                                                        AND  LDC.TXNHISTKEY                 = LD.TXNHISTKEY
+          INNER JOIN      CTE_CNT                  CNT  ON   CNT.LOTID                      = LD.LOTID
+          LEFT OUTER JOIN BAS_PROCESSDEFINITION    PC   ON   PC.PROCESSDEFID                = LDC.PROCESSDEFID
+                                                        AND  PC.PROCESSDEFVERSION           = LDC.PROCESSDEFVERSION
+          LEFT OUTER JOIN BAS_PROCESSSEGMENT       IP   ON   IP.PROCESSSEGMENTID            = LDC.PROCESSSEGMENTID
+                                                        AND  IP.PROCESSSEGMENTVERSION       = LDC.PROCESSSEGMENTVERSION
+          LEFT OUTER JOIN BAS_AREA                 IA   ON   IA.AREAID                      = LDC.AREAID
+          <!--2021.08.10 TOBE Modify 불량LOT이 발생한 시점의 공정진행상태를 보여주도록 변경
+          LEFT OUTER JOIN CTE_PROCESSSTATENAME     PSN  ON   PSN.PROCESSSTATE               = L.PROCESSSTATE  -->
+          LEFT OUTER JOIN CMD_DICTIONARY           PSD  ON   PSD.DICTIONARYID               = PS.PROCESSSEGMENTNAME
+                                                        AND  PSD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           AD   ON   AD.DICTIONARYID                = A.AREANAME
+                                                        AND  AD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           DCD  ON   DCD.DICTIONARYID               = DC.DICTIONARYID
+                                                        AND  DCD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           RPD  ON   RPD.DICTIONARYID               = RPS.PROCESSSEGMENTNAME
+                                                        AND  RPD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           RAD  ON   RAD.DICTIONARYID               = RA.AREANAME
+                                                        AND  RAD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           LTD  ON   LTD.DICTIONARYID               = LTC.DICTIONARYID
+                                                        AND  LTD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           RED  ON   RED.DICTIONARYID               = REA.AREANAME
+                                                        AND  RED.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           IPD  ON   IPD.DICTIONARYID               = IP.PROCESSSEGMENTNAME
+                                                        AND  IPD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           IAD  ON   IAD.DICTIONARYID               = IA.AREANAME
+                                                        AND  IAD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           QSD  ON   QSD.DICTIONARYID               = QS.QCSEGMENTNAME
+                                                        AND  QSD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES        LTT  ON   LTT.LOOKUP_CODE                = LD.OCCURREDSTEP
+                                                        AND  LTT.LOOKUP_TYPE                = 'LotTransitType' 
+          LEFT OUTER JOIN CMD_DICTIONARY           CTT  ON   CTT.DICTIONARYID               = LTT.DICTIONARYID
+                                                        AND  CTT.LANGUAGETYPE               = #{LANGUAGETYPE}
+         WHERE 1 = 1
+           AND LD.VALIDSTATE = 'Valid'
+           AND (LDI.STATUS IS NULL OR LDI.STATUS NOT IN ('CauseComplete', 'DeadlineComplete')) <!--확정, 마감되지 않은상태-->
+           <!--2021.05.06 TOBE Modify
+             AND (LDR.STATUS IS NULL OR LDR.STATUS <![CDATA[<>]]> 'Confirm') /*각각의 불량이 확정이 아닌상태*/ -->
+           AND LD.CREATEDTIME >= TO_TIMESTAMP(#{PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+           AND LD.CREATEDTIME <![CDATA[<]]> TO_TIMESTAMP(#{PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+           AND EXISTS
+                    (
+                        SELECT 1
+                          FROM ufn_selectstringtosplitdouble(#{PRODUCTDEFID}, ',', '|')    MAP
+                         WHERE LD.PRODUCTDEFID = MAP.VALUE1
+                           AND (LD.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 IS NULL)
+                    )
+        </if>
+        <if test="PLANTID != null and PLANTID !='' ">
+           AND LD.PLANTID = #{PLANTID}
+        </if>
+        <if test="AREAID != null and AREAID !='' ">
+           AND LD.AREAID = #{AREAID}
+        </if>
+        <if test="LOTID != null and LOTID !='' ">
+           AND LD.LOTID LIKE '%' || #{LOTID} || '%'
+        </if>
+        <if test="PARENTLOTID != null and PARENTLOTID !='' ">
+           AND L.PARENTLOTID LIKE '%' || #{PARENTLOTID} || '%'
+        </if>
+        <if test="RECEIVEAREAID != null and RECEIVEAREAID !='' and !(RECEIVEAREAID eq '*'.toString()) ">
+           AND LDI.RECEIVEAREAID = #{RECEIVEAREAID}
+        </if>
+        <if test="LOTTYPE != null and LOTTYPE !='' and !(LOTTYPE eq '*'.toString()) ">
+           AND L.LOTTYPE = #{LOTTYPE}
+        </if>
+        <if test="PROCESSSEGMENTTYPE != null and PROCESSSEGMENTTYPE !='' and !(PROCESSSEGMENTTYPE eq '*'.toString()) ">
+           AND PS.PROCESSSEGMENTTYPE = #{PROCESSSEGMENTTYPE}
+        </if>
+        <if test="CONFIRMATION != null and CONFIRMATION !='' and !(CONFIRMATION eq '*'.toString()) ">
+          <choose>
+          <when test="CONFIRMATION eq 'Y'.toString() ">
+           AND LDR.STATUS IN ('Confirm', 'DeadlineComplete')
+          </when>
+          <otherwise>
+           AND NVL(LDR.STATUS, ' ') NOT IN ('Confirm', 'DeadlineComplete')
+          </otherwise>
+          </choose>
+        </if>
+        ORDER BY LD.CREATEDTIME DESC
+    </select>
+
+    <!--
+         desc   : 불량취소에 대한 내역을 조회한다.
+    -->
+    <select id="selectDefectCancelHistoryList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectDefectCancelHistoryList*/
+        SELECT *
+          FROM (
+                SELECT TO_CHAR(LC.CANCELTIME, 'YYYYMMDDHH24MISS') AS CANCELTIME          /*취소일시*/
+                     , LC.PRODUCTDEFID                                                   /*품목 ID*/
+                     , LC.PRODUCTDEFVERSION                                              /*품목 Version*/
+                     , PD.PRODUCTDEFNAME                                                 /*품목명*/
+                     , L.PLANTID                                                         /*취소 Site ID*/
+                     , L.USERSEQUENCE                                                    /*취소 공정순서*/
+                     , L.PROCESSSEGMENTID                                                /*취소 공정 ID*/
+                     , L.PROCESSSEGMENTVERSION                                           /*취소 공정 Version*/
+                     , PSD.DICTIONARYNAME                         AS PROCESSSEGMENTNAME  /*공정명*/
+                     , L.AREAID                                                          /*취소 작업장 ID*/
+                     , AD.DICTIONARYNAME                          AS AREANAME            /*취소 작업장명*/
+                     , LCD.LOTID                                                         /*취소 Lot No*/
+                     , L.PARENTLOTID                                                     /*취소 Lot의 Parent Lot No*/
+                     , LCD.DEFECTCODE                                                    /*불량코드*/
+                     , DCD.DICTIONARYNAME                         AS DEFECTCODENAME      /*불량코드명*/
+                     , LD.QCSEGMENTID                                                    /*품질공정 ID*/
+                     , QSD.DICTIONARYNAME                         AS QCSEGMENTNAME       /*품질공정명*/
+                     , LCD.PCSQTY                                                        /*취소 PCS 수량*/
+                     , LCD.PANELQTY                                                      /*취소 PNL 수량*/
+                     , NVL(L.DEFECTUNIT, L.UNIT)                  AS UNIT                /*UOM*/
+                     , U.USER_NM                                  AS CANCELUSER          /*취소자*/
+                     , LCD.TXNHISTKEY                                                    /*Txn Hist Key*/
+                     , LC.REPAIRLOTNO                                                    /*Repair Lot No*/
+                     , C1D.DICTIONARYNAME                         AS CANCELREASON        /*취소사유코드*/
+                     , LC.PROCESSDEFID                                                   /*투입 라우팅 ID*/
+                     , LC.PROCESSDEFVERSION                                              /*투입 라우팅 Version*/
+                     , PCD.PROCESSDEFNAME                                                /*투입 라우팅명*/
+                     , LC.PROCESSPATHID                                                  /*투입 라우팅 상세 ID*/
+                     , LC.PROCESSSEGMENTID                        AS INPUTSEGMENTID      /*투입 공정 ID*/
+                     , LC.USERSEQUENCE                            AS INPUTUSERSEQUENCE   /*투입 라우팅 순서*/
+                     , LC.CANCELROUTINGTYPE                                              /*취소라우팅타입*/
+                     , C2D.DICTIONARYNAME                         AS CANCELTYPE          /*취소구분*/
+                     , LCD.REQUESTNO                                                     /*요청번호*/
+                     , LC.RESOURCEID                                                     /*투입 자원 ID*/
+                     , MR.DESCRIPTION                             AS RESOURCENAME        /*투입 자원명*/
+                     , LC.RETURNPROCESSPATHID
+                     , LC.RETURNUSERSEQUENCE
+                     , LC.RETURNPROCESSSEGMENTID
+                     , LC.RETURNPROCESSSEGMENTVERSION
+                     , LC.RETURNAREAID
+                     , LC.RETURNRESOURCEID
+                     , RMR.DESCRIPTION                            AS RETURNRESOURCENAME  /*재작업 후 자원명*/
+                     , LC.DESCRIPTION                                                    /*비고*/
+                     , LD.QCSEGMENTID||LCD.DEFECTCODE             AS JOINCODE
+                     , DCD.DICTIONARYNAME||'-'||QSD.DICTIONARYNAME
+                                                                  AS JOINNAME                     
+                  FROM            QAM_QCLOTDEFECTCANCELDEFECT LCD
+                  INNER JOIN      PCM_LOT                     L    ON   L.LOTID                   = LCD.LOTID
+                  INNER JOIN      PCM_LOTDEFECT               LD   ON   LD.LOTID                  = LCD.LOTID
+                                                                   AND  LD.TXNHISTKEY             = LCD.DEFECTTXNHISTKEY
+                  LEFT OUTER JOIN QAM_QCLOTDEFECTINBOUND      LDI  ON   LDI.LOTID                 = LCD.LOTID
+                  LEFT OUTER JOIN QAM_QCLOTDEFECTCANCEL       LC   ON   LC.LOTID                  = LCD.LOTID
+                                                                   AND  LC.TXNHISTKEY             = LCD.TXNHISTKEY
+                  LEFT OUTER JOIN QAM_QCLOTDEFECTRESULT       LDR  ON   LDR.LOTID                 = LCD.LOTID
+                                                                   AND  LDR.TXNHISTKEY            = LCD.DEFECTTXNHISTKEY
+                  LEFT OUTER JOIN BAS_PRODUCTDEFINITION       PD   ON   PD.PRODUCTDEFID           = LC.PRODUCTDEFID
+                                                                   AND  PD.PRODUCTDEFVERSION      = LC.PRODUCTDEFVERSION
+                  LEFT OUTER JOIN BAS_PROCESSSEGMENT          PS   ON   PS.PROCESSSEGMENTID       = L.PROCESSSEGMENTID
+                                                                   AND  PS.PROCESSSEGMENTVERSION  = L.PROCESSSEGMENTVERSION
+                  LEFT OUTER JOIN BAS_AREA                    A    ON   A.AREAID                  = L.AREAID
+                  LEFT OUTER JOIN BAS_DEFECTCODE              DC   ON   DC.DEFECTCODE             = LCD.DEFECTCODE
+                  LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION     QS   ON   QS.QCSEGMENTID            = LD.QCSEGMENTID
+                  LEFT OUTER JOIN CMD_USERS                   U    ON   U.USER_ID                 = LC.CANCELUSER
+                  LEFT OUTER JOIN CMD_LOOKUP_VALUES           C1   ON   C1.LOOKUP_CODE            = LC.CANCELREASONCODE
+                                                                   AND  C1.LOOKUP_TYPE            = 'ReasonCancel'
+                  LEFT OUTER JOIN CMD_LOOKUP_VALUES           C2   ON   C2.LOOKUP_CODE            = LCD.STATUS
+                                                                   AND  C2.LOOKUP_TYPE            = 'CancelDetailType'
+                  LEFT OUTER JOIN BAS_PROCESSDEFINITION       PCD  ON   PCD.PROCESSDEFID          = LC.PROCESSDEFID
+                                                                   AND  PCD.PROCESSDEFVERSION     = LC.PROCESSDEFVERSION
+                  LEFT OUTER JOIN BAS_RESOURCE                MR   ON   MR.ENTERPRISEID           = LC.ENTERPRISEID
+                                                                   AND  MR.PLANTID                = LC.PLANTID
+                                                                   AND  MR.RESOURCEID             = LC.RESOURCEID
+                  LEFT OUTER JOIN BAS_RESOURCE                RMR  ON   RMR.ENTERPRISEID          = LC.ENTERPRISEID
+                                                                   AND  RMR.PLANTID               = LC.PLANTID
+                                                                   AND  RMR.RESOURCEID            = LC.RETURNRESOURCEID
+                  LEFT OUTER JOIN CMD_DICTIONARY              PSD  ON   PSD.DICTIONARYID          = PS.PROCESSSEGMENTNAME
+                                                                   AND  PSD.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              AD   ON   AD.DICTIONARYID           = A.AREANAME
+                                                                   AND  AD.LANGUAGETYPE           = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              DCD  ON   DCD.DICTIONARYID          = DC.DICTIONARYID
+                                                                   AND  DCD.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              C1D  ON   C1D.DICTIONARYID          = C1.DICTIONARYID
+                                                                   AND  C1D.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              C2D  ON   C2D.DICTIONARYID          = C2.DICTIONARYID
+                                                                   AND  C2D.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              QSD  ON   QSD.DICTIONARYID          = QS.QCSEGMENTNAME
+                                                                   AND  QSD.LANGUAGETYPE          = #{LANGUAGETYPE}
+                 WHERE 1 = 1
+                   AND LC.CANCELTIME >= TO_TIMESTAMP(#{PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+                   AND LC.CANCELTIME <![CDATA[<]]> TO_TIMESTAMP(#{PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+                <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+                   AND EXISTS
+                            (
+                                SELECT 1
+                                  FROM ufn_selectstringtosplitdouble(#{PRODUCTDEFID}, ',', '|')    MAP
+                                 WHERE LC.PRODUCTDEFID = MAP.VALUE1
+                                  AND (LC.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 IS NULL)
+                            )
+                </if>
+                <if test="PLANTID != null and PLANTID !='' ">
+                   AND L.PLANTID = #{PLANTID}
+                </if>
+                <if test="AREAID != null and AREAID !='' ">
+                    AND L.AREAID = #{AREAID}
+                </if>
+                <if test="LOTID != null and LOTID !='' ">
+                    AND LCD.LOTID LIKE '%' || #{LOTID} || '%'
+                </if>
+                <if test="PARENTLOTID != null and PARENTLOTID !='' ">
+                    AND L.PARENTLOTID LIKE '%' || #{PARENTLOTID} || '%'
+                </if>
+                <if test="RECEIVEAREAID != null and RECEIVEAREAID !='' and !(RECEIVEAREAID eq '*'.toString()) ">
+                    AND LDI.RECEIVEAREAID = #{RECEIVEAREAID}
+                </if>
+                <if test="LOTTYPE != null and LOTTYPE !='' and !(LOTTYPE eq '*'.toString()) ">
+                    AND L.LOTTYPE = #{LOTTYPE}
+                </if>
+                <if test="PROCESSSEGMENTTYPE != null and PROCESSSEGMENTTYPE !='' and !(PROCESSSEGMENTTYPE eq '*'.toString()) ">
+                    AND PS.PROCESSSEGMENTTYPE = #{PROCESSSEGMENTTYPE}
+                </if>
+                <if test="CONFIRMATION != null and CONFIRMATION !='' and !(CONFIRMATION eq '*'.toString()) ">
+                    <choose>
+                        <when test="CONFIRMATION eq 'Y'.toString() ">
+                            AND (LDR.STATUS = 'Confirm' OR LDR.STATUS = 'Close')
+                        </when>
+                        <otherwise>
+                            AND LDR.STATUS IS NULL
+                        </otherwise>
+                    </choose>
+                </if>
+                --2021.05.07 TOBE Modify  동일한 값일 경우 나오지 않아 UNION에서 변경함
+                UNION ALL
+                SELECT TO_CHAR(LMR.APPROVALDATE, 'YYYYMMDDHH24MISS') AS CANCELTIME            -- 취소일시
+                     , LMR.PRODUCTDEFID                                                       -- 품목 ID
+                     , LMR.PRODUCTDEFVERSION                                                  -- 품목 Version
+                     , PD.PRODUCTDEFNAME                                                      -- 품목명
+                     , L.PLANTID                                                              -- 취소 Site ID
+                     , L.USERSEQUENCE                                                         -- 취소 공정순서
+                     , L.PROCESSSEGMENTID                                                     -- 취소 공정 ID
+                     , L.PROCESSSEGMENTVERSION                                                -- 취소 공정 Version
+                     , PSD.DICTIONARYNAME                            AS PROCESSSEGMENTNAME    -- 공정명
+                     , L.AREAID                                                               -- 취소 작업장 ID
+                     , AD.DICTIONARYNAME                             AS AREANAME              -- 취소 작업장명
+                     , LCD.LOTID                                                              -- 취소 Lot No
+                     , L.PARENTLOTID                                                          -- 취소 Lot의 Parent Lot No
+                     , LCD.DEFECTCODE                                                         -- 불량코드
+                     , DCD.DICTIONARYNAME                            AS DEFECTCODENAME        -- 불량코드명
+                     , LD.QCSEGMENTID                                                         -- 품질공정 ID
+                     , QSD.DICTIONARYNAME                            AS QCSEGMENTNAME         -- 품질공정명
+                     , LCD.PCSQTY                                                             -- 취소 PCS 수량
+                     , LCD.PANELQTY                                                           -- 취소 PNL 수량
+                     , NVL(L.DEFECTUNIT, L.UNIT)                     AS UNIT                  -- UOM
+                     , U.USER_NM                                     AS CANCELUSER            -- 취소자
+                     , LCD.TXNHISTKEY                                                         -- Txn Hist Key
+                     , LMR.REPAIRLOTNO                                                        -- Repair Lot No
+                     , C1D.DICTIONARYNAME                            AS CANCELREASON          -- 취소사유코드
+                     , LMR.PROCESSDEFID                                                       -- 투입 라우팅 ID
+                     , LMR.PROCESSDEFVERSION                                                  -- 투입 라우팅 Version
+                     , PCD.PROCESSDEFNAME                                                     -- 투입 라우팅명
+                     , LMR.PROCESSPATHID                                                      -- 투입 라우팅 상세 ID
+                     , LMR.PROCESSSEGMENTID                          AS INPUTSEGMENTID        -- 투입 공정 ID
+                     , LMR.USERSEQUENCE                              AS INPUTUSERSEQUENCE     -- 투입 라우팅 순서
+                     , LMR.MERGEROUTINGTYPE                                                   -- 취소라우팅타입
+                     , C2D.DICTIONARYNAME                            AS CANCELTYPE            -- 취소구분
+                     , LCD.REQUESTNO                                                          -- 요청번호
+                     , LMR.RESOURCEID                                                         -- 투입 자원 ID
+                     , MR.DESCRIPTION                                AS RESOURCENAME          -- 투입 자원명
+                     , LMR.RETURNPROCESSPATHID
+                     , LMR.RETURNUSERSEQUENCE
+                     , LMR.RETURNPROCESSSEGMENTID
+                     , LMR.RETURNPROCESSSEGMENTVERSION
+                     , LMR.RETURNAREAID
+                     , LMR.RETURNRESOURCEID                                                   -- 재작업 후 자원 ID
+                     , RMR.DESCRIPTION                               AS RETURNRESOURCENAME    -- 재작업 후 자원명
+                     , LMR.REQUESTORCOMMENT                          AS DESCRIPTION           -- 비고
+                     , LD.QCSEGMENTID||LCD.DEFECTCODE             AS JOINCODE
+                     , DCD.DICTIONARYNAME||'-'||QSD.DICTIONARYNAME
+                                                                  AS JOINNAME                      
+                  FROM            QAM_QCLOTDEFECTCANCELDEFECT LCD
+                  INNER JOIN      PCM_LOT                     L     ON   L.LOTID                   = LCD.LOTID
+                  INNER JOIN      PCM_LOTDEFECT               LD    ON   LD.LOTID                  = LCD.LOTID
+                                                                    AND  LD.TXNHISTKEY             = LCD.DEFECTTXNHISTKEY
+                  LEFT OUTER JOIN QAM_QCLOTDEFECTINBOUND      LDI   ON   LDI.LOTID                 = LCD.LOTID
+                  LEFT OUTER JOIN QAM_QCLOTDEFECTMERGEREQUEST LMR   ON   LMR.REQUESTNO             = LCD.REQUESTNO
+                                                                    AND  LMR.STATUS                = 'APPROVAL'
+                  LEFT OUTER JOIN QAM_QCLOTDEFECTRESULT       LDR   ON   LDR.LOTID                 = LCD.LOTID
+                                                                    AND  LDR.TXNHISTKEY            = LCD.DEFECTTXNHISTKEY
+                  LEFT OUTER JOIN BAS_PRODUCTDEFINITION       PD    ON   PD.PRODUCTDEFID           = LMR.PRODUCTDEFID
+                                                                    AND  PD.PRODUCTDEFVERSION      = LMR.PRODUCTDEFVERSION
+                  LEFT OUTER JOIN BAS_PROCESSSEGMENT          PS    ON   PS.PROCESSSEGMENTID       = L.PROCESSSEGMENTID
+                                                                    AND  PS.PROCESSSEGMENTVERSION  = L.PROCESSSEGMENTVERSION
+                  LEFT OUTER JOIN BAS_AREA                    A     ON   A.AREAID                  = L.AREAID
+                  LEFT OUTER JOIN BAS_DEFECTCODE              DC    ON   DC.DEFECTCODE             = LCD.DEFECTCODE
+                  LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION     QS    ON   QS.QCSEGMENTID            = LD.QCSEGMENTID
+                  LEFT OUTER JOIN CMD_USERS                   U     ON   U.USER_ID                 = LMR.REQUESTUSER
+                  LEFT OUTER JOIN CMD_LOOKUP_VALUES           C1    ON   C1.LOOKUP_CODE            = LMR.MERGEREASONCODE
+                                                                    AND  C1.LOOKUP_TYPE            = 'ReasonCancel'
+                  LEFT OUTER JOIN CMD_LOOKUP_VALUES           C2    ON   C2.LOOKUP_CODE            = LCD.STATUS
+                                                                    AND  C2.LOOKUP_TYPE            = 'CancelDetailType'
+                  LEFT OUTER JOIN BAS_PROCESSDEFINITION       PCD   ON   PCD.PROCESSDEFID          = LMR.PROCESSDEFID
+                                                                    AND  PCD.PROCESSDEFVERSION     = LMR.PROCESSDEFVERSION
+                  LEFT OUTER JOIN BAS_RESOURCE                MR    ON   MR.ENTERPRISEID           = LMR.ENTERPRISEID
+                                                                    AND  MR.PLANTID                = LMR.PLANTID
+                                                                    AND  MR.RESOURCEID             = LMR.RESOURCEID
+                  LEFT OUTER JOIN BAS_RESOURCE                RMR   ON   RMR.ENTERPRISEID          = LMR.ENTERPRISEID
+                                                                    AND  RMR.PLANTID               = LMR.PLANTID
+                                                                    AND  RMR.RESOURCEID            = LMR.RETURNRESOURCEID
+                  LEFT OUTER JOIN CMD_DICTIONARY              PSD   ON   PSD.DICTIONARYID          = PS.PROCESSSEGMENTNAME
+                                                                    AND  PSD.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              AD    ON   AD.DICTIONARYID           = A.AREANAME
+                                                                    AND  AD.LANGUAGETYPE           = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              DCD   ON   DCD.DICTIONARYID          = DC.DICTIONARYID
+                                                                    AND  DCD.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              C1D   ON   C1D.DICTIONARYID          = C1.DICTIONARYID
+                                                                    AND  C1D.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              C2D   ON   C2D.DICTIONARYID          = C2.DICTIONARYID
+                                                                    AND  C2D.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_DICTIONARY              QSD   ON   QSD.DICTIONARYID          = QS.QCSEGMENTNAME
+                                                                    AND  QSD.LANGUAGETYPE          = #{LANGUAGETYPE}
+                 WHERE     1 = 1
+                   AND LMR.REQUESTTIME >= TO_TIMESTAMP(#{PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+                   AND LMR.REQUESTTIME <![CDATA[<]]> TO_TIMESTAMP(#{PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+                <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+                   AND EXISTS
+                            (
+                                SELECT 1
+                                  FROM ufn_selectstringtosplitdouble(#{PRODUCTDEFID}, ',', '|')    MAP
+                                 WHERE LMR.PRODUCTDEFID = MAP.VALUE1
+                                   AND (LMR.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 IS NULL)
+                            )
+                </if>
+                <if test="PLANTID != null and PLANTID !='' ">
+                    AND L.PLANTID = #{PLANTID}
+                </if>
+                <if test="AREAID != null and AREAID !='' ">
+                    AND L.AREAID = #{AREAID}
+                </if>
+                <if test="LOTID != null and LOTID !='' ">
+                    AND LCD.LOTID LIKE '%' || #{LOTID} || '%'
+                </if>
+                <if test="PARENTLOTID != null and PARENTLOTID !='' ">
+                    AND L.PARENTLOTID LIKE '%' || #{PARENTLOTID} || '%'
+                </if>
+                <if test="RECEIVEAREAID != null and RECEIVEAREAID !='' and !(RECEIVEAREAID eq '*'.toString()) ">
+                    AND LDI.RECEIVEAREAID = #{RECEIVEAREAID}
+                </if>
+                <if test="LOTTYPE != null and LOTTYPE !='' and !(LOTTYPE eq '*'.toString()) ">
+                    AND L.LOTTYPE = #{LOTTYPE}
+                </if>
+                <if test="PROCESSSEGMENTTYPE != null and PROCESSSEGMENTTYPE !='' and !(PROCESSSEGMENTTYPE eq '*'.toString()) ">
+                    AND PS.PROCESSSEGMENTTYPE = #{PROCESSSEGMENTTYPE}
+                </if>
+                <if test="CONFIRMATION != null and CONFIRMATION !='' and !(CONFIRMATION eq '*'.toString()) ">
+                    <choose>
+                        <when test="CONFIRMATION eq 'Y'.toString() ">
+                            AND (LDR.STATUS = 'Confirm' OR LDR.STATUS = 'Close')
+                        </when>
+                        <otherwise>
+                            AND LDR.STATUS IS NULL
+                        </otherwise>
+                    </choose>
+                </if>
+               )
+        ORDER BY CANCELTIME
+    </select>
+
+    <!--
+         program  : 불량품 폐기취소
+         desc     : 폐기취소할 LOT의 현재 공정의 이전공정 혹은 이후공정조회
+    -->
+    <select id="selectProductRoutingPreviousProcessPathsList" parameterType="map" resultType="hashmap">
+    <choose>
+        <when test="VERSION != null and VERSION =='10002' ">
+            /* smh.qam.dao.QAM01900Dao.selectProductRoutingPreviousProcessPathsList_10002*/
+            SELECT PP.PROCESSDEFID
+                 , PP.PROCESSDEFVERSION
+                 , PDF.PROCESSDEFNAME
+                 , PP.USERSEQUENCE
+                 , PP.PROCESSSEGMENTID
+                 , PP.PROCESSSEGMENTVERSION
+                 , PP.DESCRIPTION
+                 , PP.PATHSEQUENCE
+                 , NVL(D.DICTIONARYNAME, PSG.PROCESSSEGMENTNAME)         AS PROCESSSEGMENTNAME
+                 , PP.PROCESSPATHID
+                 , NULL                                                  AS WORKSTARTTIME
+                 , NULL                                                  AS WORKENDTIME
+                 , RSC.RESOURCEID
+                 , RSC.DESCRIPTION                                       AS RESOURCENAME
+                 , RSC.AREAID
+                 , 3                                                     AS DISPLAYSEQUENCE
+                 , (ROW_NUMBER() OVER(ORDER BY PP.PATHSEQUENCE))         AS ROW_NUM
+                 , NULL                                                  AS CHK
+              FROM            PCM_LOT                LOT
+              INNER JOIN      BAS_PROCESSPATH        PP   ON   PP.PROCESSDEFID        = LOT.PROCESSDEFID
+                                                          AND  PP.PROCESSDEFVERSION   = LOT.PROCESSDEFVERSION
+              LEFT OUTER JOIN BAS_PROCESSSEGMENT     PSG  ON   PSG.PROCESSSEGMENTID   = PP.PROCESSSEGMENTID
+                                                          AND  PSG.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+              LEFT OUTER JOIN CMD_DICTIONARY         D    ON   D.DICTIONARYID         = PSG.PROCESSSEGMENTNAME
+                                                          AND  D.LANGUAGETYPE         = #{LANGUAGETYPE}
+              LEFT JOIN
+                  (
+                      SELECT B.ENTERPRISEID
+                           , B.PLANTID
+                           , B.PRODUCTDEFID
+                           , B.PRODUCTDEFVERSION
+                           , B.PROCESSDEFID
+                           , B.PROCESSDEFVERSION
+                           , B.PROCESSSEGMENTID
+                           , B.PROCESSSEGMENTVERSION
+                           , B.RESOURCEID
+                           , ROW_NUMBER() OVER(PARTITION BY B.ENTERPRISEID
+                                                          , B.PLANTID
+                                                          , B.PRODUCTDEFID
+                                                          , B.PRODUCTDEFVERSION
+                                                          , B.PROCESSDEFID
+                                                          , B.PROCESSDEFVERSION
+                                                          , B.PROCESSSEGMENTID
+                                                          , B.PROCESSSEGMENTVERSION
+                                               ORDER BY CASE WHEN B.ISPRIMARYRESOURCE = 'Y' THEN 1 ELSE 2 END) AS RN
+                        FROM        PCM_LOT              L
+                        INNER JOIN  BAS_BILLOFRESOURCE   B  ON   B.ENTERPRISEID     = L.ENTERPRISEID
+                                                            AND  B.PRODUCTDEFID     = L.PRODUCTDEFID
+                                                            AND  B.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+                                                            AND  B.PROCESSDEFID     = L.PROCESSDEFID
+                                                            AND  B.PROCESSDEFVERSION = L.PROCESSDEFVERSION
+                                                            AND  B.RESOURCETYPE     = 'Resource'
+                       WHERE L.LOTID = #{LOTID}
+                  )                                  BOR  ON   BOR.ENTERPRISEID      = LOT.ENTERPRISEID
+                                                          AND  BOR.PRODUCTDEFID      = LOT.PRODUCTDEFID
+                                                          AND  BOR.PRODUCTDEFVERSION = LOT.PRODUCTDEFVERSION
+                                                          AND  BOR.PROCESSDEFID      = LOT.PROCESSDEFID
+                                                          AND  BOR.PROCESSDEFVERSION = LOT.PROCESSDEFVERSION
+                                                          AND  BOR.PROCESSSEGMENTID  = PP.PROCESSSEGMENTID
+                                                          AND  BOR.RN                = 1
+              LEFT OUTER JOIN BAS_RESOURCE           RSC  ON   RSC.RESOURCEID        = BOR.RESOURCEID
+                                                          AND  RSC.ENTERPRISEID      = BOR.ENTERPRISEID
+                                                          AND  RSC.PLANTID           = BOR.PLANTID
+              LEFT OUTER JOIN BAS_PROCESSDEFINITION  PDF  ON   PDF.PROCESSDEFID      = BOR.PROCESSDEFID
+                                                          AND  PDF.PROCESSDEFVERSION = BOR.PROCESSDEFVERSION
+             WHERE LOT.LOTID = #{LOTID}
+            <choose>
+            <when test="CANCELCODE eq 'Rework'.toString() ">
+               /*재작업일때는 자기자신을 포함한 이전공정*/
+               AND PP.PATHSEQUENCE <![CDATA[<]]> (SELECT PATHSEQUENCE
+                                                    FROM BAS_PROCESSPATH PP2
+                                                   WHERE PP2.PROCESSDEFID      = #{PROCESSDEFID}
+                                                     AND PP2.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+                                                     AND PP2.PROCESSSEGMENTID  = #{PROCESSSEGMENTID})
+            </when>
+            <when test="CANCELCODE eq 'Retest'.toString() ">
+               /*불량취소일때는 불량처리된 현재공정*/
+               AND PP.PATHSEQUENCE = (SELECT PATHSEQUENCE
+                                        FROM BAS_PROCESSPATH PP2
+                                       WHERE PP2.PROCESSDEFID      = #{PROCESSDEFID}
+                                         AND PP2.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+                                         AND PP2.PROCESSSEGMENTID  = #{PROCESSSEGMENTID})
+            </when>
+            <otherwise>
+               /*양품인계일때는 불량처리된현재공정의 다음공정*/
+               AND PP.PATHSEQUENCE = (SELECT PATHSEQUENCE
+                                        FROM BAS_PROCESSPATH PP2
+                                       WHERE PP2.PROCESSDEFID      = #{PROCESSDEFID}
+                                         AND PP2.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+                                         AND PP2.PROCESSSEGMENTID  = #{PROCESSSEGMENTID}) + 1
+            </otherwise>
+            </choose>
+            ORDER BY DISPLAYSEQUENCE
+                   , ROW_NUM
+        </when>
+
+        <when test="VERSION != null and VERSION =='10003' ">
+            /* smh.qam.dao.QAM01900Dao.selectProductRoutingPreviousProcessPathsList_10003*/
+            SELECT PP.PROCESSDEFID
+                 , PP.PROCESSDEFVERSION
+                 , PDF.PROCESSDEFNAME
+                 , PP.USERSEQUENCE
+                 , PP.PROCESSSEGMENTID
+                 , PP.PROCESSSEGMENTVERSION
+                 , PP.DESCRIPTION
+                 , PP.PATHSEQUENCE
+                 , NVL(D.DICTIONARYNAME, PSG.PROCESSSEGMENTNAME)     AS PROCESSSEGMENTNAME
+                 , PP.PROCESSPATHID
+                 , NULL                                              AS WORKSTARTTIME
+                 , NULL                                              AS WORKENDTIME
+                 , RSC.RESOURCEID
+                 , RSC.DESCRIPTION                                   AS RESOURCENAME
+                 , RSC.AREAID
+                 , 3                                                 AS DISPLAYSEQUENCE
+                 , (ROW_NUMBER() OVER(ORDER BY PP.PATHSEQUENCE))     AS ROW_NUM
+            FROM            PCM_LOT                  LOT
+            INNER JOIN      BAS_PROCESSPATH          PP   ON   PP.PROCESSDEFID        = LOT.PROCESSDEFID
+                                                          AND  PP.PROCESSDEFVERSION   = LOT.PROCESSDEFVERSION
+            LEFT OUTER JOIN BAS_PROCESSSEGMENT       PSG  ON   PSG.PROCESSSEGMENTID   = PP.PROCESSSEGMENTID
+                                                          AND  PSG.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+            LEFT OUTER JOIN CMD_DICTIONARY           D    ON   D.DICTIONARYID         = PSG.PROCESSSEGMENTNAME
+                                                          AND  D.LANGUAGETYPE         = #{LANGUAGETYPE}
+            LEFT JOIN
+                (
+                    SELECT B.ENTERPRISEID
+                         , B.PLANTID
+                         , B.PRODUCTDEFID
+                         , B.PRODUCTDEFVERSION
+                         , B.PROCESSDEFID
+                         , B.PROCESSDEFVERSION
+                         , B.PROCESSSEGMENTID
+                         , B.PROCESSSEGMENTVERSION
+                         , B.RESOURCEID
+                         , ROW_NUMBER() OVER(PARTITION BY B.ENTERPRISEID
+                                                        , B.PLANTID
+                                                        , B.PRODUCTDEFID
+                                                        , B.PRODUCTDEFVERSION
+                                                        , B.PROCESSDEFID
+                                                        , B.PROCESSDEFVERSION
+                                                        , B.PROCESSSEGMENTID
+                                                        , B.PROCESSSEGMENTVERSION
+                                             ORDER BY CASE WHEN B.ISPRIMARYRESOURCE = 'Y' THEN 1 ELSE 2 END) AS RN
+                      FROM          PCM_LOT            L
+                      INNER JOIN    BAS_BILLOFRESOURCE B  ON   B.ENTERPRISEID       = L.ENTERPRISEID
+                                                          AND  B.PRODUCTDEFID       = L.PRODUCTDEFID
+                                                          AND  B.PRODUCTDEFVERSION  = L.PRODUCTDEFVERSION
+                                                          AND  B.PROCESSDEFID       = L.PROCESSDEFID
+                                                          AND  B.PROCESSDEFVERSION  = L.PROCESSDEFVERSION
+                                                          AND  B.RESOURCETYPE       = 'Resource'
+                     WHERE L.LOTID = #{LOTID}
+                )                                    BOR  ON   BOR.ENTERPRISEID       = LOT.ENTERPRISEID
+                                                          AND  BOR.PRODUCTDEFID       = LOT.PRODUCTDEFID
+                                                          AND  BOR.PRODUCTDEFVERSION  = LOT.PRODUCTDEFVERSION
+                                                          AND  BOR.PROCESSDEFID       = LOT.PROCESSDEFID
+                                                          AND  BOR.PROCESSDEFVERSION  = LOT.PROCESSDEFVERSION
+                                                          AND  BOR.PROCESSSEGMENTID   = PP.PROCESSSEGMENTID
+                                                          AND  BOR.RN                 = 1
+              LEFT OUTER JOIN BAS_RESOURCE           RSC  ON   RSC.RESOURCEID         = BOR.RESOURCEID
+                                                          AND  RSC.ENTERPRISEID       = BOR.ENTERPRISEID
+                                                          AND  RSC.PLANTID            = BOR.PLANTID
+              LEFT OUTER JOIN BAS_PROCESSDEFINITION  PDF  ON   PDF.PROCESSDEFID       = BOR.PROCESSDEFID
+                                                          AND  PDF.PROCESSDEFVERSION  = BOR.PROCESSDEFVERSION
+             WHERE LOT.LOTID = #{LOTID}
+            ORDER BY DISPLAYSEQUENCE
+                   , ROW_NUM
+        </when>
+
+        <otherwise>
+        </otherwise>
+    </choose>
+    </select>
+
+    <!--
+         desc    : LotNo와 취소할수량을 받아와서 현재시점에 완불처리됬는지와 전량취소여부를 판별한다.
+         asis    : GetIsAllQtyDefectLot
+    -->
+    <select id="selectIsAllQtyDefectLot" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectIsAllQtyDefectLot*/
+        SELECT COUNT(*) AS COUNT
+          FROM       PCM_LOT      PL
+          INNER JOIN PCM_LOT      L   ON   L.PARENTLOTID = PL.LOTID
+         WHERE 1 = 1
+           AND PL.LOTSTATE              = 'Terminated'
+           AND PL.PROCESSSTATE          = L.PROCESSSTATE
+           AND PL.PROCESSSEGMENTID      = L.PROCESSSEGMENTID
+           AND PL.PROCESSSEGMENTVERSION = L.PROCESSSEGMENTVERSION
+           AND L.LOTID                  = #{LOTID}
+           <!--2021.06.08 Modify ASIS에서는 불량처리할 경우 ParentLot의 DefectQty에 값을 입력하였으나 
+                                 TOBE에서는 ParentLot의 DefectQty은 0으로 처리하고 불량LOT의 DefectQty에 반영
+           AND PL.DEFECTQTY             = #{DEFECTQTY}-->
+           AND L.DEFECTQTY              = TO_NUMBER(#{DEFECTQTY})
+    </select>
+
+    <!--
+         desc   : 불량 Lot의 총 불량수량을 구한다.
+    -->
+    <select id="selectTotalLotDefectInfo" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectTotalLotDefectInfo*/
+        SELECT SUM(DEFECTQTY) AS COUNT
+          FROM PCM_LOTDEFECT
+         WHERE 1 = 1
+           AND VALIDSTATE = 'Valid'
+           AND LOTID = #{LOTID}
+    </select>
+
+    <!--
+    프 로 그 램 명    : 불량품 폐기취소
+    설        명    : 재작업 대상 LOT의 재작업 라우팅 투입 이후공정 조회(불량 Lot 기준)
+    작    성    자    : 유태근
+    작    성    일    : 2020-03-07
+    주요 변경 로그
+    -->
+    <select id="selectCurrentRoutingByLotList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectGetCurrentRoutingByLotList_10002*/
+        SELECT L2.PROCESSDEFID
+             , L2.PROCESSDEFVERSION
+             , PP.USERSEQUENCE
+             , PP.PROCESSSEGMENTID
+             , PP.PROCESSSEGMENTVERSION
+             , NVL(SD1.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)         AS PROCESSSEGMENTNAME
+             , PP.PROCESSPATHID
+             , TO_CHAR(LW.RECEIVETIME,'YYYYMMDDHH24MISS')             AS RECEIVETIME
+             , TO_CHAR(LW.WORKSTARTTIME,'YYYYMMDDHH24MISS')           AS WORKSTARTTIME
+             , TO_CHAR(LW.WORKENDTIME,'YYYYMMDDHH24MISS')             AS WORKENDTIME
+             , TO_CHAR(LW.SENDTIME,'YYYYMMDDHH24MISS')                AS SENDTIME
+             , ROW_NUMBER() OVER(ORDER BY TO_NUMBER(PP.USERSEQUENCE)) AS DISPLAYSEQUENCE
+             , NULL                                                   AS AREAID
+             , NULL                                                   AS RESOURCEID
+             , NULL                                                   AS RESOURCENAME
+             , NULL                                                   AS CHK
+          FROM       UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') L1
+          INNER JOIN PCM_LOT            L2   ON   L1.VALUE              = L2.LOTID
+          INNER JOIN BAS_PROCESSPATH     PP   ON   L2.PROCESSDEFID       = PP.PROCESSDEFID
+                                             AND  L2.PROCESSDEFVERSION  = PP.PROCESSDEFVERSION
+                                             AND  CASE WHEN L2.USERSEQUENCE IS NULL THEN 9999
+                                                  ELSE TO_NUMBER(L2.USERSEQUENCE)
+                                                  END
+                                              <![CDATA[<=]]>
+                                                  CASE WHEN  PP.USERSEQUENCE IS NULL THEN 9999
+                                                  ELSE TO_NUMBER(PP.USERSEQUENCE)
+                                                  END
+          INNER JOIN BAS_PROCESSSEGMENT PS   ON   PP.PROCESSSEGMENTID   = PS.PROCESSSEGMENTID
+          LEFT  JOIN CMD_DICTIONARY     SD1  ON   PS.PROCESSSEGMENTNAME = SD1.DICTIONARYID
+                                             AND  SD1.LANGUAGETYPE      = #{LANGUAGETYPE}
+          LEFT  JOIN PCM_LOTWORKRESULT  LW   ON   L2.LOTID              = LW.LOTID
+                                             AND  PP.PROCESSDEFID       = LW.PROCESSDEFID
+                                             AND  PP.PROCESSDEFVERSION  = LW.PROCESSDEFVERSION
+                                             AND  PP.PROCESSSEGMENTID   = LW.PROCESSSEGMENTID
+         WHERE 1 = 1
+           AND LW.SENDTIME IS NULL
+    </select>
+
+    <!--
+         desc    : Process Path
+    -->
+    <select id="selectProcessPathList" parameterType="map" resultType="hashmap">
+        <choose>
+            <when test="VERSION != null and VERSION =='10021' ">
+                /* smh.qam.dao.QAM01900Dao.selectProcessPathList_10021*/
+                SELECT PP.USERSEQUENCE                      AS USERSEQUENCE
+                     , PP.PROCESSSEGMENTID
+                     , DI.DICTIONARYNAME                    AS PROCESSSEGMENTNAME
+                     , PP.PROCESSSEGMENTVERSION
+                     , RAR.RESOURCEID
+                     , NVL(RS1.DESCRIPTION, RAR.RESOURCEID) AS RESOURCENAME
+                     , RS1.AREAID
+                     , ADI.DICTIONARYNAME AS AREANAME
+                     , PP.PROCESSDEFID
+                     , PP.PROCESSDEFVERSION
+                     , PP.PROCESSPATHID
+                     , PP.DESCRIPTION
+                     , PP.PATHSEQUENCE
+                     , PDF.PROCESSDEFID
+                     , PDF.PROCESSDEFNAME
+                  FROM       BAS_PROCESSPATH           PP
+                  INNER JOIN BAS_PROCESSDEFINITION    PDF  ON   PDF.PROCESSDEFID        = PP.PROCESSDEFID
+                                                           AND  PDF.PROCESSDEFVERSION   = PP.PROCESSDEFVERSION
+                  LEFT JOIN  BAS_PROCESSSEGMENT       PG   ON   PP.ENTERPRISEID         = PG.ENTERPRISEID
+                                                           AND  PP.PROCESSSEGMENTID     = PG.PROCESSSEGMENTID
+                  LEFT JOIN  CMD_DICTIONARY           DI   ON   DI.DICTIONARYID         = PG.PROCESSSEGMENTNAME
+                                                           AND  DI.LANGUAGETYPE         = #{LANGUAGETYPE}
+                  LEFT JOIN
+                        (
+                            SELECT PROCESSDEFID
+                                 , PROCESSDEFVERSION
+                                 , PROCESSSEGMENTID
+                                 , PROCESSSEGMENTVERSION
+                                 , ENTERPRISEID
+                                 , PLANTID
+                                 , RESOURCEID
+                                 , RANK() OVER(PARTITION BY ENTERPRISEID
+                                                          , PLANTID
+                                                          , PROCESSDEFID
+                                                          , PROCESSDEFVERSION
+                                                          , PROCESSSEGMENTID
+                                                          , PROCESSSEGMENTVERSION
+                                               ORDER BY CASE WHEN ISPRIMARYRESOURCE = 'Y' THEN 1 ELSE 2 END) AS RN
+                              FROM BAS_BILLOFRESOURCE
+                             WHERE 1 = 1
+                               AND RESOURCETYPE = 'Resource'
+                        )                             RAR  ON   RAR.PROCESSDEFID        = PP.PROCESSDEFID
+                                                           AND  RAR.PROCESSDEFVERSION   = PP.PROCESSDEFVERSION
+                                                           AND  RAR.PROCESSSEGMENTID    = PP.PROCESSSEGMENTID
+                                                           AND  RAR.ENTERPRISEID        = PP.ENTERPRISEID
+                                                           -- AND  RAR.PLANTID            = PP.PLANTID
+                                                           AND  RAR.RN                  = 1
+                  LEFT JOIN  BAS_RESOURCE             RS1  ON   RAR.ENTERPRISEID        = RS1.ENTERPRISEID
+                                                           AND  RAR.PLANTID             = RS1.PLANTID
+                                                           AND  RAR.RESOURCEID          = RS1.RESOURCEID
+                  LEFT JOIN  BAS_AREA                 AR   ON   RS1.ENTERPRISEID        = AR.ENTERPRISEID
+                                                           AND  RS1.AREAID              = AR.AREAID
+                  LEFT JOIN  CMD_DICTIONARY           ADI  ON   ADI.DICTIONARYID        = AR.AREANAME
+                                                           AND  ADI.LANGUAGETYPE        =#{LANGUAGETYPE}
+                 WHERE PP.ENTERPRISEID   = #{ENTERPRISEID}
+                   AND PP.PROCESSDEFID    = #{PROCESSDEFID}
+                <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' ">
+                  AND PP.PROCESSDEFVERSION    = #{PROCESSDEFVERSION}
+                </if>
+                ORDER BY PP.PATHSEQUENCE
+            </when>
+            <when test="VERSION != null and VERSION =='10005' ">
+                /* smh.qam.dao.QAM01900Dao.selectGetProcessPathList_10005*/
+                SELECT PP.PROCESSPATHID
+                     , PP.ENTERPRISEID
+                     , PP.PLANTID
+                     , PP.PROCESSDEFID
+                     , PP.PROCESSDEFVERSION
+                     , PP.PATHSEQUENCE
+                     , PP.PATHTYPE
+                     , PP.USERSEQUENCE
+                     , PP.PROCESSSEGMENTID
+                     , PP.PROCESSSEGMENTVERSION
+                     , DI.DICTIONARYNAME AS PROCESSSEGMENTNAME
+                     , PP.DESCRIPTION    AS DESCRIPTION
+                     , PP.VALIDSTATE
+                  FROM       BAS_PROCESSPATH        PP
+                  INNER JOIN PCM_LOT                L    ON   L.PLANTID              = PP.PLANTID
+                  INNER JOIN BAS_PROCESSDEFINITION  PDF  ON   PDF.PROCESSDEFID       = PP.PROCESSDEFID
+                                                         AND  PDF.PROCESSDEFVERSION  = PP.PROCESSDEFVERSION
+                  LEFT JOIN  BAS_PROCESSSEGMENT     PG   ON   PP.ENTERPRISEID        = PG.ENTERPRISEID
+                                                         AND  PP.PROCESSSEGMENTID    = PG.PROCESSSEGMENTID
+                  LEFT JOIN  CMD_DICTIONARY         DI   ON   DI.DICTIONARYID        = PG.PROCESSSEGMENTNAME
+                                                         AND  DI.LANGUAGETYPE        = #{LANGUAGETYPE}
+                 WHERE PP.ENTERPRISEID    = #{ENTERPRISEID}
+                   AND PP.PROCESSDEFID    = #{PROCESSDEFID}
+                   AND L.LOTID = #{LOTID}
+                <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' ">
+                  AND PP.PROCESSDEFVERSION    = #{PROCESSDEFVERSION}
+                </if>
+                <if test="PLANTID != null and PLANTID !='' ">
+                  AND PP.PLANTID    = #{PLANTID}
+                </if>
+                ORDER BY PP.PATHSEQUENCE
+            </when>
+            <otherwise>
+            </otherwise>
+        </choose>
+    </select>
+
+    <!--
+         desc    : 반품 LOT 생성 화면에서 자원조회
+    -->
+    <select id="selectTransitAreaList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectGetTransitAreaList_10022*/
+        SELECT RESOURCEID
+             , AREAID
+             , RESOURCENAME
+             , AREANAME
+             , ISPRIMARYRESOURCE
+             , RESOURCEAREA
+          FROM (
+                SELECT ''                 AS RESOURCEID
+                     , ''                 AS AREAID
+                     , ''                 AS RESOURCENAME
+                     , ''                 AS AREANAME
+                     , ''                 AS ISPRIMARYRESOURCE
+                     , ''                 AS RESOURCEAREA
+                     , 0                  AS SEQUENCE
+                  FROM DUAL
+                UNION
+                SELECT BOR.RESOURCEID
+                     , RS.AREAID
+                     , NVL(RS.DESCRIPTION, BOR.RESOURCEID) AS RESOURCENAME
+                     , NVL(AN.DICTIONARYNAME, A.AREANAME)  AS AREANAME
+                     , BOR.ISPRIMARYRESOURCE               AS ISPRIMARYRESOURCE
+                     , BOR.RESOURCEID || '|' || RS.AREAID  AS RESOURCEAREA
+                     , BOR."sequence"                      AS SEQUENCE
+                  FROM            BAS_BILLOFRESOURCE BOR
+                  INNER JOIN      BAS_RESOURCE       RS  ON   BOR.ENTERPRISEID  = RS.ENTERPRISEID
+                                                         AND  BOR.PLANTID       = RS.PLANTID
+                                                         AND  BOR.RESOURCEID    = RS.RESOURCEID
+                  LEFT OUTER JOIN BAS_AREA           A   ON   RS.ENTERPRISEID   = A.ENTERPRISEID
+                                                         AND  RS.PLANTID        = A.PLANTID
+                                                         AND  RS.AREAID         = A.AREAID
+                  LEFT OUTER JOIN CMD_DICTIONARY     AN  ON   A.AREANAME        = AN.DICTIONARYID
+                                                         AND  AN.LANGUAGETYPE   = #{LANGUAGETYPE}
+                 WHERE   1 = 1
+                   AND BOR.RESOURCETYPE = 'Resource'
+                   AND (BOR.ENTERPRISEID = #{ENTERPRISEID} OR BOR.ENTERPRISEID = '*')
+                   AND (BOR.PLANTID = #{PLANTID} OR BOR.PLANTID = '*')
+                   AND (BOR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} OR BOR.PRODUCTDEFVERSION = '*')
+                   AND (BOR.PROCESSDEFID = #{PROCESSDEFID} OR BOR.PROCESSDEFID = '*')
+                   AND (BOR.PROCESSDEFVERSION = #{PROCESSDEFVERSION} OR BOR.PROCESSDEFVERSION = '*')
+                   AND (BOR.PROCESSSEGMENTID = #{PROCESSSEGMENTID} OR BOR.PROCESSSEGMENTID = '*')
+                   AND (BOR.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION} OR BOR.PROCESSSEGMENTVERSION = '*')
+               )
+        ORDER BY SEQUENCE
+    </select>
+
+    <!--
+         desc    : 불량취소 재작업 라우팅을 조회한다.
+    -->
+    <select id="selectDefectCancelReworkRoutingList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectDefectCancelReworkRoutingList*/
+        SELECT PD.PROCESSDEFID                                         -- 라우팅 ID
+             , PD.PROCESSDEFVERSION                                   -- 라우팅 Version
+             , PD.PROCESSDEFNAME                                      -- 라우팅명
+             , DCR.PROCESSPATHID                                      -- 라우팅 상세 ID
+             , DCR.USERSEQUENCE                                       -- 라우팅 순서
+             , PP.PROCESSSEGMENTID                                    -- 공정 ID
+             , PP.PROCESSSEGMENTVERSION                               -- 공정 Version
+             , PSD.DICTIONARYNAME              AS PROCESSSEGMENTNAME  -- 공정명
+             , RM.AREAID                       AS AREAID              -- 작업장 ID
+             , AD.DICTIONARYNAME               AS AREANAME            -- 작업장명
+             , BOR.RESOURCEID                                         -- 자원 ID
+             , RM.DESCRIPTION                  AS RESOURCENAME        -- 자원명
+          FROM            QAM_QCLOTDEFECTCANCELREWORK  DCR
+          INNER JOIN      BAS_PROCESSPATH              PP  ON   PP.PROCESSDEFID            = DCR.PROCESSDEFID
+                                                           AND  PP.PROCESSDEFVERSION       = DCR.PROCESSDEFVERSION
+                                                           AND  PP.PROCESSPATHID           = DCR.PROCESSPATHID
+                                                           AND  PP.USERSEQUENCE            = DCR.USERSEQUENCE
+          LEFT OUTER JOIN BAS_PROCESSDEFINITION       PD   ON   PD.PROCESSDEFID            = PP.PROCESSDEFID
+                                                           AND  PD.PROCESSDEFVERSION       = PP.PROCESSDEFVERSION
+          LEFT OUTER JOIN BAS_PROCESSSEGMENT          PS   ON   PS.PROCESSSEGMENTID        = PP.PROCESSSEGMENTID
+                                                           AND  PS.PROCESSSEGMENTVERSION   = PP.PROCESSSEGMENTVERSION
+          LEFT OUTER JOIN BAS_BILLOFRESOURCE          BOR  ON   BOR.PROCESSDEFID           = DCR.PROCESSDEFID
+                                                           AND  BOR.PROCESSDEFVERSION      = DCR.PROCESSDEFVERSION
+                                                           AND  BOR.PROCESSSEGMENTID       = PP.PROCESSSEGMENTID
+                                                           AND  BOR.PROCESSSEGMENTVERSION  = PP.PROCESSSEGMENTVERSION
+                                                           AND  BOR.RESOURCETYPE           = 'Resource'
+                                                           AND  BOR.ISPRIMARYRESOURCE      = 'Y'
+          LEFT OUTER JOIN BAS_RESOURCE                RM   ON   BOR.RESOURCEID             = RM.RESOURCEID
+          LEFT OUTER JOIN BAS_AREA                    A    ON   RM.AREAID                  = A.AREAID
+          LEFT OUTER JOIN CMD_DICTIONARY              PSD  ON   PSD.DICTIONARYID           = PS.PROCESSSEGMENTNAME
+                                                           AND  PSD.LANGUAGETYPE           = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY              AD   ON   AD.DICTIONARYID            = A.AREANAME
+                                                           AND  AD.LANGUAGETYPE            = #{LANGUAGETYPE}
+         WHERE 1 = 1
+        <choose>
+            <when test="REQUESTNO != null and REQUESTNO !='' and (REQUESTNO eq '*'.toString()) ">
+                AND DCR.REQUESTNO = #{REQUESTNO}
+
+            </when>
+            <otherwise>
+                AND DCR.LOTID = #{CANCELLOTID}
+                AND DCR.TXNHISTKEY = #{TXNHISTKEY}
+            </otherwise>
+        </choose>
+        ORDER BY DCR.SEQUENCE
+    </select>
+
+    <!-- 프 로 그 램 명 : 재작업투입
+        P_PROCESSCLASSID 조회조건 추가
+        REWORKNUMBER, REWORKNAME 조회조건 추가
+        조회컬럼에 PLANTID 추가
+        LOT과 PLANT가 일치하는 공정이 없을경우 조회하지 않도록 수정
+        출하검사 전용 재작업라우팅은 나오지 않도록 수정 -->
+    <select id="selectReworkRoutingList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectReworkRoutingList*/
+        WITH ROUTING_PRODUCT_LIST AS
+        (
+            SELECT PD.PROCESSDEFID
+                 , PD.PROCESSDEFVERSION
+                 , LISTAGG(PD.CONTROLRESOURCEID,',') WITHIN GROUP (ORDER BY PD.PROCESSDEFID,PD.PROCESSDEFVERSION)  PRODUCTLIST
+              FROM
+                   (
+                    SELECT PD.PROCESSDEFID
+                         , PD.PROCESSDEFVERSION
+                         , MC.CONTROLRESOURCEID || MC.CONTROLRESOURCEVERSION  CONTROLRESOURCEID
+                      FROM      BAS_PROCESSDEFINITION PD
+                      LEFT JOIN BAS_REWORKCONTROL     MC   ON  PD.PROCESSDEFID      = MC.PROCESSDEFID
+                                                           AND PD.PROCESSDEFVERSION = MC.PROCESSDEFVERSION
+                                                           AND MC.CONTROLTYPE       = 'Product'
+             )PD
+            GROUP BY PD.PROCESSDEFID,PD.PROCESSDEFVERSION
+        ),ROUTING_AREA_LIST AS
+        (
+            SELECT PD.PROCESSDEFID
+                 , PD.PROCESSDEFVERSION
+                 , LISTAGG(PD.CONTROLRESOURCEID,',') WITHIN GROUP (ORDER BY PD.PROCESSDEFID,PD.PROCESSDEFVERSION)  AREALIST
+              FROM
+                   (
+                    SELECT PD.PROCESSDEFID
+                         , PD.PROCESSDEFVERSION
+                         , MC.CONTROLRESOURCEID   CONTROLRESOURCEID
+                      FROM      BAS_PROCESSDEFINITION PD
+                      LEFT JOIN BAS_REWORKCONTROL     MC   ON   PD.PROCESSDEFID      = MC.PROCESSDEFID
+                                                           AND  PD.PROCESSDEFVERSION = MC.PROCESSDEFVERSION
+                                                           AND  MC.CONTROLTYPE       = 'Area'
+                   )PD
+            GROUP BY PD.PROCESSDEFID,PD.PROCESSDEFVERSION
+        )
+        SELECT Y.PROCESSCLASSTYPE
+             , Y.PROCESSCLASSTYPENAME    APPLICATIONTYPE
+             , Y.PROCESSCLASSID
+             , Y.PROCESSCLASSNAME        REWORKTYPE
+             , Y.PROCESSDEFID            REWORKNUMBER
+             , Y.PROCESSDEFVERSION       REWORKVERSION
+             , Y.PROCESSDEFNAME          REWORKNAME
+             , Y.DESCRIPTION
+             , Y.TOPPROCESSSEGMENTID
+             , Y.TOPPROCESSSEGMENTNAME
+             , Y.CREATOR
+          FROM
+               (
+                SELECT X.PROCESSCLASSTYPE
+                     , X.PROCESSCLASSTYPENAME
+                     , X.PROCESSCLASSID
+                     , X.PROCESSCLASSNAME
+                     , X.PROCESSDEFID
+                     , X.PROCESSDEFVERSION
+                     , X.PROCESSDEFNAME
+                     , X.DESCRIPTION
+                     , X.PRODUCTLIST
+                     , X.AREALIST
+                     , X.TOPPROCESSSEGMENTID
+                     , X.TOPPROCESSSEGMENTNAME
+                     , X.REWORKITEMCONTROL
+                     , X.REWORKSEGMENTCONTROL
+                     , CASE WHEN REWORKITEMCONTROL = 'Y' AND RP_INDEX <![CDATA[>]]> 0 THEN 'Y'
+                            WHEN REWORKITEMCONTROL = 'Y' AND RP_INDEX = 0 THEN 'N'
+                            ELSE 'Y'
+                            END  RP_CHECK
+                     , CASE WHEN REWORKSEGMENTCONTROL = 'Y' AND RA_INDEX <![CDATA[>]]> 0 THEN 'Y'
+                            WHEN REWORKSEGMENTCONTROL = 'Y' AND RA_INDEX = 0 THEN 'N'
+                            ELSE 'Y'
+                            END  RA_CHECK
+                     , X.CREATOR
+                FROM
+                (
+                    SELECT PC.PROCESSCLASSTYPE
+                         , NVL(SD.DICTIONARYNAME,PC.PROCESSCLASSTYPE ) AS PROCESSCLASSTYPENAME
+                         , PC.PROCESSCLASSID
+                         , PC.PROCESSCLASSNAME
+                         , PD.PROCESSDEFID
+                         , PD.PROCESSDEFVERSION
+                         , PD.PROCESSDEFNAME
+                         , PD.DESCRIPTION
+                         , RP.PRODUCTLIST
+                         , RA.AREALIST
+                         , PD.TOPPROCESSSEGMENTID
+                         , NVL(SD1.DICTIONARYNAME,PS.PROCESSSEGMENTCLASSID)  AS TOPPROCESSSEGMENTNAME
+                         , PD.REWORKITEMCONTROL
+                         , PD.REWORKSEGMENTCONTROL
+                         , PD.PLANTID
+                         <!-- 2021.08.09 TOBE Modify 리스트값이 존재하지 않을 경우 NULL인데 이경우 0보다 큰걸로 인식되어서 index값이 Y로 설정되어 nvl처리 -->
+                         , NVL(INSTR(RP.PRODUCTLIST, L.PRODUCTDEFID||PRODUCTDEFVERSION), 0) AS RP_INDEX
+                         , NVL(INSTR(RA.AREALIST, L.AREAID), 0)                            AS RA_INDEX
+                         , NVL(CU.USER_NM, PD.CREATOR)                                     AS CREATOR
+                      FROM       BAS_PROCESSDEFINITION    PD
+                      INNER JOIN ROUTING_PRODUCT_LIST     RP  ON   PD.PROCESSDEFID            = RP.PROCESSDEFID
+                                                              AND  PD.PROCESSDEFVERSION       = RP.PROCESSDEFVERSION
+                      INNER JOIN ROUTING_AREA_LIST        RA  ON   PD.PROCESSDEFID            = RA.PROCESSDEFID
+                                                              AND  PD.PROCESSDEFVERSION       = RA.PROCESSDEFVERSION
+                      LEFT JOIN  BAS_PROCESSCLASS         PC  ON   PD.PROCESSCLASSID          = PC.PROCESSCLASSID
+                      INNER JOIN PCM_LOT                  L   ON   L.LOTID                    = #{LOTID}
+                      LEFT  JOIN CMD_LOOKUP_VALUES        SC  ON   PC.PROCESSCLASSTYPE        = SC.LOOKUP_CODE
+                                                              AND  SC.LOOKUP_TYPE             = 'ProcessClassType'
+                      LEFT  JOIN CMD_DICTIONARY           SD  ON   SC.DICTIONARYID            = SD.DICTIONARYID
+                                                              AND  SD.LANGUAGETYPE            = #{LANGUAGETYPE}
+                      INNER JOIN BAS_PROCESSSEGMENTCLASS  PS  ON   PD.TOPPROCESSSEGMENTID     = PS.PROCESSSEGMENTCLASSID
+                                                              AND  PS.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+                      LEFT  JOIN CMD_DICTIONARY           SD1 ON   PS.PROCESSSEGMENTCLASSNAME = SD1.DICTIONARYID
+                                                              AND  SD1.languagetype           = #{LANGUAGETYPE}
+                      LEFT  JOIN CMD_USERS                CU  ON   PD.CREATOR                 = CU.USER_ID
+                     WHERE 1=1
+                      AND PD.VALIDSTATE = 'Valid'
+                      AND PD.PROCESSDEFTYPE = 'Rework'
+                      AND PD.PROCESSCLASSID <![CDATA[<>]]> 'Process-ReinspectionShipment'
+                    <if test="FILTERPLANT eq 'Y'.toString() ">
+                      AND EXISTS
+                            (
+                              SELECT 1
+                                FROM BAS_PROCESSPATH  PP
+                               WHERE PP.PROCESSDEFID      = PD.PROCESSDEFID
+                                 AND PP.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+                                 AND PP.PLANTID           = L.PLANTID
+                            )
+                    </if>
+                    <if test="PROCESSCLASSTYPE != null and PROCESSCLASSTYPE !='' and !(PROCESSCLASSTYPE eq '*'.toString()) ">
+                      AND PC.PROCESSCLASSTYPE = #{PROCESSCLASSTYPE}
+                    </if>
+                    <if test="TOPPROCESSSEGMENTID != null and TOPPROCESSSEGMENTID !='' ">
+                      AND PD.TOPPROCESSSEGMENTID = #{TOPPROCESSSEGMENTID}
+                    </if>
+                    <if test="REWORKNUMBER != null and REWORKNUMBER !='' ">
+                      AND PD.PROCESSDEFID LIKE '%' ||#{REWORKNUMBER} ||'%'
+                    </if>
+                    <if test="REWORKNAME != null and REWORKNAME !='' ">
+                      AND PD.PROCESSDEFNAME LIKE '%$!{REWORKNAME}%'
+                    </if>
+                    <if test="REWORKIDNAME != null and REWORKIDNAME !='' ">
+                      AND (PD.PROCESSDEFID LIKE UPPER('%' ||#{REWORKIDNAME} ||'%') OR PD.PROCESSDEFNAME LIKE UPPER('%' ||#{REWORKIDNAME} ||'%'))
+                    </if>
+                )X
+            )Y
+         WHERE 1=1
+           AND Y.RP_CHECK = 'Y'
+           AND Y.RA_CHECK = 'Y'
+        ORDER BY PROCESSCLASSID
+               , PROCESSCLASSID
+               , PROCESSDEFID
+               , PROCESSDEFVERSION
+    </select>
+
+    <!--
+         desc    : LOT 정보 - 불량 LOT의 부모 LOT
+    -->
+    <select id="selectParentLotId" parameterType="map" resultType="String">
+        /* smh.qam.dao.QAM01900Dao.selectParentLotId */
+        SELECT PARENTLOTID
+          FROM PCM_LOT
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+
+    <!--
+         desc    : LOT 정보 - 불량 LOT의 부모 LOT의 QTY 조회
+    -->
+    <select id="selectParentLotQty" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectParentLotQty */
+        SELECT LOTID
+             , QTY
+          FROM PCM_LOT
+         WHERE LOTID                         = #{LOTID}               /*LOT ID*/
+    </select>
+
+    <!--
+         desc    : Max Split Lot 조회
+    -->
+    <select id="selectMaxSplitLot" parameterType="map" resultType="Integer">
+        /* smh.qam.dao.QAM01900Dao.selectMaxSplitLot_10002 */
+        <![CDATA[
+        SELECT NVL(MAX(TO_NUMBER(SUBSTR(PL.LOTID, -3))), 0) AS MAX_VALUE
+          FROM PCM_LOT PL
+         WHERE PL.LOTID LIKE '%' || #{LOTID} || '%'
+           AND NVL(PL.ISDEFECTED, 'N') = 'N'
+           --AND NOT REGEXP_LIKE(SUBSTR(PL.LOTID, 23, 3), '[a-zA-Z]')
+           AND NOT REGEXP_LIKE(SUBSTR(PL.LOTID, INSTR(PL.LOTID, '-', -1)+1), '[a-zA-Z]')
+        ]]>
+    </select>
+
+    <!-- 작업 시작 시 등록 된 작업 실적 정보를 조회 한다.  -->
+    <select id="getLotWorkResultByTrackIn" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.getLotWorkResultByTrackIn */
+        SELECT *
+          FROM PCM_LOTWORKRESULT    WR
+         WHERE 1 = 1
+           AND WR.LOTID            = #{LOTID}
+           AND WR.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+           AND WR.WORKCOUNT        = #{WORKCOUNT}
+    </select>
+
+    <!--
+         desc    : LOT 불량 정보 - 체크
+    -->
+    <select id="selectPcmLotDefectChk" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectPcmLotDefectChk */
+        SELECT TXNHISTKEY
+             , LOTID
+             , VALIDSTATE
+          FROM PCM_LOTDEFECT
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+
+    <!--
+         desc    : 불량취소 재작업 라우팅 테이블의 MaxSequence를 가져온다.(불량취소)
+         call    : insertCancelCustomRoutingData
+    -->
+    <select id="selectGetCancelLotRoutingMaxSequence" parameterType="map" resultType="Integer">
+        /* smh.qam.dao.QAM01900Dao.selectGetCancelLotRoutingMaxSequence */
+        SELECT CASE WHEN MAX(SEQUENCE) IS NULL THEN 1
+               ELSE MAX(SEQUENCE)+1 END AS MAXSEQUENCE
+          FROM QAM_QCLOTDEFECTCANCELREWORK
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+
+    <!--
+         desc    : LOT 정보
+    -->
+    <select id="selectPcmLotInfo" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectPcmLotInfo */
+        SELECT LOTID                         /*LOT ID*/
+             , PRODUCTIONORDERID             /*Production Order ID*/
+             , LINENO                        /*Line No*/
+             , LOTGROUPID                    /*LOT Group ID*/
+             , LOTNAME                       /*LOT 명*/
+             , ENTERPRISEID                  /*회사 ID*/
+             , PLANTID                       /*Site ID*/
+             , FACTORYID                     /*Factory ID*/
+             , ORIGINALPLANTID               /*LOT이 생성된 공장 ID*/
+             , AREAID                        /*작업장 ID*/
+             , EQUIPMENTID                   /*설비 ID*/
+             , LOCATIONID                    /*위치 ID*/
+             , RECIPEDEFID                   /*레시피 정의 ID*/
+             , RECIPEDEFVERSION              /*레시피 정의 Version*/
+             , RAWMATERIALID                 /*원자재 LOT ID*/
+             , ROOTLOTID                     /*처음 생성된 LOT ID*/
+             , PARENTLOTID                   /*부모 LOT ID*/
+             , CHILDLOTID                    /*자 LOT ID*/
+             , CARRIERID                     /*Carrier ID*/
+             , LOTTYPE                       /*LOT 타입*/
+             , LOTCREATEDTYPE                /*LOT생성유형*/
+             , LOTINPUTTYPE                  /*투입구분*/
+             , ISREPRESENTROLLLOT            /*대표Roll Lot여부*/
+             , HASSUBLOT                     /*SubLot의 관리 여부*/
+             , PRODUCTDEFID                  /*제품 정의 ID*/
+             , PRODUCTDEFVERSION             /*제품 정의 Version*/
+             , PREVPRODUCTDEFVERSION         /*이전 제품 정의 Version*/
+             , PROCESSDEFID                  /*라우팅 ID*/
+             , PROCESSDEFVERSION             /*라우팅 Version*/
+             , PROCESSPATHSTACK              /*라우팅 Stack값*/
+             , USERSEQUENCE                  /*사용자 정의 순서*/
+             , PROCESSSEGMENTID              /*공정 ID*/
+             , PROCESSSEGMENTVERSION         /*공정 Version*/
+             , PRIORITY                      /*우선순위*/
+             , DUEDATE                       /*납기일*/
+             , EXPECTEDCOMPLETEDATE          /*예상생산완료일*/
+             , ROOTLOTSTARTDATE              /*ROOT LOT의 투입일자*/
+             , LOTSTARTDATE                  /*LOT의 투입일자*/
+             , WEEK                          /*주차*/
+             , TRACKINUSER                   /*TrackIn 작업자*/
+             , TRACKINTIME                   /*TrackIn 시간*/
+             , TRACKOUTUSER                  /*TrackOut 작업자*/
+             , TRACKOUTTIME                  /*TrackOut 시간*/
+             , LOTSTATE                      /*LOT 상태*/
+             , PROCESSSTATE                  /*LOT의 공정진행 상태*/
+             , ISHOLD                        /*Hold 여부*/
+             , ISREWORK                      /*Rework 여부*/
+             , ISLOCKING                     /*LOCKING여부*/
+             , REWORKTYPE                    /*Rework 유형*/
+             , REWORKREASONCODE              /*재작업사유*/
+             , ISPRINTLOTCARD                /*Lot카드 출력여부*/
+             , ISPRINTRCLOTCARD              /*RC Lot카드 출력여부*/
+             , LAYER                         /*Layer*/
+             , CREATEDQTY                    /*처음 LOT 생성 수량*/
+             , LOTSTDPANELQTY                /*Lot 기준 투입 Panel 수량*/
+             , UNIT                          /*단위*/
+             , DEFECTUNIT                    /*불량단위*/
+             , QTY                           /*현재 수량*/
+             , DEFECTQTY                     /*불량수량*/
+             , PSEUDODEFECTQTY               /*가성불량*/
+             , PCSQTY                        /*PCS 수량*/
+             , ARRAYQTY                      /*ARRAY 수량*/
+             , PANELQTY                      /*PANEL 수량*/
+             , PANELPERQTY                   /*PANEL당 수량*/
+             , REWORKCOUNT                   /*Rework 횟수*/
+             , TOTALREWORKCOUNT              /*전체 Rework 횟수*/
+             , PUREORDER                     /*순수주*/
+             , PUREINPUT                     /*순투입*/
+             , SUBPROCESSDEFID               /*Rework/Alter의 프로세스 정의 ID*/
+             , SUBPROCESSDEFVERSION          /*Rework/Alter의 프로세스 정의 Version*/
+             , RECEIVEUSER                   /*인수 작업자*/
+             , RECEIVETIME                   /*인수 시간*/
+             , STARTEDUSER                   /*공정 투입자*/
+             , STARTEDDATE                   /*공정 투입시간*/
+             , SENDUSER                      /*인계 작업자*/
+             , SENDTIME                      /*인계 시간*/
+             , HANDLETYPE                    /*핸들유형(UI,PDA,Equipment)*/
+             , DESCRIPTION                   /*설명*/
+             , LASTTXNHISTKEY   AS LASTTXNHISTKEYV  /*마지막TXN HistKey*/
+             , ISDEFECTED                    /*불량처리여부*/
+             , WORKCOUNT                     /*작업차수*/
+             , RESOURCEID                    /*자원ID*/
+             , MKLOTID                       /*마킹LOT ID*/
+             , PREVPRODUCTDEFID              /*이전 제품 정의 ID*/
+             , PNLROOTLOTID                  /*PNL ROOT LOTID(ROLL CUT공정에서 생성한 PANEL LOTID)*/
+             , PNLCREATEDQTY                 /*PANEL 생성 수량(ROLL CUT공정에서 생성한 수량)*/
+             , INPUTCONFIRMDATE              /*투입확인시간*/
+             , INPUTCONFIRMUSER              /*투입확인작업자*/
+             , ISFINALINSPECTPROGESS         /*최종검사진행여부*/
+             , LOTINPUTQTY                   /*LOT 투입수량*/
+             , ISFIRSTCREATELOT              /*최초 생성 LOT 여부*/
+             , ISOEM                         /*OEM여부*/
+             , ISSHRINKTEST                  /*수축율 검사 대상 여부(Y=검사대상)*/
+          FROM PCM_LOT
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+
+    <!--
+         desc    : 라우팅 정의
+    -->
+    <select id="selectBasProcessDefinitionInfo" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectBasProcessDefinitionInfo */
+        SELECT PROCESSDEFID                  /*라우팅 ID*/
+             , PROCESSDEFVERSION             /*라우팅 Version*/
+             , PROCESSCLASSID                /*라우팅 그룹 ID*/
+             , PROCESSDEFNAME                /*라우팅명*/
+             , ENTERPRISEID                  /*회사 ID*/
+             , PLANTID                       /*Site ID*/
+             , PROCESSDEFTYPE                /*라우팅 유형*/
+             , LEADTIME                      /*리드타임*/
+             , VERSIONSTATE                  /*Version 상태*/
+             , REWORKITEMCONTROL             /*재작업 품목제한*/
+             , REWORKSEGMENTCONTROL          /*재작업 공정제한*/
+             , DESCRIPTION                   /*설명*/
+             , VALIDSTATE                    /*유효여부*/
+             , TOPPROCESSSEGMENTID           /*대공정ID*/        
+          FROM BAS_PROCESSDEFINITION
+         WHERE PROCESSDEFID                  = #{PROCESSDEFID}               /*라우팅 ID*/
+           AND PROCESSDEFVERSION             = #{PROCESSDEFVERSION}          /*라우팅 Version*/
+    </select>
+
+    <!--
+         desc    : 라우팅 상세 정의
+    -->
+    <select id="selectBasProcessPath" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectBasProcessPath */
+        SELECT PROCESSPATHID                 /*공정별 라우팅 정의 ID*/
+             , PROCESSDEFID                  /*라우팅 ID*/
+             , PROCESSDEFVERSION             /*라우팅 Version*/
+             , PROCESSSEGMENTID              /*공정 ID*/
+          FROM BAS_PROCESSPATH
+         WHERE PROCESSDEFID                  = #{PROCESSDEFID}               /*라우팅 ID*/
+           AND PROCESSDEFVERSION             = #{PROCESSDEFVERSION}          /*라우팅 Version*/
+           AND PROCESSSEGMENTID              = #{PROCESSSEGMENTID}           /*공정 ID*/
+    </select>
+
+    <!--
+         desc    : LOT 작업실적
+    -->
+    <select id="selectPcmLotWorkResultInfo" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectPcmLotWorkResultInfo */
+        SELECT TXNHISTKEY                    /*TXN HistKey*/
+             , LOTID                         /*LOT ID*/
+             , PROCESSSEGMENTID              /*공정 ID*/
+             , PROCESSSEGMENTVERSION         /*공정 Version*/
+             , ENTERPRISEID                  /*회사 ID*/
+             , PLANTID                       /*Site ID*/
+             , FACTORYID                     /*Factory ID*/
+             , AREAID                        /*작업장 ID*/
+             , PRODUCTIONORDERID             /*PO ID*/
+             , LINENO                        /*Line No*/
+             , PRODUCTDEFID                  /*제품 정의 ID*/
+             , PRODUCTDEFVERSION             /*제품 정의 Version*/
+             , PROCESSDEFID                  /*라우팅 ID*/
+             , PROCESSDEFVERSION             /*라우팅 Version*/
+             , PROCESSPATHID                 /*공정별 라우팅 정의 ID*/
+             , PROCESSPATHSTACK              /*라우팅 Stack값*/
+             , USERSEQUENCE                  /*ProcessPath 상의 사용자 순서*/
+             , WORKCOUNT                     /*작업차수*/
+             , RESOURCEID                    /*자원ID*/
+             , RECEIVETIME                   /*인수시간*/
+             , RECEIVEUSER                   /*인수자*/
+             , ROOTLOTSTARTDATE              /*ROOT LOT의 투입일자*/
+             , WORKSTARTTIME                 /*작업시작시간*/
+             , WORKSTARTUSER                 /*작업시작자*/
+             , WORKENDTIME                   /*작업완료시간*/
+             , WORKENDUSER                   /*작업완료자*/
+             , SENDTIME                      /*인계시간*/
+             , SENDUSER                      /*인계자*/
+             , RECEIVELEADTIME               /*인수 리드타임*/
+             , WORKSTARTLEADTIME             /*작업시작 리드타임*/
+             , WORKENDLEADTIME               /*작업완료 리드타임*/
+             , ROOTLOTINPUTPCSQTY            /*ROOT LOT 투입 PCS수량*/
+             , ROOTLOTINPUTARRAYQTY          /*ROOT LOT 투입 ARRAY 수량*/
+             , ROOTLOTINPUTPANELQTY          /*ROOT LOT 투입 PANEL 수량*/
+             , WORKENDPCSQTY                 /*작업완료PCS수량*/
+             , WORKENDARRAYQTY               /*작업완료ARRAY수량*/
+             , PREVSENDLOTHISTKEY            /*이전공정의 LOT TXN HISTKEY*/
+             , DESCRIPTION                   /*설명*/
+          FROM PCM_LOTWORKRESULT
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+
+    <!--
+         desc    : 작업장
+    -->
+    <select id="selectBasAreanfo" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectBasAreanfo */
+        SELECT AREAID                        /*작업장 ID*/
+             , PLANTID                       /*Site ID*/
+             , OWNTYPE                       /*자사구분*/
+          FROM BAS_AREA
+         WHERE AREAID                        = #{AREAID}                     /*작업장 ID*/
+    </select>
+
+    <!--
+         desc    : Lot 법인간 물류 이동
+    -->
+    <select id="selectMtmLotPlantTransitInfo" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectMtmLotPlantTransitInfo */
+        SELECT TXNHISTKEY                    /*TXN HistKey*/
+             , LOTID                         /*LOT ID*/
+          FROM MTM_LOTPLANTTRANSIT
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+
+    <!--
+         desc    : LOT 정보 이력
+    -->
+    <select id="selectPcmLotHistoryInfo" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01900Dao.selectPcmLotHistoryInfo */
+        SELECT TXNHISTKEY                    /*TXN HistKey*/
+             , LOTID                         /*LOT ID*/
+             , PRODUCTIONORDERID             /*Production Order ID*/
+             , LINENO                        /*Line NO*/
+             , LOTGROUPID                    /*LOT Group ID*/
+             , LOTNAME                       /*LOT 명*/
+             , ENTERPRISEID                  /*회사 ID*/
+             , ORIGINALPLANTID               /*LOT이 생성된 공장 ID*/
+             , PREVPLANTID                   /*이전 공장 ID*/
+             , PLANTID                       /*Site ID*/
+             , PREVFACTORYID                 /*이전 Factory ID*/
+             , FACTORYID                     /*Factory ID*/
+             , PREVAREAID                    /*이전 작업장 ID*/
+             , AREAID                        /*작업장 ID*/
+             , PREVEQUIPMENTID               /*이전 설비 ID*/
+             , EQUIPMENTID                   /*설비 ID*/
+             , LOCATIONID                    /*위치 ID*/
+             , RECIPEDEFID                   /*레시피 정의 ID*/
+             , RECIPEDEFVERSION              /*레시피 정의 Version*/
+             , PREVPRODUCTDEFID              /*이전 제품 정의 ID*/
+             , PREVPRODUCTDEFVERSION         /*이전 제품 정의 Version*/
+             , PRODUCTDEFID                  /*제품 정의 ID*/
+             , PRODUCTDEFVERSION             /*제품 정의 Version*/
+             , PREVPROCESSDEFID              /*이전 라우팅 ID*/
+             , PREVPROCESSDEFVERSION         /*이전 라우팅 Version*/
+             , PROCESSDEFID                  /*라우팅 ID*/
+             , PROCESSDEFVERSION             /*라우팅 Version*/
+             , PROCESSPATHSTACK              /*라우팅 Stack값*/
+             , PREVUSERSEQUENCE              /*이전 사용자 정의 순서*/
+             , USERSEQUENCE                  /*사용자 정의 순서*/
+             , PREVPROCESSSEGMENTID          /*이전 공정 ID*/
+             , PREVPROCESSSEGMENTVERSION     /*이전 공정 Version*/
+             , PROCESSSEGMENTID              /*공정 ID*/
+             , PROCESSSEGMENTVERSION         /*공정 Version*/
+             , RAWMATERIALID                 /*원자재 LOT ID*/
+             , ROOTLOTID                     /*처음 생성된 LOT ID*/
+             , PARENTLOTID                   /*부모 LOT ID*/
+             , CHILDLOTID                    /*자 LOT ID*/
+             , CARRIERID                     /*Carrier ID*/
+             , PREVLOTTYPE                   /*이전 LOT 타입*/
+             , LOTTYPE                       /*LOT 타입*/
+             , LOTCREATEDTYPE                /*LOT생성유형*/
+             , LOTINPUTTYPE                  /*투입구분*/
+             , ISREPRESENTROLLLOT            /*대표Roll Lot여부*/
+             , HASSUBLOT                     /*SubLot의 관리 여부*/
+             , PRIORITY                      /*우선순위*/
+             , DUEDATE                       /*마감 기한*/
+             , EXPECTEDCOMPLETEDATE          /*예상생산완료일*/
+             , ROOTLOTSTARTDATE              /*ROOT LOT의 투입일자*/
+             , LOTSTARTDATE                  /*LOT의 투입일자*/
+             , WEEK                          /*주차*/
+             , TRACKINUSER                   /*TrackIn 작업자*/
+             , TRACKINTIME                   /*TrackIn 시간*/
+             , TRACKOUTUSER                  /*TrackOut 작업자*/
+             , TRACKOUTTIME                  /*TrackOut 시간*/
+             , PREVLOTSTATE                  /*이전 LOT 상태*/
+             , LOTSTATE                      /*LOT 상태*/
+             , PREVPROCESSSTATE              /*이전 LOT 공정진행 상태*/
+             , PROCESSSTATE                  /*LOT의 공정진행 상태*/
+             , ISHOLD                        /*Hold 여부*/
+             , ISREWORK                      /*Rework 여부*/
+             , ISLOCKING                     /*LOCKING여부*/
+             , REWORKTYPE                    /*Rework 유형*/
+             , REWORKREASONCODE              /*재작업사유*/
+             , ISPRINTLOTCARD                /*Lot카드 출력여부*/
+             , ISPRINTRCLOTCARD              /*RC Lot카드 출력여부*/
+             , LAYER                         /*Layer*/
+             , CREATEDQTY                    /*처음 LOT 생성 수량*/
+             , LOTSTDPANELQTY                /*Lot 기준 투입 Panel 수량*/
+             , UNIT                          /*단위*/
+             , DEFECTUNIT                    /*불량단위*/
+             , PREVQTY                       /*이전 수량*/
+             , QTY                           /*현재 수량*/
+             , PREVDEFECTQTY                 /*이전 불량 수량*/
+             , DEFECTQTY                     /*불량수량*/
+             , PREVPSEUDODEFECTQTY           /*이전 가성불량수량*/
+             , PSEUDODEFECTQTY               /*가성불량수량*/
+             , PREVPCSQTY                    /*이전 PCS 수량*/
+             , PCSQTY                        /*PCS 수량*/
+             , PREVARRAYQTY                  /*이전 ARRAY 수량*/
+             , ARRAYQTY                      /*ARRAY 수량*/
+             , PREVPANELQTY                  /*이전 PANEL 수량*/
+             , PANELQTY                      /*PANEL 수량*/
+             , PANELPERQTY                   /*PANEL당 수량*/
+             , REWORKCOUNT                   /*Rework 횟수*/
+             , TOTALREWORKCOUNT              /*전체 Rework 횟수*/
+             , PUREORDER                     /*순수주*/
+             , PUREINPUT                     /*순투입*/
+             , SUBPROCESSDEFID               /*Rework/Alter의 프로세스 정의 ID*/
+             , SUBPROCESSDEFVERSION          /*Rework/Alter의 프로세스 정의 Version*/
+             , RECEIVEUSER                   /*인수 작업자*/
+             , RECEIVETIME                   /*인수 시간*/
+             , STARTEDUSER                   /*공정 투입자*/
+             , STARTEDDATE                   /*공정 투입시간*/
+             , SENDUSER                      /*인계 작업자*/
+             , SENDTIME                      /*인계 시간*/
+             , HANDLETYPE                    /*핸들유형(UI,PDA,Equipment)*/
+             , ISCANCEL                      /*이력 취소 여부*/
+             , CANCELHISTKEY                 /*이력 취소 HISTKEY*/
+             , DESCRIPTION                   /*설명*/
+             , ISDEFECTED                    /*불량처리여부*/
+             , WORKCOUNT                     /*작업차수*/
+             , RESOURCEID                    /*자원ID*/
+             , MKLOTID                       /*마킹LOT ID*/
+             , PNLROOTLOTID                  /*PNL ROOT LOTID(ROLL CUT공정에서 생성한 PANEL LOTID)*/
+             , PNLCREATEDQTY                 /*PANEL 생성 수량(ROLL CUT공정에서 생성한 수량)*/
+             , INPUTCONFIRMDATE              /*투입확인시간*/
+             , INPUTCONFIRMUSER              /*투입확인작업자*/
+             , ISFINALINSPECTPROGESS         /*최종검사진행여부*/
+             , LOTINPUTQTY                   /*LOT 투입수량*/
+             , ISFIRSTCREATELOT              /*최초 생성 LOT 여부*/
+             , ISOEM                         /*OEM여부*/
+             , ISSHRINKTEST                  /*수축율 검사 대상 여부(Y=검사대상)*/
+          FROM PCM_LOTHISTORY
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+
+    <!--
+         desc : Split Lot의 작업실적 입력
+         call : insertSplitLotWorkResult
+    -->
+    <insert id="insertPcmLotWorkResultSplitLotDefectCancel" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.insertPcmLotWorkResultSplitLotDefectCancel */
+        INSERT INTO PCM_LOTWORKRESULT
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , LOTID                         /*LOT ID*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PROCESSSEGMENTVERSION         /*공정 Version*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , FACTORYID                     /*Factory ID*/
+            , AREAID                        /*작업장 ID*/
+            , PRODUCTIONORDERID             /*PO ID*/
+            , LINENO                        /*Line No*/
+            , PRODUCTDEFID                  /*제품 정의 ID*/
+            , PRODUCTDEFVERSION             /*제품 정의 Version*/
+            , PROCESSDEFID                  /*라우팅 ID*/
+            , PROCESSDEFVERSION             /*라우팅 Version*/
+            , PROCESSPATHID                 /*공정별 라우팅 정의 ID*/
+            , PROCESSPATHSTACK              /*라우팅 Stack값*/
+            , USERSEQUENCE                  /*ProcessPath 상의 사용자 순서*/
+            , WORKCOUNT                     /*작업차수*/
+            , RESOURCEID                    /*자원ID*/
+            , RESULTTYPE                    /*실적구분*/
+            , ISPRINTLOTCARD                /*Lot카드 출력여부*/
+            , WEEK                          /*주차*/
+            , ISREWORK                      /*Rework 여부*/
+            , REWORKTYPE                    /*Rework 유형*/
+            , REWORKREASONCODE              /*재작업사유*/
+            , REWORKCOUNT                   /*Rework 횟수*/
+            , RECEIVETIME                   /*인수시간*/
+            , RECEIVEUSER                   /*인수자*/
+            , ROOTLOTSTARTDATE              /*ROOT LOT의 투입일자*/
+            , WORKSTARTTIME                 /*작업시작시간*/
+            , WORKSTARTUSER                 /*작업시작자*/
+            , WORKENDTIME                   /*작업완료시간*/
+            , WORKENDUSER                   /*작업완료자*/
+            , SENDTIME                      /*인계시간*/
+            , SENDUSER                      /*인계자*/
+            , RECEIVELEADTIME               /*인수 리드타임*/
+            , WORKSTARTLEADTIME             /*작업시작 리드타임*/
+            , WORKENDLEADTIME               /*작업완료 리드타임*/
+            , SENDLEADTIME                  /*인계 리드타임*/
+            , DEFECTQTY                     /*불량수량*/
+            , PSEUDODEFECTQTY               /*가성불량*/
+            , ROOTLOTINPUTPCSQTY            /*ROOT LOT 투입 PCS수량*/
+            , ROOTLOTINPUTARRAYQTY          /*ROOT LOT 투입 ARRAY 수량*/
+            , ROOTLOTINPUTPANELQTY          /*ROOT LOT 투입 PANEL 수량*/
+            , RECEIVEPCSQTY                 /*인수PCS 수량*/
+            , RECEIVEARRAYQTY               /*인수ARRAY 수량*/
+            , RECEIVEPANELQTY               /*인수PANEL 수량*/
+            , WORKSTARTPCSQTY               /*작업시작PCS수량*/
+            , WORKSTARTARRAYQTY             /*작업시작ARRAY수량*/
+            , WORKSTARTPANELQTY             /*작업시작PANEL수량*/
+            , WORKENDPCSQTY                 /*작업완료PCS수량*/
+            , WORKENDARRAYQTY               /*작업완료ARRAY수량*/
+            , WORKENDPANELQTY               /*작업완료PANEL수량*/
+            , SENDPCSQTY                    /*인계PCS수량*/
+            , SENDARRAYQTY                  /*인계ARRAY수량*/
+            , SENDPANELQTY                  /*인계PANEL수량*/
+            , PREVSENDLOTHISTKEY            /*이전공정의 LOT TXN HISTKEY*/
+            , SELFTAKEINSPRESULT            /*입고검사결과*/
+            , SELFSHIPINSPRESULT            /*자주검사결과*/
+            , MEASUREINSPRESULT             /*계측검사결과*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , NEXT_AREAID                   /*to 작업장*/
+            , NEXT_RESOURCEID               /*to 자원ID*/
+            , NEXT_PROCESSPATHSTACK         /*to 라우팅 Stack값*/
+            , NEXT_PROCESSSEGMENTID         /*to 공정별 라우팅 정의 ID*/            
+        )VALUES(
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{LOTID}                        /*LOT ID*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PROCESSSEGMENTVERSION}        /*공정 Version*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{FACTORYID}                    /*Factory ID*/
+            , #{AREAID}                       /*작업장 ID*/
+            , #{PRODUCTIONORDERID}            /*PO ID*/
+            , #{LINENO}                       /*Line No*/
+            , #{PRODUCTDEFID}                 /*제품 정의 ID*/
+            , #{PRODUCTDEFVERSION}            /*제품 정의 Version*/
+            , #{PROCESSDEFID}                 /*라우팅 ID*/
+            , #{PROCESSDEFVERSION}            /*라우팅 Version*/
+            , #{PROCESSPATHID}                /*공정별 라우팅 정의 ID*/
+            , #{PROCESSPATHSTACK}             /*라우팅 Stack값*/
+            , #{USERSEQUENCE}                 /*ProcessPath 상의 사용자 순서*/
+            , #{WORKCOUNT}                    /*작업차수*/
+            , #{RESOURCEID}                   /*자원ID*/
+            , #{RESULTTYPE}                   /*실적구분*/
+            , #{ISPRINTLOTCARD}               /*Lot카드 출력여부*/
+            , #{WEEK}                         /*주차*/
+            , #{ISREWORK}                     /*Rework 여부*/
+            , #{REWORKTYPE}                   /*Rework 유형*/
+            , #{REWORKREASONCODE}             /*재작업사유*/
+            , #{REWORKCOUNT}                  /*Rework 횟수*/
+            , #{RECEIVETIME}                  /*인수시간*/
+            , #{RECEIVEUSER}                  /*인수자*/
+            , #{ROOTLOTSTARTDATE}             /*ROOT LOT의 투입일자*/
+            , #{WORKSTARTTIME}                /*작업시작시간*/
+            , #{WORKSTARTUSER}                /*작업시작자*/
+            , #{WORKENDTIME}                  /*작업완료시간*/
+            , #{WORKENDUSER}                  /*작업완료자*/
+            , #{SENDTIME}                     /*인계시간*/
+            , #{SENDUSER}                     /*인계자*/
+            , #{RECEIVELEADTIME}              /*인수 리드타임*/
+            , #{WORKSTARTLEADTIME}            /*작업시작 리드타임*/
+            , #{WORKENDLEADTIME}              /*작업완료 리드타임*/
+            , #{SENDLEADTIME}                 /*인계 리드타임*/
+            , #{DEFECTQTY}                    /*불량수량*/
+            , #{PSEUDODEFECTQTY}              /*가성불량*/
+            , #{ROOTLOTINPUTPCSQTY}           /*ROOT LOT 투입 PCS수량*/
+            , #{ROOTLOTINPUTARRAYQTY}         /*ROOT LOT 투입 ARRAY 수량*/
+            , #{ROOTLOTINPUTPANELQTY}         /*ROOT LOT 투입 PANEL 수량*/
+            , #{RECEIVEPCSQTY}                /*인수PCS 수량*/
+            , #{RECEIVEARRAYQTY}              /*인수ARRAY 수량*/
+            , #{RECEIVEPANELQTY}              /*인수PANEL 수량*/
+            , #{WORKSTARTPCSQTY}              /*작업시작PCS수량*/
+            , #{WORKSTARTARRAYQTY}            /*작업시작ARRAY수량*/
+            , #{WORKSTARTPANELQTY}            /*작업시작PANEL수량*/
+            , #{WORKENDPCSQTY}                /*작업완료PCS수량*/
+            , #{WORKENDARRAYQTY}              /*작업완료ARRAY수량*/
+            , #{WORKENDPANELQTY}              /*작업완료PANEL수량*/
+            , #{SENDPCSQTY}                   /*인계PCS수량*/
+            , #{SENDARRAYQTY}                 /*인계ARRAY수량*/
+            , #{SENDPANELQTY}                 /*인계PANEL수량*/
+            , #{PREVSENDLOTHISTKEY}           /*이전공정의 LOT TXN HISTKEY*/
+            , #{SELFTAKEINSPRESULT}           /*입고검사결과*/
+            , #{SELFSHIPINSPRESULT}           /*자주검사결과*/
+            , #{MEASUREINSPRESULT}            /*계측검사결과*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/
+            , #{NEXT_AREAID}                  /*to 작업장*/
+            , #{NEXT_RESOURCEID}              /*to 자원ID*/
+            , #{NEXT_PROCESSPATHSTACK}        /*to 라우팅 Stack값*/
+            , #{NEXT_PROCESSSEGMENTID}        /*to 공정별 라우팅 정의 ID*/            
+        )
+    </insert>
+
+    <!--
+         desc : Lot 법인간 물류 이동 등록
+         call : saveLotPlantTransit
+    -->
+    <insert id="insertMtmLotPlantTransitDefectCancel" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.insertMtmLotPlantTransitDefectCancel */
+        INSERT INTO MTM_LOTPLANTTRANSIT
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , LOTID                         /*LOT ID*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , PRODUCTIONORDERID             /*신규 PO ID*/
+            , LINENO                        /*신규 Line No*/
+            , PREVPLANTID                   /*이전 Site ID*/
+            , FACTORYID                     /*Factory ID*/
+            , AREAID                        /*작업장 ID*/
+            , PREVAREAID                    /*이전 작업장 ID*/
+            , PROCESSDEFID                  /*라우팅 ID*/
+            , PROCESSDEFVERSION             /*라우팅 Version*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PREVPROCESSSEGMENTID          /*이전 공정 ID*/
+            , WORKCOUNT                     /*작업차수*/
+            , SENDUSER                      /*인계자*/
+            , SENDDATE                      /*인계일자*/
+            , RECEIVEUSER                   /*인수자*/
+            , RECEIVEDATE                   /*인수일자*/
+            , TRANSITSTATUS                 /*물류 상태*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , TXNGROUPHISTKEY               /*TXN GroupHistKey*/
+            , TXNUSER                       /*TXN 사용자*/
+            , TXNTIME                       /*TXN 시간*/
+            , TXNREASONCODECLASS            /*TXN 사유코드 그룹*/
+            , TXNREASONCODE                 /*TXN 사유코드*/
+            , TXNCOMMENT                    /*TXN 코멘트*/
+        )VALUES(
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{LOTID}                        /*LOT ID*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{PRODUCTIONORDERID}            /*신규 PO ID*/
+            , #{LINENO}                       /*신규 Line No*/
+            , #{PREVPLANTID}                  /*이전 Site ID*/
+            , #{FACTORYID}                    /*Factory ID*/
+            , #{AREAID}                       /*작업장 ID*/
+            , #{PREVAREAID}                   /*이전 작업장 ID*/
+            , #{PROCESSDEFID}                 /*라우팅 ID*/
+            , #{PROCESSDEFVERSION}            /*라우팅 Version*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PREVPROCESSSEGMENTID}         /*이전 공정 ID*/
+            , #{WORKCOUNT}                    /*작업차수*/
+            , #{SENDUSER}                     /*인계자*/
+            , #{SENDDATE}                     /*인계일자*/
+            , #{RECEIVEUSER}                  /*인수자*/
+            , #{RECEIVEDATE}                  /*인수일자*/
+            , #{TRANSITSTATUS}                /*물류 상태*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{TXNGROUPHISTKEY}              /*TXN GroupHistKey*/
+            , #{CREATOR}                      /*TXN 사용자*/
+            , SYSDATE                         /*TXN 시간*/
+            , #{TXNREASONCODECLASS}           /*TXN 사유코드 그룹*/
+            , #{TXNREASONCODE}                /*TXN 사유코드*/
+            , #{TXNCOMMENT}                   /*TXN 코멘트*/
+        )
+    </insert>
+
+    <!--
+         desc : PCM_LOTPLAN에 Skip한 라우팅 상세 정의 삽입
+         call : insertCancelSkipRoutingData
+    -->
+    <insert id="insertPcmLotPlanCancelSkipRoutingDefectCancel" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.insertPcmLotPlanCancelSkipRoutingDefectCancel */
+        INSERT INTO PCM_LOTPLAN
+        (     LOTID                         /*LOT ID*/
+            , PRODUCTDEFID                  /*제품 정의 ID*/
+            , PRODUCTDEFVERSION             /*제품 정의 Version*/
+            , PROCESSDEFID                  /*라우팅 ID*/
+            , PROCESSDEFVERSION             /*라우팅 Version*/
+            , PROCESSPATHID                 /*공정별 라우팅 정의 ID*/
+            , USERSEQUENCE                  /*ProcessPath 상의 사용자 순서*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PROCESSSEGMENTVERSION         /*공정 Version*/
+            , PLANACTIONTYPE                /*Plan Action 유형*/
+            , ITERATEFLAG                   /*순환여부*/
+            , ACTIONTXNID                   /*Action TXN ID*/
+            , ACTIONTXNUSER                 /*Action TXN 사용자*/
+            , ACTIONTXNREASONCODECLASS      /*Action TXN 사유코드 그룹 ID*/
+            , ACTIONTXNREASONCODE           /*Action TXN 사유코드*/
+            , ACTIONTXNCOMMENT              /*Action TXN 코멘트*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+        )VALUES(
+              #{LOTID}                        /*LOT ID*/
+            , #{PRODUCTDEFID}                 /*제품 정의 ID*/
+            , #{PRODUCTDEFVERSION}            /*제품 정의 Version*/
+            , #{PROCESSDEFID}                 /*라우팅 ID*/
+            , #{PROCESSDEFVERSION}            /*라우팅 Version*/
+            , #{PROCESSPATHID}                /*공정별 라우팅 정의 ID*/
+            , #{USERSEQUENCE}                 /*ProcessPath 상의 사용자 순서*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PROCESSSEGMENTVERSION}        /*공정 Version*/
+            , #{PLANACTIONTYPE}               /*Plan Action 유형*/
+            , #{ITERATEFLAG}                  /*순환여부*/
+            , #{ACTIONTXNID}                  /*Action TXN ID*/
+            , #{ACTIONTXNUSER}                /*Action TXN 사용자*/
+            , #{ACTIONTXNREASONCODECLASS}     /*Action TXN 사유코드 그룹 ID*/
+            , #{ACTIONTXNREASONCODE}          /*Action TXN 사유코드*/
+            , #{ACTIONTXNCOMMENT}             /*Action TXN 코멘트*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+        )
+    </insert>
+
+
+    <!--
+         desc : 불량취소 테이블(Lot별)에 취소정보 삽입
+         call : insertCancelData
+    -->
+    <insert id="insertQamQcLotDefectCancelDefectCancel" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.insertQamQcLotDefectCancelDefectCancel */
+        INSERT INTO QAM_QCLOTDEFECTCANCEL
+        (     LOTID                         /*LOTID*/
+            , TXNHISTKEY                    /*TXNHISTKEY*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , CANCELREASONCODE              /*취소사유코드*/
+            , CANCELROUTINGTYPE             /*취소라우팅구분*/
+            , PROCESSDEFID                  /*라우팅 ID*/
+            , PROCESSDEFVERSION             /*라우팅 Version*/
+            , PROCESSPATHID                 /*공정별 라우팅 정의 ID*/
+            , USERSEQUENCE                  /*ProcessPath 상의 사용자 순서*/
+            , PRODUCTDEFID                  /*제품 정의 ID*/
+            , PRODUCTDEFVERSION             /*제품 정의 Version*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PROCESSSEGMENTVERSION         /*공정 Version*/
+            , AREAID                        /*작업장 ID*/
+            , REPAIRLOTNO                   /*RepairLotNo*/
+            , STATUS                        /*상태*/
+            , CANCELTIME                    /*취소일시*/
+            , CANCELUSER                    /*취소등록자*/
+            , RESOURCEID                    /*자원 ID*/
+            , RETURNRESOURCEID              /*Return  자원 ID*/
+            , RETURNAREAID                  /*Return 작업장 ID*/
+            , RETURNPROCESSPATHID           /*Return 공정별 라우팅 정의 ID*/
+            , RETURNUSERSEQUENCE            /*Return ProcessPath 상의 사용자 순서*/
+            , RETURNPROCESSSEGMENTID        /*Return 공정 ID*/
+            , RETURNPROCESSSEGMENTVERSION   /*Return 공정 Version*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+        )VALUES(
+              #{LOTID}                        /*LOTID*/
+            , #{TXNHISTKEY}                   /*TXNHISTKEY*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{CANCELREASONCODE}             /*취소사유코드*/
+            , #{CANCELROUTINGTYPE}            /*취소라우팅구분*/
+            , #{PROCESSDEFID}                 /*라우팅 ID*/
+            , #{PROCESSDEFVERSION}            /*라우팅 Version*/
+            , #{PROCESSPATHID}                /*공정별 라우팅 정의 ID*/
+            , #{USERSEQUENCE}                 /*ProcessPath 상의 사용자 순서*/
+            , #{PRODUCTDEFID}                 /*제품 정의 ID*/
+            , #{PRODUCTDEFVERSION}            /*제품 정의 Version*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PROCESSSEGMENTVERSION}        /*공정 Version*/
+            , #{AREAID}                       /*작업장 ID*/
+            , #{REPAIRLOTNO}                  /*RepairLotNo*/
+            , #{STATUS}                       /*상태*/
+            , #{CANCELTIME}                   /*취소일시*/
+            , #{CANCELUSER}                   /*취소등록자*/
+            , #{RESOURCEID}                   /*자원 ID*/
+            , #{RETURNRESOURCEID}             /*Return  자원 ID*/
+            , #{RETURNAREAID}                 /*Return 작업장 ID*/
+            , #{RETURNPROCESSPATHID}          /*Return 공정별 라우팅 정의 ID*/
+            , #{RETURNUSERSEQUENCE}           /*Return ProcessPath 상의 사용자 순서*/
+            , #{RETURNPROCESSSEGMENTID}       /*Return 공정 ID*/
+            , #{RETURNPROCESSSEGMENTVERSION}  /*Return 공정 Version*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+        )
+    </insert>
+
+    <!--
+         desc : 불량취소 테이블(불량별)에 취소한 불량정보 삽입
+         call : insertCancelDefectData
+    -->
+    <insert id="insertQamQcLotDefectCancelDefectDefectCancel" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.insertQamQcLotDefectCancelDefectDefectCancel */
+        INSERT INTO QAM_QCLOTDEFECTCANCELDEFECT
+        (     LOTID                         /*LOTID*/
+            , TXNHISTKEY                    /*TXNHISTKEY*/
+            , DEFECTCODE                    /*불량 코드*/
+            , DEFECTTXNHISTKEY              /*불량TXNHISTKEY*/
+            , REQUESTNO                     /*요청번호*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , PCSQTY                        /*PCS수량*/
+            , PANELQTY                      /*PNL수량*/
+            , UOMDEFID                      /*UOM 정의 ID*/
+            , STATUS                        /*처리상태*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+        )VALUES(
+              #{LOTID}                        /*LOTID*/
+            , #{TXNHISTKEY}                   /*TXNHISTKEY*/
+            , #{DEFECTCODE}                   /*불량 코드*/
+            , #{DEFECTTXNHISTKEY}             /*불량TXNHISTKEY*/
+            , #{REQUESTNO}                    /*요청번호*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{PCSQTY}                       /*PCS수량*/
+            , #{PANELQTY}                     /*PNL수량*/
+            , #{UOMDEFID}                     /*UOM 정의 ID*/
+            , #{STATUS}                       /*처리상태*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/            
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+        )
+    </insert>
+
+    
+    <!--
+         desc : 불량취소 재작업 라우팅 테이블에 재작업 라우팅 삽입
+         call : insertCancelCustomRoutingData
+    -->
+    <insert id="insertQamQcLotDefectCancelReworkDefectCancle" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.insertQamQcLotDefectCancelReworkDefectCancle */
+        INSERT INTO QAM_QCLOTDEFECTCANCELREWORK
+        (     LOTID                         /*LOTID*/
+            , REQUESTNO                     /*요청번호*/
+            , TXNHISTKEY                    /*TXNHISTKEY*/
+            , SEQUENCE                      /*순번*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , CANCELCODE                    /*취소사유코드-취소구분*/
+            , PROCESSDEFID                  /*라우팅 ID*/
+            , PROCESSDEFVERSION             /*라우팅 Version*/
+            , PROCESSPATHID                 /*공정별 라우팅 정의 ID*/
+            , USERSEQUENCE                  /*ProcessPath 상의 사용자 순서*/
+            , ISSKIP                        /*SKIP여부*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PROCESSSEGMENTVERSION         /*공정 Version*/
+            , RETURNPROCESSPATHID           /*취소 공정별 라우팅 정의 ID*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+        )VALUES(
+              #{LOTID}                        /*LOTID*/
+            , #{REQUESTNO}                    /*요청번호*/
+            , #{TXNHISTKEY}                   /*TXNHISTKEY*/
+            , #{SEQUENCE}                     /*순번*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{CANCELCODE}                   /*취소사유코드-취소구분*/
+            , #{PROCESSDEFID}                 /*라우팅 ID*/
+            , #{PROCESSDEFVERSION}            /*라우팅 Version*/
+            , #{PROCESSPATHID}                /*공정별 라우팅 정의 ID*/
+            , #{USERSEQUENCE}                 /*ProcessPath 상의 사용자 순서*/
+            , #{ISSKIP}                       /*SKIP여부*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PROCESSSEGMENTVERSION}        /*공정 Version*/
+            , #{RETURNPROCESSPATHID}          /*취소 공정별 라우팅 정의 ID*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/      
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+        )
+    </insert>
+
+
+    <!--
+         desc : 불량품 폐기취소 LOT 작업이력 저장
+         call : insertPcmLothistoryDefectCancel
+    -->
+    <insert id="insertPcmLothistoryDefectCancel" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.insertPcmLothistoryDefectCancel */
+        INSERT INTO PCM_LOTHISTORY
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , LOTID                         /*LOT ID*/
+            , PRODUCTIONORDERID             /*Production Order ID*/
+            , LINENO                        /*Line NO*/
+            , LOTGROUPID                    /*LOT Group ID*/
+            , LOTNAME                       /*LOT 명*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , ORIGINALPLANTID               /*LOT이 생성된 공장 ID*/
+            , PREVPLANTID                   /*이전 공장 ID*/
+            , PLANTID                       /*Site ID*/
+            , PREVFACTORYID                 /*이전 Factory ID*/
+            , FACTORYID                     /*Factory ID*/
+            , PREVAREAID                    /*이전 작업장 ID*/
+            , AREAID                        /*작업장 ID*/
+            , PREVEQUIPMENTID               /*이전 설비 ID*/
+            , EQUIPMENTID                   /*설비 ID*/
+            , LOCATIONID                    /*위치 ID*/
+            , RECIPEDEFID                   /*레시피 정의 ID*/
+            , RECIPEDEFVERSION              /*레시피 정의 Version*/
+            , PREVPRODUCTDEFID              /*이전 제품 정의 ID*/
+            , PREVPRODUCTDEFVERSION         /*이전 제품 정의 Version*/
+            , PRODUCTDEFID                  /*제품 정의 ID*/
+            , PRODUCTDEFVERSION             /*제품 정의 Version*/
+            , PREVPROCESSDEFID              /*이전 라우팅 ID*/
+            , PREVPROCESSDEFVERSION         /*이전 라우팅 Version*/
+            , PROCESSDEFID                  /*라우팅 ID*/
+            , PROCESSDEFVERSION             /*라우팅 Version*/
+            , PROCESSPATHSTACK              /*라우팅 Stack값*/
+            , PREVUSERSEQUENCE              /*이전 사용자 정의 순서*/
+            , USERSEQUENCE                  /*사용자 정의 순서*/
+            , PREVPROCESSSEGMENTID          /*이전 공정 ID*/
+            , PREVPROCESSSEGMENTVERSION     /*이전 공정 Version*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PROCESSSEGMENTVERSION         /*공정 Version*/
+            , RAWMATERIALID                 /*원자재 LOT ID*/
+            , ROOTLOTID                     /*처음 생성된 LOT ID*/
+            , PARENTLOTID                   /*부모 LOT ID*/
+            , CHILDLOTID                    /*자 LOT ID*/
+            , CARRIERID                     /*Carrier ID*/
+            , PREVLOTTYPE                   /*이전 LOT 타입*/
+            , LOTTYPE                       /*LOT 타입*/
+            , LOTCREATEDTYPE                /*LOT생성유형*/
+            , LOTINPUTTYPE                  /*투입구분*/
+            , ISREPRESENTROLLLOT            /*대표Roll Lot여부*/
+            , HASSUBLOT                     /*SubLot의 관리 여부*/
+            , PRIORITY                      /*우선순위*/
+            , DUEDATE                       /*마감 기한*/
+            , EXPECTEDCOMPLETEDATE          /*예상생산완료일*/
+            , ROOTLOTSTARTDATE              /*ROOT LOT의 투입일자*/
+            , LOTSTARTDATE                  /*LOT의 투입일자*/
+            , WEEK                          /*주차*/
+            , TRACKINUSER                   /*TrackIn 작업자*/
+            , TRACKINTIME                   /*TrackIn 시간*/
+            , TRACKOUTUSER                  /*TrackOut 작업자*/
+            , TRACKOUTTIME                  /*TrackOut 시간*/
+            , PREVLOTSTATE                  /*이전 LOT 상태*/
+            , LOTSTATE                      /*LOT 상태*/
+            , PREVPROCESSSTATE              /*이전 LOT 공정진행 상태*/
+            , PROCESSSTATE                  /*LOT의 공정진행 상태*/
+            , ISHOLD                        /*Hold 여부*/
+            , ISREWORK                      /*Rework 여부*/
+            , ISLOCKING                     /*LOCKING여부*/
+            , REWORKTYPE                    /*Rework 유형*/
+            , REWORKREASONCODE              /*재작업사유*/
+            , ISPRINTLOTCARD                /*Lot카드 출력여부*/
+            , ISPRINTRCLOTCARD              /*RC Lot카드 출력여부*/
+            , LAYER                         /*Layer*/
+            , CREATEDQTY                    /*처음 LOT 생성 수량*/
+            , LOTSTDPANELQTY                /*Lot 기준 투입 Panel 수량*/
+            , UNIT                          /*단위*/
+            , DEFECTUNIT                    /*불량단위*/
+            , PREVQTY                       /*이전 수량*/
+            , QTY                           /*현재 수량*/
+            , PREVDEFECTQTY                 /*이전 불량 수량*/
+            , DEFECTQTY                     /*불량수량*/
+            , PREVPSEUDODEFECTQTY           /*이전 가성불량수량*/
+            , PSEUDODEFECTQTY               /*가성불량수량*/
+            , PREVPCSQTY                    /*이전 PCS 수량*/
+            , PCSQTY                        /*PCS 수량*/
+            , PREVARRAYQTY                  /*이전 ARRAY 수량*/
+            , ARRAYQTY                      /*ARRAY 수량*/
+            , PREVPANELQTY                  /*이전 PANEL 수량*/
+            , PANELQTY                      /*PANEL 수량*/
+            , PANELPERQTY                   /*PANEL당 수량*/
+            , REWORKCOUNT                   /*Rework 횟수*/
+            , TOTALREWORKCOUNT              /*전체 Rework 횟수*/
+            , PUREORDER                     /*순수주*/
+            , PUREINPUT                     /*순투입*/
+            , SUBPROCESSDEFID               /*Rework/Alter의 프로세스 정의 ID*/
+            , SUBPROCESSDEFVERSION          /*Rework/Alter의 프로세스 정의 Version*/
+            , RECEIVEUSER                   /*인수 작업자*/
+            , RECEIVETIME                   /*인수 시간*/
+            , STARTEDUSER                   /*공정 투입자*/
+            , STARTEDDATE                   /*공정 투입시간*/
+            , SENDUSER                      /*인계 작업자*/
+            , SENDTIME                      /*인계 시간*/
+            , HANDLETYPE                    /*핸들유형(UI,PDA,Equipment)*/
+            , ISCANCEL                      /*이력 취소 여부*/
+            , CANCELHISTKEY                 /*이력 취소 HISTKEY*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , TXNGROUPHISTKEY               /*TXN GroupHistKey*/
+            , TXNID                         /*TXN ID*/
+            , TXNUSER                       /*TXN 사용자*/
+            , TXNTIME                       /*TXN 시간*/
+            , TXNREASONCODECLASS            /*TXN 사유코드 그룹*/
+            , TXNREASONCODE                 /*TXN 사유코드*/
+            , TXNCOMMENT                    /*TXN 코멘트*/
+            , ISDEFECTED                    /*불량처리여부*/
+            , WORKCOUNT                     /*작업차수*/
+            , RESOURCEID                    /*자원ID*/
+            , MKLOTID                       /*마킹LOT ID*/
+            , PNLROOTLOTID                  /*PNL ROOT LOTID(ROLL CUT공정에서 생성한 PANEL LOTID)*/
+            , PNLCREATEDQTY                 /*PANEL 생성 수량(ROLL CUT공정에서 생성한 수량)*/
+            , INPUTCONFIRMDATE              /*투입확인시간*/
+            , INPUTCONFIRMUSER              /*투입확인작업자*/
+            , ISFINALINSPECTPROGESS         /*최종검사진행여부*/
+            , LOTINPUTQTY                   /*LOT 투입수량*/
+            , ISFIRSTCREATELOT              /*최초 생성 LOT 여부*/
+            , ISOEM                         /*OEM여부*/
+            , ISSHRINKTEST                  /*수축율 검사 대상 여부(Y=검사대상)*/
+        )VALUES(
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{LOTID}                        /*LOT ID*/
+            , #{PRODUCTIONORDERID}            /*Production Order ID*/
+            , #{LINENO}                       /*Line NO*/
+            , #{LOTGROUPID}                   /*LOT Group ID*/
+            , #{LOTNAME}                      /*LOT 명*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{ORIGINALPLANTID}              /*LOT이 생성된 공장 ID*/
+            , #{PREVPLANTID}                  /*이전 공장 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{PREVFACTORYID}                /*이전 Factory ID*/
+            , #{FACTORYID}                    /*Factory ID*/
+            , #{PREVAREAID}                   /*이전 작업장 ID*/
+            , #{AREAID}                       /*작업장 ID*/
+            , #{PREVEQUIPMENTID}              /*이전 설비 ID*/
+            , #{EQUIPMENTID}                  /*설비 ID*/
+            , #{LOCATIONID}                   /*위치 ID*/
+            , #{RECIPEDEFID}                  /*레시피 정의 ID*/
+            , #{RECIPEDEFVERSION}             /*레시피 정의 Version*/
+            , #{PREVPRODUCTDEFID}             /*이전 제품 정의 ID*/
+            , #{PREVPRODUCTDEFVERSION}        /*이전 제품 정의 Version*/
+            , #{PRODUCTDEFID}                 /*제품 정의 ID*/
+            , #{PRODUCTDEFVERSION}            /*제품 정의 Version*/
+            , #{PREVPROCESSDEFID}             /*이전 라우팅 ID*/
+            , #{PREVPROCESSDEFVERSION}        /*이전 라우팅 Version*/
+            , #{PROCESSDEFID}                 /*라우팅 ID*/
+            , #{PROCESSDEFVERSION}            /*라우팅 Version*/
+            , #{PROCESSPATHSTACK}             /*라우팅 Stack값*/
+            , #{PREVUSERSEQUENCE}             /*이전 사용자 정의 순서*/
+            , #{USERSEQUENCE}                 /*사용자 정의 순서*/
+            , #{PREVPROCESSSEGMENTID}         /*이전 공정 ID*/
+            , #{PREVPROCESSSEGMENTVERSION}    /*이전 공정 Version*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PROCESSSEGMENTVERSION}        /*공정 Version*/
+            , #{RAWMATERIALID}                /*원자재 LOT ID*/
+            , #{ROOTLOTID}                    /*처음 생성된 LOT ID*/
+            , #{PARENTLOTID}                  /*부모 LOT ID*/
+            , #{CHILDLOTID}                   /*자 LOT ID*/
+            , #{CARRIERID}                    /*Carrier ID*/
+            , #{PREVLOTTYPE}                  /*이전 LOT 타입*/
+            , #{LOTTYPE}                      /*LOT 타입*/
+            , #{LOTCREATEDTYPE}               /*LOT생성유형*/
+            , #{LOTINPUTTYPE}                 /*투입구분*/
+            , #{ISREPRESENTROLLLOT}           /*대표Roll Lot여부*/
+            , #{HASSUBLOT}                    /*SubLot의 관리 여부*/
+            , #{PRIORITY}                     /*우선순위*/
+            , #{DUEDATE}                      /*마감 기한*/
+            , #{EXPECTEDCOMPLETEDATE}         /*예상생산완료일*/
+            , #{ROOTLOTSTARTDATE}             /*ROOT LOT의 투입일자*/
+            , #{LOTSTARTDATE}                 /*LOT의 투입일자*/
+            , #{WEEK}                         /*주차*/
+            , #{TRACKINUSER}                  /*TrackIn 작업자*/
+            , #{TRACKINTIME}                  /*TrackIn 시간*/
+            , #{TRACKOUTUSER}                 /*TrackOut 작업자*/
+            , #{TRACKOUTTIME}                 /*TrackOut 시간*/
+            , #{PREVLOTSTATE}                 /*이전 LOT 상태*/
+            , #{LOTSTATE}                     /*LOT 상태*/
+            , #{PREVPROCESSSTATE}             /*이전 LOT 공정진행 상태*/
+            , #{PROCESSSTATE}                 /*LOT의 공정진행 상태*/
+            , #{ISHOLD}                       /*Hold 여부*/
+            , #{ISREWORK}                     /*Rework 여부*/
+            , #{ISLOCKING}                    /*LOCKING여부*/
+            , #{REWORKTYPE}                   /*Rework 유형*/
+            , #{REWORKREASONCODE}             /*재작업사유*/
+            , #{ISPRINTLOTCARD}               /*Lot카드 출력여부*/
+            , #{ISPRINTRCLOTCARD}             /*RC Lot카드 출력여부*/
+            , #{LAYER}                        /*Layer*/
+            , #{CREATEDQTY}                   /*처음 LOT 생성 수량*/
+            , #{LOTSTDPANELQTY}               /*Lot 기준 투입 Panel 수량*/
+            , #{UNIT}                         /*단위*/
+            , #{DEFECTUNIT}                   /*불량단위*/
+            , #{PREVQTY}                      /*이전 수량*/
+            , #{QTY}                          /*현재 수량*/
+            , #{PREVDEFECTQTY}                /*이전 불량 수량*/
+            , #{DEFECTQTY}                    /*불량수량*/
+            , #{PREVPSEUDODEFECTQTY}          /*이전 가성불량수량*/
+            , #{PSEUDODEFECTQTY}              /*가성불량수량*/
+            , #{PREVPCSQTY}                   /*이전 PCS 수량*/
+            , #{PCSQTY}                       /*PCS 수량*/
+            , #{PREVARRAYQTY}                 /*이전 ARRAY 수량*/
+            , #{ARRAYQTY}                     /*ARRAY 수량*/
+            , #{PREVPANELQTY}                 /*이전 PANEL 수량*/
+            , #{PANELQTY}                     /*PANEL 수량*/
+            , #{PANELPERQTY}                  /*PANEL당 수량*/
+            , #{REWORKCOUNT}                  /*Rework 횟수*/
+            , #{TOTALREWORKCOUNT}             /*전체 Rework 횟수*/
+            , #{PUREORDER}                    /*순수주*/
+            , #{PUREINPUT}                    /*순투입*/
+            , #{SUBPROCESSDEFID}              /*Rework/Alter의 프로세스 정의 ID*/
+            , #{SUBPROCESSDEFVERSION}         /*Rework/Alter의 프로세스 정의 Version*/
+            , #{RECEIVEUSER}                  /*인수 작업자*/
+            , #{RECEIVETIME}                  /*인수 시간*/
+            , #{STARTEDUSER}                  /*공정 투입자*/
+            , #{STARTEDDATE}                  /*공정 투입시간*/
+            , #{SENDUSER}                     /*인계 작업자*/
+            , #{SENDTIME}                     /*인계 시간*/
+            , #{HANDLETYPE}                   /*핸들유형(UI,PDA,Equipment)*/
+            , #{ISCANCEL}                     /*이력 취소 여부*/
+            , #{CANCELHISTKEY}                /*이력 취소 HISTKEY*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/
+            , #{TXNGROUPHISTKEY}              /*TXN GroupHistKey*/
+            , #{TXNID}                        /*TXN ID*/
+            , #{TXNUSER}                      /*TXN 사용자*/
+            , SYSDATE                         /*TXN 시간*/
+            , #{TXNREASONCODECLASS}           /*TXN 사유코드 그룹*/
+            , #{TXNREASONCODE}                /*TXN 사유코드*/
+            , #{TXNCOMMENT}                   /*TXN 코멘트*/
+            , #{ISDEFECTED}                   /*불량처리여부*/
+            , #{WORKCOUNT}                    /*작업차수*/
+            , #{RESOURCEID}                   /*자원ID*/
+            , #{MKLOTID}                      /*마킹LOT ID*/
+            , #{PNLROOTLOTID}                 /*PNL ROOT LOTID(ROLL CUT공정에서 생성한 PANEL LOTID)*/
+            , #{PNLCREATEDQTY}                /*PANEL 생성 수량(ROLL CUT공정에서 생성한 수량)*/
+            , #{INPUTCONFIRMDATE}             /*투입확인시간*/
+            , #{INPUTCONFIRMUSER}             /*투입확인작업자*/
+            , #{ISFINALINSPECTPROGESS}        /*최종검사진행여부*/
+            , #{LOTINPUTQTY}                  /*LOT 투입수량*/
+            , #{ISFIRSTCREATELOT}             /*최초 생성 LOT 여부*/
+            , #{ISOEM}                        /*OEM여부*/
+            , #{ISSHRINKTEST}                 /*수축율 검사 대상 여부(Y=검사대상)*/
+        )
+    </insert>
+
+    <!--
+         desc    : 불량취소할 Defect Lot의 갯수 및 ValidState 조정
+         call    : updateDefectLotValidState
+    -->
+    <update id="updatePcmLotDefectValidStateDefectCancle" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updatePcmLotDefectValidStateDefectCancle */
+        UPDATE PCM_LOTDEFECT
+           SET DEFECTQTY                     = #{DEFECTQTY}                  /*불량 수량*/
+             , TXNGROUPHISTKEY               = #{TXNGROUPHISTKEY}            /*TXN GroupHistKey*/
+             , TXNUSER                       = #{MODIFIER}                   /*TXN 사용자*/
+             , TXNTIME                       = SYSDATE                       /*TXN 시간*/
+             , VALIDSTATE                    = NVL(#{VALIDSTATE},VALIDSTATE) /*유효여부*/
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!--
+         desc : 불량코드를 가지고 있는 불량 Lot을 양품상태로 바꿔준다.
+         call : updateNormalLot
+    -->
+    <update id="updatePcmLotNormalLotDefectCancle" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updatePcmLotNormalLotDefectCancle */
+        UPDATE PCM_LOT
+           SET QTY                           = #{QTY}                        /*현재 수량*/
+             , PCSQTY                        = #{PCSQTY}                     /*PCS 수량*/
+             , PANELQTY                      = #{PANELQTY}                   /*PANEL 수량*/
+             , DEFECTQTY                     = #{DEFECTQTY}                  /*불량수량*/
+             , ISLOCKING                     = #{ISLOCKING}                  /*LOCKING여부*/             
+             , LOTSTATE                      = #{LOTSTATE}                   /*LOT 상태*/
+             , PROCESSSTATE                  = #{PROCESSSTATE}               /*LOT의 공정진행 상태*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNGROUPHISTKEY           = #{LASTTXNGROUPHISTKEY}        /*마지막TXN Group Hist Key*/
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!--
+         desc : 불량코드를 가지고 있는 불량 Lot을 불량처리여부를 바꿔준다.
+                기존 updatePcmLotNormalLotDefectCancle에서 같이 수행하였으나 wip splitlot호출시 문제가 되어 분리
+         call :
+    -->
+    <update id="updateDefectLotIsDefected" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updateDefectLotIsDefected */
+        UPDATE PCM_LOT
+           SET ISDEFECTED                    = #{ISDEFECTED}                 /*불량처리여부*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNGROUPHISTKEY           = #{LASTTXNGROUPHISTKEY}        /*마지막TXN Group Hist Key*/
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+    
+    <!--
+         desc : Merge 수량만큼 모Lot에 반영
+         call : updateMergeLot
+    -->
+    <update id="updatePcmLotMergeLotDefectCancle" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updatePcmLotMergeLotDefectCancle */
+        UPDATE PCM_LOT
+           SET QTY                           = #{QTY}                        /*현재 수량*/
+             , PCSQTY                        = #{PCSQTY}                     /*PCS 수량*/
+             , PANELQTY                      = #{PANELQTY}                   /*PANEL 수량*/
+             , DEFECTQTY                     = #{DEFECTQTY}                  /*불량수량*/
+             , ISLOCKING                     = #{ISLOCKING}                  /*LOCKING여부*/
+             , ISDEFECTED                    = #{ISDEFECTED}                 /*불량처리여부*/
+             , LOTSTATE                      = #{LOTSTATE}                   /*LOT 상태*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/             
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!--
+         desc : lot PanelPerQty 반영
+         call : updateLotPanelPerQty
+    -->
+    <update id="updatePcmLotPanelPerQtyDefectCancle" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updatePcmLotPanelPerQtyDefectCancle */
+        UPDATE PCM_LOT
+           SET PANELPERQTY                   = #{PANELPERQTY}                /*PANEL당 수량*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/             
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+    
+    <!--
+         desc : 불량취소시 LOT 정보 수정
+         call : updateReworkState
+    -->
+    <update id="updatePcmLotReworkStateDefectCancle" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updatePcmLotReworkStateDefectCancle */
+        UPDATE PCM_LOT
+           SET ISREWORK                      = #{ISREWORK}                   /*Rework 여부*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNGROUPHISTKEY           = #{LASTTXNGROUPHISTKEY}        /*마지막TXN Group Hist Key*/
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!--
+         desc : 불량취소시 Split Lot의 인수대기 상태에 대한 작업실적 초기화
+         call : updateSplitLotWaitForReceiveWorkResult
+    -->
+    <update id="updatePcmLotWorkResultWaitInitialDefectCancle" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updatePcmLotWorkResultWaitInitialDefectCancle */
+        UPDATE PCM_LOTWORKRESULT
+           SET RECEIVETIME                   = #{RECEIVETIME}                /*인수시간*/
+             , RECEIVEUSER                   = #{RECEIVEUSER}                /*인수자*/
+             , WORKSTARTTIME                 = #{WORKSTARTTIME}              /*작업시작시간*/
+             , WORKSTARTUSER                 = #{WORKSTARTUSER}              /*작업시작자*/
+             , WORKENDTIME                   = #{WORKENDTIME}                /*작업완료시간*/
+             , WORKENDUSER                   = #{WORKENDUSER}                /*작업완료자*/
+             , SENDTIME                      = #{SENDTIME}                   /*인계시간*/
+             , SENDUSER                      = #{SENDUSER}                   /*인계자*/
+             , RECEIVEPCSQTY                 = #{RECEIVEPCSQTY}              /*인수PCS 수량*/
+             , RECEIVEARRAYQTY               = #{RECEIVEARRAYQTY}            /*인수ARRAY 수량*/
+             , RECEIVEPANELQTY               = #{RECEIVEPANELQTY}            /*인수PANEL 수량*/
+             , WORKSTARTPCSQTY               = #{WORKSTARTPCSQTY}            /*작업시작PCS수량*/
+             , WORKSTARTARRAYQTY             = #{WORKSTARTARRAYQTY}          /*작업시작ARRAY수량*/
+             , WORKSTARTPANELQTY             = #{WORKSTARTPANELQTY}          /*작업시작PANEL수량*/
+             , WORKENDPCSQTY                 = #{WORKENDPCSQTY}              /*작업완료PCS수량*/
+             , WORKENDARRAYQTY               = #{WORKENDARRAYQTY}            /*작업완료ARRAY수량*/
+             , WORKENDPANELQTY               = #{WORKENDPANELQTY}            /*작업완료PANEL수량*/
+             , SENDPCSQTY                    = #{SENDPCSQTY}                 /*인계PCS수량*/
+             , SENDARRAYQTY                  = #{SENDARRAYQTY}               /*인계ARRAY수량*/
+             , SENDPANELQTY                  = #{SENDPANELQTY}               /*인계PANEL수량*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!--
+         desc : Split된 Lot의 필요한 데이터 Update
+         call : updateSplitLotInfo
+    -->
+    <update id="updatePcmLotSplitLotDefectCancel" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updatePcmLotSplitLotDefectCancel */
+        UPDATE PCM_LOT
+           SET PCSQTY                        = #{PCSQTY}                     /*PCS 수량*/
+             , PANELQTY                      = #{PANELQTY}                   /*PANEL 수량*/
+             , AREAID                        = #{AREAID}                     /*작업장 ID*/
+             , PARENTLOTID                   = #{PARENTLOTID}                /*부모 LOT ID*/
+             , LOTCREATEDTYPE                = #{LOTCREATEDTYPE}             /*LOT생성유형*/
+             , PROCESSSTATE                  = #{PROCESSSTATE}               /*LOT의 공정진행 상태*/
+             , DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+             , RESOURCEID                    = #{RESOURCEID}                 /*자원ID*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNGROUPHISTKEY           = #{LASTTXNGROUPHISTKEY}        /*마지막TXN Group Hist Key*/
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!--
+         desc : LOT기준으로 라우팅ID, Version, ProcessPathStack 업데이트
+         call : updateSplitLotWorkResultInfo
+    -->
+    <update id="updatePcmLotWorkResultSplitLotDefectCancel" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updatePcmLotWorkResultSplitLotDefectCancel */
+        UPDATE PCM_LOTWORKRESULT
+           SET PROCESSDEFID                  = #{PROCESSDEFID}               /*라우팅 ID*/
+             , PROCESSDEFVERSION             = #{PROCESSDEFVERSION}          /*라우팅 Version*/
+             , PROCESSPATHID                 = #{PROCESSPATHID}              /*공정별 라우팅 정의 ID*/
+             , PROCESSPATHSTACK              = #{PROCESSPATHSTACK}           /*라우팅 Stack값*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!--
+         desc : 양품상태로 바꿔줬던 Lot을 다시 불량 Lot으로 바꿔준다.
+         call : updateDefectLot
+    -->
+    <update id="updatePcmLotDefectLotDefectCancel" parameterType="map">
+        /* smh.qam.dao.QAM01900Dao.updatePcmLotDefectLotDefectCancel */
+        UPDATE PCM_LOT
+           SET QTY                           = #{QTY}                        /*현재 수량*/
+             , PCSQTY                        = #{PCSQTY}                     /*PCS 수량*/
+             , PANELQTY                      = #{PANELQTY}                   /*PANEL 수량*/
+             , DEFECTQTY                     = #{DEFECTQTY}                  /*불량수량*/
+             , ISLOCKING                     = #{ISLOCKING}                  /*LOCKING여부*/
+             , ISDEFECTED                    = #{ISDEFECTED}                 /*불량처리여부*/
+             , LOTSTATE                      = NVL(#{LOTSTATE}, LOTSTATE)    /*LOT 상태*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNGROUPHISTKEY           = #{LASTTXNGROUPHISTKEY}        /*마지막TXN Group Hist Key*/
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!-- Interface
+         desc : 불량폐기 취소 정보가 불량확정에 존재하는지 체크
+     -->
+    <select id="selectInterfaceLotDefectResultChk" parameterType="map" resultType="Integer">
+        /* smh.qam.dao.QAM01900Dao.selectInterfaceLotDefectResultChk */
+        SELECT COUNT(*)
+          FROM QAM_QCLOTDEFECTRESULT B
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+</mapper>

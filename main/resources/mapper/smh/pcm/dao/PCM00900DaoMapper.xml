@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM00900Dao">
+
+
+	<!-- S/O LIST -->
+	<select id="selectWIPListToCancelInput" parameterType="map" resultType="hashmap">
+		    WITH BASE_LOT AS
+		    (
+		            SELECT L.LOTID
+		                 , NVL(DC1.DICTIONARYNAME, L.LOTTYPE)    AS LOTTYPE
+		                 , L.PRODUCTIONORDERID
+		                 , L.LINENO
+		                 , L.PRODUCTDEFID
+		                 , L.PRODUCTDEFVERSION PRODUCTREVISION
+		                 , PD.PRODUCTDEFNAME
+		                 , L.PROCESSSEGMENTID
+		                 , NVL(DS1.DICTIONARYNAME, SG.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+		                 , L.USERSEQUENCE
+		                 , L.PLANTID
+		                 , L.AREAID
+		                 , NVL(ARD.DICTIONARYNAME, AR.AREANAME)   AS AREANAME
+		                 , NVL(PD.RTRSHT, 'SHT')       AS RTRSHT
+		                 , PD.UNIT
+		                 , L.QTY
+		                 , L.PCSQTY
+		                 , L.PANELQTY
+		                 , L.PROCESSSTATE
+		                 , TO_CHAR(L.LOTSTARTDATE,'YYYY-MM-DD HH24:MI:SS') STARTEDDATE
+		              FROM PCM_LOT  L
+		        INNER JOIN BAS_PRODUCTDEFINITION PD ON L.PRODUCTDEFID           = PD.PRODUCTDEFID
+		                                            AND L.PRODUCTDEFVERSION     = PD.PRODUCTDEFVERSION
+		        INNER JOIN BAS_PROCESSSEGMENT SG     ON L.PROCESSSEGMENTID      = SG.PROCESSSEGMENTID
+		                                            AND L.PROCESSSEGMENTVERSION = SG.PROCESSSEGMENTVERSION
+		                                            AND SG.VALIDSTATE           = 'Valid'
+		        INNER JOIN BAS_PROCESSPATH PH        ON  L.PROCESSDEFID         = PH.PROCESSDEFID
+		                                            AND L.PROCESSDEFVERSION     = PH.PROCESSDEFVERSION
+		                                            AND L.PROCESSSEGMENTID      = PH.PROCESSSEGMENTID
+		                                            AND L.PROCESSSEGMENTVERSION = PH.PROCESSSEGMENTVERSION
+		        LEFT JOIN CMD_DICTIONARY DS1         ON SG.PROCESSSEGMENTNAME   = DS1.DICTIONARYID
+		                                            AND DS1.LANGUAGETYPE        = #{LANGUAGETYPE}
+		        INNER JOIN BAS_AREA  AR              ON AR.AREAID               = L.AREAID
+		   LEFT OUTER JOIN CMD_DICTIONARY  ARD       ON ARD.DICTIONARYID        = AR.AREANAME
+		                                            AND ARD.LANGUAGETYPE        = #{LANGUAGETYPE}
+		        INNER JOIN CMD_LOOKUP_VALUES CD1     ON L.LOTTYPE               = CD1.LOOKUP_CODE
+		                                            AND CD1.LOOKUP_TYPE         = 'ProductionType'
+		                                            AND CD1.ENABLED_FLAG          = 'Y'
+		     LEFT OUTER JOIN CMD_DICTIONARY DC1      ON DC1.DICTIONARYID        = CD1.DICTIONARYID
+		                                            AND DC1.LANGUAGETYPE        = #{LANGUAGETYPE}
+		               WHERE L.PLANTID              = #{PLANTID}
+		                 AND NVL(L.ISDEFECTED, 'N') = 'N' 
+		                /* AND L.PROCESSSTATE IN ('WaitForReceive', 'Wait')  첫공정 인수대기만 취소가능함 2021.03.25 */
+		                 AND L.PROCESSSTATE IN ('WaitForReceive')
+		                 AND PH.PATHTYPE  IN  ('Start', 'StartEnd')
+		                 AND L.LOTSTATE             = 'InProduction'
+		                 AND NVL(L.ISHOLD, 'N')     = 'N' 
+		                 AND NVL(L.ISLOCKING, 'N')  = 'N'
+		            /*     AND (   (NVL(PD.RTRSHT, 'SHT') = 'SHT' AND L.PARENTLOTID = L.LOTID AND L.CHILDLOTID IS NULL AND L.LOTSTATE IN ('InProduction', 'InTransit'))
+		                      OR (      NVL(PD.RTRSHT, 'SHT') = 'RTR' AND L.ISREPRESENTROLLLOT = 'Y' AND PD.MATERIALCLASS IN ('FG','SB') AND L.PARENTLOTID = L.LOTID AND L.LOTSTATE IN ('InProduction', 'InTransit', 'Terminated')
+		                            OR (NVL(PD.RTRSHT, 'SHT') = 'RTR' AND L.ISREPRESENTROLLLOT = 'N' AND PD.MATERIALCLASS NOT IN ('FG','SB')) AND L.PARENTLOTID = L.LOTID AND L.LOTSTATE IN ('InProduction', 'InTransit', 'Terminated')     
+		                          )
+		                     )  */
+		                  AND (
+		                        (COALESCE(PD.RTRSHT, 'SHT') = 'SHT' AND L.PARENTLOTID = L.LOTID AND L.CHILDLOTID IS NULL )
+                                 OR (COALESCE(PD.RTRSHT, 'SHT') = 'RTR' and L.ISREPRESENTROLLLOT = 'Y' AND L.PARENTLOTID = L.LOTID ) 
+		                         
+		                      )
+		                
+		     <if test="PRODUCTIONORDERID != null and PRODUCTIONORDERID !='' ">
+		                 AND L.PRODUCTIONORDERID IN (  SELECT REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL) AS PRODUCTDEFID
+                                                         FROM (SELECT   #{PRODUCTIONORDERID} AS ORG_DATA FROM DUAL)
+                                                   CONNECT BY INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+                                               )              
+		     </if> 
+		     <if test="LINENO != null and LINENO !='' ">
+		                AND L.LINENO = #{LINENO} 
+		     </if>  
+		     <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+		                AND L.PRODUCTDEFID IN (   SELECT REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL) AS PRODUCTDEFID
+                                                    FROM (SELECT   #{PRODUCTDEFID} AS ORG_DATA FROM DUAL)
+                                              CONNECT BY  INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+                                               )                            
+		     </if>  
+		     
+		     <if test="PRODUCTDIVISION != null and PRODUCTDIVISION !='' ">
+		                AND PD.PRODUCTCLASSID = #{PRODUCTDIVISION}
+		     </if>                
+		     <if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !='' ">
+		                AND
+		        <foreach collection="PRODUCTDEFNAME" item="PRODUCTDEFNAME"  open="(" close=")" separator="OR">
+		                    PD.PRODUCTDEFNAME like <![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]>
+		                 
+		        </foreach>                 
+		     </if>  
+		     <if test="AREAID != null and AREAID !='' ">
+		                AND L.AREAID = #{AREAID}
+		     </if>
+		     <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' ">
+		                AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+		     </if>
+		      <if test="RODUCTDIVISION != null and RODUCTDIVISION !='' ">
+		                AND PD.PRODUCTDEFTYPE = #{RODUCTDIVISION}
+		     </if>   
+		  )
+		  SELECT '0' AS CHK
+		       , L.*
+		   FROM BASE_LOT L     
+	   ORDER BY L.PRODUCTDEFID, L.PRODUCTREVISION, L.USERSEQUENCE	
+	
+    </select>
+    <insert id="insertlotCancelWorkResult" parameterType="map" >
+		 INSERT INTO PCM_LOTCANCELWORKRESULT(  LOTID
+		                                   , TXNHISTKEY
+		                                   , ENTERPRISEID
+		                                   , PLANTID
+		                                   , FACTORYID
+		                                   , AREAID
+		                                   , PROCESSDEFID
+		                                   , PROCESSDEFVERSION
+		                                   , PREVPROCESSDEFID
+		                                   , PREVPROCESSDEFVERSION
+		                                   , PROCESSSEGMENTID
+		                                   , PREVPROCESSSEGMENTID
+		                                   , LOTSTATE
+		                                   , PREVLOTSTATE
+		                                   , PROCESSSTATE
+		                                   , PREVPROCESSSTATE
+		                                   , UNIT
+		                                   , PCSQTY
+		                                   , PANELQTY
+		                                   , CANCELCOMMENTS
+		                                   , CREATOR
+		                                   , CREATEDTIME
+		                                   , TXNGROUPHISTKEY
+		                                   , TXNUSER
+		                                   , TXNTIME) VALUES(  #{LOTID}
+		                                                      , #{TXNHISTKEY}
+		                                                      , #{ENTERPRISEID}
+		                                                      , #{PLANTID}
+		                                                      , #{FACTORYID}
+		                                                      , #{AREAID}
+		                                                      , #{PROCESSDEFID}
+		                                                      , #{PROCESSDEFVERSION}
+		                                                      , #{PREVPROCESSDEFID}
+		                                                      , #{PREVPROCESSDEFVERSION}
+		                                                      , #{PROCESSSEGMENTID}
+		                                                      , #{PREVPROCESSSEGMENTID}
+		                                                      , #{LOTSTATE}
+		                                                      , #{PREVLOTSTATE}
+		                                                      , #{PROCESSSTATE}
+		                                                      , #{PREVPROCESSSTATE}
+		                                                      , #{UNIT}
+		                                                      , #{PCSQTY}
+		                                                      , #{PANELQTY}
+		                                                      , #{CANCELCOMMENTS}
+		                                                      , #{CREATOR}
+		                                                      , SYSDATE
+		                                                      , #{TXNGROUPHISTKEY}
+		                                                      , #{TXNUSER}
+		                                                      , SYSDATE   
+		                                                    )
+    </insert>
+    <delete id="deleteLotWorkResult"  parameterType="map" >
+    	DELETE FROM PCM_LOTWORKRESULT WHERE LOTID=#{LOTID}
+    </delete>
+    <delete id="deleteLotGeneral"  parameterType="map" >
+    	DELETE FROM PCM_LOTGENEAL WHERE LOTID=#{LOTID}
+    </delete>
+    <update id="updateLot"  parameterType="map" >
+			UPDATE PCM_LOT SET AREAID              = #{AREAID}
+			                 , RESOURCEID          = #{RESOURCEID}
+			                 , LOTSTATE            = #{LOTSTATE}
+			                 , STARTEDDATE         = NULL
+			                 , STARTEDUSER         = NULL
+			                 , LOTSTARTDATE        = NULL
+			                 , ROOTLOTSTARTDATE    = NULL
+			                 , CHILDLOTID          = NULL
+			                 , QTY                 = #{QTY}
+			                 , PANELQTY            = #{PANELQTY}
+			                 , PCSQTY              = #{PCSQTY}
+			                 , ARRAYQTY            = #{ARRAYQTY}
+			                 , MODIFIEDTIME        = SYSDATE
+			                 , MODIFIER            = #{MODIFIER}
+			                 , LASTTXNGROUPHISTKEY = #{LASTTXNGROUPHISTKEY}
+			                 , LASTTXNHISTKEY      = #{LASTTXNHISTKEY}
+			                 , LASTTXNID           = #{LASTTXNID}
+			                 , LASTTXNUSER         = #{MODIFIER}
+			                 , LASTTXNTIME         = SYSDATE 
+			             WHERE LOTID               = #{LOTID}    
+    </update>
+    <update id="updateProductionOrder" parameterType="map" >
+			UPDATE MFM_PRODUCTIONORDER SET STATE            = #{STATE}
+			                            , MODIFIEDTIME      = SYSDATE
+			                            , MODIFIER          = #{MODIFIER}
+			                            , LASTTXNHISTKEY    = #{LASTTXNHISTKEY}
+			                            , LASTTXNID         = #{LASTTXNID}
+			                            , LASTTXNUSER       = #{MODIFIER}
+			                            , LASTTXNTIME       = SYSDATE 
+			                        WHERE PRODUCTIONORDERID = #{PRODUCTIONORDERID}
+			                          AND LINENO            = #{LINENO}    
+    </update>
+    <delete id="deletelotEquipment" parameterType="map" >
+    
+    	DELETE FROM PCM_LOTEQUIPMENT
+    	 WHERE LOTID                 = #{LOTID}
+    	  AND  PROCESSSTATE          = #{PROCESSSTATE}
+    	  AND  PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+    	  AND  WORKCOUNT             = #{WORKCOUNT}
+    </delete>
+    <delete id="deletelotWtime" parameterType="map" >
+    	 DELETE FROM PCM_LOTWTIME
+		  WHERE LOTID                   = #{LOTID}
+		    AND ENTERPRISEID            = #{ENTERPRISEID}
+		    AND PLANTID                 = #{PLANTID}
+		    AND PRODUCTDEFID            = #{PRODUCTDEFID}
+		    AND PRODUCTDEFVERSION       = #{PRODUCTDEFVERSION}
+		    AND PROCESSDEFID            = #{PROCESSDEFID}
+		    AND PROCESSDEFVERSION       = #{PROCESSDEFVERSION}
+		    AND PROCESSPATHID           = #{PROCESSPATHID}
+		    AND PROCESSSEGMENTID        = #{PROCESSSEGMENTID}
+		    AND PROCESSSEGMENTVERSION   = #{PROCESSSEGMENTVERSION}
+		    AND PROCESSSTATE            = #{PROCESSSTATE} 
+     </delete>
+     
+     <insert id="insertLotComment" parameterType="map" >
+		INSERT INTO PCM_LOTCOMMENT (   LOTID
+		                             , TXNHISTKEY
+		                             , ENTERPRISEID
+		                             , PLANTID
+		                             , AREAID
+		                             , PRODUCTDEFID
+		                             , PRODUCTDEFVERSION
+		                             , PROCESSDEFID
+		                             , PROCESSDEFVERSION
+		                             , PROCESSPATHID
+		                             , USERSEQUENCE
+		                             , PROCESSSEGMENTID
+		                             , PROCESSSEGMENTVERSION
+		                             , WORKCOUNT
+		                             , PROCESSSTATE
+		                             , TRANSITIONID
+		                             , COMMENTS
+		                             , TXNGROUPHISTKEY
+		                             , CREATOR
+		                             , CREATEDTIME
+		                           ) VALUES (  #{LOTID}
+		                                     , #{TXNHISTKEY}
+		                                     , #{ENTERPRISEID}
+		                                     , #{PLANTID}
+		                                     , #{AREAID}
+		                                     , #{PRODUCTDEFID}
+		                                     , #{PRODUCTDEFVERSION}
+		                                     , #{PROCESSDEFID}
+		                                     , #{PROCESSDEFVERSION}
+		                                     , #{PROCESSPATHID}
+		                                     , #{USERSEQUENCE}
+		                                     , #{PROCESSSEGMENTID}
+		                                     , #{PROCESSSEGMENTVERSION}
+		                                     , #{WORKCOUNT}
+		                                     , #{PROCESSSTATE}
+		                                     , #{TRANSITIONID}
+		                                     , #{LASTTXNID}
+		                                     , #{TXNGROUPHISTKEY}
+		                                     , #{CREATOR}
+		                                     , SYSDATE
+		                                    )                              
+     </insert>
+    
+</mapper>

@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.ben.dao.BEN60410Dao">
+
+	<select id="adjLifeExpenseList" parameterType="map" resultType="hashmap">
+		 SELECT HAP.HJSBEN_ADVANCE_PAYMENT_SEQ                                                  /* 경조금가불금 승인 관리 PK */ 
+              ,''						AS CHK				 /* 체크값 */   
+	  		  ,HAP.PERSON_ID                                                   AS PERSON_ID    /* PERSON_ID             */
+              ,TO_CHAR(HAP.REQUEST_DATE,'YYYY-MM-DD')                          AS REQUEST_DATE /* 신청일자               */
+              ,HAP.STATUS                                                      AS STATUS       /* 상태                  */
+              ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_APPROVAL_STATUS',HAP.STATUS )  AS STATUS_NAME  /* 상태명                */  
+              ,HAP.COMPANY_FLAG                                                AS COMPANY_FLAG /* 사내외구분             */
+              ,HAP.AMOUNT                                                      AS AMOUNT       /* 신청금액               */
+              ,HAP.OBJECT_NAME                                                 AS OBJECT_NAME  /* 경조대상자             */
+              ,HAP.OBJECT_PERSON_ID                                            AS OBJECT_PERSON_ID /* 대상자 PERSON_ID   */              
+              ,IN_A.ORG_NAME                                                   AS OBJECT_ORG_NAME  /* 경조대상자_부서명    */ 
+              ,(SELECT FLV.MEANING
+                  FROM PER_PEOPLE_EXTRA_INFO PPEI, FND_LOOKUP_VALUES FLV
+                  WHERE PPEI.PERSON_ID = HAP.OBJECT_PERSON_ID
+                   AND FLV.LOOKUP_CODE = PPEI.PEI_INFORMATION11
+                   AND PPEI.INFORMATION_TYPE<![CDATA[(+)]]> = 'HJS_HR_PERSONAL_DATE_INFO'
+                   AND FLV.LOOKUP_TYPE = 'HJS_HR_GRADE_TITLE')                 AS OBJECT_GRADE_NAME  /* 경조대상자_호칭 */              
+              ,TO_CHAR(HAP.PAYMENT_DATE,'YYYY-MM-DD')                          AS PAYMENT_DATE       /* 승인일자       */
+              ,SUBSTR(HAP.PAY_MONTH, 1, 4) || '-' || SUBSTR(HAP.PAY_MONTH, 5, 2)  AS PAY_MONTH       /* 급여공제월     */
+              ,HAP.REMARK                                                         AS REMARK          /* 비고          */
+              ,HAP.REASON_CONTENTS                                                AS REASON_CONTENTS /* 불가사유       */
+        FROM  HJSBEN_ADVANCE_PAYMENT   HAP
+             ,( SELECT   HAP.HJSBEN_ADVANCE_PAYMENT_SEQ  /* HJSBEN_ADVANCE_PAYMENT_SEQ */
+                        ,HAP.OBJECT_NAME                 /* 경조대상자                */
+                        ,HAP.OBJECT_PERSON_ID            /* 경조대상자 PERSON_ID      */
+                        ,HSELV.ORG_NAME                  /* 부서명                    */  
+                        ,HSELV.GRADE_NAME                /* 직급명                    */ 
+                  FROM  HJSBEN_ADVANCE_PAYMENT   HAP
+                       ,HJS_SSHR_EMPLOYEE_LOV_V  HSELV
+                  WHERE 1=1
+                    AND HAP.REQUEST_DATE   BETWEEN  HSELV.EFFECTIVE_START_DATE  AND  HSELV.EFFECTIVE_END_DATE
+                    AND HSELV.PERSON_ID<![CDATA[(+)]]> = HAP.OBJECT_PERSON_ID
+               ) IN_A
+        WHERE 1=1
+          AND HAP.PAY_MONTH                  LIKE  '20' || SUBSTR(#{BASE_YEAR},1,2) || '%'  -- 대상년도
+          AND HAP.PERSON_ID                  = 57268  -- 로그인 PERSON ID
+          AND HAP.HJSBEN_ADVANCE_PAYMENT_SEQ = IN_A.HJSBEN_ADVANCE_PAYMENT_SEQ<![CDATA[(+)]]>     
+         ORDER BY HAP.REQUEST_DATE DESC
+
+
+	</select>
+	
+	
+	<select id="adjLifeExpenseDetail" parameterType="map" resultType="hashmap">
+		         SELECT HAP.HJSBEN_ADVANCE_PAYMENT_SEQ  /* 경조금가불금 승인 관리 PK */ 
+              ,HAP.PERSON_ID                   /* PERSON_ID                 */
+              ,TO_CHAR(HAP.REQUEST_DATE,'YYYY/MM/DD') AS REQUEST_DATE /* 신청일자 */
+              ,HAP.STATUS                      /* 상태                      */
+              ,hjshrf_decode_lookup_fnc('HJS_HR_APPROVAL_STATUS',HAP.STATUS )  AS STATUS_NAME /* 상태명 */  
+              ,HAP.COMPANY_FLAG                /* 사내외구분                */
+              ,HAP.AMOUNT                      /* 신청금액                  */
+              ,HAP.OBJECT_NAME                 /* 경조대상자                */
+              ,HAP.OBJECT_PERSON_ID            /* 대상자 PERSON_ID          */
+              ,HAP.REMARK                      /* 비고                      */
+              ,TO_CHAR(HAP.PAYMENT_DATE,'YYYY/MM/DD') AS PAYMENT_DATE /* 승인일자  */
+              ,HAP.PAY_MONTH                   /* 급여공제월                */
+              ,HAP.REASON_CONTENTS             /* 불가사유                  */
+              ,in_a.org_name     AS object_org_name     /* object_부서명    */  
+              /*,in_a.grade_name   AS object_grade_name    object_직급명    */ 
+              ,(SELECT FLV.MEANING
+                  FROM PER_PEOPLE_EXTRA_INFO PPEI, FND_LOOKUP_VALUES FLV
+                  WHERE PPEI.PERSON_ID = hap.object_PERSON_ID
+                   AND FLV.LOOKUP_CODE = PPEI.PEI_INFORMATION11
+                   AND PPEI.INFORMATION_TYPE(+) = 'HJS_HR_PERSONAL_DATE_INFO'
+                   AND FLV.LOOKUP_TYPE = 'HJS_HR_GRADE_TITLE') AS object_grade_name
+              ,HAP.OBJECT_VERSION_NUMBER       /* OBJECT_VERSION_NUMBER     */
+        FROM  HJSBEN_ADVANCE_PAYMENT   HAP
+             ,( SELECT   HAP.HJSBEN_ADVANCE_PAYMENT_SEQ  /* HJSBEN_ADVANCE_PAYMENT_SEQ */
+                        ,HAP.OBJECT_NAME                 /* 경조대상자                */
+                        ,HAP.OBJECT_PERSON_ID            /* 경조대상자 PERSON_ID      */
+                        ,HSELV.org_name                  /* 부서명                    */  
+                        ,HSELV.grade_name                /* 직급명                    */ 
+                  FROM  HJSBEN_ADVANCE_PAYMENT   HAP
+                       ,HJS_SSHR_EMPLOYEE_LOV_V  HSELV
+                  WHERE HAP.REQUEST_DATE  BETWEEN  HSELV.effective_start_date  AND  HSELV.effective_end_date
+                  AND   HSELV.person_id(+) = HAP.OBJECT_PERSON_ID
+               ) in_a
+        WHERE HAP.HJSBEN_ADVANCE_PAYMENT_SEQ = in_a.HJSBEN_ADVANCE_PAYMENT_SEQ(+)     
+        AND  HAP.HJSBEN_ADVANCE_PAYMENT_SEQ  = #{HJSBEN_ADVANCE_PAYMENT_SEQ}
+
+	</select>
+	
+	<select id="selectEmpList" parameterType="map" resultType="hashmap">
+		
+		SELECT DECODE('ko', 'ko', PPF.KOR_NAME, PPF.ENG_NAME) AS EMPLOYEE_NAME
+              ,DECODE('ko', 'ko', PPF.ORG_NAME, PPF.ORG_ENG_NAME) AS ORG_NAME
+              ,DECODE('ko', 'ko', PPF.JOB_NAME, PPF.JOB_ENG_NAME) AS JOB_NAME
+              ,(SELECT FLV.MEANING
+                  FROM PER_PEOPLE_EXTRA_INFO PPEI, FND_LOOKUP_VALUES FLV
+                  WHERE PPEI.PERSON_ID = PPF.PERSON_ID
+                   AND FLV.LOOKUP_CODE = PPEI.PEI_INFORMATION11
+                   AND PPEI.INFORMATION_TYPE(+) = 'HJS_HR_PERSONAL_DATE_INFO'
+                   AND FLV.LOOKUP_TYPE = 'HJS_HR_GRADE_TITLE') AS GRADE_NAME
+              ,PPF.EMPLOYEE_NUMBER
+              ,PPF.POSITION
+              ,PPF.PERSON_ID
+        FROM   HJS_SSHR_EMPLOYEE_LOV_V PPF
+        WHERE  1 = 1
+        AND    TRUNC(SYSDATE) BETWEEN PPF.EFFECTIVE_START_DATE AND
+               PPF.EFFECTIVE_END_DATE
+        AND    DECODE('ko', 'ko', PPF.KOR_NAME, PPF.ENG_NAME) LIKE #{EMPLOYEE_NAME} || '%'   -- 성명 검색
+		
+
+	</select>
+	
+	
+	<insert id="insertAdjLife" parameterType="map">
+		
+	INSERT INTO HJSBEN_ADVANCE_PAYMENT
+	(
+		HJSBEN_ADVANCE_PAYMENT_SEQ
+		,PERSON_ID
+		,REQUEST_DATE
+		,STATUS
+		,COMPANY_FLAG
+		,AMOUNT
+		,OBJECT_NAME
+		,OBJECT_PERSON_ID
+		,REMARK
+		,CREATED_BY
+		,LAST_UPDATED_BY
+		,LAST_UPDATE_LOGIN
+		,CREATION_DATE
+		,LAST_UPDATE_DATE
+	)
+	VALUES
+	(
+		HJSBEN_ADVANCE_PAYMENT_SEQ.NEXTVAL
+        ,#{PERSON_ID}  
+        ,#{REQUEST_DATE}  
+        ,#{STATUS}
+        ,#{COMPANY_FLAG}  
+        ,#{AMOUNT}  
+        ,#{OBJECT_NAME}  
+        ,#{OBJECT_PERSON_ID}  
+        ,#{REMARK}  
+        ,#{CREATED_BY}  
+        ,#{LAST_UPDATED_BY}
+        ,#{LAST_UPDATED_BY}
+        ,SYSDATE
+        ,SYSDATE
+	)
+		
+    </insert>
+    
+	
+	<delete id="deleteAdjLife" parameterType="hashmap">
+		DELETE /* smh.ben.dao.BEN60310MDao.deleteBasMasterdataclass */ FROM HJSBEN_ADVANCE_PAYMENT
+	    WHERE HJSBEN_ADVANCE_PAYMENT_SEQ = #{HJSBEN_ADVANCE_PAYMENT_SEQ}
+	</delete>
+	
+	
+	<select id="adjLifeCheckList" parameterType="map" resultType="hashmap">
+		
+		SELECT to_char(def.request_date, 'YYYY/MM/DD')  AS request_date
+                , nvl(def.org_name, '(사직)' )  AS org_name
+                , def.grade_title
+                , def.emp_name
+                , def.amount
+                , def.pay_month
+                , def.remark
+                , def.req_person_id
+                , def.person_id
+                , def.hjsben_advance_payment_seq    
+             FROM ( SELECT hap.request_date
+                         , ( SELECT haou.attribute2
+                               FROM per_all_assignments_f  paa
+                                  , hr_all_organization_units  haou
+                              WHERE paa.organization_id = haou.organization_id
+                                AND paa.person_id = hap.person_id 
+                                AND TRUNC(SYSDATE) BETWEEN paa.effective_start_date AND paa.effective_end_date
+                                AND nvl(paa.primary_flag, 'N') = 'Y')  AS org_name
+                         , hap.pg_name  AS grade_title
+                         , hap.name     AS emp_name
+                         , hap.amount
+                         , SUBSTR(hap.pay_month, 1, 4) || '-' || SUBSTR(hap.pay_month, 5, 2)  AS pay_month
+                         , hap.remark
+                         , hap.person_id         AS req_person_id
+                         , hap.object_person_id  AS person_id
+                         , hap.hjsben_advance_payment_seq
+                      FROM hjsben_advance_payment_v   hap
+                     WHERE hap.status = '20'
+                  ) def   
+       where 1=1
+         and def.pay_month like '20' || SUBSTR(#{BASE_YEAR},1,2) || '%'  -- 대상년도
+         and def.person_id = #{PERSON_ID}       -- 로그인 person id
+          order by def.request_date  DESC
+                 , def.emp_name ASC
+		
+
+	</select>
+	
+	
+
+</mapper>

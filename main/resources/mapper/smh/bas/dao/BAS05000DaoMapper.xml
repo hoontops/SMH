@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS05000Dao">
+
+<sql id="insertDictionary">
+	BAS_COMMON_PKG.GENERATE_DICTIONARY
+</sql>
+
+    <!--
+		설		명	: 설비 그룹 - 필터조회 - 조회조건(콤보)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-28 
+		수  정   이  력	:
+	-->
+	<select id="selectConditionitem" parameterType="map" resultType="hashmap">
+			
+			/* selectConditionitem - 설비 그룹 - 필터조회 - 조회조건(콤보) */
+			SELECT  DICTIONARYID     		AS CODE
+				    ,  DICTIONARYNAME  		AS NAME
+				  FROM CMD_DICTIONARY
+				 WHERE 1 = 1
+				   AND DICTIONARYID IN (
+				   		SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+                                FROM  (SELECT  #{DICTIONARYID} AS ORG_DATA FROM DUAL)
+                                CONNECT BY  INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0 
+				   )
+				   AND LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				   AND USE_YN = 'Y'	
+    </select>
+    
+    
+    <!--
+		설		명	: 설비 그룹 - 트리 그리드 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-28 
+		수  정   이  력	:
+	-->
+    <select id="selectEqpClassTreeList" parameterType="map" resultType="hashmap">
+			--
+			-- SelectEquipmentClassManagement_Tree
+			-- Version:10002
+			/* selectEqpClassTreeList - 설비 그룹 - 트리 그리드 조회 */
+			
+			WITH PRE_EQP AS 
+			(
+    
+	                SELECT              						-- [INTERFLEX  KOREA.CO.LTD1]
+	                  		ET.ENTERPRISEID 				AS ID
+                        ,	''           						AS PARENT
+                        ,	ET.ENTERPRISENAME 			AS NAME
+                        , 	'ENTERPRISE'             		AS NODETYPE
+                        , 	''               					AS PARENTNODETYPE
+                        , 	''           						AS EQUIPMENTCLASSTYPE
+						, 	ET.ENTERPRISEID
+                        ,   0 AS AREALEVEL    	
+                  FROM		BAS_ENTERPRISE 			ET          -- [회사 정보]
+                  WHERE   
+				  			ET.ENTERPRISEID     			=  #{P_ENTERPRISEID}
+                  		AND ET.VALIDSTATE       		=  'Valid'
+
+                  UNION ALL         
+                  	SELECT              						-- [설비]
+                  			'Production' 						AS ID
+						,	#{P_ENTERPRISEID} 			AS PARENT
+						,   D.DICTIONARYNAME 			AS NAME
+						,	'GROUPTYPE'              		AS NODETYPE
+						,	'ENTERPRISE'             		AS PARENTNODETYPE
+						, 	''      		 						AS EQUIPMENTCLASSTYPE
+						,	#{P_ENTERPRISEID} 			AS ENTERPRISEID
+                        ,   1 AS AREALEVEL				
+					FROM CMD_LOOKUP_VALUES 			C					
+					LEFT OUTER JOIN CMD_DICTIONARY 	D 
+									  ON  D.DICTIONARYID 	= C.DICTIONARYID 
+									  AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					WHERE	C.LOOKUP_CODE 				= 'Production'
+						AND 	C.LOOKUP_TYPE 				= 'EquipmentType'
+						
+				 UNION ALL
+	 				SELECT              							-- [계측기]
+	 						'Measure' 						    AS ID
+						,	#{P_ENTERPRISEID} 				AS PARENT
+						,   D.DICTIONARYNAME 				AS NAME
+						, 	'GROUPTYPE'              			AS NODETYPE
+						, 	'ENTERPRISE'             			AS PARENTNODETYPE
+						, 	''      		 							AS EQUIPMENTCLASSTYPE
+						,	#{P_ENTERPRISEID} 				AS ENTERPRISEID
+                        ,   1 AS AREALEVEL
+					FROM CMD_LOOKUP_VALUES 			C
+					LEFT OUTER JOIN CMD_DICTIONARY 	D 
+									 ON  D.DICTIONARYID 	= C.DICTIONARYID 
+									 AND D.LANGUAGETYPE 	= #{SESSION_LANGUAGETYPE}
+					WHERE 	C.LOOKUP_CODE 				= 'Measure'
+						AND 	C.LOOKUP_TYPE 				= 'EquipmentType'
+			)
+			, EQP (
+					  ID
+					, PARENT
+					, NAME
+					, NODETYPE 
+					, PARENTNODETYPE
+					, EQUIPMENTCLASSTYPE
+					, ENTERPRISEID
+					, AREALEVEL
+					)
+			AS
+					(
+					SELECT *
+					  FROM PRE_EQP
+					  
+					UNION ALL
+					
+					SELECT   A.ID
+						  	,  A.PARENT
+						  	,  A.NAME
+						  	,  A.NODETYPE
+						  	,  A.PARENTNODETYPE
+						  	,  A.EQUIPMENTCLASSTYPE
+						  	,  A.ENTERPRISEID
+						  	,  AREALEVEL + 1 AS AREALEVEL
+					FROM   
+					(
+						--설비 대 그룹
+						SELECT    
+								LC.EQUIPMENTCLASSID 				AS ID
+							, 	LC.EQUIPMENTCLASSTYPE 			AS PARENT
+							,	LD.DICTIONARYNAME 					AS NAME
+							, 	'LC'             							AS NODETYPE
+							, 	'GROUPTYPE'              				AS PARENTNODETYPE
+							,   LC.EQUIPMENTCLASSTYPE
+							,	LC.ENTERPRISEID
+						  FROM   BAS_EQUIPMENTCLASS 					LC    
+						  LEFT OUTER JOIN CMD_DICTIONARY 			LD 
+						  					ON  LC.EQUIPMENTCLASSNAME 	= LD.DICTIONARYID 
+											AND LD.LANGUAGETYPE 				= #{SESSION_LANGUAGETYPE}
+						  WHERE	1 = 1           
+						  AND   LC.VALIDSTATE = 'Valid'
+						  AND   NVL(LC.PARENTEQUIPMENTCLASSID, ' ') = ' '
+						--설비 중 그룹
+						UNION ALL
+						SELECT    
+								MC.EQUIPMENTCLASSID 				AS ID
+							,	MC.PARENTEQUIPMENTCLASSID 	AS PARENT
+							,	MD.DICTIONARYNAME 				AS NAME
+							, 	'MC'            							AS NODETYPE
+							, 	'LC'             							AS PARENTNODETYPE	
+							,   MC.EQUIPMENTCLASSTYPE
+							,	MC.ENTERPRISEID
+						
+						  FROM   BAS_EQUIPMENTCLASS 					MC    
+						  LEFT OUTER JOIN CMD_DICTIONARY 			MD  
+						  					ON  MC.EQUIPMENTCLASSNAME 	= MD.DICTIONARYID 
+											AND MD.LANGUAGETYPE 			= #{SESSION_LANGUAGETYPE}
+						  INNER JOIN BAS_EQUIPMENTCLASS 				PLC 
+						  					ON  PLC.EQUIPMENTCLASSID 		= MC.PARENTEQUIPMENTCLASSID
+											AND NVL(PLC.PARENTEQUIPMENTCLASSID, ' ') = ' '
+						  WHERE	1 = 1         
+						  	 AND  MC.VALIDSTATE = 'Valid'
+					   ) A 
+					   INNER JOIN EQP
+						ON A.PARENT 					= EQP.ID 
+						AND A.PARENTNODETYPE 	= EQP.NODETYPE  
+						AND A.ENTERPRISEID			= EQP.ENTERPRISEID 
+
+					)
+						
+						SELECT ID
+							 	, 	PARENT
+							 	,	 NAME
+							 	,	 NODETYPE 
+							 	,	 PARENTNODETYPE
+							 	,	 EQUIPMENTCLASSTYPE
+							 	,	 ENTERPRISEID
+							 	,	 AREALEVEL
+						  FROM EQP
+						  START WITH PARENT IS NULL
+						CONNECT BY PRIOR   ID = PARENT
+						ORDER SIBLINGS BY NAME 			-- (21.07.19) 정렬 추가 명칭으로
+	
+    </select>
+    
+    <!--
+		설		명	: 설비 그룹 - 트리 그리드 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-28 
+		수  정   이  력	:
+	-->
+    <select id="selectEqpClassList" parameterType="map" resultType="hashmap">
+			--
+			-- SelectEquipmentClassManagement
+			-- Version:10001
+			/* selectEqpClassList - 설비 그룹 - 메인 그리드 조회(Tree row 변경시) */
+			SELECT 
+						EQ.EQUIPMENTCLASSID
+				   ,	DK.DICTIONARYNAME			AS EQUIPMENTCLASSNAME_KO_KR
+				   ,	DE.DICTIONARYNAME			AS EQUIPMENTCLASSNAME_EN_US
+				   ,	DC.DICTIONARYNAME			AS EQUIPMENTCLASSNAME_ZH_CN
+				   ,	DV.DICTIONARYNAME			AS EQUIPMENTCLASSNAME_VI_VN
+				   ,	EQ.DESCRIPTION
+				   ,	EQ.EQUIPMENTCLASSTYPE
+				   --,	EQ.DESCRIPTION
+				   ,	EQ.PLANTID
+				   ,	EQ.ENTERPRISEID
+				   ,	U1.USER_NM AS CREATOR
+				   ,TO_CHAR(EQ.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME				   
+				   ,	U2.USER_NM AS MODIFIER
+				   ,TO_CHAR(EQ.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+				   ,	EQ.VALIDSTATE
+				   ,	EQ.PARENTEQUIPMENTCLASSID
+				   ,	EQ.HIERARCHY
+				   , '' AS CHK
+				   ,    EQ.EQUIPMENTCLASSNAME
+				   
+			    FROM	BAS_EQUIPMENTCLASS EQ
+			    
+				LEFT OUTER JOIN CMD_DICTIONARY		DK	ON	EQ.EQUIPMENTCLASSNAME = DK.DICTIONARYID
+														AND	DK.LANGUAGETYPE = 'ko-KR'
+			    LEFT OUTER JOIN CMD_DICTIONARY		DE	ON	EQ.EQUIPMENTCLASSNAME = DE.DICTIONARYID
+														AND	DE.LANGUAGETYPE = 'en-US'
+			    LEFT OUTER JOIN CMD_DICTIONARY		DC	ON	EQ.EQUIPMENTCLASSNAME = DC.DICTIONARYID
+														AND	DC.LANGUAGETYPE = 'zh-CN'
+			    LEFT OUTER JOIN CMD_DICTIONARY		DV	ON	EQ.EQUIPMENTCLASSNAME = DV.DICTIONARYID
+														AND	DV.LANGUAGETYPE = 'vi-VN'
+				
+				LEFT OUTER JOIN CMD_USERS 			U1  ON  EQ.CREATOR = U1.USER_ID
+		  		LEFT OUTER JOIN CMD_USERS 			U2  ON  EQ.MODIFIER = U2.USER_ID
+
+				WHERE	1 = 1 
+				
+				
+				<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+					AND EQ.VALIDSTATE = #{P_VALIDSTATE}
+				</if>
+				<if test="P_ENTERPRISEID != null and P_ENTERPRISEID !=''">
+					AND EQ.ENTERPRISEID = #{P_ENTERPRISEID}
+				</if>
+				
+				<if test="P_EQUIPMENTCLASSTYPE != null and P_EQUIPMENTCLASSTYPE !='' and !(P_EQUIPMENTCLASSTYPE eq '*'.toString()) ">
+					 AND EQ.EQUIPMENTCLASSTYPE = #{P_EQUIPMENTCLASSTYPE}
+				</if>				
+				<choose>
+					<when test="P_PARENTEQUIPMENTCLASSID != null and P_PARENTEQUIPMENTCLASSID !=''">
+						 AND EQ.PARENTEQUIPMENTCLASSID = #{P_PARENTEQUIPMENTCLASSID}
+					</when>
+					<otherwise>
+						 AND  NVL(EQ.PARENTEQUIPMENTCLASSID, ' ') = ' '
+						 AND  EQ.EQUIPMENTCLASSTYPE = #{P_GROUPTYPE}
+					</otherwise>
+				</choose>
+				
+				<if test="P_CONDITIONVALUE != null and P_CONDITIONVALUE !=''">
+					<choose>
+						<when test="P_CONDITIONITEM != null and P_CONDITIONITEM !='' and (P_CONDITIONITEM eq '*'.toString())">
+							AND (EQ.EQUIPMENTCLASSID LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+							OR	 DK.DICTIONARYNAME 	LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+							OR	 DE.DICTIONARYNAME 	LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+							OR	 DC.DICTIONARYNAME 	LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+							OR DV.DICTIONARYNAME 	LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+							OR EQ.DESCRIPTION 			LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+								)
+						</when>	
+						<otherwise>
+							<choose>
+								<when test="P_CONDITIONITEM != null and P_CONDITIONITEM !='' and (P_CONDITIONITEM eq 'EQUIPMENTCLASSNAME'.toString())">
+								AND	(DK.DICTIONARYNAME	 LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+								OR	 DE.DICTIONARYNAME	     LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+								OR	 DC.DICTIONARYNAME	 LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+								OR	 DV.DICTIONARYNAME	 LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+								)			
+								</when>
+								<when test="P_CONDITIONITEM != null and P_CONDITIONITEM !='' and (P_CONDITIONITEM eq 'EQUIPMENTCLASSID'.toString())">
+								AND	EQ.EQUIPMENTCLASSID LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+								</when>
+								<otherwise>
+								AND	EQ.DESCRIPTION LIKE  '%' || UPPER(#{P_CONDITIONVALUE})|| '%' 
+								</otherwise>
+							</choose>	
+						</otherwise>	
+					</choose>
+				</if>
+    </select>
+    
+    <!--
+		설		명	: 설비 그룹 - 메인 그리드 조회(저장전 기등록 내역 조회)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-29 
+		수  정   이  력	:
+	-->
+    <select id="selectChkEqpGrpClassList" parameterType="map" resultType="hashmap">
+			
+			/* selectChkEqpGrpClassList - 설비 그룹 - 메인 그리드 조회(저장전 기등록 내역 조회) */
+			SELECT 
+				  EQ.EQUIPMENTCLASSID
+				, EQ.EQUIPMENTCLASSNAME
+				, EQ.ENTERPRISEID
+				, EQ.PLANTID
+				, EQ.EQUIPMENTCLASSTYPE
+				, EQ.HIERARCHY
+				, EQ.PARENTEQUIPMENTCLASSID
+				, EQ.DESCRIPTION
+				, EQ.VALIDSTATE
+			  FROM	BAS_EQUIPMENTCLASS EQ
+			 WHERE 1 = 1
+			   AND EQ.EQUIPMENTCLASSID = #{EQUIPMENTCLASSID}
+    </select>
+    
+    <!--
+		설		명	: 설비 그룹 - 메인 그리드 조회(저장 - 등록)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-29 
+		수  정   이  력	:
+	-->
+	  <insert id="insertEqpGrpClass" parameterType="map">
+	  DECLARE
+	  BEGIN
+		INSERT /* smh.bas.dao.BAS05000Dao.insertEqpGrpClass */	
+		INTO BAS_EQUIPMENTCLASS
+			(EQUIPMENTCLASSID
+			,EQUIPMENTCLASSNAME
+			,ENTERPRISEID
+			,PLANTID
+			,EQUIPMENTCLASSTYPE
+			,HIERARCHY
+			,PARENTEQUIPMENTCLASSID
+			,DESCRIPTION
+			,CREATOR
+			,CREATEDTIME
+			,LASTTXNHISTKEY
+			,LASTTXNID
+			,LASTTXNUSER
+			,LASTTXNTIME
+			,LASTTXNCOMMENT
+			,VALIDSTATE)
+			VALUES
+			(
+			 #{EQUIPMENTCLASSID}
+			,#{EQUIPMENTCLASSNAME}
+			,#{ENTERPRISEID}
+			,#{PLANTID}
+			,#{EQUIPMENTCLASSTYPE}
+			,#{HIERARCHY}		
+			,#{PARENTEQUIPMENTCLASSID}
+			,#{DESCRIPTION}
+			,#{CREATOR}
+			,SYSDATE
+			,#{LASTTXNHISTKEY}  
+			,#{LASTTXNID}  
+			,#{LASTTXNUSER}  
+			,SYSDATE  
+			,#{LASTTXNCOMMENT}  
+			,#{VALIDSTATE}
+			);
+					
+			<!-- 다국어 테이블 저장용 -->							
+					IF #{EQUIPMENTCLASSNAME_KO_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_EQUIPMENTCLASS','ko-KR',#{EQUIPMENTCLASSNAME}, #{CREATOR}, #{EQUIPMENTCLASSNAME_KO_KR}); END IF;
+					IF #{EQUIPMENTCLASSNAME_EN_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_EQUIPMENTCLASS','en-US',#{EQUIPMENTCLASSNAME}, #{CREATOR}, #{EQUIPMENTCLASSNAME_EN_US}); END IF;
+					IF #{EQUIPMENTCLASSNAME_ZH_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_EQUIPMENTCLASS','zh-CN',#{EQUIPMENTCLASSNAME}, #{CREATOR}, #{EQUIPMENTCLASSNAME_ZH_CN}); END IF;
+					IF #{EQUIPMENTCLASSNAME_VI_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_EQUIPMENTCLASS','vi-VN',#{EQUIPMENTCLASSNAME}, #{CREATOR}, #{EQUIPMENTCLASSNAME_VI_VN}); END IF;
+				<!-- 다국어 테이블 저장용 -->
+			END;
+    </insert>
+    
+    <!--
+		설		명	: 설비 그룹 - 메인 그리드 조회(저장 - 수정)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-29 
+		수  정   이  력	:
+	-->
+    <update id="updateEqpGrpClass" parameterType="map">
+		  DECLARE
+		  BEGIN
+			 /* smh.bas.dao.BAS05000Dao.updateEqpGrpClass */	
+			 UPDATE  BAS_EQUIPMENTCLASS SET  
+						-- 유효여부, 설명만 수정 가능 
+						 DESCRIPTION  					= #{DESCRIPTION}
+						,VALIDSTATE						= #{VALIDSTATE}
+						,MODIFIER						= #{MODIFIER}
+						,MODIFIEDTIME					= SYSDATE
+						,LASTTXNHISTKEY 				= #{LASTTXNHISTKEY}     
+						,LASTTXNID 						= #{LASTTXNID}     
+						,LASTTXNUSER 					= #{LASTTXNUSER}     
+						,LASTTXNTIME 					= SYSDATE     
+						,LASTTXNCOMMENT 			= #{LASTTXNCOMMENT}    
+			WHERE 	EQUIPMENTCLASSID 			= #{EQUIPMENTCLASSID};
+						
+				<!-- 다국어 테이블 저장용 -->							
+						IF #{EQUIPMENTCLASSNAME_KO_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_EQUIPMENTCLASS','ko-KR',#{EQUIPMENTCLASSNAME}, #{MODIFIER}, #{EQUIPMENTCLASSNAME_KO_KR}); END IF;
+						IF #{EQUIPMENTCLASSNAME_EN_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_EQUIPMENTCLASS','en-US',#{EQUIPMENTCLASSNAME}, #{MODIFIER}, #{EQUIPMENTCLASSNAME_EN_US}); END IF;
+						IF #{EQUIPMENTCLASSNAME_ZH_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_EQUIPMENTCLASS','zh-CN',#{EQUIPMENTCLASSNAME}, #{MODIFIER}, #{EQUIPMENTCLASSNAME_ZH_CN}); END IF;
+						IF #{EQUIPMENTCLASSNAME_VI_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_EQUIPMENTCLASS','vi-VN',#{EQUIPMENTCLASSNAME}, #{MODIFIER}, #{EQUIPMENTCLASSNAME_VI_VN}); END IF;
+				<!-- 다국어 테이블 저장용 -->
+				END;
+    </update>
+    
+    <!--
+		설		명	: 설비 그룹 - 메인 그리드 조회(저장전 기등록 내역 조회)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-29 
+		수  정   이  력	:
+	-->
+    <select id="selectUsingEquipmentClass" parameterType="map" resultType="hashmap">
+			
+			/* selectUsingEquipmentClass - 설비 그룹 - 메인 그리드 조회(삭제전 하위 노드 존재 유무 확인) */
+			SELECT 
+					MIN(P.PARANTID)                  AS PARENTID
+				,   MIN(P.PARENTNM)             	KEEP(DENSE_RANK FIRST ORDER BY EQ.CREATEDTIME, EQ.EQUIPMENTCLASSID ASC) AS PARENTNM
+				,   MIN(EQ.EQUIPMENTCLASSID)    	KEEP(DENSE_RANK FIRST ORDER BY EQ.CREATEDTIME, EQ.EQUIPMENTCLASSID ASC) AS ID
+				,   MAX(LD.DICTIONARYNAME)     	KEEP(DENSE_RANK FIRST ORDER BY EQ.CREATEDTIME, EQ.EQUIPMENTCLASSID ASC) AS NM
+			  FROM	BAS_EQUIPMENTCLASS EQ
+				 INNER JOIN 
+				(
+					SELECT LC.EQUIPMENTCLASSID  	AS PARANTID
+						 	, LDP.DICTIONARYNAME   	AS PARENTNM
+					  FROM BAS_EQUIPMENTCLASS LC
+					  LEFT OUTER JOIN CMD_DICTIONARY 		LDP 
+								ON  LC.EQUIPMENTCLASSNAME 	= LDP.DICTIONARYID 
+								AND LDP.LANGUAGETYPE 			= #{SESSION_LANGUAGETYPE}
+					 WHERE 1 = 1
+					   AND LC.EQUIPMENTCLASSID 					= #{EQUIPMENTCLASSID}
+				) P
+				ON EQ.PARENTEQUIPMENTCLASSID 				= P.PARANTID
+				LEFT OUTER JOIN CMD_DICTIONARY 				LD 
+								ON  EQ.EQUIPMENTCLASSNAME 	= LD.DICTIONARYID 
+								AND LD.LANGUAGETYPE 				= #{SESSION_LANGUAGETYPE}
+			 WHERE 1 = 1
+			   AND EQ.PARENTEQUIPMENTCLASSID 				= #{EQUIPMENTCLASSID}
+    </select>
+    
+    <!--
+		설		명	: 설비 그룹 - 메인 그리드 조회(저장 - 삭제)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-29 
+		수  정   이  력	:
+	-->
+    <update id="deleteEqpGrpClass" parameterType="map" >
+     /* smh.bas.dao.BAS05000Dao.deleteEqpGrpClass */
+    	DELETE  
+    	 FROM 	BAS_EQUIPMENTCLASS	
+    	WHERE 	EQUIPMENTCLASSID 	= #{EQUIPMENTCLASSID}
+    	   
+    </update>
+    
+    
+    
+
+</mapper>

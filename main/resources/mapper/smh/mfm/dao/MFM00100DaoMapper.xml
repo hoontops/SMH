@@ -1,0 +1,657 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM00100Dao">
+
+	<!-- 프 로 그 램 명 : 생산관리 > 생산계획 > 생산계획 조회 설 명 : 작 성 자 : 배선용 작 성 일 : 2019-09-18 
+		주요 변경 로그 : -->
+	<select id="selectProductPlanList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : selectProductPlan
+				-- Version : 10001
+				SELECT   X.PRODUCTDEFID
+						 ,	PD.PRODUCTDEFVERSION
+						 ,${TOTAL1} AS TOTAL1
+						 ,${TOTAL2} AS TOTAL2
+						 ,${CALLINE}
+						 ,${CALLINE2}
+					     ,  PD.PRODUCTDEFNAME  PRODUCTDEFNAME
+					     ,	NVL(PD.PCSPNL,0) AS PCSPNL
+					     ,  CT.CUSTOMERNAME    CUSTOMER
+					     ,  NVL(SD.DICTIONARYNAME, SC.DICTIONARYID) LOTTYPE
+				FROM
+				(
+					 SELECT *
+					 FROM (
+							 SELECT PRODUCTDEFID
+								      ,FCSTDATE
+									  ,QTY
+							 FROM PCM_SALESPOFORCAST
+		                     WHERE 1=1
+		                     AND INPUTWEEK = SUBSTR(#{P_INPUTWEEK},3,2) || '_' || SUBSTR(#{P_INPUTWEEK},6,2) || 'W'
+		                     AND FCSTDATE BETWEEN #{P_PERIOD_PERIODFR} AND #{P_PERIOD_PERIODTO}
+							 AND "sequence" = #{P_SEQUENCE}	--차수
+							 ORDER BY 1,2
+							 )
+					  PIVOT ( 
+						        SUM(QTY) AS QTY
+						        FOR FCSTDATE 
+						        IN (
+						            ${COLUMNS}	
+						            )
+						       )
+			    ) X
+			    INNER JOIN
+			    	(
+			    		SELECT	PRODUCTDEFID
+			    				,	PRODUCTDEFVERSION
+				    			,	PRODUCTDEFNAME
+				    			,	PRODUCTIONTYPE
+				    			,	CUSTOMERID
+				    			,	PLANTID
+				    			,	PCSPNL
+				    			,	ROW_NUMBER() OVER (PARTITION BY PRODUCTDEFID ORDER BY PRODUCTDEFVERSION) AS RN
+			    		FROM	BAS_PRODUCTDEFINITION 
+			    	)  	PD		ON  X.PRODUCTDEFID = PD.PRODUCTDEFID
+								AND PD.RN = 1			    	
+			    LEFT JOIN BAS_CUSTOMER          	CT 	ON  PD.CUSTOMERID = CT.CUSTOMERID     
+			                                       	AND PD.PLANTID = CT.PLANTID
+                LEFT  JOIN CMD_LOOKUP_VALUES              SC 	ON  PD.PRODUCTIONTYPE = SC.LOOKUP_CODE
+                                                   	AND SC.LOOKUP_TYPE = 'ProductionType'
+                LEFT  JOIN CMD_DICTIONARY        SD 	ON  SC.DICTIONARYID = SD.DICTIONARYID
+                                                   	AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+                WHERE 1 = 1                             
+			-- 품목코드
+				<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	ufn_selectStringToSplit(#{P_PRODUCTDEFID}, ',')		PMP
+							WHERE	X.PRODUCTDEFID = PMP.VALUE
+						)
+				</if>
+			-- 구분
+				<if test="P_LOTTYPE != null and P_LOTTYPE !='' and !(P_LOTTYPE eq '*'.toString()) ">
+		        AND     PD.PRODUCTIONTYPE = #{P_LOTTYPE}
+		       </if>
+			-- 고객
+				<if test="P_CUSTOMERID != null and P_CUSTOMERID !='' and !(P_CUSTOMERID eq '*'.toString()) ">
+		        AND     PD.CUSTOMERID = #{P_CUSTOMERID}
+		        </if>
+		        ORDER BY X.PRODUCTDEFID
+	</select>
+	
+	
+	<!-- 프 로 그 램 명 : 생산관리 > 생산계획 > 생산계획 조회 설 명 : 작 성 자 : 배선용 작 성 일 : 2019-09-18 
+		주요 변경 로그 : -->
+	<select id="selectProductPlanForPivotList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : selectProductPlanForPivot
+				-- Version : 10001
+				SELECT   SP.PRODUCTDEFID
+						  ,  SP.PRODUCTDEFVERSION
+					      ,  PD.PRODUCTDEFNAME
+					      ,  CT.CUSTOMERNAME   CUSTOMER
+					      ,  NVL(SD.DICTIONARYNAME, SC.DICTIONARYID) LOTTYPE
+					      ,  SP.FCSTDATE
+					      ,  NVL(SP.QTY,0) AS QTY
+						  ,  NVL(CEIL(SP.QTY / NULLIF(PD.PCSPNL, 0)),0) AS PANELQTY
+						  ,	 NVL(PD.PCSPNL,0) AS PCSPNL
+					      --,  SP.REGWEEK AS WEEK
+                          ,  WC.WEEKOFTHEYEAR AS WEEK
+					      --,  SP."month" AS MONTH
+                          ,  WC.MONTH AS MONTH
+				FROM PCM_SALESPOFORCAST SP
+				INNER JOIN
+			    	(
+			    		SELECT	PRODUCTDEFID
+				    			,	PRODUCTDEFNAME
+				    			,	PRODUCTIONTYPE
+				    			,	CUSTOMERID
+				    			,	PLANTID
+				    			,	PCSPNL
+				    			,	ROW_NUMBER() OVER (PARTITION BY PRODUCTDEFID ORDER BY PRODUCTDEFVERSION) AS RN
+			    		FROM	BAS_PRODUCTDEFINITION 
+			    	) 						 	PD	ON  SP.PRODUCTDEFID = PD.PRODUCTDEFID
+													AND PD.RN = 1			    	
+				LEFT JOIN BAS_CUSTOMER           CT  ON  PD.CUSTOMERID = CT.CUSTOMERID     
+				                                    AND PD.PLANTID = CT.PLANTID
+				LEFT  JOIN CMD_LOOKUP_VALUES              SC  ON  PD.PRODUCTIONTYPE = SC.LOOKUP_CODE
+				                                    AND SC.LOOKUP_TYPE = 'ProductionType'
+				LEFT  JOIN CMD_DICTIONARY        SD  ON  SC.DICTIONARYID = SD.DICTIONARYID
+				                                    AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN MFM_WORKCALENDAR   WC  ON  WC.PLANTID = SP.PLANTID
+				                                    AND WC.PLANTDATE = SP.FCSTDATE				                                    
+                WHERE 1=1
+                AND INPUTWEEK = SUBSTR(#{P_INPUTWEEK},3,2) || '_' || SUBSTR(#{P_INPUTWEEK},6,2) || 'W'
+                AND SP.FCSTDATE BETWEEN #{P_PERIOD_PERIODFR} AND #{P_PERIOD_PERIODTO}
+                AND SP."sequence" = #{P_SEQUENCE}                                   
+			-- 품목코드
+				<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	ufn_selectStringToSplit(#{P_PRODUCTDEFID}, ',')		PMP
+							WHERE	SP.PRODUCTDEFID = PMP.VALUE
+						)
+				</if>
+			-- 구분
+				<if test="P_LOTTYPE != null and P_LOTTYPE !='' and !(P_LOTTYPE eq '*'.toString()) ">
+		        AND     PD.PRODUCTIONTYPE = #{P_LOTTYPE}
+		        </if>
+			-- 고객
+				<if test="P_CUSTOMERID != null and P_CUSTOMERID !='' and !(P_CUSTOMERID eq '*'.toString()) ">
+		        AND     PD.CUSTOMERID = #{P_CUSTOMERID}
+		        </if>
+		        ORDER BY SP.PRODUCTDEFID, SP.FCSTDATE
+	</select>
+	
+	<!--
+	프 로 그 램 명	: 생산관리 > 생산 계획 > 수주계획조회
+	설		명	: 저장 시 주차 별 Max Sequence 가져오는 쿼리
+	생	성	자	: 박윤신
+	생	성	일	: 2020-03-18
+	수  정   이  력	: 
+	-->
+	<select id="selectSalespoforcastMaxSequenceList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectSalespoforcastMaxSequence
+				-- Version : 10001				
+				SELECT MAX("sequence") AS SEQUENCE 
+				FROM PCM_SALESPOFORCAST
+				WHERE PRODUCTDEFID = #{PRODUCTDEFID}
+				AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} 
+				AND REGWEEK = #{REGWEEK}
+				AND FCSTDATE = #{DATE}
+	</select>
+	
+	<!--
+		설		명	: 공정 부하 기준 정보 - 부하량 기준정보 신규등록
+		생	성	자	: 김진현 
+		생	성	일	: 2020-04-20 
+		수  정   이  력	: 
+	-->
+	<insert id="insertSalesOfForcast" parameterType="map">
+	    INSERT INTO PCM_SALESPOFORCAST (
+			  	PRODUCTDEFID
+			,	PRODUCTDEFVERSION
+			,	REGWEEK
+			,	"sequence"
+			,	FCSTDATE
+			,	QTY
+			,	WEEK
+			,	"month"
+			
+			,	ENTERPRISEID
+			,	PLANTID
+			,	DESCRIPTION
+			
+			,	CREATOR
+			,	CREATEDTIME
+			,	MODIFIER
+			,	MODIFIEDTIME
+			
+			,	LASTTXNHISTKEY
+			,	LASTTXNID
+			,	LASTTXNUSER
+			,	LASTTXNTIME
+			,	LASTTXNCOMMENT
+			,	VALIDSTATE
+			) 
+	    VALUES ( 
+	         #{PRODUCTDEFID}  
+	        ,#{PRODUCTDEFVERSION}  
+	        ,#{REGWEEK}  
+	        ,#{SEQUENCE}  			
+	        ,#{FCSTDATE}
+	        ,#{QTY}
+	        ,#{WEEK} 
+			,#{MONTH}
+			
+			,#{ENTERPRISEID}
+			,#{PLANTID}
+			,#{DESCRIPTION}		
+				
+			,#{CREATOR}
+            ,SYSDATE
+            ,#{MODIFIER}
+            ,SYSDATE
+            
+			,#{LASTTXNHISTKEY}
+			,#{TXNID}
+            ,#{CREATOR}
+            ,SYSDATE
+            ,NULL
+			,'Valid'
+			)
+    </insert>
+    
+    <insert id="saveExcelUpload" parameterType="map">
+    	INSERT INTO PCM_SALESPOFORCASTUPLOAD
+    		(
+    			UUID
+			,	IDX
+			,	DATA01
+			,	DATA02
+			,	DATA03
+			,	DATA04
+			,	DATA05
+			,	DATA06
+			,	DATA07
+			,	DATA08
+			,	DATA09
+			,	DATA10
+			,	DATA11
+			,	DATA12
+			,	QTY01, QTY02, QTY03, QTY04, QTY05, QTY06, 	QTY07, QTY08, QTY09, 	QTY10
+			,	QTY11, QTY12, QTY13, QTY14, QTY15, QTY16, 	QTY17, QTY18, QTY19, 	QTY20
+			,	QTY21, QTY22, QTY23, QTY24, QTY25, QTY26, 	QTY27, QTY28, QTY29, 	QTY30
+			,	QTY31, QTY32, QTY33, QTY34, QTY35, QTY36, 	QTY37, QTY38, QTY39, 	QTY40
+			,	QTY41, QTY42, QTY43, QTY44, QTY45, QTY46, 	QTY47, QTY48, QTY49, 	QTY50
+			,	QTY51, QTY52, QTY53, QTY54, QTY55, QTY56, 	QTY57, QTY58, QTY59, 	QTY60
+			,	QTY61, QTY62, QTY63, QTY64, QTY65, QTY66, 	QTY67, QTY68, QTY69, 	QTY70
+			,	QTY71, QTY72, QTY73, QTY74, QTY75, QTY76,	QTY77, QTY78, QTY79, 	QTY80
+			,	QTY81, QTY82, QTY83, QTY84, QTY85, QTY86,	QTY87, QTY88, QTY89,	QTY90
+			,	QTY91, QTY92, QTY93, QTY94, QTY95, QTY96, 	QTY97, QTY98, QTY99
+			
+			,	CREATOR
+			,	CREATEDTIME
+			,	MODIFIER
+			,	MODIFIEDTIME
+			
+			,	LASTTXNHISTKEY
+			,	LASTTXNID
+			,	LASTTXNUSER
+			,	LASTTXNTIME
+			
+			,	LASTTXNCOMMENT
+			,	VALIDSTATE
+    		)
+    		VALUES
+    		(
+    				#{P_UUID}
+    			,	#{P_IDX}
+    			,	#{DATA01}
+    			,	#{DATA02}
+    			,	#{DATA03}
+    			,	#{DATA04}
+    			,	#{DATA05}
+    			,	#{DATA06}
+    			,	#{DATA07}
+    			,	#{DATA08}
+    			,	#{DATA09}
+    			,	#{DATA10}
+    			,	#{DATA11}
+    			,	#{DATA12}
+    			,	NVL(#{QTY01},''), NVL(#{QTY02},''), NVL(#{QTY03},''), NVL(#{QTY04},''), NVL(#{QTY05},''), NVL(#{QTY06},''), NVL(#{QTY07},''), NVL(#{QTY08},''), NVL(#{QTY09},''), NVL(#{QTY10},'')
+				,	NVL(#{QTY11},''), NVL(#{QTY12},''), NVL(#{QTY13},''), NVL(#{QTY14},''), NVL(#{QTY15},''), NVL(#{QTY16},''), NVL(#{QTY17},''), NVL(#{QTY18},''), NVL(#{QTY19},''), NVL(#{QTY20},'')
+				,	NVL(#{QTY21},''), NVL(#{QTY22},''), NVL(#{QTY23},''), NVL(#{QTY24},''), NVL(#{QTY25},''), NVL(#{QTY26},''), NVL(#{QTY27},''), NVL(#{QTY28},''), NVL(#{QTY29},''), NVL(#{QTY30},'')
+				,	NVL(#{QTY31},''), NVL(#{QTY32},''), NVL(#{QTY33},''), NVL(#{QTY34},''), NVL(#{QTY35},''), NVL(#{QTY36},''), NVL(#{QTY37},''), NVL(#{QTY38},''), NVL(#{QTY39},''), NVL(#{QTY40},'')
+				,	NVL(#{QTY41},''), NVL(#{QTY42},''), NVL(#{QTY43},''), NVL(#{QTY44},''), NVL(#{QTY45},''), NVL(#{QTY46},''), NVL(#{QTY47},''), NVL(#{QTY48},''), NVL(#{QTY49},''), NVL(#{QTY50},'')
+				,	NVL(#{QTY51},''), NVL(#{QTY52},''), NVL(#{QTY53},''), NVL(#{QTY54},''), NVL(#{QTY55},''), NVL(#{QTY56},''), NVL(#{QTY57},''), NVL(#{QTY58},''), NVL(#{QTY59},''), NVL(#{QTY60},'')
+				,	NVL(#{QTY61},''), NVL(#{QTY62},''), NVL(#{QTY63},''), NVL(#{QTY64},''), NVL(#{QTY65},''), NVL(#{QTY66},''), NVL(#{QTY67},''), NVL(#{QTY68},''), NVL(#{QTY69},''), NVL(#{QTY70},'')
+				,	NVL(#{QTY71},''), NVL(#{QTY72},''), NVL(#{QTY73},''), NVL(#{QTY74},''), NVL(#{QTY75},''), NVL(#{QTY76},''), NVL(#{QTY77},''), NVL(#{QTY78},''), NVL(#{QTY79},''), NVL(#{QTY80},'')
+				,	NVL(#{QTY81},''), NVL(#{QTY82},''), NVL(#{QTY83},''), NVL(#{QTY84},''), NVL(#{QTY85},''), NVL(#{QTY86},''), NVL(#{QTY87},''), NVL(#{QTY88},''), NVL(#{QTY89},''), NVL(#{QTY90},'')
+				,	NVL(#{QTY91},''), NVL(#{QTY92},''), NVL(#{QTY93},''), NVL(#{QTY94},''), NVL(#{QTY95},''), NVL(#{QTY96},''), NVL(#{QTY97},''), NVL(#{QTY98},''), NVL(#{QTY99},'')
+				,#{CREATOR}
+	            ,SYSDATE
+	            ,#{MODIFIER}
+	            ,SYSDATE
+	            
+				,#{LASTTXNHISTKEY}
+				,#{TXNID}
+	            ,#{CREATOR}
+	            ,SYSDATE
+	            
+	            ,NULL
+				,'Valid'
+    		)
+    </insert>
+    
+    <select id="validation01List" parameterType="map" resultType="hashmap">
+    	SELECT 
+		  			UUID
+				,	IDX		
+		FROM PCM_SALESPOFORCASTUPLOAD A
+		WHERE UUID = #{P_UUID}
+		AND IDX > 1 --타이틀 제외
+		AND (
+    				DATA01 IS NULL 
+    			OR	DATA08 IS NULL 
+    			OR	DATA09 IS NULL		    			
+    			OR (SELECT COUNT(*) FROM MFM_WORKCALENDAR WHERE SUBSTR(YEAR,3,4) || '_' || LPAD(WEEKOFTHEYEAR,2,'0') || 'W' = A.DATA01) = 0
+    			OR (SELECT COUNT(*) FROM BAS_PRODUCTDEFINITION WHERE PRODUCTDEFID = A.DATA08 AND PRODUCTDEFVERSION = A.DATA09) = 0
+    			OR (
+    				 		REGEXP_INSTR(NVL(QTY01,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY02,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY03,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY04,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY05,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY06,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY07,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY08,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY09,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY10,0), '^[+-]?\d*(\.?\d*)$') = 0
+    				 OR	REGEXP_INSTR(NVL(QTY11,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY12,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY13,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY14,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY15,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY16,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY17,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY18,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY19,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY20,0), '^[+-]?\d*(\.?\d*)$') = 0
+    				 OR	REGEXP_INSTR(NVL(QTY21,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY22,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY23,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY24,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY25,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY26,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY27,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY28,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY29,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY30,0), '^[+-]?\d*(\.?\d*)$') = 0
+    				 OR	REGEXP_INSTR(NVL(QTY31,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY32,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY33,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY34,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY35,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY36,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY37,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY38,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY39,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY40,0), '^[+-]?\d*(\.?\d*)$') = 0
+    				 OR	REGEXP_INSTR(NVL(QTY41,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY42,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY43,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY44,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY45,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY46,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY47,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY48,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY49,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY50,0), '^[+-]?\d*(\.?\d*)$') = 0
+    				 OR	REGEXP_INSTR(NVL(QTY51,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY52,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY53,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY54,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY55,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY56,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY57,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY58,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY59,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY60,0), '^[+-]?\d*(\.?\d*)$') = 0
+    				 OR	REGEXP_INSTR(NVL(QTY61,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY62,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY63,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY64,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY65,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY66,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY67,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY68,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY69,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY70,0), '^[+-]?\d*(\.?\d*)$') = 0
+    				 OR	REGEXP_INSTR(NVL(QTY71,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY72,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY73,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY74,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY75,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY76,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY77,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY78,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY79,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY80,0), '^[+-]?\d*(\.?\d*)$') = 0
+    				 OR	REGEXP_INSTR(NVL(QTY81,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY82,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY83,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY84,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY85,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY86,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY87,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY88,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY89,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY90,0), '^[+-]?\d*(\.?\d*)$') = 0
+    				 OR	REGEXP_INSTR(NVL(QTY91,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY92,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY93,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY94,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY95,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY96,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY97,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY98,'0'), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY99,'0'), '^[+-]?\d*(\.?\d*)$') = 0
+    		   		 )
+    		   	)
+    	AND DATA04 = '수주예상'
+	</select>    
+		
+	<select id="succUploadList" parameterType="map" resultType="hashmap">
+		SELECT
+				UUID
+			,	IDX
+			,	DATA01
+			,	DATA02
+			,	DATA03
+			,	DATA04
+			,	DATA05
+			,	DATA06
+			,	DATA07
+			,	DATA08
+			,	DATA09
+			,	DATA10
+			,	DATA11
+			,	DATA12
+			,	QTY01, QTY02, QTY03, QTY04, QTY05, QTY06, 	QTY07, QTY08, QTY09, 	QTY10
+			,	QTY11, QTY12, QTY13, QTY14, QTY15, QTY16, 	QTY17, QTY18, QTY19, 	QTY20
+			,	QTY21, QTY22, QTY23, QTY24, QTY25, QTY26, 	QTY27, QTY28, QTY29, 	QTY30
+			,	QTY31, QTY32, QTY33, QTY34, QTY35, QTY36, 	QTY37, QTY38, QTY39, 	QTY40
+			,	QTY41, QTY42, QTY43, QTY44, QTY45, QTY46, 	QTY47, QTY48, QTY49, 	QTY50
+			,	QTY51, QTY52, QTY53, QTY54, QTY55, QTY56, 	QTY57, QTY58, QTY59, 	QTY60
+			,	QTY61, QTY62, QTY63, QTY64, QTY65, QTY66, 	QTY67, QTY68, QTY69, 	QTY70
+			,	QTY71, QTY72, QTY73, QTY74, QTY75, QTY76,	QTY77, QTY78, QTY79, 	QTY80
+			,	QTY81, QTY82, QTY83, QTY84, QTY85, QTY86,	QTY87, QTY88, QTY89,	QTY90
+			,	QTY91, QTY92, QTY93, QTY94, QTY95, QTY96, 	QTY97, QTY98, QTY99
+			
+			,	CREATOR
+			,	CREATEDTIME
+			,	MODIFIER
+			,	MODIFIEDTIME
+			
+			,	LASTTXNHISTKEY
+			,	LASTTXNID
+			,	LASTTXNUSER
+			,	LASTTXNTIME
+			
+			,	LASTTXNCOMMENT
+			,	VALIDSTATE
+		FROM PCM_SALESPOFORCASTUPLOAD
+		WHERE UUID = #{P_UUID}
+		AND IDX = 1
+		UNION ALL
+		SELECT
+				UUID
+			,	IDX
+			,	DATA01
+			,	DATA02
+			,	DATA03
+			,	DATA04
+			,	DATA05
+			,	DATA06
+			,	DATA07
+			,	DATA08
+			,	DATA09
+			,	DATA10
+			,	DATA11
+			,	DATA12
+			,	QTY01, QTY02, QTY03, QTY04, QTY05, QTY06, 	QTY07, QTY08, QTY09, 	QTY10
+			,	QTY11, QTY12, QTY13, QTY14, QTY15, QTY16, 	QTY17, QTY18, QTY19, 	QTY20
+			,	QTY21, QTY22, QTY23, QTY24, QTY25, QTY26, 	QTY27, QTY28, QTY29, 	QTY30
+			,	QTY31, QTY32, QTY33, QTY34, QTY35, QTY36, 	QTY37, QTY38, QTY39, 	QTY40
+			,	QTY41, QTY42, QTY43, QTY44, QTY45, QTY46, 	QTY47, QTY48, QTY49, 	QTY50
+			,	QTY51, QTY52, QTY53, QTY54, QTY55, QTY56, 	QTY57, QTY58, QTY59, 	QTY60
+			,	QTY61, QTY62, QTY63, QTY64, QTY65, QTY66, 	QTY67, QTY68, QTY69, 	QTY70
+			,	QTY71, QTY72, QTY73, QTY74, QTY75, QTY76,	QTY77, QTY78, QTY79, 	QTY80
+			,	QTY81, QTY82, QTY83, QTY84, QTY85, QTY86,	QTY87, QTY88, QTY89,	QTY90
+			,	QTY91, QTY92, QTY93, QTY94, QTY95, QTY96, 	QTY97, QTY98, QTY99
+			
+			,	CREATOR
+			,	CREATEDTIME
+			,	MODIFIER
+			,	MODIFIEDTIME
+			
+			,	LASTTXNHISTKEY
+			,	LASTTXNID
+			,	LASTTXNUSER
+			,	LASTTXNTIME
+			
+			,	LASTTXNCOMMENT
+			,	VALIDSTATE
+		FROM PCM_SALESPOFORCASTUPLOAD
+		WHERE UUID = #{P_UUID}		       
+		AND (ERRORDATA IS NULL AND DATA04='수주예상')
+		AND IDX > 1
+    </select>
+    
+    <update id="updateErrorData" parameterType="map">
+    	UPDATE PCM_SALESPOFORCASTUPLOAD A
+    	SET ERRORDATA = CASE WHEN DATA01 IS NULL THEN
+    											'Requier 주차구분'
+    									WHEN DATA08 IS NULL THEN
+    											'Requier 품목코드'
+    									WHEN DATA09 IS NULL THEN
+    											'Requier 품목Ver'
+    									WHEN (SELECT COUNT(*) FROM MFM_WORKCALENDAR WHERE SUBSTR(YEAR,3,4) || '_' || LPAD(WEEKOFTHEYEAR,2,'0') || 'W' = A.DATA01) = 0 THEN
+    											'주차구분 unValid'
+    									WHEN (SELECT COUNT(*) FROM BAS_PRODUCTDEFINITION WHERE PRODUCTDEFID = A.DATA08 AND PRODUCTDEFVERSION = A.DATA09) = 0 THEN
+    											'품목/버젼 unValid'
+    									WHEN (
+							    				 		REGEXP_INSTR(NVL(QTY01,0), '^[+-]?\d*(\.?\d*)$') = 0	OR	REGEXP_INSTR(NVL(QTY02,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY03,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY04,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY05,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY06,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY07,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY08,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY09,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY10,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    				 OR	REGEXP_INSTR(NVL(QTY11,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY12,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY13,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY14,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY15,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY16,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY17,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY18,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY19,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY20,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    				 OR	REGEXP_INSTR(NVL(QTY21,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY22,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY23,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY24,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY25,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY26,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY27,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY28,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY29,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY30,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    				 OR	REGEXP_INSTR(NVL(QTY31,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY32,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY33,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY34,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY35,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY36,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY37,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY38,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY39,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY40,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    				 OR	REGEXP_INSTR(NVL(QTY41,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY42,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY43,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY44,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY45,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY46,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY47,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY48,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY49,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY50,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    				 OR	REGEXP_INSTR(NVL(QTY51,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY52,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY53,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY54,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY55,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY56,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY57,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY58,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY59,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY60,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    				 OR	REGEXP_INSTR(NVL(QTY61,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY62,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY63,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY64,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY65,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY66,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY67,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY68,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY69,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY70,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    				 OR	REGEXP_INSTR(NVL(QTY71,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY72,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY73,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY74,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY75,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY76,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY77,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY78,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY79,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY80,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    				 OR	REGEXP_INSTR(NVL(QTY81,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY82,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY83,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY84,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY85,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY86,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY87,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY88,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY89,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY90,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    				 OR	REGEXP_INSTR(NVL(QTY91,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY92,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY93,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY94,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY95,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY96,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY97,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY98,0), '^[+-]?\d*(\.?\d*)$') = 0 OR	REGEXP_INSTR(NVL(QTY99,0), '^[+-]?\d*(\.?\d*)$') = 0
+							    		   		 ) THEN
+							    		   		 'unvalid Number'
+    							END
+    	WHERE UUID =  #{UUID}
+    	AND IDX = #{IDX}
+    </update>
+	
+	<select id="selectErrorList" parameterType="map" resultType="hashmap">
+		SELECT 
+				UUID
+			,	IDX
+			,	DATA01		--주차구분
+			,	DATA02
+			,	DATA03
+			,	DATA04
+			,	DATA05
+			,	DATA06
+			,	DATA07
+			,	DATA08		--품목코드
+			,	DATA09		--품목버젼
+			,	DATA10
+			,	DATA11
+			,	DATA12
+			,	QTY01, QTY02, QTY03, QTY04, QTY05, QTY06, 	QTY07, QTY08, QTY09, 	QTY10
+			,	QTY11, QTY12, QTY13, QTY14, QTY15, QTY16, 	QTY17, QTY18, QTY19, 	QTY20
+			,	QTY21, QTY22, QTY23, QTY24, QTY25, QTY26, 	QTY27, QTY28, QTY29, 	QTY30
+			,	QTY31, QTY32, QTY33, QTY34, QTY35, QTY36, 	QTY37, QTY38, QTY39, 	QTY40
+			,	QTY41, QTY42, QTY43, QTY44, QTY45, QTY46, 	QTY47, QTY48, QTY49, 	QTY50
+			,	QTY51, QTY52, QTY53, QTY54, QTY55, QTY56, 	QTY57, QTY58, QTY59, 	QTY60
+			,	QTY61, QTY62, QTY63, QTY64, QTY65, QTY66, 	QTY67, QTY68, QTY69, 	QTY70
+			,	QTY71, QTY72, QTY73, QTY74, QTY75, QTY76,	QTY77, QTY78, QTY79, 	QTY80
+			,	QTY81, QTY82, QTY83, QTY84, QTY85, QTY86,	QTY87, QTY88, QTY89,	QTY90
+			,	QTY91, QTY92, QTY93, QTY94, QTY95, QTY96, 	QTY97, QTY98, QTY99
+			,	ERRORDATA
+		FROM PCM_SALESPOFORCASTUPLOAD A
+    	WHERE UUID = #{P_UUID}
+    	AND IDX = 1
+    	AND (SELECT COUNT(*)
+    	       FROM PCM_SALESPOFORCASTUPLOAD
+    	       WHERE UUID = #{P_UUID}
+    		   AND ERRORDATA IS NOT NULL
+    		   AND ERRORDATA <![CDATA[<>]]> 'Requier 품목코드'
+		       AND ERRORDATA <![CDATA[<>]]> 'Requier 품목Ver'
+		       AND DATA04 <![CDATA[<>]]> '수주대비'
+		       AND ERRORDATA <![CDATA[<>]]> '품목/버젼 unValid'		       
+    	       ) > 0
+    	UNION ALL
+		SELECT 
+    			UUID
+			,	IDX
+			,	DATA01		--주차구분
+			,	DATA02
+			,	DATA03
+			,	DATA04
+			,	DATA05
+			,	DATA06
+			,	DATA07
+			,	DATA08		--품목코드
+			,	DATA09		--품목버젼
+			,	DATA10
+			,	DATA11
+			,	DATA12
+			,	QTY01, QTY02, QTY03, QTY04, QTY05, QTY06, 	QTY07, QTY08, QTY09, 	QTY10
+			,	QTY11, QTY12, QTY13, QTY14, QTY15, QTY16, 	QTY17, QTY18, QTY19, 	QTY20
+			,	QTY21, QTY22, QTY23, QTY24, QTY25, QTY26, 	QTY27, QTY28, QTY29, 	QTY30
+			,	QTY31, QTY32, QTY33, QTY34, QTY35, QTY36, 	QTY37, QTY38, QTY39, 	QTY40
+			,	QTY41, QTY42, QTY43, QTY44, QTY45, QTY46, 	QTY47, QTY48, QTY49, 	QTY50
+			,	QTY51, QTY52, QTY53, QTY54, QTY55, QTY56, 	QTY57, QTY58, QTY59, 	QTY60
+			,	QTY61, QTY62, QTY63, QTY64, QTY65, QTY66, 	QTY67, QTY68, QTY69, 	QTY70
+			,	QTY71, QTY72, QTY73, QTY74, QTY75, QTY76,	QTY77, QTY78, QTY79, 	QTY80
+			,	QTY81, QTY82, QTY83, QTY84, QTY85, QTY86,	QTY87, QTY88, QTY89,	QTY90
+			,	QTY91, QTY92, QTY93, QTY94, QTY95, QTY96, 	QTY97, QTY98, QTY99		
+			,	ERRORDATA
+    	FROM PCM_SALESPOFORCASTUPLOAD A
+    	WHERE UUID = #{P_UUID}
+    	AND ERRORDATA IS NOT NULL
+    	AND ERRORDATA <![CDATA[<>]]> 'Requier 품목코드'
+		AND ERRORDATA <![CDATA[<>]]> 'Requier 품목Ver'
+		AND DATA04 <![CDATA[<>]]> '수주대비'
+		AND ERRORDATA <![CDATA[<>]]> '품목/버젼 unValid'		
+	</select>
+	
+	<select id="selectWeekInfo" parameterType="map" resultType="hashmap">
+		SELECT 	DISTINCT
+					YEAR								--년도
+				,	MAX(MONTH) AS MONTH		--월
+				,	WEEKOFTHEYEARISO				--년 주차			
+				,	(SELECT WEEKOFTHEYEARISO 
+				 	FROM MFM_WORKCALENDAR
+					WHERE ENTERPRISEID = #{ENTERPRISEID}
+				 	AND PLANTID = #{PLANTID}
+				 	AND PLANTDATE = TO_CHAR(SYSDATE,'YYYY-MM-DD')
+				 	) AS WEEKOFTODAY		--오늘일자에 해당되는 주차
+				 ,	NVL((SELECT MAX("sequence")+1
+					      FROM PCM_SALESPOFORCAST
+					      WHERE ENTERPRISEID = #{ENTERPRISEID}
+					 	  AND PLANTID = #{PLANTID}
+					 	  AND INPUTWEEK = #{DATA01}
+					      ),1) AS SEQUENCE			--차수를 구해서 넣으려면 여기서 구한다.(쿼리로 사용하지 않음)		
+		FROM MFM_WORKCALENDAR
+		WHERE SUBSTR(YEAR,3,4) || '_' || LPAD(WEEKOFTHEYEARISO,2,'0') || 'W' = #{DATA01}
+		GROUP BY YEAR,WEEKOFTHEYEARISO
+	</select>
+	
+	<update id="updateLastConfirmClear" parameterType="map">
+		UPDATE PCM_SALESPOFORCAST 
+		SET CONFIRMYN = 'N'
+		WHERE INPUTWEEK = #{DATA01}		
+	</update>
+	
+	<update id="upsertSalesOfForcast" parameterType="map">
+		MERGE INTO PCM_SALESPOFORCAST
+	    USING DUAL
+	    ON (
+	    	 		PRODUCTDEFID 			= #{PRODUCTDEFID} 
+	    	 AND PRODUCTDEFVERSION	= #{PRODUCTDEFVERSION}
+	    	 AND REGWEEK 				= #{REGWEEK}
+	    	 AND "sequence" 				= #{SEQUENCE}		--업로드는MAX+1 차수에 추가된다. (업로드 마지막차수=확정차수)
+	    	 AND FCSTDATE 				= #{FCSTDATE}
+	         )
+	     WHEN MATCHED THEN
+	     	UPDATE
+            SET	QTY 						= #{QTY}
+	     		,	MODIFIER				= #{MODIFIER}
+				,	MODIFIEDTIME			= SYSDATE
+			
+				,	LASTTXNHISTKEY		= #{LASTTXNHISTKEY}
+				,	LASTTXNID				= #{TXNID}
+				,	LASTTXNUSER			= #{CREATOR}
+				,	LASTTXNTIME			= SYSDATE
+				,	LASTTXNCOMMENT	= 'Update#2'
+				,	VALIDSTATE				= 'Valid'
+	     WHEN NOT MATCHED THEN
+			   INSERT (
+				    PRODUCTDEFID
+				,	PRODUCTDEFVERSION
+				,	REGWEEK
+				,	"sequence"
+				,	FCSTDATE
+				,	QTY
+				,	WEEK
+				,	"month"
+				
+				,	ENTERPRISEID
+				,	PLANTID
+				,	DESCRIPTION
+				
+				,	CREATOR
+				,	CREATEDTIME
+				,	MODIFIER
+				,	MODIFIEDTIME
+				
+				,	LASTTXNHISTKEY
+				,	LASTTXNID
+				,	LASTTXNUSER
+				,	LASTTXNTIME
+				,	LASTTXNCOMMENT
+				,	VALIDSTATE
+				,	INPUTWEEK
+				,	CONFIRMYN
+				) 
+		    VALUES ( 
+		         #{PRODUCTDEFID}  
+		        ,#{PRODUCTDEFVERSION}  
+		        ,#{REGWEEK}  
+		        ,#{SEQUENCE}  			
+		        ,#{FCSTDATE}
+		        ,#{QTY}
+		        ,#{WEEK} 
+				,#{MONTH}
+				
+				,#{ENTERPRISEID}
+				,#{PLANTID}
+				,#{DESCRIPTION}		
+					
+				,#{CREATOR}
+	            ,SYSDATE
+	            ,#{MODIFIER}
+	            ,SYSDATE
+	            
+				,#{LASTTXNHISTKEY}
+				,#{TXNID}
+	            ,#{CREATOR}
+	            ,SYSDATE
+	            ,NULL
+				,'Valid'
+				,#{INPUTWEEK}
+				,'Y'
+				)
+    </update>
+    
+    <update id="updateConfirmOfForcast" parameterType="map">
+    	UPDATE PCM_SALESPOFORCAST
+    	SET CONFIRMYN = CASE WHEN  "sequence" = #{P_SEQUENCE} THEN 
+    											'Y' 
+    									ELSE 
+    											'N' 
+    							END
+    	WHERE INPUTWEEK = SUBSTR(#{P_INPUTWEEK},3,2) || '_' || SUBSTR(#{P_INPUTWEEK},6,2) || 'W'
+    </update>
+	
+	<select id="selectConfirmOfForcast" parameterType="map" resultType="hashmap">
+		SELECT 	'OK' AS RESULT
+		FROM DUAL
+	</select>
+	
+</mapper>

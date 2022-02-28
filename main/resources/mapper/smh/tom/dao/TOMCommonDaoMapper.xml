@@ -1,0 +1,900 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.tom.dao.TOM00001Dao">
+<!-- TOM 공통 DAO (조회조건 및 Grid 컴포넌트) -->      
+    
+    <!--
+	설		명	: Site 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+    <select id="selectTomPlantList" parameterType="map" resultType="hashmap">
+	    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+	    SELECT
+	         NULL AS CODE
+	        ,#{CMB_TYPE} AS NAME     
+	    FROM DUAL
+	    UNION ALL
+	    </if>
+    	--
+		-- GetPlantList
+		-- Version:00001
+	   	SELECT /* smh.tom.dao.TOM00001Dao.selectTomPlantList */
+	      		PLANTID		AS CODE,
+	      		PLANTNAME	AS NAME
+	    FROM BAS_PLANT
+	   	WHERE (
+	   		  ENTERPRISEID = #{ENTERPRISEID} 
+	   		  OR 
+	   		  UPPER(ENTERPRISEID) LIKE '%' || UPPER(#{ENTERPRISEID}) || '%'
+	   		  )
+	    AND VALIDSTATE = 'Valid'
+	</select>
+	
+	<!--
+	설		명	: 작업장 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+    <select id="selectTomAreaListByTool" parameterType="map" resultType="hashmap">
+    	--
+		-- GetAreaListByTool
+		-- Version:10001
+		SELECT /* smh.tom.dao.TOM00001Dao.selectTomAreaListByTool */
+	    		AR.AREAID				AS AREAID	--공장아이디
+			,	DIC.DICTIONARYNAME      AS AREANAME	--공장명
+	    <if test="CURRENTLOGINID != null and CURRENTLOGINID !='' ">
+	      	,	NVL(SAR.ISMODIFY,'')  	AS ISMODIFY
+	    </if> 
+	    FROM BAS_AREA      AR
+	     	 INNER JOIN CMD_DICTIONARY  DIC		ON AR.AREANAME   		= DIC.DICTIONARYID
+	                									AND DIC.LANGUAGETYPE 	= #{LANGUAGETYPE}
+	                									AND  DIC.USE_YN                = 'Y' 
+	    <if test="CURRENTLOGINID != null and CURRENTLOGINID !='' ">
+	     	 INNER JOIN FN_AREA(#{CURRENTLOGINID}) SAR	ON AR.AREAID   			= SAR.AREAID		
+	                									AND AR.ENTERPRISEID  	= SAR.ENTERPRISEID
+	                									AND AR.PLANTID   		= SAR.PLANTID
+	    </if> 
+	    <if test="ISMOD eq 'Y' ">
+	    												AND SAR.ISMODIFY = 'Y'
+	    </if>                            
+	    WHERE AR.VALIDSTATE = 'Valid'
+	    AND AR.AREATYPE	= 'Area'
+	    AND AR.OWNTYPE IS NOT NULL
+	    <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+	    	AND	AR.ENTERPRISEID	= #{ENTERPRISEID}
+	    </if> 
+	    <if test="PLANTID != null and PLANTID !='' ">
+	    	AND	AR.PLANTID = #{PLANTID}
+	    </if>
+	    <if test="P_PLANTID != null and P_PLANTID !='' ">
+	    	AND	AR.PLANTID = #{P_PLANTID}
+	    </if>
+	    <if test="FACTORYID != null and FACTORYID !='' ">
+	    	AND	AR.FACTORYID = #{FACTORYID}
+	    </if>
+	    <if test="AREANAME != null and AREANAME !='' ">
+	    	AND	(
+	    		UPPER(DIC.DICTIONARYNAME) LIKE '%' || UPPER(#{AREANAME}) || '%' 
+	            OR
+	            UPPER(AR.AREAID) LIKE '%' || UPPER(#{AREANAME}) || '%'
+	            )
+	    </if>
+	    <if test="AREAID != null and AREAID !='' ">
+	    	AND AR.AREAID = #{AREAID}
+	    </if>
+	    <if test="AREATYPE != null and AREATYPE !='' ">
+	    	AND	AR.AREATYPE = #{AREATYPE}
+	    </if>
+	    ORDER BY DIC.DICTIONARYNAME
+	</select>	
+	
+	<!--
+	설		명	: 상태코드 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+    <select id="selectTomStateListByTool" parameterType="map" resultType="hashmap">
+	    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+	    SELECT
+	         NULL AS CODE
+	        ,#{CMB_TYPE} AS NAME     
+	    FROM DUAL
+	    UNION ALL
+	    </if>
+    	--
+		-- GetStateListByTool
+		-- Version:10001    	
+		SELECT /* smh.tom.dao.TOM00001Dao.selectTomStateListByTool */
+       			STS.STATEID      	AS CODE
+      		,	DCD.DICTIONARYNAME  AS NAME
+     	FROM BAS_STATE	STS
+     		 INNER JOIN CMD_LOOKUP_VALUES	CDD		ON STS.STATEID			= CDD.LOOKUP_CODE
+               										AND CDD.LOOKUP_TYPE		= 'ToolDurableStatus'
+     		 INNER JOIN CMD_DICTIONARY  	DCD	    ON CDD.DICTIONARYID   	= DCD.DICTIONARYID
+               										AND DCD.LANGUAGETYPE   	= #{LANGUAGETYPE}
+               										AND  DCD.USE_YN                = 'Y' 
+    	WHERE STS.VALIDSTATE = 'Valid'
+     	AND STS.STATEMODELID = #{STATEMODELID}
+	</select>
+	
+	<!--
+	설		명	: 공통코드 : 코드그룹ID에 속한 코드 정보 리스트 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+    <select id="selectTomLookupCodeList" parameterType="map" resultType="hashmap">
+		--
+		-- Id : GetCodeList
+		-- Version : 00001		
+		SELECT /* smh.tom.dao.TOM00001Dao.selectTomLookupCodeList */
+      			CD.LOOKUP_CODE		AS CODEID
+    		, 	DIC.DICTIONARYNAME  AS CODENAME
+    	FROM CMD_LOOKUP_VALUES     CD
+    		 LEFT OUTER JOIN CMD_DICTIONARY DIC		ON DIC.DICTIONARYID = CD.DICTIONARYID
+             										AND DIC.LANGUAGETYPE = #{LANGUAGETYPE}
+             										AND  DIC.USE_YN                = 'Y' 
+    	WHERE CD.LOOKUP_TYPE = #{CODECLASSID}
+    	AND CD.ENABLED_FLAG = 'Y'
+    	ORDER BY CD.DISPLAYSEQUENCE ASC
+	</select>
+	
+	<!--
+	설		명	: 제품 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+    <select id="selectTomProductdefidPoplistByTool" parameterType="map" resultType="hashmap">
+    	--
+        -- GetProductdefidPoplistByTool
+        -- Version:10001    	
+    	SELECT /* smh.tom.dao.TOM00001Dao.selectTomProductdefidPoplistByTool */
+				PRD.PRODUCTDEFID
+			, 	PRD.PRODUCTDEFVERSION 
+		    , 	PRD.PRODUCTDEFNAME
+		    , 	PRD.PRODUCTDEFID || '|' || PRODUCTDEFVERSION || '|'||NVL(PROCESSDEFID,'') || '|' || NVL(PROCESSDEFVERSION,'') || '|' AS PRODUCTDEFCODE
+		    , 	PIS.JOBTYPE
+		    , 	DCP.DICTIONARYNAME   AS JOBTYPENAME
+		    , 	PRD.PRODUCTDEFTYPE
+		    , 	DCD.DICTIONARYNAME   AS PRODUCTDEFTYPENAME
+		    , 	PRD.PRODUCTIONTYPE
+		    , 	DCT.DICTIONARYNAME   AS PRODUCTIONTYPENAME
+		FROM BAS_PRODUCTDEFINITION       	PRD
+			 INNER JOIN CMD_LOOKUP_VALUES	CDD		ON PRD.PRODUCTDEFTYPE  			= CDD.LOOKUP_CODE
+		       										AND CDD.LOOKUP_TYPE   			= 'ProductDefType'         
+		     INNER JOIN CMD_DICTIONARY   	DCD 	ON CDD.DICTIONARYID  			= DCD.DICTIONARYID
+		<if test="LANGUAGETYPE != null and LANGUAGETYPE !='' ">
+		       										AND DCD.LANGUAGETYPE  			= #{LANGUAGETYPE}		
+		       										AND  DCD.USE_YN                = 'Y' 
+		</if>
+		     INNER JOIN CMD_LOOKUP_VALUES	CDT     ON PRD.PRODUCTIONTYPE  			= CDT.LOOKUP_CODE
+		       										AND CDT.LOOKUP_TYPE   			= 'ProductionType'
+		     INNER JOIN CMD_DICTIONARY   	DCT     ON CDT.DICTIONARYID  			= DCT.DICTIONARYID
+		<if test="LANGUAGETYPE != null and LANGUAGETYPE !='' ">
+		              								AND DCT.LANGUAGETYPE  			= #{LANGUAGETYPE}
+		              								AND  DCT.USE_YN                = 'Y' 
+		</if>
+		     LEFT OUTER JOIN BAS_PRODUCTITEMSPEC PIS 	ON  PRD.ENTERPRISEID   		= PIS.ENTERPRISEID
+		            									AND PRD.PRODUCTDEFID  		= PIS.ITEMID
+		            									AND PRD.PRODUCTDEFVERSION  	= PIS.ITEMVERSION
+		     LEFT OUTER JOIN CMD_LOOKUP_VALUES 	 CDP    ON PIS.JOBTYPE				= CDP.LOOKUP_CODE
+		            									AND CDP.LOOKUP_TYPE   		= 'JobType'         
+		     LEFT OUTER JOIN CMD_DICTIONARY      DCP    ON CDP.DICTIONARYID  		= DCP.DICTIONARYID
+		<if test="LANGUAGETYPE != null and LANGUAGETYPE !='' ">
+		            									AND DCP.LANGUAGETYPE  		= #{LANGUAGETYPE}
+		            									AND  DCP.USE_YN                = 'Y' 
+		</if>
+		WHERE 1=1
+		AND PRD.VALIDSTATE = 'Valid'
+		<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+			AND PRD.ENTERPRISEID = #{ENTERPRISEID}
+		</if>
+		<if test="PLANTID != null and PLANTID !='' and !'*'.equals(PLANTID) ">
+			<!--	AND UPPER(PRD.PLANTID) LIKE '%' || UPPER(#{PLANTID}) || '%'	-->
+		</if>
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and !(PRODUCTDEFID eq '*'.toString()) ">
+			AND (
+		        UPPER(PRD.PRODUCTDEFID) LIKE '%' || UPPER(#{PRODUCTDEFID}) || '%'
+		        OR
+		        UPPER(PRD.PRODUCTDEFNAME) LIKE '%' || UPPER(#{PRODUCTDEFID}) || '%'
+		        )
+		</if>
+		<if test="PRODUCTDEF != null and PRODUCTDEF !='' and !(PRODUCTDEF eq '*'.toString()) ">
+		   AND (
+		       UPPER(PRD.PRODUCTDEFID) LIKE '%' || UPPER(#{PRODUCTDEF}) || '%'
+		       OR
+		       UPPER(PRD.PRODUCTDEFNAME) LIKE '%' || UPPER(#{PRODUCTDEF}) || '%'
+		       )
+		</if>
+		<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !='' and !(PRODUCTDEFNAME eq '*'.toString()) ">
+			AND (
+				UPPER(PRD.PRODUCTDEFID) LIKE '%' || UPPER(#{PRODUCTDEFNAME}) || '%'
+				OR
+				UPPER(PRD.PRODUCTDEFNAME) LIKE '%' || UPPER(#{PRODUCTDEFNAME}) || '%'				
+				)
+		</if>
+		<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' and !(PRODUCTDEFVERSION eq '*'.toString()) ">
+		    AND UPPER(PRD.PRODUCTDEFVERSION) LIKE '%' || UPPER(#{PRODUCTDEFVERSION}) || '%'
+		</if>
+		<if test="P_FILMVERSION != null and P_FILMVERSION !='' ">
+		    AND PRD.PRODUCTDEFVERSION = #{P_FILMVERSION}
+		</if>
+		<if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' and !(PRODUCTDEFTYPE eq '*'.toString()) ">
+		    AND PRD.PRODUCTDEFTYPE = #{PRODUCTDEFTYPE}
+		</if>
+		<if test="SEARCH != null and SEARCH !='' and !(SEARCH eq '*'.toString()) ">
+		    AND (
+		         UPPER(PRD.PRODUCTDEFID) LIKE '%' || UPPER(#{SEARCH}) || '%'
+		         OR  
+		         UPPER(PRD.PRODUCTDEFNAME) LIKE '%' || UPPER(#{SEARCH}) || '%'
+		        )
+		</if>
+		ORDER BY PRODUCTDEFID, PRODUCTDEFVERSION
+	</select>
+	
+	<!--
+	설		명	: 품목 코드 조회 (공정)
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+	<select id="selectProductdefidlistByOspList" parameterType="map" resultType="hashmap">
+			    --
+				-- GetProductdefidlistByOsp
+				-- Version:10001
+				SELECT 
+						PRD.PRODUCTDEFID
+					,	PRD.PRODUCTDEFVERSION	
+					,	PRD.PRODUCTDEFNAME
+					,	PRD.PRODUCTDEFID || '|' || PRD.PRODUCTDEFVERSION || '|'	||NVL(PRD.PROCESSDEFID,'') || '|' || NVL(PRD.PROCESSDEFVERSION,'') || '|' AS PRODUCTDEFCODE
+					,	PRD.PRODUCTDEFTYPE
+					, 	PRD.PRODUCTIONTYPE
+		   			, 	DCT.DICTIONARYNAME   AS PRODUCTIONTYPENAME
+		   			,	BPIS.JOBTYPE
+		   			,	DCT2.DICTIONARYNAME   AS JOBTYPENAME
+				FROM	BAS_PRODUCTDEFINITION    PRD
+				<!-- ====================================================================== -->
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES	CDT     ON PRD.PRODUCTIONTYPE  			= CDT.LOOKUP_CODE
+		       														AND CDT.LOOKUP_TYPE   			= 'ProductionType'
+		     	LEFT OUTER JOIN CMD_DICTIONARY   	DCT     ON CDT.DICTIONARYID  			= DCT.DICTIONARYID
+		     																AND DCT.LANGUAGETYPE =  #{LANGUAGETYPE}
+		     																--AND  DCT.USE_YN                = 'Y' 
+		     	<!-- ====================================================================== -->
+		     	LEFT OUTER JOIN BAS_ITEMMASTER BIM 	ON  PRD.PRODUCTDEFID   		= BIM.ITEMID
+					            									AND PRD.PRODUCTDEFVERSION 	= BIM.ITEMVERSION
+					            									AND PRD.ENTERPRISEID  			= PRD.ENTERPRISEID
+				LEFT OUTER JOIN BAS_PRODUCTITEMSPEC BPIS 	ON  BIM.ITEMID   		= BPIS.ITEMID
+					            									AND BIM.ITEMVERSION  		= BPIS.ITEMVERSION
+					            									AND BIM.ENTERPRISEID  		= BPIS.ENTERPRISEID		            		
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES			CDT2     ON BPIS.JOBTYPE  			= CDT2.LOOKUP_CODE
+		       																AND CDT2.LOOKUP_TYPE   			= 'JobType'
+		     	LEFT OUTER JOIN CMD_DICTIONARY   			DCT2     ON CDT2.DICTIONARYID  			= DCT2.DICTIONARYID				
+		     																AND DCT2.LANGUAGETYPE  			= #{LANGUAGETYPE}	   
+		     																  AND  DCT2.USE_YN                = 'Y'        																
+		     	<!-- ====================================================================== -->
+				WHERE	1=1
+				AND		PRD.VALIDSTATE = 'Valid'
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+					AND	PRD.ENTERPRISEID = #{ENTERPRISEID}
+				</if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+					AND	PRD.PLANTID = #{PLANTID}
+				</if>
+				<if test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' and !(P_PRODUCTDEFTYPE eq '*'.toString()) ">
+					AND	PRD.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE}
+				</if>
+				--AND	PRD.PRODUCTDEFTYPE  IN ( 'Product','SemiProduct')
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and !(PRODUCTDEFID eq '*'.toString()) ">
+					AND	(     UPPER(PRD.PRODUCTDEFID) LIKE '%' || UPPER(#{PRODUCTDEFID}) || '%'
+					      OR  UPPER(PRD.PRODUCTDEFNAME) LIKE '%' || UPPER(#{PRODUCTDEFID}) || '%'
+					    )
+				</if>
+				ORDER BY PRODUCTDEFID ,PRODUCTDEFVERSION
+	</select>	
+	    
+	<!--
+	설		명	: 작업장 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: InHouseOSP (사내외주), OutsideOSP(사외외주), OurCompany(자사), MajorSuppliers(소사)
+						  
+	-->
+	<select id="selectAreaidPopupListByOsp" parameterType="map" resultType="hashmap">
+		--
+		-- GetAreaidPopupListByOsp
+		-- Version:10001
+		SELECT 
+				SAR.AREAID		      		AS AREAID
+			,	DIC.DICTIONARYNAME    AS AREANAME
+			--,	SAR.VENDORID          	AS OSPVENDORID
+			--,	VEN.VENDORNAME        	AS OSPVENDORNAME
+			,	' '          					AS OSPVENDORID
+			,	' '        						AS OSPVENDORNAME
+		FROM BAS_AREA                 		SAR
+			--INNER JOIN BAS_VENDOR           VEN  ON  VEN.VENDORID     = SAR.VENDORID  
+		    --                                     AND VEN.PLANTID      = SAR.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY	DIC  ON  DIC.DICTIONARYID = SAR.AREANAME
+		                                         AND DIC.LANGUAGETYPE = #{LANGUAGETYPE}
+		                                         AND  DIC.USE_YN                = 'Y' 
+		WHERE SAR.VALIDSTATE = 'Valid'
+		AND SAR.OWNTYPE IS NOT NULL
+		<if test="P_OWNTYPE != null and P_OWNTYPE !='' and !(P_OWNTYPE eq 'Y'.toString()) ">
+			AND	SAR.OWNTYPE    IN ('InHouseOSP','OutsideOSP','MajorSuppliers')
+		</if>
+		<if test="P_IOOWNTYPE != null and P_IOOWNTYPE !='' and !(P_IOOWNTYPE eq 'Y'.toString()) ">
+			AND	SAR.OWNTYPE    = 'OutsideOSP'
+		</if>
+			AND	SAR.PLANTID = #{P_PLANTID}
+		<if test="P_AREANAME != null and P_AREANAME !='' and !(P_AREANAME eq '*'.toString()) ">
+			AND	(   UPPER(SAR.AREAID) LIKE '%' || UPPER(#{P_AREANAME}) || '%' 
+			     OR UPPER(DIC.DICTIONARYNAME) LIKE '%' || UPPER(#{P_AREANAME}) || '%')
+		</if>
+	</select>
+	
+	<!--
+	설		명	: 공정명 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+	<select id="selectProcessSegmentListByOsp" parameterType="map" resultType="hashmap">
+		--
+		-- GetProcessSegmentListByOsp
+		-- Version:10001
+		SELECT
+				PRO.PROCESSSEGMENTID
+			,	DIC.DICTIONARYNAME  AS PROCESSSEGMENTNAME
+		FROM  BAS_PROCESSSEGMENT               PRO
+			INNER JOIN BAS_PROCESSSEGMENTCLASS SPC ON  SPC.PROCESSSEGMENTCLASSID = PRO.PROCESSSEGMENTCLASSID
+	    	LEFT OUTER JOIN CMD_DICTIONARY	   DIC ON  DIC.DICTIONARYID = PRO.PROCESSSEGMENTNAME
+											       					AND DIC.LANGUAGETYPE =  #{LANGUAGETYPE}
+											       					AND  DIC.USE_YN                = 'Y' 
+		WHERE 1=1
+		<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' and !(PROCESSSEGMENTID eq '*'.toString()) ">
+			AND	PRO.PROCESSSEGMENTID = #{PROCESSSEGMENTID} 
+		</if>
+		<if test="PROCESSSEGMENTNAME != null and PROCESSSEGMENTNAME !='' and !(PROCESSSEGMENTNAME eq '*'.toString()) ">
+			AND	(PRO.PROCESSSEGMENTID LIKE '%' || #{PROCESSSEGMENTNAME} || '%' 
+			OR DIC.DICTIONARYNAME LIKE '%' || #{PROCESSSEGMENTNAME} || '%')
+		</if>
+		<if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' ">
+			AND	PRO.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID} 
+		</if>
+		<if test="P_PROCESSSEGMENTCLASSID != null and P_PROCESSSEGMENTCLASSID !='' and !(P_PROCESSSEGMENTCLASSID eq '*'.toString()) ">
+			AND	PRO.PROCESSSEGMENTCLASSID = #{P_PROCESSSEGMENTCLASSID} 
+		</if>
+		<if test="P_TOPPROCESSSEGMENTCLASSID != null and P_TOPPROCESSSEGMENTCLASSID !='' and !(P_TOPPROCESSSEGMENTCLASSID eq '*'.toString()) ">
+			AND	SPC.PARENTPROCESSSEGMENTCLASSID = #{P_TOPPROCESSSEGMENTCLASSID} 
+		</if>
+		AND	PRO.ENTERPRISEID = #{ENTERPRISEID}
+		AND	PRO.VALIDSTATE = 'Valid'
+		ORDER BY PRO.PROCESSSEGMENTID
+	</select>
+	
+	<!--
+	설		명	: 입고자 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+	<select id="selectReceiptUserList" parameterType="map" resultType="hashmap">
+		-- GetRequestorListByOsp
+		-- Version:10001
+		SELECT 
+				SUR.USER_ID		AS	REQUESTUSER
+			,	SUR.USER_NM	AS	REQUESTUSERNAME
+		FROM    CMD_USERS  SUR
+		--WHERE	SUR.VALIDSTATE = 'Valid'
+		WHERE	SUR.USE_YN = 'Y'
+		<if test="P_PLANTID != null and P_PLANTID !='' ">
+			AND		SUR.PLANTID = #{P_PLANTID}
+		</if>
+		<if test="REQUESTUSERNAME != null and REQUESTUSERNAME !='' ">
+			AND (
+					UPPER(SUR.USER_ID) LIKE '%' || UPPER(#{REQUESTUSERNAME})|| '%' 
+				 OR UPPER(SUR.USER_NM) LIKE '%' || UPPER(#{REQUESTUSERNAME})|| '%'
+				)
+		</if>
+		ORDER BY SUR.USER_ID
+	</select>
+	
+	<!--
+	설		명	: 공정별 AREA 정보 가져오기 
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+	<select id="selectAreaidByOspProcesssegmentid" parameterType="map" resultType="hashmap">
+        -- Id : GetAreaidByOspProcesssegmentid
+		-- Version : 10001
+		SELECT	
+				CD.LOOKUP_CODE          AS CODE
+			,	DIC.DICTIONARYNAME		AS NAME
+		FROM	CMD_LOOKUP_VALUES					CD
+		LEFT OUTER JOIN CMD_DICTIONARY	DIC	ON	DIC.DICTIONARYID = CD.DICTIONARYID
+																AND	DIC.LANGUAGETYPE =  #{LANGUAGETYPE}
+																AND  DIC.USE_YN                = 'Y' 
+		WHERE	CD.LOOKUP_TYPE = 'SearchCommon'
+		AND		CD.ENABLED_FLAG = 'Y'
+		UNION ALL
+		SELECT	
+				DISTINCT	MMR.AREAID	  AS CODE
+			,	DAA.DICTIONARYNAME        AS NAME
+		FROM	   BAS_BILLOFRESOURCE   SBR
+		INNER JOIN BAS_RESOURCE         MMR ON  MMR.RESOURCEID            = SBR.RESOURCEID
+			                               AND MMR.PLANTID               = SBR.PLANTID
+			                               AND MMR.ENTERPRISEID          = SBR.ENTERPRISEID
+		LEFT OUTER  JOIN BAS_AREA       SAR ON  SAR.AREAID                = MMR.AREAID
+		                                   AND SAR.PLANTID               = MMR.PLANTID 
+		LEFT OUTER  JOIN CMD_DICTIONARY DAA ON  DAA.DICTIONARYID          = SAR.AREANAME
+		                                    				AND DAA.LANGUAGETYPE         = #{LANGUAGETYPE}
+		                                    				AND  DAA.USE_YN                = 'Y' 
+		WHERE 1=1 OR (1=1
+		AND		SBR.RESOURCETYPE          = 'Resource'
+		AND		SBR.VALIDSTATE            = 'Valid'
+		AND		SBR.PRODUCTDEFID          = #{P_PRODUCTDEFID}
+		AND		SBR.PRODUCTDEFVERSION     = #{P_PRODUCTDEFVERSION}
+		AND		SBR.PROCESSDEFID          = #{P_PROCESSDEFID}
+		AND		SBR.PROCESSDEFVERSION     = #{P_PROCESSDEFVERSION}
+		AND		SBR.PROCESSSEGMENTID      = #{P_PROCESSSEGMENTID}
+		AND		SBR.PROCESSSEGMENTVERSION = #{P_PROCESSSEGMENTVERSION}
+		AND		SBR.PLANTID               = #{P_PLANTID}
+		)
+	</select>
+	
+	<!--
+        설       명   : 협렵업체 조회 
+       생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+        수  정   이  력 :
+    -->
+    <select id="selectVendorList" parameterType="map" resultType="hashmap">
+        --
+        --GetVendorList
+        --Version:10001         
+        SELECT 
+                VENDORID
+            ,   VENDORNAME
+        FROM    BAS_VENDOR
+        WHERE   1 = 1
+         
+        <if test="( VENDORID != null and VENDORID !='' and !(VENDORID eq '*'.toString()) ) ">
+            AND (
+                      UPPER(VENDORID) LIKE '%' || UPPER(NVL(#{VENDORID},'X')) || '%' 
+                 OR UPPER(VENDORNAME) LIKE '%' || UPPER(NVL(#{VENDORID},'X')) || '%'
+                 )
+        </if>
+        <if test="( VENDORNAME != null and VENDORNAME !='' and !(VENDORNAME eq '*'.toString()) ) ">
+            AND (
+                      UPPER(VENDORID) LIKE '%' || UPPER(NVL(#{VENDORNAME},'X')) || '%'
+                 OR UPPER(VENDORNAME) LIKE '%' || UPPER(NVL(#{VENDORNAME},'X')) || '%'
+                 )
+        </if>
+        
+        <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+            AND     ENTERPRISEID = #{ENTERPRISEID}
+        </if>         
+        <if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+            AND     PLANTID = #{PLANTID}
+        </if>         
+        <if test="P_PLANTID != null and P_PLANTID !='' and !(P_PLANTID eq '*'.toString()) ">
+            AND     PLANTID = #{P_PLANTID}
+        </if>         
+        <if test="VENDORTYPE != null and VENDORTYPE !='' and !(VENDORTYPE eq '*'.toString()) ">
+            AND     VENDORTYPE = #{VENDORTYPE}
+        </if>        
+             
+        <choose>
+         	<when test="P_VALIDSTATE != null and P_VALIDSTATE !='' ">
+         		AND     VALIDSTATE = #{P_VALIDSTATE}
+         	</when>
+         	<otherwise>
+         		AND     VALIDSTATE = 'Valid'
+         	</otherwise>
+		</choose>        
+        
+        ORDER BY VENDORID ASC
+    </select>
+    
+    
+    <!--
+	설		명	: Tool구분 목록을 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+	<select id="selectDurableClassIDByToolList" parameterType="map" resultType="hashmap">
+		--
+		-- GetDurableClassIDByTool
+		-- Version:10001
+		SELECT CODE, NAME
+		FROM (
+				<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+			    SELECT
+			         NULL AS CODE
+			        ,#{CMB_TYPE} AS NAME     
+			    FROM DUAL
+			    UNION ALL
+			    </if>
+				SELECT 
+		                CD.LOOKUP_CODE AS    CODE,
+		                DC.DICTIONARYNAME AS NAME
+		        FROM	CMD_LOOKUP_VALUES		CD
+		        INNER JOIN CMD_DICTIONARY		DC	ON	CD.DICTIONARYID			= DC.DICTIONARYID
+		                                            			AND	DC.LANGUAGETYPE			= #{LANGUAGETYPE}
+		                                            			AND  DC.USE_YN                = 'Y' 
+		        WHERE	CD.LOOKUP_TYPE = 'DurableClass'
+		        AND		CD.ENABLED_FLAG	= 'Y'
+		        )
+        ORDER BY CASE WHEN CODE = 'M' THEN '1'
+		        			 WHEN CODE = 'W' THEN '2'
+		        			 WHEN CODE = 'B' THEN '3'
+		        			 WHEN CODE = 'J' THEN '4'
+		        			 WHEN CODE = 'E' THEN '5'
+		        			 ELSE '0'
+		        	  END
+	</select>
+	
+	<!--
+	설		명	: Tool유형 목록을 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+	<select id="selectCodeClassIDListByToolList" parameterType="map" resultType="hashmap">
+		--
+		-- GetCodeClassIDListByTool
+		-- Version:10001
+		SELECT CODE, NAME
+		FROM (
+				<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+			    SELECT
+			         NULL AS CODE
+			        ,#{CMB_TYPE} AS NAME
+			        ,0 AS ORD
+			    FROM DUAL
+			    UNION ALL
+			    </if>
+				SELECT CODE, NAME2 AS NAME, ORD
+		        FROM (
+					SELECT 
+							CD.LOOKUP_CODE			AS CODE
+						,	DC.DICTIONARYNAME		AS NAME2
+						,   CD.DISPLAYSEQUENCE       AS ORD
+					FROM	CMD_LOOKUP_VALUES					CD
+					INNER JOIN CMD_DICTIONARY		DC	ON	CD.DICTIONARYID			= DC.DICTIONARYID
+																	AND	DC.LANGUAGETYPE			= #{LANGUAGETYPE}
+																	AND  DC.USE_YN                = 'Y' 
+					INNER JOIN TOM_DURABLECLASS		DCS	ON	CD.LOOKUP_TYPE			= 'ToolForm' || DCS.DURABLECLASSID
+														AND	DCS.DURABLECLASSTYPE	= 'Tool'
+					WHERE	CD.ENABLED_FLAG	= 'Y'
+					AND		DCS.VALIDSTATE	= 'Valid'
+					<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+						AND		DCS.ENTERPRISEID		= #{ENTERPRISEID}
+					</if>
+					AND		DCS.DURABLECLASSID		= #{DURABLECLASSID}
+					ORDER BY CD.DISPLAYSEQUENCE
+					)
+				GROUP BY CODE, NAME2, ORD
+				)
+        ORDER BY ORD
+	</select>
+	
+	
+	
+	<!--
+	설		명	: Tool종류 목록을 조회
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+	<select id="selectDetailListByToolList" parameterType="map" resultType="hashmap">
+		--
+		-- Id : GetToolFormMoldToolKind
+		-- Version : 10001
+		SELECT CODE, NAME
+		FROM (
+				<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+			    SELECT
+			         NULL AS CODE
+			        ,#{CMB_TYPE} AS NAME
+			        ,0 AS ORD
+			    FROM DUAL
+			    UNION ALL
+			    </if>
+				SELECT 
+						CD.LOOKUP_CODE AS CODE 
+					 , 	CASE
+					 		WHEN DIC.DICTIONARYNAME IS NULL	THEN CD.MEANING 
+					 		ELSE DIC.DICTIONARYNAME 
+					 	END 						AS NAME	
+					 ,   CD.DISPLAYSEQUENCE       AS ORD
+				FROM	CMD_LOOKUP_VALUES						CD
+				LEFT JOIN CMD_DICTIONARY 			DIC	ON DIC.DICTIONARYID = CD.DICTIONARYID
+																		AND DIC.LANGUAGETYPE = #{LANGUAGETYPE}	
+																		AND  DIC.USE_YN                = 'Y' 
+				WHERE 	1 = 1
+				AND		CD.LOOKUP_TYPE = 'ToolKind' || #{DURABLECLASSID} || #{FORMID}
+				AND		CD.ENABLED_FLAG = 'Y'
+				GROUP BY 
+						CD.LOOKUP_CODE 
+					,	CASE
+					 		WHEN DIC.DICTIONARYNAME IS NULL	THEN CD.MEANING 
+					 		ELSE DIC.DICTIONARYNAME 
+					 	END
+					,	CD.DISPLAYSEQUENCE
+				)
+        ORDER BY ORD
+	</select>
+	
+	
+	<!--
+	설		명	: 사용자목록을 조회한다.
+	생	성	자	: 박현우
+	생	성	일	: 2021-03-15
+	수  정   이  력	: 
+	-->
+	<select id="selectUserListForPopupByToolList" parameterType="map" resultType="hashmap">
+		--
+		-- "GetUserListForPopupByTool"
+		-- Version:10001
+			SELECT 
+					USR.USER_ID					AS USERID
+				,	USR.USER_NM					AS USERNAME
+				,	USR.DEPT_NM					AS DEPARTMENT
+				,	USR.JIKWI_CD				AS DUTY
+				--,	DIC.DICTIONARYNAME			AS PLANT
+				--,	ENT.ENTERPRISENAME			AS ENTERPRISE
+			FROM	CMD_USERS 				USR
+			INNER JOIN BAS_ENTERPRISE		ENT	ON	USR.ENTERPRISEID		= ENT.ENTERPRISEID
+			INNER JOIN BAS_PLANT			PLT	ON	USR.ENTERPRISEID		= PLT.ENTERPRISEID
+												AND	USR.PLANTID				= PLT.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY	DIC	ON	PLT.PLANTNAME			= DIC.DICTIONARYID
+																	AND	DIC.LANGUAGETYPE		= #{LANGUAGETYPE}			
+																	AND  DIC.USE_YN                = 'Y' 			
+			WHERE	1=1
+			AND		USR.ENTERPRISEID	= #{ENTERPRISEID}
+			AND		USR.PLANTID			= #{PLANTID}
+			<if test="USERNAME != null and USERNAME !='' ">
+				AND		UPPER(USR.USER_NM)		LIKE '%' || UPPER(#{USERNAME}) || '%'
+			</if>
+			ORDER BY USR.DEPT_NM,	USR.USER_NM
+	</select>
+	
+	
+	
+	<update id="deleteToolRequestMailEmailRecvList" parameterType="hashmap">
+		DELETE FROM TOM_TOOLREQUESTMAIL
+		WHERE ATCH_SRC_KEY = #{ATCH_SRC_KEY}
+	</update>
+	
+	<!-- 치공구 제작의뢰 EMAIL 수신자 저장 -->
+    <update id="insertToolRequestMailEmailRecvList" parameterType="hashmap">
+         INSERT 
+         INTO    TOM_TOOLREQUESTMAIL
+                    ( SNDNG_LOG_ID     	/* 발송 로그 ID           */
+                    , SNDNG_KND_CD     	/* 발송 종류 코드    */
+                    , SENDER_INFO       /* 발송자 정보                 */
+                    , SENDER_NAME       /* 발송자 정보                 */
+                    , RCVER_INFO        /* 수신자 정보                 */
+                    , CONTENT2           /* 내용                 */
+                    , SUBJECT_TEXT    	/* 제목                 */
+                    , CC
+                    , KEEP_START_DATEC 	/* 보관 시작일자C */
+                    , SNDNG_YN
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , ATCH_SRC_KEY
+                    , RCVER_NAME
+                    , ATCH_TY_CD
+                    )
+         VALUES (
+                     CMD_SNDNG_LOGS_S.NEXTVAL
+                     , 'EMAIL'
+                     , #{FROM_ADDR}
+                     , #{FROM_NAME}
+                     , #{TO_ADDR}
+                     , #{CONTENT}
+                     , #{SUBJECT}
+                     , #{TO_CC}
+                     , TO_CHAR(SYSDATE, 'YYYYMMDD')
+                     , #{SNDNG_YN}
+                     , #{CREATED_BY}
+                     , SYSDATE
+                     , #{ATCH_SRC_KEY}
+                     , #{TO_NAME}
+                     , #{ATCH_TY_CD}
+                     )
+    </update>
+    
+    <!-- 발주/취소 수신자List -->
+    <select id="selectToolRequestMailRecvList" parameterType="map" resultType="hashmap">
+		SELECT 
+				 TRM.SNDNG_LOG_ID	
+		        ,TRM.JOB_SYS_CD	
+		        ,TRM.SNDNG_KND_CD	
+		        ,TRM.SENDER_INFO 
+		        ,TRM.RCVER_INFO as EMAIL_ADDR	
+		        ,TRM.CONTENT2	
+		        ,TRM.RESVE_DTMC	
+		        ,TRM.SUBJECT_TEXT	
+		        ,TRM.CC	
+		        ,TRM.RM	
+		        ,TRM.CREATED_BY	
+		        --,TRM.CREATION_DATE	
+		        ,TRM.LAST_UPDATED_BY	
+		        ,TRM.LAST_UPDATE_DATE	
+		        ,TRM.LAST_UPDATE_LOGIN	
+		        ,CSL.SNDNG_YN
+		        ,CSL.SNDNG_RESULT
+		        ,TO_CHAR(CSL.CREATION_DATE,'YYYY-MM-DD HH24:MI:SS') AS CREATION_DATE	
+		        ,TRM.KEEP_START_DATEC	
+		        ,TRM.SENDER_NAME	
+		        ,TRM.ATCH_SRC_KEY
+		        ,TRM.ATCH_TY_CD
+		        ,TRM.RCVER_NAME as USER_NM
+		        ,'1' AS CHK
+		        ,(SELECT DECODE(ORDERYN,'Y','발주','N','취소','미발주') FROM TOM_TOOLREQUEST WHERE TO_CHAR(REQUESTDATE,'YYYY-MM-DD')||'|'||REQUESTSEQUENCE = TRM.ATCH_SRC_KEY) AS ORDERNM
+		        ,CD.DEPT_NM
+                ,CCV.MEANING AS JIKWI_CD
+                ,' ' AS AUTH_NM
+		FROM	TOM_TOOLREQUESTMAIL	TRM
+		LEFT   OUTER JOIN CMD_USERS U1 ON   TRM.RCVER_INFO = U1.EMAIL_ADDR
+		LEFT   OUTER JOIN CMD_DEPTS CD ON	CD.DEPT_CD = U1.DEPT_CD
+		LEFT   OUTER JOIN CMD_CODE_V CCV ON	CCV.CODEID = U1.JIKWI_CD AND CCV.CODECLASSID = 'HRPostCode'
+		LEFT OUTER JOIN (
+						SELECT   A.SNDNG_LOG_ID	
+						        ,A.JOB_SYS_CD	
+						        ,A.SNDNG_KND_CD	
+						        ,A.SENDER_INFO 
+						        ,A.RCVER_INFO as EMAIL_ADDR	
+						        ,A.CONTENT	
+						        ,A.RESVE_DTMC	
+						        ,A.SUBJECT_TEXT	
+						        ,A.CC	
+						        ,A.RM	
+						        ,A.CREATED_BY	
+						        ,A.CREATION_DATE	
+						        ,A.LAST_UPDATED_BY	
+						        ,A.LAST_UPDATE_DATE	
+						        ,A.LAST_UPDATE_LOGIN	
+						        ,A.SNDNG_YN
+						        ,decode(A.SNDNG_YN,'Y','Success','F','Fail') as SNDNG_RESULT	
+						        ,A.KEEP_START_DATEC	
+						        ,A.SENDER_NAME	
+						        ,A.ATCH_SRC_KEY
+						        ,A.ATCH_TY_CD
+						        ,A.RCVER_NAME as USER_NM	
+						FROM CMD_SNDNG_LOGS A
+						WHERE A.ATCH_SRC_KEY = #{ATCH_SRC_KEY}
+						AND A.RCVER_INFO || TO_CHAR(A.CREATION_DATE,'YYYYMMDDHH24MISS') = (
+																							SELECT MAX(B.RCVER_INFO || TO_CHAR(B.CREATION_DATE,'YYYYMMDDHH24MISS'))
+																							FROM CMD_SNDNG_LOGS B
+																							WHERE B.ATCH_SRC_KEY = #{ATCH_SRC_KEY}
+																						   )
+						) CSL ON CSL.ATCH_SRC_KEY = TRM.ATCH_SRC_KEY
+		WHERE TRM.ATCH_SRC_KEY = #{ATCH_SRC_KEY}
+	</select>
+	
+	<!-- 수신자List 조회 :: SELECT * FROM CMD_SNDNG_LOGS WHERE ATCH_SRC_KEY = '2021-04-21|2' -->
+    <select id="selectToolRecvList" parameterType="map" resultType="hashmap">
+		SELECT A.SNDNG_LOG_ID	
+		        ,A.JOB_SYS_CD	
+		        ,A.SNDNG_KND_CD	
+		        ,A.SENDER_INFO 
+		        ,A.RCVER_INFO as EMAIL_ADDR	
+		        ,A.CONTENT	AS CONTENT2
+		        ,A.RESVE_DTMC	
+		        ,A.SUBJECT_TEXT	
+		        ,A.CC	
+		        ,A.RM	
+		        ,A.CREATED_BY	
+		        --,A.CREATION_DATE	
+		        ,A.LAST_UPDATED_BY	
+		        ,A.LAST_UPDATE_DATE	
+		        ,A.LAST_UPDATE_LOGIN	
+		        ,A.SNDNG_YN
+		        ,decode(A.SNDNG_YN,'Y','Success','F','Fail') as SNDNG_RESULT	
+		        ,TO_CHAR(A.CREATION_DATE,'YYYY-MM-DD HH24:MI:SS') AS CREATION_DATE
+		        ,A.KEEP_START_DATEC	
+		        ,A.SENDER_NAME	
+		        ,A.ATCH_SRC_KEY
+		        ,A.ATCH_TY_CD
+		        ,A.RCVER_NAME as USER_NM
+		        ,CASE WHEN A.ATCH_TY_CD = 'TOMTOOLREQUEST' THEN '발주' ELSE '취소' END AS SENDTYPENAME
+		        ,C.DEPT_NM
+                ,D.MEANING AS JIKWI_NM
+                --,F.USERGROUPNAME AS AUTH_NM
+                ,' ' AS AUTH_NM
+		FROM CMD_SNDNG_LOGS A
+				,CMD_USERS B
+	             ,CMD_DEPTS C
+	             ,CMD_CODE_V D
+	             --,BAS_USERGROUPUSER E
+	             --,BAS_USERGROUP F
+		WHERE A.ATCH_SRC_KEY = #{ATCH_SRC_KEY}
+		AND A.RCVER_INFO = B.EMAIL_ADDR
+        AND B.DEPT_CD = C.DEPT_CD
+        AND B.JIKWI_CD = D.CODEID
+        AND D.CODECLASSID = 'HRPostCode'
+        --AND B.USER_ID = E.USERID
+        --AND E.USERGROUPID = F.USERGROUPID
+		ORDER BY A.CREATION_DATE
+	</select>
+	
+	<select id="selectToolRequestStatusName" parameterType="map" resultType="hashmap">
+		SELECT DECODE(ORDERYN,'Y','발주','N','취소','미발주') AS STATUSNAME
+        FROM TOM_TOOLREQUEST 
+        WHERE TO_CHAR(REQUESTDATE,'YYYY-MM-DD')||'|'||REQUESTSEQUENCE = #{ATCH_SRC_KEY}
+	</select>
+	
+	
+	<!-- 주차별 일자 리스트 쿼리 -->
+	<select id="selectSalespoforcastRegWeekDayList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectSalespoforcastRegWeekDay
+				-- Version : 10001				      
+				SELECT PLANTDATE AS DATE2
+				FROM MFM_WORKCALENDAR 
+				WHERE 1=1
+				AND WEEKOFTHEYEAR = #{WEEK}
+				AND YEAR = #{YEAR}
+				ORDER BY PLANTDATE ASC
+	</select>
+	
+	<select id="selectSalespoforcastRegWeekDayList2" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectSalespoforcastRegWeekDay2 : 업로드한 주차 + 차수에 해당하는 FCSTDATE 일자를 쭉 구한다.
+				-- Version : 10001				      
+				SELECT FCSTDATE AS DATE2
+				FROM PCM_SALESPOFORCAST 
+				WHERE 1=1
+				AND INPUTWEEK = SUBSTR(#{P_INPUTWEEK},3,2) || '_' || SUBSTR(#{P_INPUTWEEK},6) || 'W'
+				AND "sequence" = #{P_SEQUENCE}
+				GROUP BY FCSTDATE
+				ORDER BY FCSTDATE
+	</select>
+	
+	<select id="selectWeekDefaultTerm" parameterType="map" resultType="hashmap">
+		SELECT
+				TO_CHAR(SYSDATE,'YYYY-MM-DD') AS START_DATE,
+				TO_CHAR(ADD_MONTHS(SYSDATE,6),'YYYY-MM-DD') AS END_DATE
+		FROM DUAL
+	</select>
+	
+	<!-- 주차 쿼리 -->
+	<select id="selectSalespoforcastWeekoftheyearList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectSalespoforcastWeekoftheyear
+				-- Version : 10001				
+				SELECT YEAR || '-' || month AS YEARMONTH
+					, YEAR || '-' || WEEKOFTHEYEARISO 		AS YEARWEEK
+					, WEEKOFTHEYEARISO 		AS WEEK
+					, YEAR 		AS YEAR
+				FROM MFM_WORKCALENDAR 
+				WHERE 1=1
+				<if test="FROM_DATE != null and FROM_DATE !='' and TO_DATE != null and TO_DATE !='' ">
+					AND TO_DATE(PLANTDATE, 'YYYY-MM-DD') <![CDATA[>=]]> TO_DATE(#{FROM_DATE}, 'YYYY-MM-DD')
+					AND TO_DATE(PLANTDATE, 'YYYY-MM-DD') <![CDATA[<=]]> TO_DATE(#{TO_DATE}, 'YYYY-MM-DD')
+				</if>
+				<if test="TXT_WEEK != null and TXT_WEEK !='' ">
+					AND WEEKOFTHEYEAR = #{TXT_WEEK}
+				</if>
+				<if test="TXT_DATE != null and TXT_DATE !='' ">
+					AND TO_DATE(PLANTDATE, 'YYYY-MM-DD') = TO_DATE(#{TXT_DATE}, 'YYYY-MM-DD') 
+				</if>
+				GROUP BY YEAR, MONTH, WEEKOFTHEYEARISO, YEAR  
+				ORDER BY YEAR, MONTH, WEEKOFTHEYEARISO, YEAR
+	</select>
+	
+	
+		
+
+</mapper>

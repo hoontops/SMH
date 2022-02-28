@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS03100Dao">
+
+
+    <!-- Routing Roll Loss 품목 조회-->
+     <select id="selectRoutionRollLossList" parameterType="map" resultType="hashmap">
+			        SELECT BM.PRODUCTDEFID
+			             , BM.PRODUCTDEFVERSION
+			             , PD.PRODUCTDEFNAME
+			             , BM.PLANTID
+			             , PIS.PCSPNL   
+			             , PIS.PCSMM   
+			             , PIS.PNLSIZEYAXIS
+			             , PIS.PNLSIZEXAXIS
+			             , BM.MATERIALDEFID
+			             , IM.ITEMNAME   AS MATERIALDEFNAME
+			             , BM.QTY    AS COMPONENTQTY
+			             , BM.ENTERPRISEID
+			             , O.OPERATIONID
+			             , O.USERSEQUENCE
+			             , U1.USER_NM   AS CREATOR
+			             , TO_CHAR(RL.CREATEDTIME,'YYYY-MM-DD HH:mi:ss') AS CREATEDTIME
+			             , U2.USER_NM   AS MODIFIER
+			             , TO_CHAR(RL.MODIFIEDTIME,'YYYY-MM-DD HH:mi:ss') AS MODIFIEDTIME
+			             , RL.DESCRIPTION
+			          FROM BAS_PROCESSPATH PP
+			    INNER JOIN BAS_BILLOFMATERIAL BM ON PP.PROCESSDEFID          = BM.PROCESSDEFID 
+			                                    AND PP.PROCESSDEFVERSION     = BM.PROCESSDEFVERSION 
+			                                    AND PP.PROCESSSEGMENTID      = BM.PROCESSSEGMENTID 
+			                                    AND PP.PROCESSSEGMENTVERSION = BM.PROCESSSEGMENTVERSION
+			    INNER JOIN BAS_PRODUCTITEMSPEC PIS ON BM.PRODUCTDEFID        = PIS.ITEMID 
+			                                      AND BM.PRODUCTDEFVERSION   = PIS.ITEMVERSION
+			    INNER JOIN BAS_PRODUCTDEFINITION PD ON PD.PRODUCTDEFID       = BM.PRODUCTDEFID
+			                                       AND PD.PRODUCTDEFVERSION  = BM.PRODUCTDEFVERSION
+			    INNER JOIN BAS_ITEMMASTER IM  ON IM.ITEMID      = BM.MATERIALDEFID  
+			                                 AND IM.ITEMVERSION = BM.MATERIALDEFVERSION
+			    LEFT JOIN BAS_OPERATION O ON O.PROCESSSEGMENTID   = BM.PROCESSSEGMENTID
+			                             AND O.MAINPRODUCTID      = BM.PRODUCTDEFID
+			                             AND O.MAINPRODUCTVERSION = BM.PRODUCTDEFVERSION
+			    LEFT JOIN BAS_ROLLLOSS RL ON RL.PLANTID           = BM.PLANTID
+			                             AND RL.PRODUCTDEFID      = BM.PRODUCTDEFID
+			                             AND RL.PRODUCTDEFVERSION = BM.PRODUCTDEFVERSION
+			    LEFT JOIN CMD_USERS    U1 ON U1.USER_ID = RL.CREATOR
+			    LEFT JOIN CMD_USERS    U2 ON U2.USER_ID = RL.MODIFIER
+			    WHERE BM.ISREQUIRED   = 'Y'
+			      AND PP.PATHTYPE     = 'Start'
+			      AND PIS.RTRSHT      = 'RTR'
+			      AND BM.ENTERPRISEID = #{ENTERPRISEID}
+	   <if test = "PLANTID != null and PLANTID !='' "> 
+				  AND BM.PLANTID      = #{PLANTID}		
+	  </if>
+       <if test = "PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+                  AND BM.PRODUCTDEFID = #{PRODUCTDEFID}
+       </if>
+       <if test = "PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' "> 
+                  AND BM.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+       </if>
+       <if test = "RODUCTDEFTYPE != null and RODUCTDEFTYPE !='' "> 
+                  AND PD.PRODUCTDEFTYPE= #{RODUCTDEFTYPE}
+       </if>
+	        ORDER BY BM.PRODUCTDEFID , BM.PRODUCTDEFVERSION  
+    </select>
+    <select id="selectRolllossOperationList" parameterType="map" resultType="hashmap">
+		      WITH SELECTROLLCUT AS 
+		      (
+		          SELECT O.OPERATIONID
+		               , O.PLANTID
+		               , O.OPERATIONSEQUENCE
+		               , O.MAINPRODUCTID
+		               , O.MAINPRODUCTVERSION
+		            FROM BAS_OPERATION O
+		           WHERE O.MAINPRODUCTID     = #{PRODUCTDEFID}
+		            AND O.MAINPRODUCTVERSION = #{PRODUCTDEFVERSION}
+		            AND O.ENTERPRISEID       = #{ENTERPRISEID}
+		            AND O.PROCESSSEGMENTID   = '1020101'
+		      )
+		    SELECT  
+		          ORA.USERSEQUENCE
+		         , ORA.OPERATIONID
+		         , ORA.PROCESSSEGMENTID
+		         , D.DICTIONARYNAME  AS PROCESSSEGMENTNAME
+		         , ORA.MAINPRODUCTID   AS PRODUCTDEFID
+		         , ORA.MAINPRODUCTVERSION AS PRODUCTDEFVERSION
+		         , ORA.PLANTID 
+		         , NVL(RLO.LOSSM,0) AS LOSSM
+		         , NVL(RLO.LOSSPNL,0) AS LOSSPNL
+		         , RLO.CREATEDTIME
+		         , U1.USER_NM    AS CREATOR
+		         , RLO.MODIFIEDTIME
+		         , U2.USER_NM    AS MODIFIER
+		      FROM BAS_OPERATION  ORA
+		    INNER JOIN BAS_PROCESSSEGMENT  PS   ON  PS.PROCESSSEGMENTID  = ORA.PROCESSSEGMENTID
+		     LEFT JOIN BAS_ROLLLOSSOPERATION RLO ON RLO.PLANTID           = ORA.PLANTID
+		                                       AND RLO.PRODUCTDEFID      = ORA.MAINPRODUCTID
+		                                       AND RLO.PRODUCTDEFVERSION = ORA.MAINPRODUCTVERSION
+		                                       AND RLO.OPERATIONID       = ORA.OPERATIONID
+		    LEFT JOIN CMD_USERS U1              ON U1.USER_ID            = RLO.CREATOR
+		    LEFT JOIN CMD_USERS U2              ON U2.USER_ID            = RLO.MODIFIER
+		    LEFT JOIN CMD_DICTIONARY D          ON D.DICTIONARYID        = PS.PROCESSSEGMENTNAME 
+		                                       AND D.LANGUAGETYPE        = #{LANGUAGETYPE}
+		        WHERE ORA.MAINPRODUCTID      = #{PRODUCTDEFID}
+		          AND ORA.MAINPRODUCTVERSION = #{PRODUCTDEFVERSION}
+		          AND ORA.ENTERPRISEID       = #{ENTERPRISEID}        
+		          AND ORA.OPERATIONSEQUENCE <![CDATA[<=]]> (SELECT RC.OPERATIONSEQUENCE FROM SELECTROLLCUT RC)
+		     ORDER BY ORA.OPERATIONSEQUENCE ASC        
+    </select>
+     <update id="saveRollloss" parameterType="map">
+    	MERGE INTO BAS_ROLLLOSS
+    	USING DUAL
+    	        ON (     PLANTID           = #{PLANTID} 		
+                     AND PRODUCTDEFID      = #{PRODUCTDEFID}
+                     AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+                    )
+              WHEN  MATCHED THEN  
+                       UPDATE SET MATERIALID     = #{MATERIALID}
+                                , DESCRIPTION    = #{DESCRIPTION}
+                                , VALIDSTATE     = #{VALIDSTATE}
+                                , LASTTXNID      = #{LASTTXNID}
+                                , MODIFIER       = #{MODIFIER}
+                                , MODIFIEDTIME   = SYSDATE
+                                , LASTTXNHISTKEY = #{LASTTXNHISTKEY}
+                                , LASTTXNUSER    = #{MODIFIER}
+                                , LASTTXNTIME    = SYSDATE
+              WHEN NOT MATCHED THEN
+                      INSERT (   PLANTID
+                               , PRODUCTDEFID
+                               , PRODUCTDEFVERSION
+                               , MATERIALID
+                               , DESCRIPTION
+                               , VALIDSTATE
+                               , LASTTXNID
+                               , CREATOR
+                               , CREATEDTIME
+                               , LASTTXNHISTKEY
+                               , LASTTXNUSER
+                               , LASTTXNTIME) VALUES (  #{PLANTID}
+                                                      , #{PRODUCTDEFID}
+                                                      , #{PRODUCTDEFVERSION}
+                                                      , #{MATERIALID}
+                                                      , #{DESCRIPTION}
+                                                      , #{VALIDSTATE}
+                                                      , #{LASTTXNID}
+                                                      , #{CREATOR}
+                                                      , SYSDATE
+                                                      , #{LASTTXNHISTKEY}
+                                                      , #{CREATOR}
+                                                      , SYSDATE
+                                                     )
+    </update>
+    <update id="saveRolllossOperation" parameterType="map">
+    	MERGE INTO BAS_ROLLLOSSOPERATION
+    	USING DUAL
+    	        ON (     PLANTID           = #{PLANTID} 		
+                     AND PRODUCTDEFID      = #{PRODUCTDEFID}
+                     AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+                     AND OPERATIONID       = #{OPERATIONID}
+                    )
+              WHEN  MATCHED THEN  
+                       UPDATE SET LOSSM          =  ROUND(#{LOSSM},3)	
+                                , LOSSPNL        =  #{LOSSPNL} 
+                                , DESCRIPTION    =  #{DESCRIPTION} 
+                                , MODIFIER       =  #{MODIFIER}     
+                                , MODIFIEDTIME   =  SYSDATE   
+                                , LASTTXNID      =  'modify'   
+                                , LASTTXNUSER    =  #{MODIFIER}      
+                                , LASTTXNTIME    =  SYSDATE
+              WHEN NOT MATCHED THEN
+                      INSERT (    PLANTID
+							    , PRODUCTDEFID
+							    , PRODUCTDEFVERSION
+							    , OPERATIONID
+							    , LOSSM
+							    , LOSSPNL
+							    , DESCRIPTION
+							    , CREATOR
+							    , CREATEDTIME
+							    , MODIFIER
+							    , MODIFIEDTIME
+							    , LASTTXNHISTKEY
+							    , LASTTXNID
+							    , LASTTXNUSER
+							    , LASTTXNTIME
+                             ) VALUES (   #{PLANTID}
+									    , #{PRODUCTDEFID}
+									    , #{PRODUCTDEFVERSION}
+									    , #{OPERATIONID}
+									    , ROUND(#{LOSSM},3)
+									    , #{LOSSPNL}
+									    , #{DESCRIPTION}
+									    , #{CREATOR}
+									    , SYSDATE
+									    , #{MODIFIER}
+									    , SYSDATE
+									    , #{LASTTXNHISTKEY}
+									    ,'Create'
+									    , #{CREATOR}
+									    , SYSDATE
+                                       )      
+    </update>
+</mapper>

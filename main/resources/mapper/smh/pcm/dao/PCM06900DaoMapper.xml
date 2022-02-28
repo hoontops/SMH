@@ -1,0 +1,1223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM06900Dao">
+   <select id="selectLotCardList" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM06900Dao.selectLotCardList */
+			<![CDATA[
+			SELECT X.LOTID
+					       ,X.LOTID || '|' || DECODE(SD1.DICTIONARYNAME, NULL, X.WORKTYPE, SD1.DICTIONARYNAME) AS WORKTYPENAME -- 작업구분
+					FROM
+					(SELECT L.LOTID
+					      ,CASE
+					           WHEN L.LOTCREATEDTYPE = 'Return' THEN
+					            'Return'
+					           WHEN L.LOTCREATEDTYPE = 'Repair' THEN
+					            'MRB'
+					           WHEN L.LOTCREATEDTYPE = 'Claim' THEN
+					            'Claim'
+					           ELSE
+					            CASE
+					                WHEN L.ISREWORK = 'Y' OR L.WORKCOUNT > 0 THEN
+					                 'IsRework'
+					                ELSE
+					                 'Normal'
+					            END
+					       END AS WORKTYPE
+					FROM   PCM_LOT L
+					INNER  JOIN UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',') T
+					ON     L.LOTID = T.VALUE
+					ORDER BY LOTID) X
+					LEFT JOIN CMD_LOOKUP_VALUES SC1 ON X.WORKTYPE        = SC1.LOOKUP_CODE  AND SC1.LOOKUP_TYPE  = 'LotWorkType'
+					LEFT JOIN CMD_DICTIONARY    SD1 ON SC1.DICTIONARYID = SD1.DICTIONARYID AND SD1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			]]>
+    </select>
+    
+   <select id="selectAreaResourceByLot" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM06900Dao.selectAreaResourceByLot */
+			SELECT AREAID
+					, RESOURCEID
+					, PROCESSSEGMENTID
+					, LOTID
+			 FROM PCM_LOT
+			WHERE LOTID = #{LOTID}			
+    </select>
+    
+	<select id="getCheckStaying" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM06900Dao.getCheckStaying */
+			SELECT Z.LOTID
+			    ,  Z.PROCESSSTATE
+			    ,  Z.STAYINGLOCKSTD
+			    ,  Z.CURRENTSTATESTAYINGTIMECNV
+			    ,  Z.CHECKTIME
+			    ,  TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS')CUR_TIME
+			    ,  CASE WHEN COALESCE(DELAYREASONCODE,'*') = '*' AND STAYINGLOCK = 'Staying' THEN 'Y'
+				    ELSE 'N'
+				    END ISLOCKING        
+			FROM
+			(
+				SELECT    Y.LOTID
+					    ,  Y.PROCESSSTATE
+						,  DL.DELAYREASONCODE
+					    ,  CASE WHEN Y.PROCESSSTATE = 'WaitForReceive' THEN RECEIVESTAYINGTIME / 3600
+						WHEN Y.PROCESSSTATE = 'Wait'           THEN TRACKINSTAYINGTIME / 3600
+						WHEN Y.PROCESSSTATE = 'Run'            THEN TRACKOUTSTAYINGTIME / 3600
+						WHEN Y.PROCESSSTATE = 'WaitForSend'    THEN SENDSTAYINGTIME / 3600
+						    END   STAYINGLOCKSTD       				    
+					    ,  CASE WHEN Y.PROCESSSTATE = 'WaitForReceive'  THEN CASE WHEN Y.CURRENTSTATESTAYINGTIME_SEC > COALESCE(RECEIVESTAYINGTIME ,99999999999999999999999999)
+												      THEN 'Staying'
+												      ELSE 'Normal'
+												      END
+						WHEN     Y.PROCESSSTATE = 'Wait'  THEN CASE WHEN Y.CURRENTSTATESTAYINGTIME_SEC > COALESCE(TRACKINSTAYINGTIME ,99999999999999999999999999)
+												      THEN 'Staying'
+												      ELSE 'Normal'	                                                              
+												      END
+						WHEN     Y.PROCESSSTATE = 'Run'  THEN CASE WHEN Y.CURRENTSTATESTAYINGTIME_SEC > COALESCE(TRACKOUTSTAYINGTIME ,99999999999999999999999999)
+												      THEN 'Staying'
+												      ELSE 'Normal'	                          	                                                              
+												      END
+						WHEN     Y.PROCESSSTATE = 'WaitForSend'  THEN CASE WHEN Y.CURRENTSTATESTAYINGTIME_SEC > COALESCE(SENDSTAYINGTIME ,99999999999999999999999999)
+												      THEN 'Staying'
+												      ELSE 'Normal'
+												      END
+						     END   STAYINGLOCK     
+					 --   ,  REPLACE(Y.CURRENTSTATESTAYINGTIMECNV, SUBSTR(TO_CHAR(Y.CURRENTSTATESTAYINGTIMECNV),1,6) ,'') || ' ' || Y.LANUAGETIME CURRENTSTATESTAYINGTIMECNV         
+					   , Y.CURRENTSTATESTAYINGTIMECNV        
+						, TO_CHAR(CHECKTIME,'YYYY-MM-DD HH24:MI:SS') CHECKTIME  					                          
+				FROM
+				(
+					SELECT 
+					       X.PROCESSSEGMENTID
+					    ,  X.PROCESSSEGMENTVERSION
+					    ,  X.LOTID
+					    ,  X.PROCESSSTATE
+					    ,  X.LANUAGETIME
+					    ,  CASE WHEN X.PROCESSSTATE = 'WaitForReceive' THEN ROUND( (SYSDATE - X.SENDTIME) , 1)  
+						    WHEN X.PROCESSSTATE = 'Wait'           THEN ROUND( (SYSDATE - X.RECEIVETIME) , 1)
+						    WHEN X.PROCESSSTATE = 'Run'            THEN ROUND( (SYSDATE - X.TRACKINTIME)  , 1)
+						    WHEN X.PROCESSSTATE = 'WaitForSend'    THEN ROUND( (SYSDATE - X.TRACKOUTTIME)   , 1)
+						    END CURRENTSTATESTAYINGTIME
+					    ,  CASE WHEN X.PROCESSSTATE = 'WaitForReceive' THEN JUSTIFY_HOURS((SYSDATE - X.SENDTIME)*24 *60*60 )                                    
+						    WHEN X.PROCESSSTATE = 'Wait'           THEN JUSTIFY_HOURS((SYSDATE - X.RECEIVETIME) *24 *60*60 ) 
+						    WHEN X.PROCESSSTATE = 'Run'            THEN JUSTIFY_HOURS((SYSDATE - X.TRACKINTIME ) *24 *60*60 ) 
+						    WHEN X.PROCESSSTATE = 'WaitForSend'    THEN JUSTIFY_HOURS((SYSDATE - X.TRACKOUTTIME ) *24 *60*60 ) 
+						    END CURRENTSTATESTAYINGTIMECNV 				            
+					    ,  CASE WHEN X.PROCESSSTATE = 'WaitForReceive' THEN (SYSDATE - X.SENDTIME) *24 *60*60
+						    WHEN X.PROCESSSTATE = 'Wait'           THEN (SYSDATE - X.RECEIVETIME) *24 *60*60
+						    WHEN X.PROCESSSTATE = 'Run'            THEN (SYSDATE - X.TRACKINTIME) *24 *60*60
+						    WHEN X.PROCESSSTATE = 'WaitForSend'    THEN (SYSDATE - X.TRACKOUTTIME)  *24 *60*60
+						    END CURRENTSTATESTAYINGTIME_SEC        
+					    ,  CASE WHEN X.PROCESSSTATE = 'WaitForReceive' THEN X.SENDTIME   
+						    WHEN X.PROCESSSTATE = 'Wait'           THEN X.RECEIVETIME
+						    WHEN X.PROCESSSTATE = 'Run'            THEN X.TRACKINTIME
+						    WHEN X.PROCESSSTATE = 'WaitForSend'    THEN X.TRACKOUTTIME
+						    END CHECKTIME
+					    ,   X.PROCESSDEFID
+					    ,   X.PROCESSDEFVERSION						             	
+					FROM
+					(
+						SELECT 
+						       L.PROCESSSEGMENTID
+						    ,  L.PROCESSSEGMENTVERSION
+						    ,  L.LOTID
+						    ,  CASE WHEN L.PROCESSSTATE = 'WaitForReceive' THEN 'WaitForReceive'
+							    WHEN L.PROCESSSTATE = 'Wait'           THEN 'Receive'
+							    WHEN L.PROCESSSTATE = 'Run'            THEN 'WorkStart'
+							    WHEN L.PROCESSSTATE = 'WaitForSend'    THEN 'WorkEnd'
+							    END  WIPPROCESSSTATE						    
+						    ,  L.PROCESSSTATE   
+						    ,  L.RECEIVETIME
+						    ,  L.TRACKINTIME
+						    ,  L.TRACKOUTTIME
+						    ,  CASE WHEN PP.PATHTYPE = 'Start' OR PP.PATHTYPE = 'StartEnd' THEN L.LOTSTARTDATE
+							    ELSE LH.SENDTIME
+							    END SENDTIME
+						    ,  SD4.DICTIONARYNAME LANUAGEDAY       
+						    ,  SD5.DICTIONARYNAME LANUAGETIME
+						    ,  L.PROCESSDEFID
+						    ,  L.PROCESSDEFVERSION						     
+						FROM PCM_LOT L
+						INNER JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID =PD.PRODUCTDEFID
+										   AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+						INNER JOIN PCM_LOTWORKRESULT     LW ON  L.LOTID = LW.LOTID
+										   AND L.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+										   AND L.WORKCOUNT = LW.WORKCOUNT
+										   AND L.AREAID    = LW.AREAID
+						LEFT  JOIN PCM_LOTHISTORY        LH ON  LW.LOTID = LH.LOTID
+										   AND LW.PREVSENDLOTHISTKEY = LH.TXNHISTKEY
+						INNER JOIN BAS_PROCESSPATH       PP ON  SPLIT_PART(L.PROCESSPATHSTACK,'.',1) = PP.PROCESSPATHID
+																		AND	PP.VALIDSTATE = 'Valid'
+					    LEFT JOIN CMD_DICTIONARY        SD4 ON  SD4.DICTIONARYID = 'DAY'  	                               
+										 AND SD4.LANGUAGETYPE = #{LANGUAGETYPE}
+					    LEFT JOIN CMD_DICTIONARY        SD5 ON  SD5.DICTIONARYID = 'TIME'  	                               
+									       AND SD5.LANGUAGETYPE = #{LANGUAGETYPE}
+						WHERE 1=1
+						AND   L.LOTSTATE IN ('InTransit','InProduction')
+						AND   COALESCE(L.ISDEFECTED,'N') = 'N'
+				--		AND	  PD.PRODUCTDEFTYPE = 'Product'	
+						AND   L.LOTID =  #{LOTID}	            					
+					)  X
+					LEFT JOIN CMD_LOOKUP_VALUES SC       ON  SC.LOOKUP_CODE = X.WIPPROCESSSTATE
+								   AND SC.LOOKUP_TYPE = 'WipProcessState'
+					LEFT JOIN CMD_DICTIONARY SD ON  SC.DICTIONARYID = SD.DICTIONARYID
+								   AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+					WHERE 1=1
+				)  y
+				LEFT JOIN PCM_SEGMENTSTAYINGTIME ST ON  Y.PROCESSSEGMENTID = ST.PROCESSSEGMENTID
+								   AND Y.PROCESSSEGMENTVERSION = ST.PROCESSSEGMENTVERSION
+				LEFT JOIN PCM_DELAYLOT           DL ON  Y.LOTID = DL.LOTID
+								   AND Y.PROCESSSEGMENTID = DL.PROCESSSEGMENTID
+								   AND Y.PROCESSSEGMENTVERSION = DL.PROCESSSEGMENTVERSION
+								   AND Y.PROCESSDEFID = DL.PROCESSDEFID
+								   AND Y.PROCESSDEFVERSION = DL.PROCESSDEFVERSION		                                   
+			)  Z
+			WHERE 1=1
+    </select>
+    
+    <select id="getPlantIsWipSurvey" parameterType="map" resultType="hashmap">
+				--
+				-- Id : getPlantIsWipSurvey
+				-- Version : 10001
+				SELECT
+						P.PLANTID
+					,	COALESCE(P.ISWIPSURVEY, 'N')	AS ISWIPSURVEY
+				FROM	BAS_PLANT	P
+				WHERE	P.ENTERPRISEID = #{ENTERPRISEID}
+				AND		P.PLANTID = #{PLANTID}
+    </select>
+    
+    <select id="getProcessDefTypeByProcess" parameterType="map" resultType="hashmap">
+				--
+				-- Id : getProcessDefTypeByProcess
+				-- Version : 10001
+				SELECT
+						L.LOTID
+					,	PD.PROCESSDEFTYPE
+					,	CASE WHEN PP.PATHTYPE = 'End' OR PP.PATHTYPE = 'StartEnd' THEN 'Y'
+							 ELSE 'N'
+						END  LASTREWORK 
+					,	PD.PROCESSDEFID
+					,	PD.PROCESSDEFVERSION
+				FROM	PCM_LOT						L
+				INNER JOIN BAS_PROCESSDEFINITION		PD	ON	L.ENTERPRISEID = PD.ENTERPRISEID
+														AND	L.PLANTID = PD.PLANTID
+														AND	L.SUBPROCESSDEFID = PD.PROCESSDEFID
+														AND	L.SUBPROCESSDEFVERSION = PD.PROCESSDEFVERSION
+				INNER JOIN BAS_PROCESSPATH			PP	ON	PD.PROCESSDEFID = PP.PROCESSDEFID
+														AND	PD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION 
+														AND	L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+														AND	L.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+														AND	PP.VALIDSTATE = 'Valid'
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				UNION ALL
+				SELECT  L.LOTID
+                    ,   CASE WHEN L.WORKCOUNT > 0 THEN 'Repeat' 
+                        ELSE 'Normal' END AS PROCESSDEFTYPE
+                    ,   CASE WHEN PP.PATHTYPE = 'End' OR PP.PATHTYPE = 'StartEnd' THEN 'Y'
+                             ELSE 'N'
+                        END  LASTREWORK
+                    ,	PD.PROCESSDEFID
+                    ,	PD.PROCESSDEFVERSION
+                FROM    PCM_LOT                  L
+                INNER JOIN BAS_PROCESSDEFINITION     PD  ON  L.ENTERPRISEID = PD.ENTERPRISEID
+                                                        AND L.PLANTID = PD.PLANTID
+                                                        AND L.PROCESSDEFID = PD.PROCESSDEFID
+                                                        AND L.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+                INNER JOIN BAS_PROCESSPATH           PP  ON  PD.PROCESSDEFID = PP.PROCESSDEFID
+                                                        AND PD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION 
+                                                        AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+                                                        AND L.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+                                                        AND	PP.VALIDSTATE = 'Valid'
+                WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND 	COALESCE(L.SUBPROCESSDEFID, '') = ''  	
+    </select>
+    
+	<!--    공정 관리 > 공정작업 > 인수 등록 설 명 : 입력한 작업장, Lot No.와 일치하는 Lot 상세 
+		정보를 조회 한다. (Resource 변경 -->
+    <select id="selectLotInfoByProcess" parameterType="map" resultType="hashmap">
+	    <choose>
+          	<when test="VERSION != null and VERSION =='30031' "> 
+				--
+				-- Id : SelectLotInfoByProcess
+				-- Version : 30031
+				WITH PROCESSSEGMENT AS
+				(
+					SELECT
+							L.LOTID
+						,	L.ENTERPRISEID
+						,	L.PLANTID
+						,	PP.PROCESSPATHID
+						,	PP.PATHSEQUENCE
+						,	PP.PATHTYPE
+						,	LAG(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)		AS PREVPROCESSSEGMENTID
+						,	LAG(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)	AS PREVPROCESSSEGMENTVERSION
+						,	PP.PROCESSSEGMENTID
+						,	PP.PROCESSSEGMENTVERSION
+						,	COALESCE(LEAD(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC), OPP.PROCESSSEGMENTID)			AS NEXTPROCESSSEGMENTID
+						,	COALESCE(LEAD(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC), OPP.PROCESSSEGMENTVERSION)	AS NEXTPROCESSSEGMENTVERSION
+						,	L.LOTSTATE
+						,   PP.ISWEEKMNG 
+					FROM	PCM_LOT						L
+					LEFT OUTER JOIN BAS_PROCESSPATH		PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+					--										AND	L.PLANTID = PP.PLANTID
+															AND	L.SUBPROCESSDEFID = PP.PROCESSDEFID
+															AND L.SUBPROCESSDEFVERSION = PP.PROCESSDEFVERSION
+															AND	PP.VALIDSTATE = 'Valid'
+					LEFT OUTER JOIN BAS_PROCESSPATH		OPP ON	SPLIT_PART(L.PROCESSPATHSTACK, '.', 1) = OPP.PROCESSPATHID
+																	AND	OPP.VALIDSTATE = 'Valid'
+					WHERE	L.ENTERPRISEID = #{ENTERPRISEID}
+					AND		L.PLANTID = #{PLANTID}
+					AND		L.AREAID = #{AREAID}
+					AND		L.LOTID = #{LOTID}
+					AND     COALESCE(L.ISREPRESENTROLLLOT,'N')='N'
+					AND		L.LOTSTATE IN ('InProduction','InTransit')
+				)
+				SELECT
+						L.LOTID
+					,	L.PROCESSSTATE
+					,	PP.PROCESSPATHID
+					,	COALESCE(PPN.DICTIONARYNAME, PSP.PROCESSSEGMENTNAME)	AS PREVPROCESSSEGMENTNAME
+					,	PS.PROCESSSEGMENTID
+					,	COALESCE(PN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)		AS PROCESSSEGMENTNAME
+					,	PS.PROCESSSEGMENTVERSION
+					,	PP.NEXTPROCESSSEGMENTID
+					,	COALESCE(PNN.DICTIONARYNAME, PSN.PROCESSSEGMENTNAME)	AS NEXTPROCESSSEGMENTNAME
+					,	PP.NEXTPROCESSSEGMENTVERSION
+					,	L.USERSEQUENCE
+					,	L.PRODUCTDEFID
+					,	L.PRODUCTDEFVERSION
+					,	PD.PRODUCTDEFNAME
+					,	'Main'							AS PRODUCTTYPE
+					,	TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD')	AS INPUTDATE
+					,	L.PRODUCTIONORDERID
+					,	TO_CHAR(L.DUEDATE, 'YYYY-MM-DD')		AS DUEDATE
+					,	PD.PRODUCTDEFTYPE				AS PRODUCTDEFTYPEID
+					,	DTD.DICTIONARYNAME				AS PRODUCTDEFTYPE
+					,	L.LOTTYPE
+					,	OTD.DICTIONARYNAME				AS PRODUCTIONTYPE
+					,	COALESCE(L.ISHOLD, 'N')			AS ISHOLD
+					,	COALESCE(L.ISLOCKING, 'N')		AS ISLOCKING
+					,	COALESCE(AN.DICTIONARYNAME, A.AREANAME)	AS AREANAME
+					,   L.AREAID
+					,	A.WAREHOUSEID
+					,	L.ISREWORK
+					,	C.CUSTOMERNAME
+					,	L.UNIT
+					,	L.DEFECTUNIT
+					,	TO_NUMBER(L.PANELQTY)				AS PNLQTY
+					,	COALESCE(L.PANELPERQTY, PD.PCSPNL)		AS PANELPERQTY
+					,	TO_NUMBER(L.QTY)							AS PCSQTY
+					,	ROUND(TO_NUMBER(L.QTY) / TO_NUMBER(PD.PCSMM), 2) 	AS MM
+					,	PD.PCSPNL
+					,	PS.PROCESSSEGMENTTYPE
+					,	PSN.PROCESSSEGMENTTYPE			AS NEXTPROCESSSEGMENTTYPE
+                    ,	COALESCE(ST2.STEPTYPE, ST1.STEPTYPE)		AS STEPTYPE							
+					,	COALESCE(L.ISPRINTLOTCARD, 'N')	AS ISPRINTLOTCARD
+					,	COALESCE(L.ISPRINTRCLOTCARD, 'N')		AS ISPRINTRCLOTCARD
+					,   TRACKINUSER
+					,   COALESCE(SU.USER_NM,L.TRACKINUSER) TRACKINUSERNAME
+					,	PD.MATERIALCLASS
+					,	CASE WHEN L.PRODUCTDEFVERSION != PO.PRODUCTDEFVERSION THEN 'Y'
+							 ELSE 'N'
+						END								AS ISRCLOT
+					,	L.RESOURCEID
+					,	COALESCE(RC.DESCRIPTION, L.RESOURCEID)	AS RESOURCENAME					
+					,	PP.PATHTYPE
+					,	L.LOTSTATE
+					,   PP.ISWEEKMNG
+					,	L.DESCRIPTION
+					,	PSC.PARENTPROCESSSEGMENTCLASSID
+					,	PD.RTRSHT
+					,   PS.PROCESSSEGMENTCLASSID
+					,	CASE WHEN L.LOTCREATEDTYPE = 'Claim' THEN 'Y'
+							 ELSE 'N'
+						END								AS ISCLAIMLOT
+				FROM	PROCESSSEGMENT					PP
+				INNER JOIN PCM_LOT						L	ON	PP.ENTERPRISEID = L.ENTERPRISEID
+				--											AND	PP.PLANTID = L.PLANTID
+															AND	PP.LOTID = L.LOTID
+															AND	PP.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+															--AND PP.PROCESSSEGMENTVERSION = L.PROCESSSEGMENTVERSION
+				INNER  JOIN PCM_LOTWORKRESULT		  LW	ON 	PP.LOTID = LW.LOTID
+															AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+															AND L.WORKCOUNT = LW.WORKCOUNT
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PSP	ON	PP.PREVPROCESSSEGMENTID = PSP.PROCESSSEGMENTID
+															AND	PP.PREVPROCESSSEGMENTVERSION = PSP.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY			PPN	ON	PSP.PROCESSSEGMENTNAME = PPN.DICTIONARYID
+															AND	PPN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS	ON	PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+															AND	PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS	PSC	ON	PS.PROCESSSEGMENTCLASSID = PSC.PROCESSSEGMENTCLASSID
+                LEFT OUTER JOIN 	FN_GETSTEPTYPE() ST1 ON PS.STEPCLASS=ST1.CODE																
+				LEFT OUTER JOIN CMD_DICTIONARY			PN	ON	PS.PROCESSSEGMENTNAME = PN.DICTIONARYID
+															AND	PN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PSN	ON	PP.NEXTPROCESSSEGMENTID = PSN.PROCESSSEGMENTID
+															AND	PP.NEXTPROCESSSEGMENTVERSION = PSN.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN BAS_RESOURCE				RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+															AND	L.PLANTID = RC.PLANTID
+															AND	L.RESOURCEID = RC.RESOURCEID
+                LEFT OUTER JOIN 	FN_GETSTEPTYPE() ST2 ON RC.STEPCLASS=ST2.CODE															
+				LEFT OUTER JOIN CMD_DICTIONARY			PNN	ON	PSN.PROCESSSEGMENTNAME = PNN.DICTIONARYID
+															AND	PNN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD	ON	L.ENTERPRISEID = PD.ENTERPRISEID
+														--	AND	L.ORIGINALPLANTID = PD.PLANTID
+															AND	L.PRODUCTDEFID = PD.PRODUCTDEFID
+															AND	L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT OUTER JOIN MFM_PRODUCTIONORDER		PO	ON	L.ENTERPRISEID = PO.ENTERPRISEID
+														--	AND	L.ORIGINALPLANTID = PO.PLANTID
+															AND	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+															AND	L.LINENO = PO.LINENO
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES					DT	ON	PD.PRODUCTDEFTYPE = DT.LOOKUP_CODE
+															AND	DT.LOOKUP_TYPE = 'ProductDefType'
+				LEFT OUTER JOIN CMD_DICTIONARY			DTD	ON	DT.DICTIONARYID = DTD.DICTIONARYID
+															AND	DTD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES					OT	ON	L.LOTTYPE = OT.LOOKUP_CODE
+															AND	OT.LOOKUP_TYPE = 'ProductionType'
+				LEFT OUTER JOIN CMD_DICTIONARY			OTD	ON	OT.DICTIONARYID = OTD.DICTIONARYID
+															AND	OTD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_AREA					A	ON	L.ENTERPRISEID = A.ENTERPRISEID
+															AND	L.PLANTID = A.PLANTID
+															AND L.AREAID = A.AREAID
+				LEFT OUTER JOIN CMD_DICTIONARY			AN	ON	A.AREANAME = AN.DICTIONARYID
+															AND	AN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_CUSTOMER				C	ON	PO.ENTERPRISEID = C.ENTERPRISEID
+															AND	PO.PLANTID = C.PLANTID
+															AND	PO.CUSTOMERID = C.CUSTOMERID
+				LEFT OUTER JOIN CMD_USERS                 SU  ON  L.TRACKINUSER = SU.USER_ID                
+          	</when>
+          	<when test="VERSION != null and VERSION =='10031' "> 
+				--
+				-- Id : SelectLotInfoByProcess
+				-- Version : 10031
+				WITH PROCESSSEGMENT AS
+				(
+					SELECT
+							L.LOTID
+						,	L.ENTERPRISEID
+						,	L.PLANTID
+						,	PP.PROCESSPATHID
+						,	PP.PATHTYPE
+						,	PP.PATHSEQUENCE
+						,	LAG(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)		AS PREVPROCESSSEGMENTID
+						,	LAG(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)	AS PREVPROCESSSEGMENTVERSION
+						,	PP.PROCESSSEGMENTID
+						,	PP.PROCESSSEGMENTVERSION
+						,	LEAD(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)		AS NEXTPROCESSSEGMENTID
+						,	LEAD(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)	AS NEXTPROCESSSEGMENTVERSION
+						,	CASE WHEN L.LOTSTATE = 'InTransit' AND LP.LOTID IS NOT NULL THEN 'OverSeaInTransit' 
+						         ELSE L.LOTSTATE
+						         END  LOTSTATE
+						, PP.ISWEEKMNG            
+					FROM	PCM_LOT						L
+					LEFT OUTER JOIN BAS_PROCESSPATH		PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+					--										AND	L.PLANTID = PP.PLANTID
+															AND	L.PROCESSDEFID = PP.PROCESSDEFID
+															AND	L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+															AND	PP.VALIDSTATE = 'Valid'
+					LEFT JOIN MTM_LOTPLANTTRANSIT        LP  ON  L.LOTID = LP.LOTID
+					                                        AND LP.TRANSITSTATUS <![CDATA[<>]]> 'InProduction'															
+					WHERE	L.ENTERPRISEID = #{ENTERPRISEID}
+					AND		L.PLANTID = #{PLANTID}
+					AND		L.AREAID = #{AREAID}
+					AND		L.LOTID = #{LOTID}
+					AND     COALESCE(L.ISREPRESENTROLLLOT, 'N') <![CDATA[<>]]> 'Y' 
+					AND		L.LOTSTATE IN ('InProduction','InTransit')
+				),REQUIRE_INSPECT AS 
+				(
+					SELECT L.LOTID
+					    ,  L.PROCESSSEGMENTID     
+					    ,  L.PROCESSSEGMENTVERSION
+					    --------------- 자주 검사(출하 필수 체크)---------------------------------------------------------
+					    ,  CASE WHEN COALESCE(IS1.ISREQUIRED,'NONE') ='NONE' THEN 
+					                 CASE WHEN COALESCE(IS2.ISREQUIRED,'NONE') ='NONE' THEN
+					                            CASE WHEN COALESCE(IS3.ISREQUIRED,'NONE') = 'NONE' THEN 'N'
+					                                 ELSE IS3.ISREQUIRED
+					                                 END
+					                       ELSE IS2.ISREQUIRED 
+					                       END
+					             ELSE IS1.ISREQUIRED
+					             END SHIPREQUIRED
+					    --------------------------자주검사(입고)----------------------------------------------------      
+					    ,  CASE WHEN COALESCE(IS4.ISREQUIRED,'NONE') ='NONE' THEN 
+					                 CASE WHEN COALESCE(IS5.ISREQUIRED,'NONE') ='NONE' THEN
+					                            CASE WHEN COALESCE(IS6.ISREQUIRED,'NONE') = 'NONE' THEN 'N'
+					                                 ELSE IS6.ISREQUIRED
+					                                 END
+					                       ELSE IS5.ISREQUIRED 
+					                       END
+					             ELSE IS4.ISREQUIRED
+					             END TAKEREQUIRED       
+					    ---------------------------품질규격검사ㅓ-----------------------------------------------------      
+					    ,  CASE WHEN COALESCE(IS7.ISREQUIRED,'NONE') ='NONE' THEN 
+					                 CASE WHEN COALESCE(IS8.ISREQUIRED,'NONE') ='NONE' THEN
+					                            CASE WHEN COALESCE(IS9.ISREQUIRED,'NONE') = 'NONE' THEN 'N'
+					                                 ELSE IS9.ISREQUIRED
+					                                 END
+					                       ELSE IS8.ISREQUIRED 
+					                       END
+					             ELSE IS7.ISREQUIRED
+					             END OPERATIONREQUIRED
+					    ---------------------------수입(외주입고품)-----------------------------------------------------      
+					    ,  CASE WHEN COALESCE(ISA.ISREQUIRED,'NONE') ='NONE' THEN 
+					                 CASE WHEN COALESCE(ISB.ISREQUIRED,'NONE') ='NONE' THEN
+					                            CASE WHEN COALESCE(ISC.ISREQUIRED,'NONE') = 'NONE' THEN 'N'
+					                                 ELSE ISC.ISREQUIRED
+					                                 END
+					                       ELSE ISB.ISREQUIRED 
+					                       END
+					             ELSE ISA.ISREQUIRED
+					             END OSPREQUIRED
+					FROM PROCESSSEGMENT L
+					INNER JOIN BAS_PROCESSSEGMENT        PS ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+					                                       AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+					                                       <choose>
+					                                       	<when test="MIDDLESEGMENTCLASSID == null or MIDDLESEGMENTCLASSID ==''"> 
+						                                       AND PS.PROCESSSEGMENTCLASSID NOT IN ('7026' ,'7030', '7534', '7536')
+						                                       AND PS.PROCESSSEGMENTTYPE NOT IN ('Package')					                                       	
+					                                       	</when>
+					                                       	<otherwise>
+					                                       		AND PS.PROCESSSEGMENTCLASSID IN (${MIDDLESEGMENTCLASSID}) 
+					                                       	</otherwise>
+					                                       </choose>
+					INNER JOIN BAS_PROCESSSEGMENTCLASS  PSC ON PS.PROCESSSEGMENTCLASSID = PSC.PROCESSSEGMENTCLASSID
+					-----------------------자주검사 (출하)-----------------------------------------------------------------------------
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL IS1 ON  PS.PROCESSSEGMENTID = IS1.PROCESSSEGMENTID
+					                                       AND PS.PROCESSSEGMENTVERSION = IS1.PROCESSSEGMENTVERSION
+					                                       AND IS1.INSPECTIONCLASSID = 'SelfInspectionShip'
+					                                       AND IS1.PROCESSSEGMENTTYPE  = 'ProcessSegmentID'
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL IS2 ON  PS.PROCESSSEGMENTCLASSID = IS2.PROCESSSEGMENTID
+					                                       AND IS2.PROCESSSEGMENTVERSION = '*'
+					                                       AND IS2.INSPECTIONCLASSID = 'SelfInspectionShip'                                       
+					                                       AND IS2.PROCESSSEGMENTTYPE  = 'MiddleProcessSegmentClass'
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL IS3 ON  PSC.PARENTPROCESSSEGMENTCLASSID = IS3.PROCESSSEGMENTID
+					                                       AND IS3.PROCESSSEGMENTVERSION = '*'
+					                                       AND IS3.INSPECTIONCLASSID = 'SelfInspectionShip'                                       
+					                                       AND IS3.PROCESSSEGMENTTYPE  = 'TopProcessSegmentClass'   
+					--------------------------자주검사 입고---------------------------------------------------     
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL IS4 ON  PS.PROCESSSEGMENTID = IS4.PROCESSSEGMENTID
+					                                       AND PS.PROCESSSEGMENTVERSION = IS4.PROCESSSEGMENTVERSION
+					                                       AND IS4.INSPECTIONCLASSID = 'SelfInspectionTake'
+					                                       AND IS4.PROCESSSEGMENTTYPE  = 'ProcessSegmentID'
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL IS5 ON  PS.PROCESSSEGMENTCLASSID = IS5.PROCESSSEGMENTID
+					                                       AND IS5.PROCESSSEGMENTVERSION = '*'
+					                                       AND IS5.INSPECTIONCLASSID = 'SelfInspectionTake'                                       
+					                                       AND IS5.PROCESSSEGMENTTYPE  = 'MiddleProcessSegmentClass'
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL IS6 ON  PSC.PARENTPROCESSSEGMENTCLASSID = IS6.PROCESSSEGMENTID
+					                                       AND IS6.PROCESSSEGMENTVERSION = '*'
+					                                       AND IS6.INSPECTIONCLASSID = 'SelfInspectionTake'                                       
+					                                       AND IS6.PROCESSSEGMENTTYPE  = 'TopProcessSegmentClass'   
+					--------------------------품질규격---------------------------------------------------     
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL IS7 ON  PS.PROCESSSEGMENTID = IS7.PROCESSSEGMENTID
+					                                       AND PS.PROCESSSEGMENTVERSION = IS7.PROCESSSEGMENTVERSION
+					                                       AND IS7.INSPECTIONCLASSID = 'OperationInspection'
+					                                       AND IS7.PROCESSSEGMENTTYPE  = 'ProcessSegmentID'
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL IS8 ON  PS.PROCESSSEGMENTCLASSID = IS8.PROCESSSEGMENTID
+					                                       AND IS8.PROCESSSEGMENTVERSION = '*'
+					                                       AND IS8.INSPECTIONCLASSID = 'OperationInspection'                                       
+					                                       AND IS8.PROCESSSEGMENTTYPE  = 'MiddleProcessSegmentClass'
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL IS9 ON  PSC.PARENTPROCESSSEGMENTCLASSID = IS9.PROCESSSEGMENTID
+					                                       AND IS9.PROCESSSEGMENTVERSION = '*'
+					                                       AND IS9.INSPECTIONCLASSID = 'OperationInspection'                                       
+					                                       AND IS9.PROCESSSEGMENTTYPE  = 'TopProcessSegmentClass'
+					--------------------------수입(외주입고품)---------------------------------------------------     
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL ISA ON  PS.PROCESSSEGMENTID = ISA.PROCESSSEGMENTID
+					                                       AND PS.PROCESSSEGMENTVERSION = ISA.PROCESSSEGMENTVERSION
+					                                       AND ISA.INSPECTIONCLASSID = 'OSPInspection'
+					                                       AND ISA.PROCESSSEGMENTTYPE  = 'ProcessSegmentID'
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL ISB ON  PS.PROCESSSEGMENTCLASSID = ISB.PROCESSSEGMENTID
+					                                       AND ISB.PROCESSSEGMENTVERSION = '*'
+					                                       AND ISB.INSPECTIONCLASSID = 'OSPInspection'                                       
+					                                       AND ISB.PROCESSSEGMENTTYPE  = 'MiddleProcessSegmentClass'
+					LEFT  JOIN BAS_INSPECTIONSEGMENTREL ISC ON  PSC.PARENTPROCESSSEGMENTCLASSID = ISC.PROCESSSEGMENTID
+					                                       AND ISC.PROCESSSEGMENTVERSION = '*'
+					                                       AND ISC.INSPECTIONCLASSID = 'OSPInspection'                                       
+					                                       AND ISC.PROCESSSEGMENTTYPE  = 'TopProcessSegmentClass'
+				),	ROLLCUTTING AS
+				(
+					SELECT
+							PS.LOTID
+						,	PP.PATHSEQUENCE
+					FROM	PROCESSSEGMENT			PS
+					INNER JOIN BAS_PROCESSPATH		PP	ON	PS.PROCESSPATHID = PP.PROCESSPATHID
+																	AND	PP.VALIDSTATE = 'Valid'
+					INNER JOIN BAS_PROCESSSEGMENT	RPS	ON	PP.PROCESSSEGMENTID = RPS.PROCESSSEGMENTID
+														AND	PP.PROCESSSEGMENTVERSION = RPS.PROCESSSEGMENTVERSION
+														AND	RPS.PROCESSSEGMENTCLASSID = '1020'
+				)
+				SELECT
+						L.LOTID
+					,	L.PROCESSSTATE
+					,	PP.PROCESSPATHID
+					,	COALESCE(PPN.DICTIONARYNAME, PSP.PROCESSSEGMENTNAME)	AS PREVPROCESSSEGMENTNAME
+					,	PS.PROCESSSEGMENTID
+					,	COALESCE(PN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)		AS PROCESSSEGMENTNAME
+					,	PS.PROCESSSEGMENTVERSION
+					,	PP.NEXTPROCESSSEGMENTID
+					,	COALESCE(PNN.DICTIONARYNAME, PSN.PROCESSSEGMENTNAME)	AS NEXTPROCESSSEGMENTNAME
+					,	PP.NEXTPROCESSSEGMENTVERSION
+					,	L.USERSEQUENCE
+					,	L.PRODUCTDEFID
+					,	L.PRODUCTDEFVERSION
+					,	PD.PRODUCTDEFNAME
+					,	'Main'							AS PRODUCTTYPE
+					,	TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD')	AS INPUTDATE
+					,	L.PRODUCTIONORDERID
+					,	TO_CHAR(L.DUEDATE, 'YYYY-MM-DD')		AS DUEDATE
+					,	PD.PRODUCTDEFTYPE				AS PRODUCTDEFTYPEID
+					,	DTD.DICTIONARYNAME				AS PRODUCTDEFTYPE
+					,	L.LOTTYPE
+					,	OTD.DICTIONARYNAME				AS PRODUCTIONTYPE
+					,	COALESCE(L.ISHOLD, 'N')			AS ISHOLD
+					,	COALESCE(L.ISLOCKING, 'N')		AS ISLOCKING
+					,	COALESCE(AN.DICTIONARYNAME, A.AREANAME)	AS AREANAME
+					,   L.AREAID
+					,	A.WAREHOUSEID
+					,	L.ISREWORK
+					,	C.CUSTOMERNAME
+					,	L.UNIT
+					,	L.DEFECTUNIT
+					,	CASE WHEN COALESCE(PANELPERQTY,0) = 0 THEN TO_NUMBER(L.PANELQTY)
+					         ELSE CEIL(TO_NUMBER(QTY)/TO_NUMBER(PANELPERQTY))
+					         END AS PNLQTY
+					,	COALESCE(L.PANELPERQTY, PD.PCSPNL)		AS PANELPERQTY
+					,	TO_NUMBER(L.QTY)				AS PCSQTY
+					--,	ROUND(TO_NUMBER(L.QTY) / TO_NUMBER(PD.PCSMM), 2))		AS MM
+					,	CASE WHEN PD.PRODUCTDEFTYPE='SubAssembly' AND PD.PCSMM =  0 THEN NULL
+						ELSE ROUND(TO_NUMBER(L.QTY) / TO_NUMBER(PD.PCSMM), 2)  END		AS MM
+					,	PD.PCSPNL
+					,	PS.PROCESSSEGMENTTYPE
+					,	PSN.PROCESSSEGMENTTYPE			AS NEXTPROCESSSEGMENTTYPE
+					,	COALESCE(ST2.STEPTYPE, ST1.STEPTYPE)		AS STEPTYPE					
+					,	COALESCE(L.ISPRINTLOTCARD, 'N')			AS ISPRINTLOTCARD
+					,	COALESCE(L.ISPRINTRCLOTCARD, 'N')		AS ISPRINTRCLOTCARD
+					,   TRACKINUSER
+					,   COALESCE(SU.USER_NM,L.TRACKINUSER)		AS TRACKINUSERNAME
+					,	PD.MATERIALCLASS
+					,	CASE WHEN RCI.LOTID IS NOT NULL THEN 'Y'
+							 ELSE 'N'
+						END								AS ISRCLOT
+					,	L.RESOURCEID
+					,	COALESCE(RC.DESCRIPTION, L.RESOURCEID)	AS RESOURCENAME
+					,   CASE WHEN COALESCE(RI.SHIPREQUIRED,'N') = 'Y' AND  COALESCE(LW.SELFSHIPINSPRESULT,'NA') ='NA' THEN 'N'
+					         ELSE 'Y'
+					         END SELFSHIPINSPRESULT
+					,   CASE WHEN COALESCE(RI.TAKEREQUIRED,'N') = 'Y' AND  COALESCE(LW.SELFTAKEINSPRESULT,'NA') ='NA' THEN 'N'
+					         ELSE 'Y'
+					         END SELFTAKEINSPRESULT					         
+					,   CASE WHEN COALESCE(RI.OPERATIONREQUIRED,'N') = 'Y' THEN CASE WHEN LW.MEASUREINSPRESULT IS NULL THEN 'NA'
+					                                                           ELSE COALESCE(LW.MEASUREINSPRESULT,'N')
+					                                                           END
+					         ELSE 'Y'         
+					         END MEASUREINSPRESULT
+					,	CASE WHEN  RC.ISOSPINSPCONTROL = 'Y'             /*   210512 노석안K 요청 로직수정 : 외주작업장여부 체크 제외 ,검사통제의 외주검사='Y' 이고 작업장의 외주검사여부= 'Y' 일때 외주검사항목='Y' */ 
+                               THEN COALESCE(RI.OSPREQUIRED, 'N')
+                               ELSE 'N'
+						END								AS OSPINSPRESULT
+					/*,	CASE WHEN A.OWNTYPE = 'OutsideOSP' THEN COALESCE(RI.OSPREQUIRED, 'N')
+							 ELSE 'N'
+						END								AS OSPINSPRESULT*/
+					,	CASE WHEN COALESCE(PD.RTRSHT, 'SHT') = 'RTR' THEN CASE WHEN PP.PATHSEQUENCE <![CDATA[<=]]> RCP.PATHSEQUENCE THEN 'Y'
+																			   ELSE 'N'
+																		  END
+							 ELSE 'N'
+						END								AS ISBEFOREROLLCUTTING
+					,	PP.PATHTYPE
+					,	L.LOTSTATE
+					,   PP.ISWEEKMNG
+					,	L.DESCRIPTION
+					,	PSC.PARENTPROCESSSEGMENTCLASSID
+					,	PD.RTRSHT
+					,   PS.PROCESSSEGMENTCLASSID
+					,	CASE WHEN L.LOTCREATEDTYPE = 'Claim' THEN 'Y'
+							 ELSE 'N'
+						END								AS ISCLAIMLOT
+				FROM	PROCESSSEGMENT					PP
+				INNER JOIN PCM_LOT						L	ON	PP.ENTERPRISEID = L.ENTERPRISEID
+				--											AND	PP.PLANTID = L.PLANTID
+															AND	PP.LOTID = L.LOTID
+															AND	PP.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+															AND	L.PROCESSSTATE = #{PROCESSSTATE}
+															--AND PP.PROCESSSEGMENTVERSION = L.PROCESSSEGMENTVERSION
+				INNER  JOIN PCM_LOTWORKRESULT		  LW	ON 	PP.LOTID = LW.LOTID
+															AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+															AND L.WORKCOUNT = LW.WORKCOUNT
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PSP	ON	PP.PREVPROCESSSEGMENTID = PSP.PROCESSSEGMENTID
+															AND	PP.PREVPROCESSSEGMENTVERSION = PSP.PROCESSSEGMENTVERSION
+			
+				LEFT OUTER JOIN CMD_DICTIONARY			PPN	ON	PSP.PROCESSSEGMENTNAME = PPN.DICTIONARYID
+															AND	PPN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS	ON	PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+															AND	PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS	PSC	ON	PS.PROCESSSEGMENTCLASSID = PSC.PROCESSSEGMENTCLASSID
+                LEFT OUTER JOIN FN_GETSTEPTYPE()     ST1 ON PS.STEPCLASS=ST1.CODE															
+				LEFT OUTER JOIN CMD_DICTIONARY			PN	ON	PS.PROCESSSEGMENTNAME = PN.DICTIONARYID
+															AND	PN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PSN	ON	PP.NEXTPROCESSSEGMENTID = PSN.PROCESSSEGMENTID
+															AND	PP.NEXTPROCESSSEGMENTVERSION = PSN.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN BAS_RESOURCE				RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+															AND	L.PLANTID = RC.PLANTID
+															AND	L.RESOURCEID = RC.RESOURCEID
+                LEFT OUTER JOIN FN_GETSTEPTYPE()     ST2 ON RC.STEPCLASS=ST2.CODE																	
+				LEFT OUTER JOIN CMD_DICTIONARY			PNN	ON	PSN.PROCESSSEGMENTNAME = PNN.DICTIONARYID
+															AND	PNN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD	ON	L.ENTERPRISEID = PD.ENTERPRISEID
+														--	AND	L.ORIGINALPLANTID = PD.PLANTID
+															AND	L.PRODUCTDEFID = PD.PRODUCTDEFID
+															AND	L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT OUTER JOIN MFM_PRODUCTIONORDER		PO	ON	L.ENTERPRISEID = PO.ENTERPRISEID
+															AND	L.ORIGINALPLANTID = PO.PLANTID
+															AND	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+															AND	L.LINENO = PO.LINENO
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES					DT	ON	PD.PRODUCTDEFTYPE = DT.LOOKUP_CODE
+															AND	DT.LOOKUP_TYPE = 'ProductDefType'
+				LEFT OUTER JOIN CMD_DICTIONARY			DTD	ON	DT.DICTIONARYID = DTD.DICTIONARYID
+															AND	DTD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES					OT	ON	L.LOTTYPE = OT.LOOKUP_CODE
+															AND	OT.LOOKUP_TYPE = 'ProductionType'
+				LEFT OUTER JOIN CMD_DICTIONARY			OTD	ON	OT.DICTIONARYID = OTD.DICTIONARYID
+															AND	OTD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_AREA					A	ON	L.ENTERPRISEID = A.ENTERPRISEID
+															AND	L.PLANTID = A.PLANTID
+															AND L.AREAID = A.AREAID
+				LEFT OUTER JOIN CMD_DICTIONARY			AN	ON	A.AREANAME = AN.DICTIONARYID
+															AND	AN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_CUSTOMER				C	ON	PO.ENTERPRISEID = C.ENTERPRISEID
+															AND	PO.PLANTID = C.PLANTID
+															AND	PO.CUSTOMERID = C.CUSTOMERID
+				LEFT OUTER JOIN CMD_USERS                 SU  ON  L.TRACKINUSER = SU.USER_ID
+                INNER JOIN REQUIRE_INSPECT              RI  ON  L.LOTID = RI.LOTID
+                                                            AND L.PROCESSSEGMENTID = RI.PROCESSSEGMENTID
+                                                            AND L.PROCESSSEGMENTVERSION = RI.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN ROLLCUTTING				RCP	ON	PP.LOTID = RCP.LOTID
+				LEFT OUTER JOIN PCM_RUNNINGCHANGEINFO	RCI	ON	L.LOTID = RCI.LOTID
+															AND	TO_NUMBER(L.USERSEQUENCE) <![CDATA[>=]]> TO_NUMBER(RCI.USERSEQUENCE)
+															AND	L.PRODUCTDEFVERSION = RCI.TOPRODUCTDEFVERSION
+				     
+          	</when>	          	
+          	<otherwise>
+				
+          	</otherwise>
+		</choose>	
+    </select>
+    
+   <select id="selectCommentByProcess" parameterType="map" resultType="hashmap">	
+				-- Id : SelectCommentByProcess
+				-- Version : 10001
+				SELECT
+						PP1.PROCESSPATHID
+					,	PP1.USERSEQUENCE
+					,	PP1.PROCESSSEGMENTID
+					,	NVL(PSN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+					,	PP1.DESCRIPTION
+					,	CASE WHEN PS.PROCESSSEGMENTID = #{PROCESSSEGMENTID} THEN 'Y'
+							 ELSE 'N'
+						END							AS ISCURRENTPROCESS
+				FROM	PCM_LOT						L
+				INNER JOIN BAS_PRODUCTDEFINITION      PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                        AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION	
+				INNER JOIN BAS_PROCESSPATH           PP1 ON SPLIT_PART(L.PROCESSPATHSTACK,'.',1) = PP1.PROCESSPATHID
+																	AND	PP1.VALIDSTATE = 'Valid' 				                                        			
+				<!-- LEFT OUTER JOIN BAS_PROCESSPATH		PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+														AND	L.PLANTID = PP.PLANTID
+														AND	PD.PROCESSDEFID = PP.PROCESSDEFID
+														AND	PD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+														AND	PP.VALIDSTATE = 'Valid' -->
+														--AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT	PS	ON	PP1.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+														AND	PP1.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY		PSN	ON	PS.PROCESSSEGMENTNAME = PSN.DICTIONARYID
+														AND	PSN.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND     ((L.ENTERPRISEID = 'SMLINES' <!-- AND PP.PATHSEQUENCE = PP1.PATHSEQUENCE -->) 
+				<!-- OR      ( L.ENTERPRISEID = 'YOUNGPOONG' AND (PP.PATHSEQUENCE = PP1.PATHSEQUENCE OR PP.PATHSEQUENCE = PP1.PATHSEQUENCE+1)) -->)
+				ORDER BY PP1.PATHSEQUENCE ASC
+	</select>
+	<!-- 공정 4-Step 상세 정보 탭의 공정 Spec 리스트를 조회   -->
+    <select id="selectProcessSpecByProcess" parameterType="map" resultType="hashmap">	    		
+				-- Id : SelectProcessSpecByProcess
+				-- Version : 10001
+				SELECT
+						PP.PROCESSPATHID
+					,	PP.USERSEQUENCE
+					,	PP.PROCESSSEGMENTID
+					,	NVL(PSN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+					,	IID.DICTIONARYNAME				AS SPECCLASSNAME
+					,	SD.LSL
+					,	SD.SL
+					,	SD.USL
+					,	CASE WHEN PP.PROCESSSEGMENTID = #{PROCESSSEGMENTID} THEN 'Y'
+							 ELSE 'N'
+						END								AS ISCURRENTPROCESS
+					,   PP.PATHSEQUENCE	
+					,   CASE WHEN L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID 
+					         THEN PP.PATHSEQUENCE
+					         ELSE 0
+					         END  LOTPATHSEQUENCE							
+				FROM	PCM_LOT							L
+				LEFT OUTER JOIN BAS_PROCESSPATH			PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+															AND	L.PLANTID = PP.PLANTID
+															AND	L.PROCESSDEFID = PP.PROCESSDEFID
+															AND	L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+															AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+															AND	PP.VALIDSTATE = 'Valid'
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS	ON	PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+															AND	PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY			PSN	ON	PS.PROCESSSEGMENTNAME = PSN.DICTIONARYID
+															AND	PSN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_INSPECTIONITEMREL	IR	ON	L.RESOURCEID = IR.RESOURCEID
+															AND	L.PRODUCTDEFVERSION = IR.RESOURCEVERSION
+															AND	IR.INSPECTIONDEFID = 'OperationInspection'
+															AND	L.PROCESSSEGMENTID = IR.PROCESSSEGID
+				LEFT OUTER JOIN BAS_INSPITEM                    II      ON  IR.ENTERPRISEID   = II.ENTERPRISEID
+		                                     AND IR.INSPITEMID    = II.INSPITEMID   
+		        LEFT OUTER JOIN CMD_DICTIONARY              IID     ON  II.INSPITEMNAME   = IID.DICTIONARYID
+		                                     AND IID.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_SPECDEFINITION		S	ON	IR.SPECCLASSID = S.SPECCLASSID
+															AND	IR.SPECSEQUENCE = S.SPECSEQUENCE
+				INNER JOIN BAS_SPECDETAIL			SD	ON	S.SPECSEQUENCE = SD.SPECSEQUENCE
+															AND	SD.CONTROLTYPE = #{CONTROLTYPE} 
+															AND	SD.SPECCLASSID = #{SPECCLASSID} 
+				LEFT OUTER JOIN BAS_SPECCLASS			SC	ON	S.SPECCLASSID = SC.SPECCLASSID
+				LEFT OUTER JOIN CMD_DICTIONARY			DIC	ON	SC.SPECCLASSNAME = DIC.DICTIONARYID
+															AND	DIC.LANGUAGETYPE = #{LANGUAGETYPE} 
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+	</select>
+	
+	<select id="selectLotData" parameterType="map" resultType="hashmap">
+		SELECT LOTID
+				,PRODUCTIONORDERID
+				,LINENO
+				,LOTGROUPID
+				,LOTNAME
+				,ENTERPRISEID
+				,PLANTID
+				,FACTORYID
+				,ORIGINALPLANTID
+				,AREAID
+				,EQUIPMENTID
+				,LOCATIONID
+				,RECIPEDEFID
+				,RECIPEDEFVERSION
+				,RAWMATERIALID
+				,ROOTLOTID
+				,PARENTLOTID
+				,CHILDLOTID
+				,CARRIERID
+				,LOTTYPE
+				,LOTCREATEDTYPE
+				,LOTINPUTTYPE
+				,ISREPRESENTROLLLOT
+				,HASSUBLOT
+				,PRODUCTDEFID
+				,PRODUCTDEFVERSION
+				,PREVPRODUCTDEFVERSION
+				,PROCESSDEFID
+				,PROCESSDEFVERSION
+				,PROCESSPATHSTACK
+				,USERSEQUENCE
+				,PROCESSSEGMENTID
+				,PROCESSSEGMENTVERSION
+				,PRIORITY
+				,DUEDATE
+				,EXPECTEDCOMPLETEDATE
+				,ROOTLOTSTARTDATE
+				,LOTSTARTDATE
+				,WEEK
+				,TRACKINUSER
+				,TRACKINTIME
+				,TRACKOUTUSER
+				,TRACKOUTTIME
+				,LOTSTATE
+				,PROCESSSTATE
+				,ISHOLD
+				,ISREWORK
+				,ISLOCKING
+				,REWORKTYPE
+				,REWORKREASONCODE
+				,ISPRINTLOTCARD
+				,ISPRINTRCLOTCARD
+				,LAYER
+				,CREATEDQTY
+				,LOTSTDPANELQTY
+				,UNIT
+				,DEFECTUNIT
+				,QTY
+				,DEFECTQTY
+				,PSEUDODEFECTQTY
+				,PCSQTY
+				,ARRAYQTY
+				,PANELQTY
+				,PANELPERQTY
+				,REWORKCOUNT
+				,TOTALREWORKCOUNT
+				,PUREORDER
+				,PUREINPUT
+				,SUBPROCESSDEFID
+				,SUBPROCESSDEFVERSION
+				,RECEIVEUSER
+				,RECEIVETIME
+				,STARTEDUSER
+				,STARTEDDATE
+				,SENDUSER
+				,SENDTIME
+				,HANDLETYPE
+				,DESCRIPTION
+				,CREATOR
+				,CREATEDTIME
+				,MODIFIER
+				,MODIFIEDTIME
+				,LASTTXNHISTKEY
+				,LASTTXNID
+				,LASTTXNUSER
+				,LASTTXNTIME
+				,LASTTXNCOMMENT
+				,ISDEFECTED
+				,LASTTXNGROUPHISTKEY
+				,WORKCOUNT
+				,RESOURCEID
+				,MKLOTID
+				,PREVPRODUCTDEFID
+				,PNLROOTLOTID
+				,PNLCREATEDQTY
+				,INPUTCONFIRMDATE
+				,INPUTCONFIRMUSER
+				,ISFINALINSPECTPROGESS
+				,LOTINPUTQTY
+				,ISFIRSTCREATELOT
+				,ISOEM
+				,ISSHRINKTEST				
+				,TO_CHAR(ADD_MONTHS(SYSDATE + nvl(null,0), nvl(null,0)),'YYYYMMDDHH24MISS') AS NOW
+		FROM PCM_LOT
+		WHERE 1=1
+		   AND LOTID = #{LOTID}	  
+		   <if test="TXNHISTKEY != null and TXNHISTKEY !='' ">
+		   	AND LASTTXNHISTKEY = #{TXNHISTKEY}
+		   </if>
+	</select>
+	
+	<update id="updateSplitLot" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.updateSplitLot */
+	    UPDATE  PCM_LOT 
+	    SET 
+	         LOTCREATEDTYPE 		= 	#{LOTCREATEDTYPE}     
+	        ,PROCESSSTATE 			= 	#{PROCESSSTATE}     
+	        ,CREATEDQTY 			= 	#{CREATEDQTY}     
+	        ,UNIT 						= 	#{UNIT}
+	        ,QTY 						= 	#{QTY}
+	        ,PCSQTY 					= 	#{PCSQTY}
+	        ,WEEK 					= 	#{WEEK}
+	        ,PANELPERQTY 			= 	#{PANELPERQTY}
+	        <if test="PANELQTY != null and PANELQTY !='' ">
+	        	,PANELQTY	= #{PANELQTY}
+	        </if>
+	        ,RESOURCEID = #{RESOURCEID}
+	                             
+	        ,MODIFIER = #{MODIFIER}     
+	        ,MODIFIEDTIME = SYSDATE     
+	    
+	        <!-- ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+	        ,LASTTXNID = #{LASTTXNID}     
+	        ,LASTTXNUSER = #{LASTTXNUSER}     
+	        ,LASTTXNTIME = #{LASTTXNTIME}     
+	        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}  -->     
+	    
+    WHERE 1=1
+	   AND LOTID = #{LOTID}	  
+    </update>
+    
+<update id="updateLot" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.updateLot */
+	    UPDATE  PCM_LOT 
+	    SET 
+	         PCSQTY 					= 	#{PCSQTY}
+        	,PANELQTY	= #{PANELQTY}	                             
+	        ,MODIFIER = #{MODIFIER}     
+	        ,MODIFIEDTIME = SYSDATE
+    WHERE 1=1
+	   AND LOTID = #{LOTID}	  
+    </update>
+
+<update id="updateLotFinal" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.updateLotFinal */
+	    UPDATE  PCM_LOT 
+	    SET 
+	         PROCESSSTATE 	= 	#{PROCESSSTATE}
+        	,RECEIVETIME		= #{RECEIVETIME}	                             
+	        ,MODIFIER 			= #{MODIFIER}     
+	        ,MODIFIEDTIME 		= #{LASTTXNTIME}
+    WHERE 1=1
+	   AND LOTID = #{LOTID}	  
+    </update>
+    
+<select id="selectReturnData" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM06900Dao.selectReturnData */
+			SELECT 	LOTID
+						,PRODUCTDEFID
+						,PRODUCTDEFVERSION
+						,PROCESSDEFID
+						,PROCESSDEFVERSION
+						,SUBPROCESSDEFID
+						,SUBPROCESSDEFVERSION
+						,FROMPROCESSSEGMENTID
+						,FROMPROCESSSEGMENTVERSION
+						,FROMPROCESSSTATE
+						,FROMAREAID
+						,FROMRESOURCEID
+						,REWORKPROCESSSEGMENTID
+						,REWORKPROCESSSEGMENTVERSION
+						,REWORKAREAID
+						,REWORKRESOURCE
+						,TOPROCESSSEGMENTID
+						,TOPROCESSSEGMENTVERSION
+						,TOPROCESSSTATE
+						,TORESOURCEID
+						,TOAREAID
+						,MOVESTATE
+						,WORKCOUNT
+						,APPLOVEDUSER
+						,APPLOVEDDATE
+						,REWORKQTY
+						,DESCRIPTION
+						,CREATOR
+						,CREATEDTIME
+						,MODIFIER
+						,MODIFIEDTIME
+						,LASTTXNHISTKEY
+						,LASTTXNID
+						,LASTTXNUSER
+						,LASTTXNTIME
+						,LASTTXNCOMMENT
+						,VALIDSTATE
+			 FROM 	PCM_REWORKRETURN
+			WHERE 	LOTID = #{LOTID}			
+    </select>
+    
+	<insert id="insertReworkReturnChildLot" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.insertChildLot */
+	    INSERT INTO   PCM_REWORKRETURN
+	   					 (LOTID
+						,PRODUCTDEFID
+						,PRODUCTDEFVERSION
+						,PROCESSDEFID
+						,PROCESSDEFVERSION
+						,SUBPROCESSDEFID
+						,SUBPROCESSDEFVERSION
+						,FROMPROCESSSEGMENTID
+						,FROMPROCESSSEGMENTVERSION
+						,FROMPROCESSSTATE
+						,FROMAREAID
+						,FROMRESOURCEID
+						,REWORKPROCESSSEGMENTID
+						,REWORKPROCESSSEGMENTVERSION
+						,REWORKAREAID
+						,REWORKRESOURCE
+						,TOPROCESSSEGMENTID
+						,TOPROCESSSEGMENTVERSION
+						,TOPROCESSSTATE
+						,TORESOURCEID
+						,TOAREAID
+						,MOVESTATE
+						,WORKCOUNT
+						,APPLOVEDUSER
+						,APPLOVEDDATE
+						,REWORKQTY
+						,DESCRIPTION
+						,CREATOR
+						,CREATEDTIME
+						,MODIFIER
+						,MODIFIEDTIME
+						,LASTTXNHISTKEY
+						,LASTTXNID
+						,LASTTXNUSER
+						,LASTTXNTIME
+						,LASTTXNCOMMENT
+						,VALIDSTATE
+						)
+	    			VALUES 
+					    (
+					    #{LOTID}
+						,#{PRODUCTDEFID}
+						,#{PRODUCTDEFVERSION}
+						,#{PROCESSDEFID}
+						,#{PROCESSDEFVERSION}
+						,#{SUBPROCESSDEFID}
+						,#{SUBPROCESSDEFVERSION}
+						,#{FROMPROCESSSEGMENTID}
+						,#{FROMPROCESSSEGMENTVERSION}
+						,#{FROMPROCESSSTATE}
+						,#{FROMAREAID}
+						,#{FROMRESOURCEID}
+						,#{REWORKPROCESSSEGMENTID}
+						,#{REWORKPROCESSSEGMENTVERSION}
+						,#{REWORKAREAID}
+						,#{REWORKRESOURCE}
+						,#{TOPROCESSSEGMENTID}
+						,#{TOPROCESSSEGMENTVERSION}
+						,#{TOPROCESSSTATE}
+						,#{TORESOURCEID}
+						,#{TOAREAID}
+						,#{MOVESTATE}
+						,#{WORKCOUNT}
+						,#{APPLOVEDUSER}
+						,#{APPLOVEDDATE}
+						,#{REWORKQTY}
+						,#{DESCRIPTION}
+						,#{CREATOR}
+						,#{CREATEDTIME}
+						,#{MODIFIER}
+						,#{MODIFIEDTIME}
+						,#{LASTTXNHISTKEY}
+						,#{LASTTXNID}
+						,#{LASTTXNUSER}
+						,#{LASTTXNTIME}
+						,#{LASTTXNCOMMENT}
+						,#{VALIDSTATE}			    
+					    )	  
+    </insert>
+
+	
+    
+	<update id="updateReworkReturnChildLot" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.updateReworkReturnChildLot */
+	    UPDATE  PCM_REWORKRETURN 
+	    SET 
+				 PRODUCTDEFID                   = #{PRODUCTDEFID}               
+				,PRODUCTDEFVERSION              = #{PRODUCTDEFVERSION}          
+				,PROCESSDEFID                   = #{PROCESSDEFID}               
+				,PROCESSDEFVERSION              = #{PROCESSDEFVERSION}          
+				,SUBPROCESSDEFID                = #{SUBPROCESSDEFID}            
+				,SUBPROCESSDEFVERSION           = #{SUBPROCESSDEFVERSION}       
+				,FROMPROCESSSEGMENTID           = #{FROMPROCESSSEGMENTID}       
+				,FROMPROCESSSEGMENTVERSION      = #{FROMPROCESSSEGMENTVERSION}  
+				,FROMPROCESSSTATE               = #{FROMPROCESSSTATE}           
+				,FROMAREAID                     = #{FROMAREAID}                 
+				,FROMRESOURCEID                 = #{FROMRESOURCEID}             
+				,REWORKPROCESSSEGMENTID         = #{REWORKPROCESSSEGMENTID}     
+				,REWORKPROCESSSEGMENTVERSION    = #{REWORKPROCESSSEGMENTVERSION}
+				,REWORKAREAID                   = #{REWORKAREAID}               
+				,REWORKRESOURCE                 = #{REWORKRESOURCE}             
+				,TOPROCESSSEGMENTID             = #{TOPROCESSSEGMENTID}         
+				,TOPROCESSSEGMENTVERSION        = #{TOPROCESSSEGMENTVERSION}    
+				,TOPROCESSSTATE                 = #{TOPROCESSSTATE}             
+				,TORESOURCEID                   = #{TORESOURCEID}               
+				,TOAREAID                       = #{TOAREAID}                   
+				,MOVESTATE                      = #{MOVESTATE}                  
+				,WORKCOUNT                      = #{WORKCOUNT}                  
+				,APPLOVEDUSER                   = #{APPLOVEDUSER}               
+				,APPLOVEDDATE                   = #{APPLOVEDDATE}               
+				,REWORKQTY                      = #{REWORKQTY}                  
+				,DESCRIPTION                    = #{DESCRIPTION}
+				,MODIFIER                       = #{MODIFIER}                   
+				,MODIFIEDTIME                   = #{MODIFIEDTIME}               
+				,LASTTXNHISTKEY                 = #{LASTTXNHISTKEY}             
+				,LASTTXNID                      = #{LASTTXNID}                  
+				,LASTTXNUSER                    = #{LASTTXNUSER}                
+				,LASTTXNTIME                    = #{LASTTXNTIME}                
+				,LASTTXNCOMMENT                 = #{LASTTXNCOMMENT}             
+				,VALIDSTATE                     = #{VALIDSTATE}
+    WHERE 1=1
+	   AND LOTID = #{LOTID}	  
+    </update>
+    
+    	<insert id="insertPcmReworkReturnhistory" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.insertPcmReworkReturnhistory */
+	    INSERT INTO   PCM_REWORKRETURNHISTORY
+	   					 (TXNHISTKEY
+						,LOTID
+						,PRODUCTDEFID
+						,PRODUCTDEFVERSION
+						,PROCESSDEFID
+						,PROCESSDEFVERSION
+						,SUBPROCESSDEFID
+						,SUBPROCESSDEFVERSION
+						,FROMPROCESSSEGMENTID
+						,FROMPROCESSSEGMENTVERSION
+						,FROMPROCESSSTATE
+						,FROMAREAID
+						,FROMRESOURCEID
+						,REWORKPROCESSSEGMENTID
+						,REWORKPROCESSSEGMENTVERSION
+						,REWORKAREAID
+						,REWORKRESOURCE
+						,TOPROCESSSEGMENTID
+						,TOPROCESSSEGMENTVERSION
+						,TOPROCESSSTATE
+						,TORESOURCEID
+						,TOAREAID
+						,MOVESTATE
+						,WORKCOUNT
+						,APPLOVEDUSER
+						,APPLOVEDDATE
+						,REWORKQTY
+						,DESCRIPTION
+						,CREATOR
+						,CREATEDTIME
+						,MODIFIER
+						,MODIFIEDTIME
+						,TXNGROUPHISTKEY
+						,TXNID
+						,TXNUSER
+						,TXNTIME
+						,TXNREASONCODECLASS
+						,TXNREASONCODE
+						,TXNCOMMENT
+						,VALIDSTATE
+						)
+	    			VALUES 
+					    (
+					    #{TXNHISTKEY}
+						,#{LOTID}
+						,#{PRODUCTDEFID}
+						,#{PRODUCTDEFVERSION}
+						,#{PROCESSDEFID}
+						,#{PROCESSDEFVERSION}
+						,#{SUBPROCESSDEFID}
+						,#{SUBPROCESSDEFVERSION}
+						,#{FROMPROCESSSEGMENTID}
+						,#{FROMPROCESSSEGMENTVERSION}
+						,#{FROMPROCESSSTATE}
+						,#{FROMAREAID}
+						,#{FROMRESOURCEID}
+						,#{REWORKPROCESSSEGMENTID}
+						,#{REWORKPROCESSSEGMENTVERSION}
+						,#{REWORKAREAID}
+						,#{REWORKRESOURCE}
+						,#{TOPROCESSSEGMENTID}
+						,#{TOPROCESSSEGMENTVERSION}
+						,#{TOPROCESSSTATE}
+						,#{TORESOURCEID}
+						,#{TOAREAID}
+						,#{MOVESTATE}
+						,#{WORKCOUNT}
+						,#{APPLOVEDUSER}
+						,#{APPLOVEDDATE}
+						,#{REWORKQTY}
+						,#{DESCRIPTION}
+						,#{CREATOR}
+						,#{CREATEDTIME}
+						,#{MODIFIER}
+						,#{MODIFIEDTIME}
+						,#{TXNGROUPHISTKEY}
+						,#{TXNID}
+						,#{TXNUSER}
+						,#{TXNTIME}
+						,#{TXNREASONCODECLASS}
+						,#{TXNREASONCODE}
+						,#{TXNCOMMENT}
+						,#{VALIDSTATE}	    
+					    )	  
+    </insert>
+</mapper>

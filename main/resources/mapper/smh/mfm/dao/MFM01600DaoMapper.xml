@@ -1,0 +1,554 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM01600Dao">
+
+<sql id="insertDictionary">
+	BAS_COMMON_PKG.GENERATE_DICTIONARY
+</sql>
+
+
+    <!--
+		설		명	: 품목그룹, 제품군그룹 
+		생	성	자	: 김성현
+		생	성	일	: 2021. 06. 28 
+		수  정   이  력	:
+	-->	
+	<select id="selectProductKind" parameterType="map" resultType="hashmap">
+		-- selectProductKind
+		WITH PRDLIST AS
+		(
+		    SELECT  PD.PRODUCTDEFID
+		    	,   PD.PRODUCTDEFVERSION					-- [21.04.30 Rev 추가]
+		        ,   TRIM(PD.PRODUCTDEFNAME) 			AS PRODUCTDEFNAME
+		        ,	MAX(PD.PRODUCTIONTYPE) 				AS PRODUCTIONTYPE
+				,	MAX(PD.LOADOWNER)      				AS LOADOWNER
+				,	MAX(PD.CREATOR)        					AS CREATOR
+				,	MAX(PD.CREATEDTIME)    				AS CREATEDTIME
+				,	MAX(PD.MODIFIER)       					AS MODIFIER
+				,	MAX(PD.MODIFIEDTIME)   				AS MODIFIEDTIME
+				,	MAX(PD.VALIDSTATE)     					AS VALIDSTATE
+				,	MAX(PD.PLANTID)        					AS PLANTID
+				,	MAX(PD.PRODUCTDEFTYPE) 				AS PRODUCTDEFTYPE
+				,	MAX(PD.ISLOADMNG)      				AS ISLOADMNG
+		    FROM BAS_PRODUCTDEFINITION PD           -- 제품정보
+		    WHERE 1=1
+                  AND PD.ENTERPRISEID = #{ENTERPRISEID}
+                  AND		PD.PLANTID = #{PLANTID}
+                  AND		PD.VALIDSTATE = 'Valid'			-- 추가 (화면에서 값이 안넘어옴.)
+                   -- [21.04.26 노석안 과장님 요청 사항 품목사용여부 Y인 것만 부하기준정보에서 등록됨]
+                  AND   	PD.ISLOADMNG = 'Y'
+			GROUP BY PD.PRODUCTDEFID
+			        , TRIM(PD.PRODUCTDEFNAME)	
+			        , PD.PRODUCTDEFVERSION           -- [21.04.30 버전 추가]	              
+		)
+        SELECT
+              CODE
+            , NAME
+            , TYPE
+        FROM
+        (
+        SELECT
+		    REL.PRODUCTDEFCLASSGROUPNAME AS CODE
+		  , REL.PRODUCTDEFCLASSGROUPNAME AS NAME
+		  , 'PRODUCTDEFCLASSGROUPNAME'   AS TYPE
+        FROM 	PRDLIST					PD
+        -- 제품,품목 그룹 리스트
+        INNER JOIN MFM_WORKDONEPRODUCTREL  REL
+        ON PD.PRODUCTDEFID  	= REL.PRODUCTDEFID     
+		WHERE 1 = 1
+            AND REL.ENTERPRISEID = #{ENTERPRISEID}
+            AND REL.PLANTID    = #{PLANTID}
+			AND REL.VALIDSTATE = 'Valid'
+			AND REL.PRODUCTDEFCLASSGROUPNAME IS NOT NULL
+		 GROUP BY REL.PRODUCTDEFCLASSGROUPNAME
+		-- ORDER BY REL.PRODUCTDEFCLASSGROUPNAME 
+		UNION ALL
+		-- selectProductKindForProduct
+	
+        SELECT
+		    REL.PRODUCTDEFGROUPNAME AS CODE
+		  , REL.PRODUCTDEFGROUPNAME AS NAME
+		  , 'PRODUCTDEFGROUPNAME'   AS TYPE
+        FROM 	PRDLIST					PD
+        -- 제품,품목 그룹 리스트
+        INNER JOIN MFM_WORKDONEPRODUCTREL  REL
+        ON PD.PRODUCTDEFID  	= REL.PRODUCTDEFID     
+		WHERE 1 = 1
+            AND REL.ENTERPRISEID = #{ENTERPRISEID}
+            AND REL.PLANTID    = #{PLANTID}
+			AND REL.VALIDSTATE = 'Valid'
+			AND REL.PRODUCTDEFGROUPNAME IS NOT NULL
+		 GROUP BY REL.PRODUCTDEFGROUPNAME
+		 --ORDER BY REL.PRODUCTDEFGROUPNAME 	
+        )
+        WHERE 1 = 1
+		<if test="CODENAME != null and CODENAME !='' and !(CODENAME eq '*'.toString()) ">
+			AND (CODE LIKE  '%' || UPPER(#{CODENAME})|| '%' 
+				OR NAME LIKE  '%' || UPPER(#{CODENAME})|| '%'
+				)
+		</if>        
+        ORDER BY TYPE, CODE
+	</select>
+    <!--
+		설		명	: 주요 품목 재공 실적_기준정보화면 - [메인조회]
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-24 
+		수  정   이  력	:  
+	-->
+	<select id="selectWorkDoneProductRelList" parameterType="map" resultType="hashmap">
+			/*selectWorkDoneProductRelList - 주요 품목 재공 실적_기준정보화면 - [메인조회]	*/
+				
+				WITH PRDLIST AS
+				(
+				    SELECT  PD.PRODUCTDEFID
+				    	,   PD.PRODUCTDEFVERSION					-- [21.04.30 Rev 추가]
+				        ,   TRIM(PD.PRODUCTDEFNAME) 			AS PRODUCTDEFNAME
+				        ,	MAX(PD.PRODUCTIONTYPE) 				AS PRODUCTIONTYPE
+						,	MAX(PD.LOADOWNER)      				AS LOADOWNER
+						,	MAX(PD.CREATOR)        					AS CREATOR
+						,	MAX(PD.CREATEDTIME)    				AS CREATEDTIME
+						,	MAX(PD.MODIFIER)       					AS MODIFIER
+						,	MAX(PD.MODIFIEDTIME)   				AS MODIFIEDTIME
+						,	MAX(PD.VALIDSTATE)     					AS VALIDSTATE
+						,	MAX(PD.PLANTID)        					AS PLANTID
+						,	MAX(PD.PRODUCTDEFTYPE) 				AS PRODUCTDEFTYPE
+						,	MAX(PD.ISLOADMNG)      				AS ISLOADMNG
+						
+                        
+				    FROM BAS_PRODUCTDEFINITION PD           -- 제품정보
+				    WHERE 1=1
+					
+                    AND		PD.PLANTID = #{P_PLANTID}
+                    
+                    
+                    AND		PD.VALIDSTATE = 'Valid'			-- 추가 (화면에서 값이 안넘어옴.)
+                    
+                     -- [21.04.26 노석안 과장님 요청 사항 품목사용여부 Y인 것만 부하기준정보에서 등록됨]
+                    AND   	PD.ISLOADMNG = 'Y'
+                    -- [21.07.01 ]
+                    AND   	PD.VALIDSTATELOAD = 'Valid'		-- 공정 부하 담당자 (유효여부_공정부하 유효 한 것만 가져온다.)
+					
+					<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+						AND EXISTS (
+									SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFID}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	PD.PRODUCTDEFID = LMP.VALUE
+							   		)
+					</if>
+					-- 생산구분
+					<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+						AND 	PD.PRODUCTIONTYPE = #{P_PRODUCTIONTYPE}
+					</if>
+					-- 제품구분
+					<choose>
+						<when test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' and !(P_PRODUCTDEFTYPE eq '*'.toString()) ">
+							AND 	PD.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE}
+						</when>
+						<otherwise>
+							AND 	PD.PRODUCTDEFTYPE IN ('Product','SubAssembly')			-- 21.04.26 추가 (제품, 반제품만 나오도록 )
+						</otherwise>
+					</choose>
+					
+					
+					--담당자
+					<if test="USERID != null and USERID !='' and !(USERID eq '*'.toString()) ">
+						AND EXISTS (
+									SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{USERID}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	PD.LOADOWNER  = LMP.VALUE		-- OWNER ->LOADOWNER 변경 
+								   )
+					</if>
+					
+                    
+					GROUP BY PD.PRODUCTDEFID
+					        , TRIM(PD.PRODUCTDEFNAME)	
+					        , PD.PRODUCTDEFVERSION           -- [21.04.30 버전 추가]	    
+				)
+				SELECT	PD.PRODUCTDEFID
+					,		PD.PRODUCTDEFNAME					
+					, 		PD.PRODUCTDEFVERSION           	-- [21.04.30 버전 추가]
+					,		PD.ISLOADMNG
+					,		NVL(CDD.DICTIONARYNAME, PD.PRODUCTDEFTYPE) 			AS PRODUCTDEFTYPE					
+					--,		PD.VALIDSTATE                        
+                    , 		'0' AS CHK
+                    , 		''  AS X_BTN
+                    --, 		''  AS PRODUCTDEFVERSION					
+                    , 		PD.LOADOWNER			            								AS OWNER
+                    , 		NVL(U1.USER_NM,PD.LOADOWNER)									AS OWNERNAME
+                    , 		PD.ISLOADMNG 														AS YESNOUSEPRODUCTDEFCLASS             -- 제품사용유무                    
+                    , 		REL.PRODUCTDEFGROUPNAME                 -- 제품그룹명
+                    , 		REL.PRODUCTDEFCLASSGROUPNAME         -- 품목그룹명
+                    , 		NVL(U2.USER_NM,REL.CREATOR)									AS CREATOR
+                    , 		TO_CHAR(REL.CREATEDTIME, 'YYYY-MM-DD  HH24:MI:SS') 	AS CREATEDTIME
+					, 		NVL(U3.USER_NM,REL.MODIFIER)									AS MODIFIER
+					, 		TO_CHAR(REL.MODIFIEDTIME, 'YYYY-MM-DD  HH24:MI:SS') 	AS MODIFIEDTIME
+					, 		REL.ENTERPRISEID
+					, 		REL.PLANTID
+					
+					,       REL.VALIDSTATE          -- 유효여부 21.04.30 수정 가능하도록
+					
+					-- [21.07.01] 생산구분 추가
+                    ,       PD.PRODUCTIONTYPE
+	                , 		CASE
+						 		WHEN DIC.DICTIONARYNAME IS NULL	THEN CD2.MEANING
+						 		ELSE DIC.DICTIONARYNAME 
+						 	END 						AS PRODUCTIONTYPENAME
+						 	
+					
+				FROM 	PRDLIST					PD
+				LEFT OUTER JOIN CMD_USERS			U1	ON	PD.LOADOWNER = U1.USER_ID
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES 		CD	ON	CD.LOOKUP_CODE = PD.PRODUCTDEFTYPE
+													AND	CD.LOOKUP_TYPE = 'ProductDivision2'
+				LEFT OUTER JOIN CMD_DICTIONARY	CDD	ON	CDD.DICTIONARYID = CD.DICTIONARYID
+													AND CDD.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}        -- 다국어 코드
+              
+                -- 제품,품목 그룹 리스트
+				LEFT OUTER JOIN MFM_WORKDONEPRODUCTREL  REL
+                ON PD.PRODUCTDEFID  	= REL.PRODUCTDEFID
+                --AND PD.PLANTID      		= REL.PLANTID
+                AND PD.PRODUCTDEFVERSION      		    = REL.PRODUCTDEFVERSION		-- (21.06.01  조건 수정)
+                LEFT OUTER JOIN CMD_USERS			U2	ON	REL.CREATOR = U2.USER_ID
+				LEFT OUTER JOIN CMD_USERS			U3	ON	REL.MODIFIER = U3.USER_ID
+				
+				-- [21.07.01] 생산구분 추가
+                LEFT OUTER JOIN CMD_LOOKUP_VALUES	CD2
+                ON	CD2.LOOKUP_CODE 				=  PD.PRODUCTIONTYPE
+                AND		CD2.LOOKUP_TYPE 				= 'ProductionType'
+                AND		CD2.ENABLED_FLAG 			= 'Y'
+				LEFT JOIN CMD_DICTIONARY 			DIC	
+				ON DIC.DICTIONARYID 					= CD2.DICTIONARYID
+				AND DIC.LANGUAGETYPE 				= #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				WHERE	1 = 1
+				--미입력
+				<if test="!(P_NOINPUT eq '*'.toString()) ">
+					<if test="(P_NOINPUT eq 'Y'.toString()) ">
+						AND 	(NVL(REL.PRODUCTDEFGROUPNAME, ' ') = ' '
+						OR		 NVL(REL.PRODUCTDEFCLASSGROUPNAME, ' ') = ' ')
+					</if>
+					<if test="(P_NOINPUT eq 'N'.toString()) ">
+						AND 	 NVL(REL.PRODUCTDEFGROUPNAME, ' ') != ' '
+						AND		 NVL(REL.PRODUCTDEFCLASSGROUPNAME, ' ') != ' '
+					</if>
+				</if>
+				
+				-- 품목사용여부
+				<if test="P_USEPRODUCTDEFCLASS_YN != null and P_USEPRODUCTDEFCLASS_YN !='' and !(P_USEPRODUCTDEFCLASS_YN eq '*'.toString()) ">
+					--AND 	NVL(REL.YESNOUSEPRODUCTDEFCLASS, 'N') = #{P_USEPRODUCTDEFCLASS_YN}
+				</if>
+				
+				-- 유효여부 (21.04.30 추가)
+				<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+					AND 	REL.VALIDSTATE = #{P_VALIDSTATE}
+				</if>
+				
+				-- 그룹 추가 (21.07.07)
+				<if test="P_GRPCODE != null and P_GRPCODE !='' and !(P_GRPCODE eq '*'.toString()) ">
+					AND (
+										REL.PRODUCTDEFGROUPNAME            		= #{P_GRPCODE}    -- 제품그룹명
+							OR 		REL.PRODUCTDEFCLASSGROUPNAME       	= #{P_GRPCODE}    -- 품목그룹명
+						)
+				</if>
+					
+				
+				ORDER BY PD.PRODUCTDEFID ASC
+	</select>
+	
+    <!--
+		설		명	: 주요 품목 재공 실적_기준정보화면 - [메인조회]
+		생	성	자	: 김성현
+		생	성	일	: 2021-06-24 
+		수  정   이  력	:  
+	-->
+	<select id="selectProcessOrderList" parameterType="map" resultType="hashmap">
+			/*selectProcessOrderList - 주요 품목 재공 실적_기준정보화면 - [메인조회]	*/
+				
+			WITH RELLIST AS
+			(
+				SELECT  
+					  REL.PRODUCTDEFID  
+					, REL.PRODUCTDEFVERSION 
+					, REL.PRODUCTDEFCLASSGROUPNAME
+					, REL.PRODUCTDEFGROUPNAME
+				FROM BAS_PRODUCTDEFINITION PD           -- 제품정보
+				INNER JOIN MFM_WORKDONEPRODUCTREL  REL
+				   ON PD.PRODUCTDEFID  	  = REL.PRODUCTDEFID
+				  AND PD.PRODUCTDEFVERSION  = REL.PRODUCTDEFVERSION		
+				WHERE 1=1
+				  AND PD.PLANTID = #{P_PLANTID}
+				  AND PD.VALIDSTATE = 'Valid'
+
+				<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND EXISTS (
+								SELECT	1
+									FROM	(SELECT DATA AS VALUE 
+											  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFID}) AS TP_SIMPLE_TABLE)) 
+											) LMP
+									WHERE	PD.PRODUCTDEFID = LMP.VALUE
+								)
+				</if>
+				-- 생산구분
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE = #{P_PRODUCTIONTYPE}
+				</if>
+				-- 제품구분
+				<choose>
+					<when test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' and !(P_PRODUCTDEFTYPE eq '*'.toString()) ">
+						AND 	PD.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE}
+					</when>
+					<otherwise>
+						AND 	PD.PRODUCTDEFTYPE IN ('Product','SubAssembly')			-- 21.04.26 추가 (제품, 반제품만 나오도록 )
+					</otherwise>
+				</choose>
+				--담당자
+				<if test="USERID != null and USERID !='' and !(USERID eq '*'.toString()) ">
+					AND EXISTS (
+								SELECT	1
+									FROM	(SELECT DATA AS VALUE 
+											  FROM TABLE(CAST(FN_TO_ROWS(#{USERID}) AS TP_SIMPLE_TABLE)) 
+											) LMP
+									WHERE	PD.LOADOWNER  = LMP.VALUE		
+							   )
+				</if>
+				--미입력
+				<if test="!(P_NOINPUT eq '*'.toString()) ">
+					<if test="(P_NOINPUT eq 'Y'.toString()) ">
+						AND 	(NVL(REL.PRODUCTDEFGROUPNAME, ' ') = ' '
+						OR		 NVL(REL.PRODUCTDEFCLASSGROUPNAME, ' ') = ' ')
+					</if>
+					<if test="(P_NOINPUT eq 'N'.toString()) ">
+						AND 	 NVL(REL.PRODUCTDEFGROUPNAME, ' ') != ' '
+						AND		 NVL(REL.PRODUCTDEFCLASSGROUPNAME, ' ') != ' '
+					</if>
+				</if>
+				
+				-- 품목사용여부
+				<if test="P_USEPRODUCTDEFCLASS_YN != null and P_USEPRODUCTDEFCLASS_YN !='' and !(P_USEPRODUCTDEFCLASS_YN eq '*'.toString()) ">
+					--AND 	NVL(REL.YESNOUSEPRODUCTDEFCLASS, 'N') = #{P_USEPRODUCTDEFCLASS_YN}
+				</if>
+				
+				-- 유효여부 (21.04.30 추가)
+				<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+					AND 	REL.VALIDSTATE = #{P_VALIDSTATE}
+				</if>						
+				GROUP BY REL.PRODUCTDEFID  
+					, REL.PRODUCTDEFVERSION 
+					, REL.PRODUCTDEFCLASSGROUPNAME
+					, REL.PRODUCTDEFGROUPNAME   
+			) 
+
+			SELECT
+				  WR.PROCESSSEGMENTID
+				, DC1.DICTIONARYNAME					AS PROCESSSEGMENTNAME  -- 공정명
+				, WR.IDX
+				, WR.GROUPNAME
+				, WR.TYPE
+				, WR.SORT
+				, WR.VALIDSTATE
+			FROM
+			(
+			SELECT 
+				  PATH.PROCESSSEGMENTID 
+				, EXT.PROCESSSEGMENTNAME
+				, SSG.IDX
+				, REL.PRODUCTDEFCLASSGROUPNAME AS GROUPNAME
+				, 'PRODUCTDEFCLASSGROUPNAME'   AS TYPE
+				, NVL(SSG.SORT, PATH.USERSEQUENCE) AS SORT
+				, NVL(SSG.VALIDSTATE, 'Valid') AS VALIDSTATE
+			FROM RELLIST REL
+			LEFT OUTER JOIN BAS_PROCESSPATH PATH ON REL.PRODUCTDEFID  = PATH.PROCESSDEFID AND REL.PRODUCTDEFVERSION = PATH.PROCESSDEFVERSION
+			LEFT OUTER JOIN (SELECT DISTINCT PROCESSSEGMENTID, PROCESSSEGMENTNAME FROM BAS_PROCESSSEGMENTEXT) EXT ON PATH.PROCESSSEGMENTID  = EXT.PROCESSSEGMENTID
+			LEFT OUTER JOIN MFM_PROCESSSEGMENT SSG ON PATH.PROCESSSEGMENTID = SSG.PROCESSSEGMENTID AND REL.PRODUCTDEFCLASSGROUPNAME = SSG.PRODUCTDEFCLASSGROUPNAME
+			WHERE 1 = 1
+			  AND PATH.VALIDSTATE = 'Valid'	
+			  AND REL.PRODUCTDEFCLASSGROUPNAME IS NOT NULL
+			<if test="P_GRPCODE != null and P_GRPCODE !='' and !(P_GRPCODE eq '*'.toString()) ">
+				AND 	REL.PRODUCTDEFCLASSGROUPNAME = #{P_GRPCODE}
+			</if>				  
+			GROUP BY PATH.PROCESSSEGMENTID, EXT.PROCESSSEGMENTNAME, SSG.IDX, REL.PRODUCTDEFCLASSGROUPNAME, NVL(SSG.SORT, PATH.USERSEQUENCE), SSG.VALIDSTATE                
+			UNION ALL
+			SELECT 
+				  PATH.PROCESSSEGMENTID 
+				, EXT.PROCESSSEGMENTNAME
+				, SSG.IDX
+				, REL.PRODUCTDEFGROUPNAME AS GROUPNAME
+				, 'PRODUCTDEFGROUPNAME'   AS TYPE
+				, NVL(SSG.SORT, PATH.USERSEQUENCE) AS SORT
+				, NVL(SSG.VALIDSTATE, 'Valid') AS VALIDSTATE
+			FROM RELLIST REL
+			LEFT OUTER JOIN BAS_PROCESSPATH PATH ON REL.PRODUCTDEFID  = PATH.PROCESSDEFID AND REL.PRODUCTDEFVERSION = PATH.PROCESSDEFVERSION
+			LEFT OUTER JOIN (SELECT DISTINCT PROCESSSEGMENTID, PROCESSSEGMENTNAME FROM BAS_PROCESSSEGMENTEXT) EXT ON PATH.PROCESSSEGMENTID  = EXT.PROCESSSEGMENTID
+			LEFT OUTER JOIN MFM_PROCESSSEGMENT SSG ON PATH.PROCESSSEGMENTID = SSG.PROCESSSEGMENTID AND REL.PRODUCTDEFGROUPNAME = SSG.PRODUCTDEFGROUPNAME
+			WHERE 1 = 1
+			  AND PATH.VALIDSTATE = 'Valid'	
+			  AND REL.PRODUCTDEFGROUPNAME IS NOT NULL
+			<if test="P_GRPCODE != null and P_GRPCODE !='' and !(P_GRPCODE eq '*'.toString()) ">
+				AND 	REL.PRODUCTDEFGROUPNAME = #{P_GRPCODE}
+			</if>				  
+			GROUP BY PATH.PROCESSSEGMENTID, EXT.PROCESSSEGMENTNAME, SSG.IDX, REL.PRODUCTDEFGROUPNAME, NVL(SSG.SORT, PATH.USERSEQUENCE), SSG.VALIDSTATE
+			) WR
+			LEFT OUTER JOIN	CMD_DICTIONARY			DC1	ON	WR.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+														AND	DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 																	
+			ORDER BY WR.TYPE, WR.GROUPNAME, TO_NUMBER(WR.SORT)
+	</select>
+		
+	<!--
+		설		명	: 주요 품목 재공 실적_기준정보화면 - [메인저장] (기존 내역 조회)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-24 
+		수  정   이  력	:  
+	-->
+	<select id="selectWorkDoneProductRel" parameterType="map" resultType="hashmap">
+			/*selectWorkDoneProductRel - 주요 품목 재공 실적_기준정보화면 - [메인저장] (기존 내역 조회)*/
+				SELECT PRODUCTDEFID         	-- 품목코드(제품)
+					 , ENTERPRISEID              	--
+					 , PLANTID                   	--
+					 , OWNERPRODUCTDEFID         	-- 담당자
+					 , PRODUCTDEFGROUPNAME       	-- 제품그룹명
+					 , PRODUCTDEFCLASSGROUPNAME -- 품목그룹명
+					 , YESNOUSEPRODUCTDEFCLASS   	-- 제품사용유무
+					 , CREATOR
+					 , CREATEDTIME
+					 , MODIFIER
+					 , MODIFIEDTIME
+					 , LASTTXNHISTKEY
+					 , LASTTXNID
+					 , LASTTXNUSER
+					 , LASTTXNTIME
+					 , LASTTXNCOMMENT
+					 , VALIDSTATE
+					 , PRODUCTDEFVERSION
+				  FROM MFM_WORKDONEPRODUCTREL   --주요 품목 재공 실적 기준정보 테이블
+				 WHERE 1 = 1
+				   AND 	PRODUCTDEFID			= 	#{PRODUCTDEFID}
+				   AND   PRODUCTDEFVERSION	=	#{PRODUCTDEFVERSION}
+	</select>
+	
+	<!--
+		설		명	: 주요 품목 재공 실적_기준정보화면 - [메인저장]
+		생	성	자	: 김진현 
+		생	성	일	: 2020-04-24 
+		수  정   이  력	: 
+	-->
+	<insert id="insertWorkDoneProductRel" parameterType="map">
+	    /*insertWorkDoneProductRel - 주요 품목 재공 실적_기준정보화면 - [메인저장]*/
+		INSERT INTO MFM_WORKDONEPRODUCTREL( 
+			  PRODUCTDEFID         -- 품목코드(제품)
+			 , ENTERPRISEID              --
+			 , PLANTID                   --
+			 , OWNERPRODUCTDEFID         -- 담당자
+			 , PRODUCTDEFGROUPNAME       -- 제품그룹명
+			 , PRODUCTDEFCLASSGROUPNAME  -- 품목그룹명
+			 , YESNOUSEPRODUCTDEFCLASS   -- 제품사용유무
+			 , CREATOR
+			 , CREATEDTIME
+			 , MODIFIER
+			 , MODIFIEDTIME
+			 , LASTTXNHISTKEY
+			 , LASTTXNID
+			 , LASTTXNUSER
+			 , LASTTXNTIME
+			 , LASTTXNCOMMENT
+			 , VALIDSTATE
+			 , PRODUCTDEFVERSION	
+			) 
+	    VALUES( 
+	         #{PRODUCTDEFID}  
+	        ,#{ENTERPRISEID}  
+	        ,#{PLANTID}  
+	        ,#{OWNER}  			
+	        ,#{PRODUCTDEFGROUPNAME}
+	        ,#{PRODUCTDEFCLASSGROUPNAME}
+	        ,#{YESNOUSEPRODUCTDEFCLASS} 
+			,#{CREATOR}
+            ,SYSDATE
+            ,#{MODIFIER}
+            ,SYSDATE
+			,#{LASTTXNHISTKEY}
+			,#{TXNID}
+            ,#{CREATOR}
+            ,SYSDATE
+            ,NULL
+			,#{VALIDSTATE}
+			,#{PRODUCTDEFVERSION}
+			)
+    </insert>
+    
+    <!--
+		설		명	: 주요 품목 재공 실적_기준정보화면 - [메인저장 - 수정]
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-24 
+		수  정   이  력	:
+	-->
+    <update id="updateWorkDoneProductRel" parameterType="map">
+			
+			 UPDATE MFM_WORKDONEPRODUCTREL  /*updateWorkDoneProductRel - 주요 품목 재공 실적_기준정보화면 - [메인저장 - 수정]*/
+			SET   OWNERPRODUCTDEFID					= #{OWNER} 
+				, 	PRODUCTDEFGROUPNAME			= #{PRODUCTDEFGROUPNAME} 
+				, 	PRODUCTDEFCLASSGROUPNAME	= #{PRODUCTDEFCLASSGROUPNAME} 
+				, 	YESNOUSEPRODUCTDEFCLASS		= #{YESNOUSEPRODUCTDEFCLASS} 
+			    ,	VALIDSTATE								= #{VALIDSTATE} 
+				, 	MODIFIER								= #{MODIFIER} 
+				, 	MODIFIEDTIME							= SYSDATE
+				, 	LASTTXNHISTKEY 						= #{LASTTXNHISTKEY}
+			WHERE PRODUCTDEFID						= #{PRODUCTDEFID}
+			   AND PRODUCTDEFVERSION				= #{PRODUCTDEFVERSION}
+    </update>
+
+	
+    <!--
+		설		명	: 주요 품목 재공 실적_기준정보화면 - [메인저장 - 수정]
+		생	성	자	: 김성현
+		생	성	일	: 2021-06-24 
+		수  정   이  력	:
+	-->
+    <update id="mergeOrderRel" parameterType="map">
+		-- mergeOrderRel	
+		MERGE INTO MFM_PROCESSSEGMENT
+    	USING DUAL
+    	        ON (     PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+				    AND IDX = TO_NUMBER(#{IDX})
+                    )
+              WHEN  MATCHED THEN  
+	              UPDATE SET 
+						  SORT                                   = LPAD(#{SORT},8,'0')
+						, VALIDSTATE                           = #{VALIDSTATE}
+						, MODIFIEDTIME                       = SYSDATE
+						, MODIFIER                             = #{MODIFIER}
+           WHEN NOT MATCHED THEN
+				INSERT ( 
+						  PROCESSSEGMENTID
+						, IDX
+						, PRODUCTDEFCLASSGROUPNAME
+						, PRODUCTDEFGROUPNAME
+						, SORT
+						, VALIDSTATE
+						, CREATEDTIME
+						, CREATOR
+						, MODIFIEDTIME
+						, MODIFIER
+					) 
+				    VALUES
+					( 
+						  #{PROCESSSEGMENTID}
+						, MFM_PROCESSSEGMENT_SEQ.NEXTVAL
+						, DECODE(#{TYPE}, 'PRODUCTDEFCLASSGROUPNAME', #{GROUPNAME}, NULL)
+						, DECODE(#{TYPE}, 'PRODUCTDEFGROUPNAME', #{GROUPNAME}, NULL)
+						, LPAD(#{SORT},8,'0')
+						, #{VALIDSTATE}
+						, SYSDATE
+						, #{CREATOR}
+						, SYSDATE
+						, #{MODIFIER}
+					)
+    </update>
+        
+	 
+
+</mapper>

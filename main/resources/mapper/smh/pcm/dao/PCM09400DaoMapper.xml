@@ -1,0 +1,994 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM09400Dao">
+      
+    
+    
+	<!--
+		설		명	: 품목코드 팝업 조회(조회조건) 
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-10 
+		수  정   이  력	:
+	-->
+	<select id="selectPcmProductItemGroupList" parameterType="map" resultType="hashmap">
+			    --
+				-- GetProductItemGroup
+				-- Version:10002
+				
+				SELECT 	/*selectPcmProductItemGroupList - 품목코드 팝업 조회(조회조건)*/
+						MDC.MASTERDATACLASSNAME
+					,	IM.ITEMID
+			    	,	IM.ITEMNAME 
+			    	,	IM.ITEMVERSION
+			    	,	IM.UOMDEFID
+			    	,   CT.CUSTOMERNAME
+				FROM BAS_ITEMMASTER IM 
+				LEFT JOIN BAS_MASTERDATACLASS MDC  ON IM.MASTERDATACLASSID = MDC.MASTERDATACLASSID
+				                                  AND IM.ENTERPRISEID = MDC.ENTERPRISEID
+				LEFT JOIN BAS_PRODUCTITEMSPEC PIS  ON IM.ITEMID = PIS.ITEMID
+				                                  AND IM.ITEMVERSION = PIS.ITEMVERSION
+				LEFT JOIN BAS_CUSTOMER        CT   ON  PIS.ENTERPRISEID = CT.ENTERPRISEID
+				   							      AND PIS.CUSTOMERID = CT.CUSTOMERID
+			    WHERE  1 = 1   
+			    AND    IM.VALIDSTATE = 'Valid'
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+					AND	IM.ENTERPRISEID = #{ENTERPRISEID} 
+				</if>
+				<if test="MASTERDATACLASSID != null and MASTERDATACLASSID !='' and !(MASTERDATACLASSID eq '*'.toString()) ">
+					AND	IM.MASTERDATACLASSID = #{MASTERDATACLASSID}  
+				</if>	
+				<if test="ITEMID != null and ITEMID !='' and !(ITEMID eq '*'.toString()) ">
+					AND	UPPER(IM.ITEMID) LIKE  '%' || UPPER(#{ITEMID})|| '%'
+				</if>
+				<if test="ITEMNAME != null and ITEMNAME !='' and !(ITEMNAME eq '*'.toString()) ">
+					AND	UPPER(IM.ITEMNAME) LIKE  '%' || UPPER(#{ITEMNAME})|| '%'
+				</if>
+			    AND IM.MASTERDATACLASSID IN ('Product','SemiProduct','SubAssembly','Commodity') --'Product 제품/ SemiProduct 반제품/ SubAssembly 공정반제품'
+			    GROUP BY IM.ITEMID,IM.ITEMNAME,MDC.MASTERDATACLASSNAME,CT.CUSTOMERNAME,	IM.ITEMVERSION,	IM.UOMDEFID
+			    ORDER BY IM.ITEMID, IM.ITEMVERSION
+	</select>
+	
+	<!--
+		설		명	: 고객사 정보 팝업 조회(조회조건) 
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-10 
+		수  정   이  력	:
+	-->
+	<select id="selectCustomerList" parameterType="map" resultType="hashmap">
+				--
+				-- GetCustomerList
+				-- Version:10002
+				
+				/*SAMPLE 표현을 위해 추가  21.04.22*/
+				<if test="SAMPLE != null and SAMPLE !='' and (SAMPLE eq 'Y'.toString()) ">
+	                  SELECT	/*SAMPLE 표현을 위해 추가  21.04.22*/
+		                        DECODE(rownum, 1, 'Common_1_*', 2, 'Common_2_*', 3, 'Boe_*')   AS CUSTOMERID
+						 	,	'Sample' AS CUSTOMERNAME
+						 	,	'' AS ADDRESS
+						 	,	'' AS CEONAME
+						 	,   '' AS TELNO
+						 	,	'' AS FAXNO
+						 	,   '' AS SHIPTO
+						 	,	''  AS CUSTOMER
+					FROM	DUAL		A
+	                CONNECT BY  level <![CDATA[<=]]>  3
+	                UNION ALL
+                </if>
+				
+				
+				SELECT	/*selectCustomerList - 고객사 정보 팝업 조회(조회조건)*/
+				 		A.CUSTOMERID
+				 	,	A.CUSTOMERNAME
+				 	,	A.ADDRESS
+				 	,	A.CEONAME
+				 	,	A.TELNO
+				 	,	A.FAXNO
+				 	,   A.SHIPTO
+				 	,	A.CUSTOMERID || ' / ' ||A.CUSTOMERNAME   AS CUSTOMER
+				FROM	BAS_CUSTOMER		A			    
+				WHERE 	1 = 1
+				
+				
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+					AND		A.ENTERPRISEID = #{ENTERPRISEID}
+				</if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+					AND		A.PLANTID = #{PLANTID}
+				</if>
+				<if test="CUSTOMERNAME != null and CUSTOMERNAME !='' and !(CUSTOMERNAME eq '*'.toString()) ">
+					AND		UPPER(D.DICTIONARYNAME) LIKE '%' || UPPER(#{CUSTOMERNAME})|| '%' 
+				</if>
+				<if test="CUSTOMERID != null and CUSTOMERID !='' and !(CUSTOMERID eq '*'.toString()) ">
+					AND		A.CUSTOMERID = #{CUSTOMERID} 
+				</if>
+				<if test="SEARCH != null and SEARCH !='' and !(SEARCH eq '*'.toString()) ">
+					AND		(UPPER(A.CUSTOMERID) LIKE  '%' || UPPER(#{CUSTOMERID})|| '%'  
+					OR       UPPER(A.CUSTOMERNAME) LIKE  '%' || UPPER(#{CUSTOMERNAME})|| '%')  
+				</if>
+				<if test="TXTCUSTOMERID != null and TXTCUSTOMERID !='' and !(TXTCUSTOMERID eq '*'.toString()) ">
+					AND		(UPPER(A.CUSTOMERID)   LIKE  '%' || UPPER(#{TXTCUSTOMERID})|| '%'  
+					OR		 UPPER(A.CUSTOMERNAME) LIKE  '%' || UPPER(#{TXTCUSTOMERID})|| '%')  
+				</if>
+				AND		A.VALIDSTATE = 'Valid'
+	
+	</select>
+	
+	
+	<!--
+		설		명	: 고객정보 메인 그리드  조회(조회조건) 
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-10 
+		수  정   이  력	:
+	-->
+	<select id="selectPackagProductMstList" parameterType="map" resultType="hashmap">
+				SELECT 	/*selectPackagProductMstList - 고객정보 메인 그리드  조회(조회조건)*/
+					      M.ENTERPRISEID            --회사 ID
+					    , M.PLANTID                 --사이트 ID
+					    , M.CUSTOMERID              --고객사 ID (G)
+					   /*
+					    , (
+					        SELECT   A.CUSTOMERNAME
+					            FROM	BAS_CUSTOMER		A			    
+					            WHERE 	1 = 1
+					                AND		A.ENTERPRISEID  = M.ENTERPRISEID
+					                AND		A.PLANTID       = M.PLANTID 
+					                AND		A.CUSTOMERID    = M.CUSTOMERID
+					                AND		A.VALIDSTATE = 'Valid'
+					    ) AS CUSTOMERNM             -- 고객사 명
+					    */
+					    
+					    , M.CUSTOMERNM              --고객사명(직접입력) 21.04.12 변경
+					    
+					    ---[ 필수값 ]
+					    , M.DC                      -- DC (G)
+					    , M.PRGMNAME                -- 프로그램명 (G)
+					    , M.PONO                    -- PONO (G)
+					    , M.DNO                     -- DNO (G)
+					    , M.INVNO                   -- INVNO (G)
+					    , M.ASN                     -- ASN (G)
+					    , M.PACKNO                  -- PackNo (G)
+					    , M.REMARK                  -- 비고 (G)    
+					    , M.VALIDSTATE              -- 유효여부 (G)
+					    
+					    , M.CREATER
+					    , TO_CHAR(M.CREATEDTIME, 'YYYY-MM-DD') AS CREATEDTIME
+					    , M.MODIFIER
+					    , TO_CHAR(M.MODIFIEDTIME, 'YYYY-MM-DD') AS MODIFIEDTIME
+					    
+					    
+					    , M.BOXLINENO				-- 내부 box no 여부 (21.04.08 추가)
+					    , M.LOT_ONE_ONLY        -- LOT 한건 입력 가능 여부(21.04.13 추가)
+					    
+					    , M.MOD_FL					-- 고객사별 수정 가능 여부 (21.04.30 추가)
+					  FROM   BAS_PACKAGEPRODUCT_MST M 
+                      , (
+                      SELECT M.ENTERPRISEID
+                           , M.PLANTID
+                           , M.CUSTOMERID
+					  FROM BAS_PACKAGEPRODUCT_MST M 
+					  LEFT OUTER JOIN  BAS_PACKAGEPRODUCT_DTL D
+					  ON  M.ENTERPRISEID = D.ENTERPRISEID
+					  AND M.PLANTID = D.PLANTID
+					  AND M.CUSTOMERID = D.CUSTOMERID
+					 WHERE 1 = 1
+						 <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+							AND M.ENTERPRISEID =  #{ENTERPRISEID}
+						 </if>
+						 <if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+							AND M.PLANTID = #{PLANTID}
+						 </if>
+						 <if test="CUSTOMERID != null and CUSTOMERID !='' and !(CUSTOMERID eq '*'.toString()) ">
+							AND M.CUSTOMERID = #{CUSTOMERID}
+						 </if>
+						 <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and !(PRODUCTDEFID eq '*'.toString()) ">
+							AND D.PRODUCTDEFID = #{PRODUCTDEFID}
+						 </if>
+						 <if test="CUSTOMERPN != null and CUSTOMERPN !='' and !(CUSTOMERPN eq '*'.toString()) ">
+							AND UPPER(D.CUSTOMERPN)  LIKE  '%' || UPPER(#{CUSTOMERPN})|| '%'    
+						 </if>
+						 <if test="CUSTOMERMODELNM != null and CUSTOMERMODELNM !='' and !(CUSTOMERMODELNM eq '*'.toString()) ">
+							AND UPPER(D.CUSTOMERMODELNM)  LIKE  '%' || UPPER(#{CUSTOMERMODELNM})|| '%' 
+						 </if>
+						 
+						 ---[ 21.03.25 김정욱 과장님 요청 사항 고객사 명으로 조회 가능]
+						 <if test="CUSTOMERNM != null and CUSTOMERNM !='' and !(CUSTOMERNM eq '*'.toString()) ">
+							 -- 직접 입력한 고객사명
+							  AND UPPER(M.CUSTOMERNM)  LIKE  '%' || UPPER(#{CUSTOMERNM})|| '%'                         
+							</if>
+						 
+					GROUP BY  M.ENTERPRISEID, M.PLANTID, M.CUSTOMERID
+                     ) A 
+                     WHERE 1 = 1
+                       AND M.ENTERPRISEID 	= A.ENTERPRISEID
+                       AND  M.PLANTID   		= A.PLANTID
+                       AND  M.CUSTOMERID 	= A.CUSTOMERID	 
+                       
+                       
+				ORDER BY CUSTOMERID  -- 21.04.22 정렬 추가		 
+	
+	</select>
+	
+	<!--
+		설		명	: 포장정보 sub메인 그리드  조회
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-11 
+		수  정   이  력	:
+	-->
+	<select id="selectPackagProductDtlList" parameterType="map" resultType="hashmap">	
+				SELECT /*selectPackagProductDtlList -포장사양 관리 포장 정보 조회*/
+					 D.ENTERPRISEID
+				   , D.PLANTID
+				   , D.CUSTOMERID
+				   , D.PACKSPECDETSEQ
+				   , D.VALIDSTATE               -- 유효여부
+				   , D.CUSTOMERMODELNM          -- 고객모델명
+				   , D.CUSTOMERPRODNAME         -- 고객품명
+				   , D.CUSTOMERPN               -- 고객PN(CPN)
+				   , D.CUSTOMERCOMPANYID        -- 고객 업체코드
+				   , NVL(D.CUSTOMERREVUSEYN, '')      AS CUSTOMERREVUSEYN   -- 고객Rev 사용
+				   , D.CUSTOMERREV              -- 고객Rev
+				   , D.PRODUCTDEFID             -- 제품 정의 ID
+				   
+				    , D.PRODUCTDEFID||
+                     (
+                        CASE WHEN NVL(D.PRODUCTDEFVERSION,' ') = ' ' 
+                             THEN ''
+                             ELSE D.PRODUCTDEFVERSION
+                             END
+                     ) AS PRODUCTDEFNM      -- 추가
+				   
+				   , D.PRODUCTDEFVERSION        -- 제품 정의 Ver
+				   , D.SUMPCS                   -- 합수
+				   , D.ATTRIBUTE1
+				   , D.ATTRIBUTE2
+				   , D.ATTRIBUTE3
+				   , D.ATTRIBUTE4
+				   , D.ATTRIBUTE5
+				   , D.ATTRIBUTE6
+				   , D.ATTRIBUTE7
+				   , D.ATTRIBUTE8
+				   , D.ATTRIBUTE9
+				   , D.ATTRIBUTE10
+				   , D.CREATER
+				   , TO_CHAR(D.CREATEDTIME, 'YYYY-MM-DD') AS CREATEDTIME
+				   , D.MODIFIER
+				   , TO_CHAR(D.MODIFIEDTIME, 'YYYY-MM-DD') AS MODIFIEDTIME
+				   
+			  FROM BAS_PACKAGEPRODUCT_DTL D
+			 WHERE 1 = 1
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+					AND D.ENTERPRISEID   = #{ENTERPRISEID}
+				</if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+					AND D.PLANTID        = #{PLANTID}
+				</if>
+				<if test="CUSTOMERID != null and CUSTOMERID !='' and !(CUSTOMERID eq '*'.toString()) ">
+					AND D.CUSTOMERID     = #{CUSTOMERID}
+				</if>
+				
+				-- (21.07.28) 조회 조건에 해당하는 포장정보 조회
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and !(PRODUCTDEFID eq '*'.toString()) ">
+					AND D.PRODUCTDEFID = #{PRODUCTDEFID}
+				 </if>
+				 <if test="CUSTOMERPN != null and CUSTOMERPN !='' and !(CUSTOMERPN eq '*'.toString()) ">
+					AND UPPER(D.CUSTOMERPN)  LIKE  '%' || UPPER(#{CUSTOMERPN})|| '%'    
+				 </if>
+				 <if test="CUSTOMERMODELNM != null and CUSTOMERMODELNM !='' and !(CUSTOMERMODELNM eq '*'.toString()) ">
+					AND UPPER(D.CUSTOMERMODELNM)  LIKE  '%' || UPPER(#{CUSTOMERMODELNM})|| '%' 
+				 </if>
+				
+	</select>
+
+
+	<!--
+		설		명	: 버튼 기준정보 sub메인 그리드  조회
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-11 
+		수  정   이  력	:
+	-->
+	<select id="selectPackagProductFncList" parameterType="map" resultType="hashmap">	
+				
+				SELECT /* selectPackagProductFncList -포장사양 관리 버튼 기준정보 조회*/
+						F.ENTERPRISEID           
+					  , F.PLANTID
+					  , F.CUSTOMERID
+					  , F.PRODFUNCSEQ
+					  , F.BUTTONNAME
+					  , F.SRCNAME
+					  , F.VALIDSTATE      
+					  , F.CREATER
+					  , TO_CHAR(F.CREATEDTIME, 'YYYY-MM-DD') AS CREATEDTIME
+					  , F.MODIFIER
+					  , TO_CHAR(F.MODIFIEDTIME, 'YYYY-MM-DD') AS MODIFIEDTIME
+				  FROM BAS_PACKAGEPRODUCT_FNC F
+				 WHERE 1 = 1
+					<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+						AND F.ENTERPRISEID   = #{ENTERPRISEID}
+					</if>
+					<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+						AND F.PLANTID        = #{PLANTID}
+					</if>
+					<if test="CUSTOMERID != null and CUSTOMERID !='' and !(CUSTOMERID eq '*'.toString()) ">
+						AND F.CUSTOMERID     = #{CUSTOMERID}
+					</if>
+	</select>
+	
+	<!--
+		설		명	: 품목유형 조회 
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-11 
+		수  정   이  력	:
+	-->
+	<select id="selectMstDataClassId" parameterType="map" resultType="hashmap">	
+				--
+				-- GetmasterdataclassList
+				-- Version:10001
+				SELECT 	/*selectMstDataClassId -포장사양 관리 품목코드 팝업 품목유형 조회*/
+					 	MASTERDATACLASSID	AS CODE
+					,	ENTERPRISEID
+					,	PLANTID
+					,	MASTERDATACLASSNAME	AS NAME
+					,	IDCLASSID			AS IDCLASSIDRULE 
+					,	DESCRIPTIONRULE
+					,	DUPLICATERULE
+					,	ITEMOWNER
+					,	MESITEMTYPE
+					,	DESCRIPTION
+					,	VALIDSTATE
+					,   ISAPPROVAL
+					
+                FROM    BAS_MASTERDATACLASS
+                WHERE    1=1 
+                AND     VALIDSTATE = 'Valid'
+
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+			     	AND		ENTERPRISEID = #{ENTERPRISEID}
+			    </if>
+				<if test="ITEMOWNER != null and ITEMOWNER !='' and !(ITEMOWNER eq '*'.toString()) ">				                
+					AND		ITEMOWNER = #{ITEMOWNER}
+				</if>	
+				<if test="MESITEMTYPE != null and MESITEMTYPE !='' and !(MESITEMTYPE eq '*'.toString()) ">	
+			    	AND 	MESITEMTYPE = #{MESITEMTYPE}
+			    </if>
+	</select>
+	
+	
+	<!--
+		설		명	: 품목유형 활용 품목코드 팝업 조회 
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-11 
+		수  정   이  력	:
+	-->
+	<select id="selectPcmProductItemGroupListVer1" parameterType="map" resultType="hashmap">
+			--
+				-- GetProductItemGroup
+				-- Version:10001
+				
+				SELECT  /*selectPcmProductItemGroupListVer1 - 품목유형 활용 품목코드 팝업 조회*/
+						MDC.MASTERDATACLASSNAME
+					,	IM.ITEMID
+			    	,	IM.ITEMNAME 
+			    	,   MAX(CT.CUSTOMERNAME) AS CUSTOMERNAME
+			    	,   IM.UOMDEFID
+			    	
+			    	
+			    	,   IM.ITEMVERSION		--포장사양관리에서 사용
+				FROM BAS_ITEMMASTER IM 
+				LEFT JOIN BAS_MASTERDATACLASS MDC  ON IM.MASTERDATACLASSID = MDC.MASTERDATACLASSID
+				                                  AND IM.ENTERPRISEID = MDC.ENTERPRISEID
+				LEFT JOIN BAS_PRODUCTITEMSPEC PIS  ON IM.ITEMID = PIS.ITEMID
+				                                  AND IM.ITEMVERSION = PIS.ITEMVERSION
+				LEFT JOIN BAS_CUSTOMER        CT   ON  PIS.ENTERPRISEID = CT.ENTERPRISEID
+				   							      AND PIS.CUSTOMERID = CT.CUSTOMERID
+			    WHERE   1 = 1
+			      AND   IM.VALIDSTATE = 'Valid'	 
+			    <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+					AND	IM.ENTERPRISEID = #{ENTERPRISEID}
+				</if>
+				<if test="MASTERDATACLASSID != null and MASTERDATACLASSID !='' and !(MASTERDATACLASSID eq '*'.toString()) ">				                
+					AND	IM.MASTERDATACLASSID = #{MASTERDATACLASSID}			-- 품목유형
+				</if>
+				
+				<if test="ITEMID != null and ITEMID !='' and !(ITEMID eq '*'.toString()) ">		
+					AND	UPPER(IM.ITEMID) LIKE  '%' || UPPER(#{ITEMID})|| '%'
+				</if>
+				<if test="ITEMNAME != null and ITEMNAME !='' and !(ITEMNAME eq '*'.toString()) ">				                
+					AND	UPPER(IM.ITEMNAME) LIKE  '%' || UPPER(#{ITEMNAME})|| '%'
+				</if>
+				<if test="PRODTYPE != null and PRODTYPE !='' and !(PRODTYPE eq '*'.toString()) ">		                
+					AND	IM.PRODUCTIONTYPE =  #{PRODTYPE}	-- 생산구분  (IM으로 변경)(21.05.12)
+				</if>
+				
+			    -- 20.03.25 상품인 경우 조회 되어야 함.
+			    -- SemiProduct : 제품 ,  SemiProduct: 정보없음 , SubAssembly : 반제품, Commodity: 상품, OperationItem: 공정반제품   (밑에 내용 주석으로 막음)
+			    -- AND IM.MASTERDATACLASSID IN ('Product','SemiProduct','SubAssembly','Commodity') --'Product 제품/ SemiProduct 반제품/ SubAssembly 공정반제품'   / 삼품 추가
+			    
+			    
+			    GROUP BY IM.ITEMID,IM.ITEMNAME,MDC.MASTERDATACLASSNAME, IM.UOMDEFID
+			    		, IM.ITEMVERSION		-- 포장사양관리에서 사용
+			    ORDER BY IM.ITEMID
+			    		, IM.ITEMVERSION		-- 포장사양관리에서 사용
+			    --, IM.ITEMVERSION
+	
+	</select>
+	
+	<!--
+		설		명	: 저장전 DB 중복 체크(고객정보) 
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	:
+	-->
+	<select id="selectPackagProductMstDupList" parameterType="map" resultType="hashmap">	
+				
+				SELECT 	/*selectPackagProductMstDupList -저장전 DB 중복 체크(고객정보) */
+					  M.ENTERPRISEID            --회사 ID
+					, M.PLANTID                 --사이트 ID
+					, M.CUSTOMERID              --고객사 ID (G)
+				   /*
+					, (
+						SELECT   A.CUSTOMERNAME
+							FROM	BAS_CUSTOMER		A			    
+							WHERE 	1 = 1
+								AND		A.ENTERPRISEID  = M.ENTERPRISEID
+								AND		A.PLANTID       = M.PLANTID 
+								AND		A.CUSTOMERID    = M.CUSTOMERID
+								AND		A.VALIDSTATE = 'Valid'
+					) AS CUSTOMERNM             -- 고객사 명
+					*/
+					
+					, M.CUSTOMERNM              --고객사명 21.04.12 고객사명 직접 입력으로 컬럼 추가 
+					---[ 필수값 ]
+					, M.DC                      -- DC (G)
+					, M.PRGMNAME                -- 프로그램명 (G)
+					, M.PONO                    -- PONO (G)
+					, M.DNO                     -- DNO (G)
+					, M.INVNO                   -- INVNO (G)
+					, M.ASN                     -- ASN (G)
+					, M.PACKNO                  -- PackNo (G)
+					, M.REMARK                  -- 비고 (G)    
+					, M.VALIDSTATE              -- 유효여부 (G)
+					
+					, M.CREATER
+					, TO_CHAR(M.CREATEDTIME, 'YYYY-MM-DD') AS CREATEDTIME
+					, M.MODIFIER
+					, TO_CHAR(M.MODIFIEDTIME, 'YYYY-MM-DD') AS MODIFIEDTIME
+				  FROM BAS_PACKAGEPRODUCT_MST M 
+				 WHERE 1 = 1
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+			     	AND		ENTERPRISEID = #{ENTERPRISEID}
+			    </if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">				                
+					AND		PLANTID = #{PLANTID}
+				</if>	
+	</select>
+	
+	
+	<!--
+		설		명	: 저장전 DB 중복 체크(포장정보) 
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	:
+	-->
+	<select id="selectPackagProductDtlDupList" parameterType="map" resultType="hashmap">	
+				
+				SELECT 	/*selectPackagProductDtlDupList -저장전 DB 중복 체크(포장정보) */
+						 D.ENTERPRISEID
+					   , D.PLANTID
+					   , D.CUSTOMERID
+					   , D.PACKSPECDETSEQ
+					   
+					   , D.VALIDSTATE               -- 유효여부
+					   , D.CUSTOMERMODELNM          -- 고객모델명
+					   , D.CUSTOMERPRODNAME         -- 고객품명
+					   , D.CUSTOMERPN               -- 고객PN(CPN)
+					   , D.CUSTOMERCOMPANYID        -- 고객 업체코드
+					   , D.CUSTOMERREVUSEYN         -- 고객Rev 사용
+					   , D.CUSTOMERREV              -- 고객Rev
+					   , D.PRODUCTDEFID             -- 제품 정의 ID
+					   , D.PRODUCTDEFVERSION        -- 제품 정의 Ver
+					   , D.SUMPCS                   -- 합수
+					   
+					   , D.ATTRIBUTE1
+					   , D.ATTRIBUTE2
+					   , D.ATTRIBUTE3
+					   , D.ATTRIBUTE4
+					   , D.ATTRIBUTE5
+					   , D.ATTRIBUTE6
+					   , D.ATTRIBUTE7
+					   , D.ATTRIBUTE8
+					   , D.ATTRIBUTE9
+					   , D.ATTRIBUTE10
+						
+					   , D.CREATER
+					   , TO_CHAR(D.CREATEDTIME, 'YYYY-MM-DD') AS CREATEDTIME
+					   , D.MODIFIER
+					   , TO_CHAR(D.MODIFIEDTIME, 'YYYY-MM-DD') AS MODIFIEDTIME
+					   
+				  FROM BAS_PACKAGEPRODUCT_DTL D
+				 WHERE 1 = 1
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+			     	AND		ENTERPRISEID = #{ENTERPRISEID}
+			    </if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">				                
+					AND		PLANTID = #{PLANTID}
+				</if>	
+	</select>
+	
+	
+	<!--
+		설		명	: 저장전 DB 중복 체크(버튼기준정보) 
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	:
+	-->
+	<select id="selectPackagProductFncDupList" parameterType="map" resultType="hashmap">	
+				
+				SELECT 	/*selectPackagProductFncDupList - 저장전 DB 중복 체크(버튼기준정보)  */
+							F.ENTERPRISEID           
+						  , F.PLANTID
+						  , F.CUSTOMERID
+						  , F.PRODFUNCSEQ
+						  , F.BUTTONNAME
+						  , F.SRCNAME
+						  , F.VALIDSTATE      
+						  , F.CREATER
+						  , TO_CHAR(F.CREATEDTIME, 'YYYY-MM-DD') AS CREATEDTIME
+						  , F.MODIFIER
+						  , TO_CHAR(F.MODIFIEDTIME, 'YYYY-MM-DD') AS MODIFIEDTIME
+					  FROM BAS_PACKAGEPRODUCT_FNC F
+					 WHERE 1 = 1
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+			     	AND		ENTERPRISEID = #{ENTERPRISEID}
+			    </if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">				                
+					AND		PLANTID = #{PLANTID}
+				</if>	
+	</select>
+	
+	
+	<!--
+		설		명	: 저장전 DB NEXT SEQ 조회
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	:
+	-->
+	<select id="selectPackagProductDtlLNextSeq" parameterType="map" resultType="hashmap">	
+				
+				SELECT 	/*selectPackagProductDtlLNextSeq - 저장전 DB NEXT SEQ 조회(DTL)  */
+					--NVL(MAX(PACKSPECDETSEQ),0)+1 AS PACKSPECDETSEQNEXT
+					 -- (21.08.03) 수정
+					 CASE WHEN MAX(PACKSPECDETSEQ) IS NULL 
+                         THEN 0
+                         ELSE MAX(TO_NUMBER(NVL(PACKSPECDETSEQ,0)))+1 
+                         END
+                         AS PACKSPECDETSEQNEXT
+					
+				 FROM BAS_PACKAGEPRODUCT_DTL D
+				 WHERE 1 = 1
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+			     	AND		ENTERPRISEID = #{ENTERPRISEID}
+			    </if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">				                
+					AND		PLANTID = #{PLANTID}
+				</if>	
+				<if test="CUSTOMERID != null and CUSTOMERID !='' and !(CUSTOMERID eq '*'.toString()) ">				                
+					AND		CUSTOMERID = #{CUSTOMERID}
+				</if>
+	</select>
+	
+	<!--
+		설		명	: 저장전 DB NEXT SEQ 조회
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	:
+	-->
+	<select id="selectPackagProductFncNextSeq" parameterType="map" resultType="hashmap">	
+				
+				SELECT 	/*selectPackagProductFncNextSeq - 저장전 DB NEXT SEQ 조회(BTN)  */
+					--NVL(MAX(PRODFUNCSEQ),0)+1 AS PRODFUNCSEQNEXT
+					-- (21.08.03) 수정
+					CASE WHEN MAX(PRODFUNCSEQ) IS NULL 
+                         THEN 0
+                         ELSE MAX(TO_NUMBER(NVL(PRODFUNCSEQ,0)))+1 
+                         END
+                         AS PRODFUNCSEQNEXT
+				  FROM BAS_PACKAGEPRODUCT_FNC F
+				 WHERE 1 = 1
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+			     	AND		ENTERPRISEID = #{ENTERPRISEID}
+			    </if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">				                
+					AND		PLANTID = #{PLANTID}
+				</if>	
+				<if test="CUSTOMERID != null and CUSTOMERID !='' and !(CUSTOMERID eq '*'.toString()) ">				                
+					AND		CUSTOMERID = #{CUSTOMERID}
+				</if>
+	</select>
+	
+	
+	<!--
+		설		명	: 포장관리 고객정보 테이블 등록
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+	<insert id="insertPackagProductMst" parameterType="map">
+	    INSERT INTO BAS_PACKAGEPRODUCT_MST( 
+	        ENTERPRISEID
+			, PLANTID
+			, CUSTOMERID
+			, DC
+			, PRGMNAME
+			, PONO
+			, DNO
+			, INVNO
+			, ASN
+			, PACKNO
+			, REMARK
+			, VALIDSTATE
+			, CREATER
+			, CREATEDTIME
+			, MODIFIER
+			, MODIFIEDTIME			
+			, LASTTXNHISTKEY 
+			, BOXLINENO    
+			, CUSTOMERNM
+			, LOT_ONE_ONLY
+			, MOD_FL				-- 고객사별 수정여부 추가 21.04.30
+			) 
+	    VALUES( 
+	         #{ENTERPRISEID}  
+	        ,#{PLANTID}  
+	        ,#{CUSTOMERID}  
+	        ,#{DC}  
+	        ,#{PRGMNAME}  
+	        ,#{PONO}  
+	        ,#{DNO}  
+	        ,#{INVNO}  
+	        ,#{ASN}  
+	        ,#{PACKNO}  
+	        ,#{REMARK}
+	        ,#{VALIDSTATE}
+	          
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{LASTTXNHISTKEY}    
+	        ,#{BOXLINENO}
+	        ,#{CUSTOMERNM}
+	        
+	        ,#{LOT_ONE_ONLY}
+	        ,#{MOD_FL}				-- 고객사별 수정여부 추가 21.04.30
+	        
+	          )
+    </insert>
+    
+    
+    <!--
+		설		명	: 포장관리 포장정보 테이블 등록
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+	<insert id="insertPackagProductDtl" parameterType="map">
+	    INSERT INTO BAS_PACKAGEPRODUCT_DTL( 
+	        ENTERPRISEID
+			, PLANTID
+			, CUSTOMERID
+			, PACKSPECDETSEQ
+			, VALIDSTATE
+			, CUSTOMERMODELNM
+			, CUSTOMERPRODNAME
+			, CUSTOMERPN
+			, CUSTOMERCOMPANYID
+			, CUSTOMERREVUSEYN
+			, CUSTOMERREV
+			, PRODUCTDEFID
+			, PRODUCTDEFVERSION
+			, SUMPCS
+			, ATTRIBUTE1
+			, ATTRIBUTE2
+			, ATTRIBUTE3
+			, ATTRIBUTE4
+			, ATTRIBUTE5
+			, ATTRIBUTE6
+			, ATTRIBUTE7
+			, ATTRIBUTE8
+			, ATTRIBUTE9
+			, ATTRIBUTE10
+			, CREATER
+			, CREATEDTIME
+			, MODIFIER
+			, MODIFIEDTIME
+			, LASTTXNHISTKEY    ) 
+	    VALUES( 
+	          #{ENTERPRISEID}
+			, #{PLANTID}
+			, #{CUSTOMERID}
+			, #{PACKSPECDETSEQ}
+			, #{VALIDSTATE}
+			, #{CUSTOMERMODELNM}
+			, #{CUSTOMERPRODNAME}
+			, #{CUSTOMERPN}
+			, #{CUSTOMERCOMPANYID}
+			, #{CUSTOMERREVUSEYN}
+			, #{CUSTOMERREV}
+			, #{PRODUCTDEFID}
+			, #{PRODUCTDEFVERSION}
+			, #{SUMPCS}
+			, #{ATTRIBUTE1}
+			, #{ATTRIBUTE2}
+			, #{ATTRIBUTE3}
+			, #{ATTRIBUTE4}
+			, #{ATTRIBUTE5}
+			, #{ATTRIBUTE6}
+			, #{ATTRIBUTE7}
+			, #{ATTRIBUTE8}
+			, #{ATTRIBUTE9}
+			, #{ATTRIBUTE10}
+	        , #{CREATOR}  
+	        , SYSDATE  
+	        , #{CREATOR}  
+	        , SYSDATE  
+	        , #{LASTTXNHISTKEY}    )
+    </insert>
+    
+    
+    
+	<!--
+		설		명	: 포장관리 버튼기준정보 테이블 등록
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+	<insert id="insertPackagProductBtn" parameterType="map">
+	    INSERT INTO BAS_PACKAGEPRODUCT_FNC( 
+	          ENTERPRISEID
+			, PLANTID
+			, CUSTOMERID
+			, PRODFUNCSEQ
+			, BUTTONNAME
+			, SRCNAME
+			, VALIDSTATE
+			, CREATER
+			, CREATEDTIME
+			, MODIFIER
+			, MODIFIEDTIME
+			, LASTTXNHISTKEY    ) 
+	    VALUES( 
+	          #{ENTERPRISEID}
+			, #{PLANTID}
+			, #{CUSTOMERID}
+			, #{PRODFUNCSEQ}
+			, #{BUTTONNAME}
+			, #{SRCNAME}
+			, #{VALIDSTATE}
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{LASTTXNHISTKEY}    )
+    </insert>
+    
+    <!--
+		설		명	: 포장관리 고객정보 테이블 수정
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+	<update id="updatePackagProductMst" parameterType="map" >
+	    UPDATE BAS_PACKAGEPRODUCT_MST 
+		SET   DC						= #{DC} 
+			, PRGMNAME			= #{PRGMNAME} 
+			, PONO					= #{PONO} 
+			, DNO						= #{DNO} 
+			, INVNO					= #{INVNO} 
+			, ASN						= #{ASN} 
+			, PACKNO				= #{PACKNO} 
+			, REMARK				= #{REMARK} 
+			, VALIDSTATE			= #{VALIDSTATE} 	
+			, MODIFIER				= #{MODIFIER} 
+			, MODIFIEDTIME			= SYSDATE
+			, LASTTXNHISTKEY 	= #{LASTTXNHISTKEY}
+			, BOXLINENO 			= #{BOXLINENO}
+			, CUSTOMERNM		= #{CUSTOMERNM}
+			, LOT_ONE_ONLY		= #{LOT_ONE_ONLY}
+			, MOD_FL					= #{MOD_FL}					-- 고객사별 수정여부 추가 21.04.30
+		WHERE ENTERPRISEID 	= #{ENTERPRISEID}
+		  AND PLANTID 		= #{PLANTID}
+		  AND CUSTOMERID 	= #{CUSTOMERID}
+    </update>
+    
+    <!--
+		설		명	: 포장관리 포장정보 테이블 수정
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+	<update id="updatePackagProductDtl" parameterType="map" >
+	    UPDATE BAS_PACKAGEPRODUCT_DTL 
+		SET   VALIDSTATE		= #{VALIDSTATE} 
+			, CUSTOMERMODELNM	= #{CUSTOMERMODELNM} 
+			, CUSTOMERPRODNAME	= #{CUSTOMERPRODNAME} 
+			, CUSTOMERPN		= #{CUSTOMERPN} 
+			, CUSTOMERCOMPANYID	= #{CUSTOMERCOMPANYID} 
+			, CUSTOMERREVUSEYN	= #{CUSTOMERREVUSEYN} 
+			, CUSTOMERREV		= #{CUSTOMERREV} 
+			, PRODUCTDEFID		= #{PRODUCTDEFID} 
+			, PRODUCTDEFVERSION	= #{PRODUCTDEFVERSION} 
+			, SUMPCS			= #{SUMPCS} 
+
+			, MODIFIER			= #{MODIFIER} 
+			, MODIFIEDTIME		= SYSDATE
+			, LASTTXNHISTKEY 	= #{LASTTXNHISTKEY}
+			
+			, ATTRIBUTE1 	= #{ATTRIBUTE1}
+			, ATTRIBUTE2 	= #{ATTRIBUTE2}
+			, ATTRIBUTE3 	= #{ATTRIBUTE3}
+			, ATTRIBUTE4 	= #{ATTRIBUTE4}
+			, ATTRIBUTE5 	= #{ATTRIBUTE5}
+			, ATTRIBUTE6 	= #{ATTRIBUTE6}
+			, ATTRIBUTE7 	= #{ATTRIBUTE7}
+			, ATTRIBUTE8 	= #{ATTRIBUTE8}
+			, ATTRIBUTE9 	= #{ATTRIBUTE9}
+			, ATTRIBUTE10 	= #{ATTRIBUTE10}
+		
+		
+		WHERE ENTERPRISEID 		= #{ENTERPRISEID}
+		  AND PLANTID 			= #{PLANTID}
+		  AND CUSTOMERID 		= #{CUSTOMERID}
+		  AND PACKSPECDETSEQ 	= #{PACKSPECDETSEQ}
+    </update>
+    
+    
+    <!--
+		설		명	: 포장관리 버튼기준정보 테이블 수정
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+	<update id="updatePackagProductBtn" parameterType="map" >
+	    UPDATE BAS_PACKAGEPRODUCT_FNC 
+		
+		SET   BUTTONNAME		= #{BUTTONNAME} 
+			, SRCNAME			= #{SRCNAME} 
+			, VALIDSTATE 		= #{VALIDSTATE} 
+
+			, MODIFIER			= #{MODIFIER} 
+			, MODIFIEDTIME		= SYSDATE
+			, LASTTXNHISTKEY 	= #{LASTTXNHISTKEY}
+		
+		
+		WHERE ENTERPRISEID 		= #{ENTERPRISEID}
+		  AND PLANTID 			= #{PLANTID}
+		  AND CUSTOMERID 		= #{CUSTOMERID}
+		  AND PRODFUNCSEQ 		= #{PRODFUNCSEQ}
+    </update>
+    
+    
+    <!--
+		설		명	: 포장관리 버튼기준정보 테이블 삭제
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+    <delete id="deletePackagProductBtn" parameterType="map" > 
+	    DELETE FROM BAS_PACKAGEPRODUCT_FNC 
+		WHERE ENTERPRISEID 		= #{ENTERPRISEID}
+		  AND PLANTID 			= #{PLANTID}
+		  AND CUSTOMERID 		= #{CUSTOMERID}
+		  AND PRODFUNCSEQ 		= #{PRODFUNCSEQ}
+    </delete>
+    
+    
+    <!--
+		설		명	: 포장관리 포장정보 테이블 삭제
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+    <delete id="deletePackagProductDtl" parameterType="map" > 
+	    DELETE FROM BAS_PACKAGEPRODUCT_DTL 
+		WHERE ENTERPRISEID 		= #{ENTERPRISEID}
+		  AND PLANTID 			= #{PLANTID}
+		  AND CUSTOMERID 		= #{CUSTOMERID}
+		  AND PACKSPECDETSEQ 	= #{PACKSPECDETSEQ}
+    </delete>
+	
+	
+	<!--
+		설		명	: 포장관리 버튼기준정보 테이블 삭제
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+    <delete id="deletePackagProductBtnAll" parameterType="map" > 
+	    DELETE FROM BAS_PACKAGEPRODUCT_FNC 
+		WHERE ENTERPRISEID 		= #{ENTERPRISEID}
+		  AND PLANTID 			= #{PLANTID}
+		  AND CUSTOMERID 		= #{CUSTOMERID}
+    </delete>
+    
+    
+    <!--
+		설		명	: 포장관리 포장정보 테이블 삭제
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+    <delete id="deletePackagProductDtlAll" parameterType="map" > 
+	    DELETE FROM BAS_PACKAGEPRODUCT_DTL 
+		WHERE ENTERPRISEID 		= #{ENTERPRISEID}
+		  AND PLANTID 			= #{PLANTID}
+		  AND CUSTOMERID 		= #{CUSTOMERID}
+    </delete>
+    
+    <!--
+		설		명	: 포장관리 고객정보 테이블 삭제
+		생	성	자	: 김진현 
+		생	성	일	: 2020-03-12 
+		수  정   이  력	: 
+	-->
+    <delete id="deletePackagProductMst" parameterType="map" > 
+	    DELETE FROM BAS_PACKAGEPRODUCT_MST 
+		WHERE ENTERPRISEID 		= #{ENTERPRISEID}
+		  AND PLANTID 			= #{PLANTID}
+		  AND CUSTOMERID 		= #{CUSTOMERID}
+    </delete>
+    
+    <!--
+		설		명	: 고객사 정보 팝업 조회(조회조건) - 포장사양에 등록된 내용만 
+		생	성	자	: 김진현 
+		생	성	일	: 2020-04-12 
+		수  정   이  력	:
+	-->
+	<select id="selectPackCustomerList" parameterType="map" resultType="hashmap">
+				
+				SELECT	/*selectPackCustomerList - 고객사 정보 팝업 조회(조회조건) - 포장사양에 등록된 내용만*/
+						A.CUSTOMERID
+					 ,  A.CUSTOMERNM
+				  FROM BAS_PACKAGEPRODUCT_MST   A
+				 WHERE 1 = 1		    
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+					AND		A.ENTERPRISEID = #{ENTERPRISEID}
+				</if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+					AND		A.PLANTID = #{PLANTID}
+				</if>		
+				<if test="TXTCUSTOMERID != null and TXTCUSTOMERID !='' and !(TXTCUSTOMERID eq '*'.toString()) ">
+					AND		(UPPER(A.CUSTOMERID)   LIKE  '%' || UPPER(#{TXTCUSTOMERID})|| '%'  
+					OR		 UPPER(A.CUSTOMERNM) LIKE  '%' || UPPER(#{TXTCUSTOMERID})|| '%')  
+				</if>
+				<if test="VALID != null and VALID !='' and !(VALID eq '*'.toString()) ">
+					AND DECODE( A.VALIDSTATE, 1, 'Valid', 'Invalid') = #{VALID}
+				</if>
+	</select>
+    
+    
+    <!--
+		설		명	: 포장기준정보관리 - Mst 고객사 코드 중복 체크
+		생	성	자	: 김진현
+		생	성	일	: 2021-07-21
+		수  정   이  력	:
+	-->
+	<select id="savePackagMstChk" parameterType="map" resultType="hashmap">
+				/* savePackagMstChk - 포장기준정보관리 - Mst 고객사 코드 중복 체크 */
+				SELECT CASE WHEN MAX(M.CUSTOMERID) IS NULL 
+						THEN 'Y'        -- 존재 하지않는다
+						ELSE 'N'        -- 이미 존재한다
+						END  
+						AS CUSTOMERID_FLAG
+			  FROM BAS_PACKAGEPRODUCT_MST M 
+							 WHERE 1 = 1
+								AND		ENTERPRISEID    	= #{ENTERPRISEID}
+								AND		PLANTID         		= #{PLANTID}
+								AND     	CUSTOMERID      	= #{CUSTOMERID}
+	</select>
+    
+    
+	 
+
+</mapper>

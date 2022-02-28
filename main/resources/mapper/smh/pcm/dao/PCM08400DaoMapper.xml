@@ -1,0 +1,826 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM08400Dao">
+      
+    
+    
+	<!--
+		설		명	: 공장정보 조회 
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-15 
+		수  정   이  력	:
+	-->
+	<select id="selectPlantList" parameterType="map" resultType="hashmap">
+		
+				--
+			    -- GetPlantList
+			    -- Version:10001
+			    
+				SELECT	/*selectPlantList - 포장 실적 조회조회(조회조건)*/
+						A.PLANTID
+					, 	CASE
+					 		WHEN DIC.DICTIONARYNAME IS NULL	THEN A.PLANTID
+					 		ELSE DIC.DICTIONARYNAME END 	AS PLANTNAME
+					,	'08:30' AS STARTBUSINESSHOUR
+				FROM 	BAS_PLANT A			
+				LEFT JOIN CMD_DICTIONARY 					DIC	ON DIC.DICTIONARYID  = A.PLANTNAME
+																AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE 	1 = 1
+				
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+					AND		A.ENTERPRISEID = #{ENTERPRISEID} 
+				</if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+					AND		UPPER(A.PLANTID) LIKE  '%' || UPPER(#{PLANTID})|| '%'					
+				</if>
+				
+				AND 	A.VALIDSTATE = 'Valid'
+				ORDER BY A.PLANTID ASC
+			
+		
+	</select>
+	
+	<!--
+		설		명	: 제품구분 조회 
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-15 
+		수  정   이  력	:
+	-->
+	<select id="selectTypeList" parameterType="map" resultType="hashmap">
+				--
+			    -- GetTypeList
+			    -- Version:1001
+				SELECT 
+                        CD.LOOKUP_CODE		AS CODEID
+					 , 	CASE
+					 		WHEN DIC.DICTIONARYNAME IS NULL	THEN CD.MEANING
+					 		ELSE DIC.DICTIONARYNAME 
+					 	END 						AS CODENAME
+					 ,  CD.DISPLAYSEQUENCE
+					 ,  CD.LOOKUP_TYPE  		AS CODECLASSID
+                     
+				FROM	CMD_LOOKUP_VALUES						CD
+				LEFT JOIN CMD_DICTIONARY 			DIC	ON DIC.DICTIONARYID = CD.DICTIONARYID
+														AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE 	1 = 1
+				AND		CD.LOOKUP_TYPE = #{CODECLASSID}
+				<if test="CODEID != null and CODEID !='' and !(CODEID eq '*'.toString()) ">
+					AND		UPPER(CD.LOOKUP_CODE) LIKE  '%' || UPPER(#{CODEID})|| '%'
+				</if>
+				<if test="CODENAME != null and CODENAME !='' and !(CODENAME eq '*'.toString()) ">
+					AND		UPPER(DIC.DICTIONARYNAME) LIKE  '%' || UPPER(#{CODENAME})|| '%' 
+				</if>
+				AND		CD.ENABLED_FLAG = 'Y'
+				ORDER BY CD.DISPLAYSEQUENCE ASC
+	</select>
+	
+	<!--
+		설		명	: 품목코드 팝업 조회(포장 실적 조회) CHK 추가
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-15 
+		수  정   이  력	:
+	-->
+	<select id="selectProductDefinitionList" parameterType="map" resultType="hashmap">
+				--
+			    -- GetProductDefinitionList
+			    -- Version:10002
+				SELECT 
+						'0' AS CHK
+					,	PD.PRODUCTDEFID
+					,	PD.PRODUCTDEFNAME
+					,	PD.PRODUCTDEFVERSION
+					,	PD.PRODUCTDEFTYPE
+					, 	(SELECT MEANING FROM CMD_LOOKUP_VALUES WHERE LOOKUP_TYPE = 'ProductDefType' AND LOOKUP_CODE = PD.PRODUCTDEFTYPE) AS PRODUCTDEFTYPE_NM
+					,	PD.PRODUCTIONTYPE
+					, 	(SELECT MEANING FROM CMD_LOOKUP_VALUES WHERE LOOKUP_TYPE = 'ProductionType' AND LOOKUP_CODE = PD.PRODUCTIONTYPE) AS PRODUCTIONTYPE_NM
+					,	PD.UNIT
+					,	UOM.UOMDEFNAME AS UNIT_NM
+					,	PD.PRODUCTDEFID || '|' || PD.PRODUCTDEFVERSION	AS PRODUCTDEF
+				  FROM	BAS_PRODUCTDEFINITION	PD
+				  LEFT JOIN (SELECT UD.UOMDEFID
+							 , UI.UOMDEFNAME
+						  FROM	BAS_UOMDEFMAP		UD
+						  JOIN BAS_UOMDEFINITION	UI	ON	UD.UOMDEFID = UI.UOMDEFID
+						 WHERE	UD.UOMCATEGORY = 'Segment'
+						   AND  UD.VALIDSTATE = 'Valid'
+						)UOM ON PD.UNIT = UOM.UOMDEFID
+				 WHERE 1 = 1
+			 <if test="TXTPRODUCTDEFNAME != null and TXTPRODUCTDEFNAME !=''"> 
+				 AND		(UPPER(PD.PRODUCTDEFID) LIKE UPPER(<![CDATA['%' ||]]> #{TXTPRODUCTDEFNAME} <![CDATA[|| '%']]> )
+							OR UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{TXTPRODUCTDEFNAME} <![CDATA[|| '%']]> )
+							)
+			 </if>
+			 <if test="PRODUCTDIVISION != null and PRODUCTDIVISION !='' and !(PRODUCTDIVISION eq '*'.toString())">
+				AND		PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}
+			 </if>
+			 <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' and !(PRODUCTIONTYPE eq '*'.toString())">
+				AND		PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+			 </if>
+				 ORDER BY PD.PRODUCTDEFID, PD.PRODUCTDEFVERSION
+	</select>
+	
+	
+	<!--
+		설		명	: 작업장ID 조회(사용자 권한별)
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-15 
+		수  정   이  력	:
+	-->
+	<select id="selectAreaListByAuthorityList" parameterType="map" resultType="hashmap">
+				--
+			    -- Id : GetAreaListByAuthority
+			    -- Version:10001
+			    
+				SELECT	AREAID
+                    ,	CASE					
+                    		WHEN D.DICTIONARYNAME IS NULL THEN  TO_CHAR(A.AREANAME)     -- 다국어 명
+							ELSE D.DICTIONARYNAME
+						END 						AS AREANAME
+					,	A.PLANTID
+				FROM	 FN_AREA(#{USERID})  A
+				LEFT OUTER JOIN CMD_DICTIONARY 		 D	ON	A.AREANAME = D.DICTIONARYID
+												  		AND	D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE 	1 = 1
+				
+				<if test="ISMODIFY != null and ISMODIFY !='' and !(ISMODIFY eq 'N'.toString())">
+					AND     A.ISMODIFY = 'Y'
+				</if>				
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())">
+				
+					AND 	A.PLANTID = #{PLANTID}
+				</if>
+				
+				<if test="TXTAREA != null and TXTAREA !='' and !(TXTAREA eq '*'.toString()) ">
+				
+					 AND    (UPPER(AREAID)  LIKE  '%' || UPPER(#{TXTAREA})|| '%' 
+					 OR 	 UPPER(AREANAME) LIKE  '%' || UPPER(#{TXTAREA})|| '%'
+					 OR 	 UPPER(D.DICTIONARYNAME) LIKE  '%' || UPPER(#{TXTAREA})|| '%')
+				</if>
+				
+				<if test="AREA != null and AREA !='' and !(AREA eq '*'.toString()) ">
+					 AND    (UPPER(AREAID) LIKE  '%' || UPPER(#{AREA})|| '%' 
+					 OR 	 UPPER(AREANAME) LIKE  '%' || UPPER(#{AREA})|| '%' 
+					 OR 	 UPPER(D.DICTIONARYNAME) LIKE  '%' || UPPER(#{AREA})|| '%' )
+				</if>							
+				ORDER BY AREAID ASC
+	</select>
+	
+		<!--
+		설		명	: Lot No 팝업 메인 조회(포장 실적 조회)
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-15 
+		수  정   이  력	:
+	-->
+	<select id="selectLotIdList" parameterType="map" resultType="hashmap">
+
+				--
+				-- Id : GetLotIdList
+				-- Version : 10001
+				WITH WIPLIST 
+				AS
+				(
+					SELECT 	L.LOTID
+						,	L.LOTTYPE
+						,	L.PRODUCTDEFID
+						,	L.PRODUCTDEFVERSION
+						,	PD.PRODUCTDEFNAME
+						,	L.PROCESSDEFID
+						,	L.PROCESSSEGMENTID
+						,	L.USERSEQUENCE
+						,	L.PLANTID
+						,	L.AREAID
+						,	NVL(PD.RTRSHT, 'SHT')	AS RTRSHT
+						,	L.UNIT
+						,	L.QTY
+						,	L.PCSQTY
+						,	L.PANELQTY
+						,	(PD.PCSMM * L.QTY)			AS M2QTY 
+						,	PO.PLANENDTIME
+						,	L.WORKCOUNT
+			        FROM    PCM_LOT              		L
+			        INNER JOIN BAS_PRODUCTDEFINITION		PD	ON	L.PRODUCTDEFID = PD.PRODUCTDEFID
+				    										AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+					LEFT JOIN MFM_PRODUCTIONORDER		PO	ON	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+															AND L.LINENO = PO.LINENO
+					INNER JOIN BAS_PROCESSSEGMENT		SG	ON	L.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+															AND L.PROCESSSEGMENTVERSION = SG.PROCESSSEGMENTVERSION
+					-- 중공정
+					LEFT JOIN BAS_PROCESSSEGMENTCLASS	MSC	ON	SG.PROCESSSEGMENTCLASSID = MSC.PROCESSSEGMENTCLASSID AND MSC.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+					
+					-- 대공정
+					LEFT JOIN BAS_PROCESSSEGMENTCLASS	TSC ON	MSC.PARENTPROCESSSEGMENTCLASSID = TSC.PROCESSSEGMENTCLASSID AND TSC.PROCESSSEGMENTCLASSTYPE = 'MiddleProcessSegmentClass'
+					
+					
+			        WHERE  1 = 1
+			        -- (21.07.12) -> 로트는 생산중상관 없이 조회 되어야 됨 일단 주석처리 
+			        -- L.LOTSTATE IN ('InProduction', 'InTransit')			--생산중, 생산중(외주)
+			        AND 	NVL(L.ISDEFECTED, 'N') = 'N' 
+			        
+			        <if test="PROCESSSEGMENTTYPE != null and PROCESSSEGMENTTYPE !='' and !(PROCESSSEGMENTTYPE eq '*'.toString())">
+			        	AND		SG.PROCESSSEGMENTTYPE = #{PROCESSSEGMENTTYPE}
+			        </if>
+					<if test="TXTPRODUCTDEFNAME2 != null and TXTPRODUCTDEFNAME2 !='' and !(TXTPRODUCTDEFNAME2 eq '*'.toString())">
+			        	AND		PD.PRODUCTDEFID = #{TXTPRODUCTDEFNAME2}
+			        </if>
+					<if test="TXTPRODUCTDEFIDNAME != null and TXTPRODUCTDEFIDNAME !='' and !(TXTPRODUCTDEFIDNAME eq '*'.toString())">
+			        	AND		(UPPER(L.PRODUCTDEFID) LIKE  '%' || UPPER(#{TXTPRODUCTDEFIDNAME})|| '%'  
+			        	OR		UPPER(PD.PRODUCTDEFNAME) LIKE  '%' || UPPER(#{TXTPRODUCTDEFIDNAME})|| '%' )
+					</if>
+			        
+					<if test="TXTLOTID != null and TXTLOTID !='' and !(TXTLOTID eq '*'.toString())">
+			        	AND		UPPER(L.LOTID) LIKE  '%' || UPPER(#{TXTLOTID})|| '%'  
+			        </if>
+			        
+					<if test="CBOCUSTOMER != null and CBOCUSTOMER !='' and !(CBOCUSTOMER eq '*'.toString())">
+			        	AND		EXISTS
+			        			(
+			        				SELECT	1
+   									  FROM  (SELECT DATA AS VALUE 
+											   FROM TABLE(CAST(FN_TO_ROWS(#{CBOCUSTOMER}) AS TP_SIMPLE_TABLE))) C 
+			        				 WHERE	PO.CUSTOMERID = C.VALUE
+			        			)
+			        </if>
+			        
+					<if test="TXTPROCESSSEGMENT != null and TXTPROCESSSEGMENT !='' and !(TXTPROCESSSEGMENT eq '*'.toString())">
+			        	AND		L.PROCESSSEGMENTID = #{TXTPROCESSSEGMENT}
+			        </if>
+			        
+					<if test="CBOPRODUCTIONTYPE != null and CBOPRODUCTIONTYPE !='' and !(CBOPRODUCTIONTYPE eq '*'.toString())">
+			        	AND		EXISTS
+			        			(
+			        				SELECT	1
+									FROM   (SELECT DATA AS VALUE 
+											   FROM TABLE(CAST(FN_TO_ROWS(#{CBOPRODUCTIONTYPE}) AS TP_SIMPLE_TABLE))) PT 
+									
+			        				WHERE	L.LOTTYPE = PT.VALUE
+			        			)
+			        </if>
+			        
+					<if test="CBORTRSHT != null and CBORTRSHT !='' and !(CBORTRSHT eq '*'.toString())">
+			        	AND		NVL(PIS.RTRSHT, 'SHT') = #{CBORTRSHT}
+			        </if>
+			        
+					<if test="CBOTOPPROCESS != null and CBOTOPPROCESS !='' and !(CBOTOPPROCESS eq '*'.toString())">
+			        	AND		MPS.PROCESSSEGMENTID = #{CBOTOPPROCESS}
+					</if>
+			        
+					<if test="CBOMIDDLEPROCESS != null and CBOMIDDLEPROCESS !='' and !(CBOMIDDLEPROCESS eq '*'.toString())">
+			        	AND		TPS.PROCESSSEGMENTID = #{CBOMIDDLEPROCESS}
+			        </if>
+			    )
+				SELECT 	L.*
+					,	EXTRACT(DAY FROM (PLANENDTIME - CURRENT_TIMESTAMP)) AS LEFTDATE
+					-- 인수Step 수량
+					,	WR.RECEIVEPCSQTY
+					,	WR.RECEIVEPANELQTY
+					-- 시작 Step 수량
+					,	WR.WORKSTARTPCSQTY
+					,	WR.WORKSTARTPANELQTY
+					-- 완료 Step 수량
+					,	WR.WORKENDPCSQTY
+					,	WR.WORKENDPANELQTY
+					-- 인계 Step 수량
+					,	WR.SENDPCSQTY
+					,	WR.SENDPANELQTY
+					-- 공정 LeadTime
+					,	(NVL(WR.RECEIVELEADTIME, 0) + NVL(WR.WORKSTARTLEADTIME, 0) + 
+						 NVL(WR.WORKENDLEADTIME, 0) + NVL(WR.SENDLEADTIME, 0)) AS LEADTIME
+					
+					/*########[코드 값 명들]########*/
+                    ,  PROC.PROCESSDEFNAME  AS PROCESSDEFNM
+                    ,  P.PROCESSSEGMENTNAME AS PROCESSSEGMENTNAME
+                    ,  S.CODENAME           AS PLANTNAME
+                    ,  A.AREANAME           AS AREANAME  
+                    ,  UOM.UOMDEFNAME       AS UOMDEFNAME	
+                    , '0'					AS CHK 
+                    ,  TO_CHAR(L.PLANENDTIME, 'yyyy-MM-dd') AS R_PLANENDTIME
+						 
+			    FROM 	WIPLIST						L
+			    
+			    /*
+                    =======================[명(콤보 정보 조회)]=======================
+                    */
+                   -- 라우팅명
+                   LEFT JOIN (
+                             SELECT *
+                              FROM BAS_PROCESSDEFINITION
+                    )PROC ON L.LOTTYPE = PROC.PROCESSDEFID 
+           
+                    LEFT JOIN (
+                        -- 공정명
+                             SELECT 
+                                    A.PROCESSSEGMENTID
+                                ,	NVL(D.DICTIONARYNAME, A.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+                                ,	A.PROCESSSEGMENTVERSION
+                            
+                            FROM	BAS_PROCESSSEGMENT 			A
+                            LEFT JOIN BAS_PROCESSSEGMENTCLASS 	B	ON B.PROCESSSEGMENTCLASSID = A.PROCESSSEGMENTCLASSID				
+                            LEFT JOIN CMD_DICTIONARY 			D	ON D.DICTIONARYID = A.PROCESSSEGMENTNAME
+                                                                    AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  		   
+                            WHERE 	1 = 1
+                            AND 	A.VALIDSTATE = 'Valid'
+                    )P ON L.PROCESSSEGMENTID = P.PROCESSSEGMENTID                     
+                    LEFT JOIN (
+                        -- Site 명
+                         SELECT
+                               PLANTID	CODEID,
+                               PLANTNAME	CODENAME
+                          FROM 
+                               BAS_PLANT
+                         WHERE 
+                               ENTERPRISEID = #{ENTERPRISEID}
+                           AND VALIDSTATE = 'Valid'
+                    )S ON L.PLANTID = S.CODEID 
+                    
+                    LEFT JOIN (
+                                -- tArea 명
+                                --
+                                --GetAreaList    -- Version:10003
+                                
+                                SELECT	AREAID
+                                    ,	CASE
+                                            WHEN D.DICTIONARYNAME IS NULL THEN A.AREANAME 
+                                            ELSE D.DICTIONARYNAME
+                                        END 						AS AREANAME
+                                    ,	A.PLANTID
+                                FROM	BAS_AREA 					A
+                                LEFT OUTER JOIN CMD_DICTIONARY 		D	ON	A.AREANAME = D.DICTIONARYID
+                                                                        AND	D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                                WHERE 	1 = 1
+                                AND 	A.VALIDSTATE = 'Valid'
+                    )A ON L.AREAID = A.AREAID
+                    AND L.PLANTID = A.PLANTID
+              
+                    LEFT JOIN (
+                             SELECT UD.UOMDEFID
+                                         , UI.UOMDEFNAME
+                                      FROM	BAS_UOMDEFMAP		UD
+                                      JOIN BAS_UOMDEFINITION	UI	ON	UD.UOMDEFID = UI.UOMDEFID
+                                     WHERE	UD.UOMCATEGORY = 'Segment'
+                                       AND  UD.VALIDSTATE = 'Valid'
+					)UOM ON L.UNIT = UOM.UOMDEFID
+                /*
+                =======================[명(콤보 정보 조회)]=======================
+                */
+			    
+			    
+			    
+			    LEFT JOIN PCM_LOTWORKRESULT			WR	ON	L.LOTID = WR.LOTID
+			    										AND L.PROCESSSEGMENTID = WR.PROCESSSEGMENTID
+			    										AND L.USERSEQUENCE = WR.USERSEQUENCE
+			    										AND L.WORKCOUNT = WR.WORKCOUNT
+                ORDER BY L.PRODUCTDEFID, L.PRODUCTDEFVERSION, L.USERSEQUENCE, L.LOTID
+	</select>	
+	
+	<!--
+		설		명	: 포장실적 조회 - Lot No - 품목 팝업 조회 
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-15 
+		수  정   이  력	:
+	-->
+	<select id="selectProductionOrderIdListOfLotInput" parameterType="map" resultType="hashmap">
+
+				--
+				-- Id : GetProductionOrderIdListOfLotInput
+				-- Version : 10001
+				SELECT  /* 포장 실적 조회 (품목 팝업) - selectProductionOrderIdListOfLotInput*/
+						PO.PRODUCTDEFID || '|' || PD.PRODUCTDEFVERSION	AS PRODUCTDEF 
+					,	PO.PRODUCTIONORDERID || '|' || PO.LINENO 		AS PRODUCTIONORDER
+					,	PO.PRODUCTIONORDERID
+					,	PO.LINENO
+					,	PO.PLANQTY
+					,	PO.PRODUCTDEFID
+					,	PD.PRODUCTDEFNAME
+					,	PD.PRODUCTDEFVERSION
+					,	D1.DICTIONARYNAME		AS PRODUCTDEFTYPE
+					,	PD.UNIT
+				FROM	MFM_PRODUCTIONORDER		PO
+				INNER JOIN BAS_PRODUCTDEFINITION	PD	ON	PO.PLANTID = PD.PLANTID
+													AND	PO.PRODUCTDEFID = PD.PRODUCTDEFID
+													AND	PO.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES 		C1	ON	PD.PRODUCTDEFTYPE = C1.LOOKUP_CODE
+													AND C1.LOOKUP_TYPE = 'ProductDefType'
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	ON	C1.DICTIONARYID = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+												
+				WHERE	1 = 1
+            
+				AND		PO.PLANTID = #{PLANTID} 
+				AND		PO.ISSPLIT = 'Y'
+				AND		PO.STATE IN ('Create','LotCreate')
+				
+				AND 	EXISTS (
+					SELECT 	1
+					FROM 	PCM_LOT X
+					WHERE 	1 = 1
+					AND 	PO.PRODUCTDEFID = X.PRODUCTDEFID
+					AND 	PO.PRODUCTDEFVERSION = X.PRODUCTDEFVERSION
+					AND 	PO.PRODUCTIONORDERID = X.PRODUCTIONORDERID
+					AND 	PO.LINENO = X.LINENO
+					AND 	X.LOTSTATE = 'Created'	
+		   		)
+		   		
+				
+				
+				<if test="TXTPRODUCTIONORDERID != null and TXTPRODUCTIONORDERID !='' and !(TXTPRODUCTIONORDERID eq '*'.toString()) ">
+					AND		(PO.PRODUCTIONORDERID LIKE  '%' || UPPER(#{TXTPRODUCTIONORDERID})|| '%' 
+					OR 		 PO.PRODUCTIONORDERNAME  LIKE  '%' || UPPER(#{TXTPRODUCTIONORDERID})|| '%')
+				</if>
+				<if test="TXTPRODUCTDEFNAME != null and TXTPRODUCTDEFNAME !='' and !(TXTPRODUCTDEFNAME eq '*'.toString()) ">
+					AND		(PD.PRODUCTDEFID LIKE  '%' || UPPER(#{TXTPRODUCTDEFNAME})|| '%'
+					OR		 PD.PRODUCTDEFNAME LIKE  '%' || UPPER(#{TXTPRODUCTDEFNAME})|| '%')
+				</if>
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !='' and !(PRODUCTDIVISION eq '*'.toString()) ">
+					AND		PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION} 
+				</if>
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !='' and (PRODUCTDIVISION eq 'Sample'.toString()) ">
+					AND		PD.PRODUCTIONTYPE <![CDATA[<>]]> 'Production'
+				</if>
+				ORDER BY PO.PRODUCTIONORDERID ASC
+	</select>	
+	
+	
+	<!--
+		설		명	: 포장 실적 조회 (Lot No. 선택 팝업의 공정 팝업)
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-16 
+		수  정   이  력	:
+	-->
+	<select id="selectProcessSegmentList" parameterType="map" resultType="hashmap">
+				--
+				-- GetProcessSegmentList
+				-- Version:10001
+				SELECT 
+						A.PROCESSSEGMENTID
+				    ,	NVL(D.DICTIONARYNAME, A.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+				    ,	A.PROCESSSEGMENTVERSION
+				
+				FROM	BAS_PROCESSSEGMENT 			A
+				LEFT JOIN BAS_PROCESSSEGMENTCLASS 	B	ON B.PROCESSSEGMENTCLASSID = A.PROCESSSEGMENTCLASSID				
+				LEFT JOIN CMD_DICTIONARY 			D	ON D.DICTIONARYID = A.PROCESSSEGMENTNAME
+														AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE 	1 = 1
+				
+				
+				<if test="PROCESSSEGMENT != null and PROCESSSEGMENT !='' and !(PROCESSSEGMENT eq '*'.toString())">
+					 AND   (UPPER(A.PROCESSSEGMENTID) LIKE  '%' || UPPER(#{PROCESSSEGMENT})|| '%' 
+					 OR		UPPER(A.PROCESSSEGMENTNAME) LIKE  '%' || UPPER(#{PROCESSSEGMENT})|| '%'  
+					 OR		UPPER(D.DICTIONARYNAME) LIKE  '%' || UPPER(#{PROCESSSEGMENT})|| '%' )
+				</if>
+				AND 	A.VALIDSTATE = 'Valid'
+				ORDER BY PROCESSSEGMENTID ASC
+				
+	</select>
+	
+	<!--
+		설		명	: 포장 실적 조회 (포장 작업 리스트 - 메인조회)
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-16 
+		수  정   이  력	:
+	-->
+	<select id="SelectPackingFinishedList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectPackingFinishedList
+				-- Version : 10001
+				
+				/*입력된 구분자 두개(|  ,)로 넘어 온값 row 변경*/
+				<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString())">
+				<![CDATA[
+				WITH TAB_ROW_DUL AS (
+					SELECT REGEXP_SUBSTR(A.MYDATAS,'[^,]+', 1, ROWNUM) AS MYDATA
+					  FROM (
+							SELECT #{P_PRODUCTDEFID} AS MYDATAS
+							  FROM DUAL
+							) A            
+					 CONNECT BY ROWNUM <= LENGTH(REGEXP_REPLACE(MYDATAS,'[^,]+')) + 1       
+				)
+				/*| 구분자 col 으로 변경 DATA_01, DATA_02 로 구분*/
+				, TAB_RETURN_ROW AS (
+					SELECT A.TEXT_DATA
+						 , TRIM(REGEXP_SUBSTR(REPLACE(TEXT_DATA, '|', '| '), '[^|]+', 1, 1, 'i')) AS DATA_01
+						 , TRIM(REGEXP_SUBSTR(REPLACE(TEXT_DATA, '|', '| '), '[^|]+', 1, 2, 'i')) AS DATA_02
+					  FROM (
+							   SELECT MYDATA AS TEXT_DATA
+									, REGEXP_COUNT(MYDATA, '\|') AS C1_1
+								 FROM  TAB_ROW_DUL  
+							) A            
+				)
+				]]>
+				</if>
+				
+				
+				SELECT 	BP.BOXNO
+					,	PD.PRODUCTDEFID
+					,	PD.PRODUCTDEFNAME
+					--,  	NVL(US.USER_NM, BP.WORKER)					AS WORKER			-- (21.06.08) 수정
+					,  	NVL(US.USER_NM, BP.CREATOR)					AS WORKER
+					,	SUM(BP.QTY)											AS PCSQTY
+					,	TO_CHAR(BP.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')	AS PACKINGDATE
+					,	''													AS REASONCANCEL
+					,	BP.DOCUMENTNO
+					,   '0' AS CHK
+					
+					--,   L.PANELQTY
+					-- (21.06.21) 합계로 변경
+					--,   SUM(L.PANELQTY) AS PANELQTY
+					-- (21.07.12) 올림 처리 -> 포장 인계 등록에 올림 처리되어 있음
+					--, 	SUM(NVL(CEIL(L.PANELQTY),0))	AS PANELQTY
+					-- (21.07.14) 올림처리 및 수량이 안맞아서 계산 처리 함 
+                    ,	CEIL(SUM(COALESCE(BP.QTY,0) / PD.PCSPNL))	AS PANELQTY
+                    ,   L.PRODUCTDEFVERSION 
+					
+				FROM	PCM_BOXPACKING				BP
+				
+                INNER JOIN PCM_LOT					L	ON	BP.LOTID = L.LOTID
+                INNER JOIN BAS_PRODUCTDEFINITION		PD	ON	L.PRODUCTDEFID = PD.PRODUCTDEFID
+														AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                INNER JOIN FN_AREA(#{USERID}) A 
+                
+                ON	L.AREAID = A.AREAID
+				--LEFT  JOIN CMD_USERS					US	ON	BP.WORKER = US.USER_ID 	-- (21.06.08) 
+				LEFT  JOIN CMD_USERS					US	ON	BP.CREATOR = US.USER_ID  
+               
+                WHERE   L.LOTSTATE IN ('Finished', 'InProduction', 'InTransit', 'InTransitPlant')
+				AND 	NVL(L.ISHOLD, 'N') = 'N'
+				AND 	NVL(L.ISLOCKING, 'N') = 'N'
+				AND 	L.PROCESSSTATE = 'WaitForReceive'
+               
+                <![CDATA[
+				AND		BP.CREATEDTIME 	BETWEEN TO_TIMESTAMP(#{P_PERIOD_PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+                  						AND TO_TIMESTAMP(#{P_PERIOD_PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+				]]>
+				-- SITE
+				<if test="P_PLANTID != null and P_PLANTID !='' and !(P_PLANTID eq '*'.toString())">
+		        AND     L.PLANTID = #{P_PLANTID}
+				</if>
+		        -- LOTID 조회
+				<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOTID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	L.LOTID = LMP.VALUE
+						)
+				</if>
+				-- 품목코드
+				<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString())">
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	TAB_RETURN_ROW		PMP
+							WHERE	L.PRODUCTDEFID = PMP.DATA_01
+							AND		(L.PRODUCTDEFVERSION = PMP.DATA_02 OR PMP.DATA_02 = '')
+						)
+				</if>
+				--품목명               	
+				<if test="P_PRODUCTNAME != null and P_PRODUCTNAME !='' and !(P_PRODUCTNAME eq '*'.toString())">
+                AND 	EXISTS
+                        (
+                            SELECT  1
+                            FROM    (SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTNAME}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+                            WHERE   PD.PRODUCTDEFNAME LIKE  '%' || UPPER(LMP.VALUE)|| '%'  
+                        )
+               	</if>
+               	 -- BOX NO
+				<if test="P_BOXNO != null and P_BOXNO !='' and !(P_BOXNO eq '*'.toString())">
+		        AND     BP.BOXNO LIKE  '%' || UPPER(#{P_BOXNO})|| '%' 
+				</if>
+		        -- 전표번호
+				<if test="P_CHITNO != null and P_CHITNO !='' and !(P_CHITNO eq '*'.toString())">
+		        AND     BP.DOCUMENTNO LIKE '%' || UPPER(#{P_CHITNO})|| '%'  
+		        </if>
+               
+                 GROUP BY BP.BOXNO
+					,	PD.PRODUCTDEFID
+					,	PD.PRODUCTDEFNAME
+					--,  	NVL(US.USER_NM, BP.WORKER)					-- (21.06.08) 수정
+					,  	NVL(US.USER_NM, BP.CREATOR)
+					,	TO_CHAR(BP.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')
+					,	BP.DOCUMENTNO
+					
+					-- [21.06.09]  (수량PNL)
+                    --,   L.PANELQTY		-- (21.06.21) 합계로 변경함
+                    ,   L.PRODUCTDEFVERSION
+                    
+                 	-- 정렬 추가 (21.06.21)
+                    order by BP.BOXNO, TO_CHAR(BP.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') desc
+                
+				
+	</select>	
+	
+	<!--
+		설		명	: 포장 실적 조회 (포장 작업 리스트 - 상세조회)
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-16 
+		수  정   이  력	:
+	-->
+	<select id="SelectPackingLotList" parameterType="map" resultType="hashmap">
+				-- Id : SelectPackingLotList
+				-- Version : 10001
+				
+				WITH T_PACK_WEEK AS (
+				    /*
+				    -- (21.07.12) - 포장된 LOTID의 박스 정보 밑 주자 정보 조회 수정으로 주석 처리
+				    SELECT  PL.ENTERPRISEID
+				        ,   PL.PLANTID
+				        ,   MAX(PL.PACKINGHDRID) KEEP(DENSE_RANK FIRST  ORDER BY PL.CREATEDTIME DESC)  AS  PACKINGHDRID
+				        ,   PL.LOTID
+				        ,   MAX(HR.DC)           		   AS DC
+				      FROM PCM_PACKING_LOT          	PL
+				      INNER JOIN PCM_PACKING_HDR    	HR
+				      ON PL.ENTERPRISEID    		= HR.ENTERPRISEID
+				      AND PL.PLANTID        		= HR.PLANTID
+				      AND PL.PACKINGHDRID   	= HR.PACKINGHDRID
+				      GROUP BY PL.ENTERPRISEID
+				             , PL.PLANTID
+				             , PL.LOTID
+				     */     
+				     
+				     -- (3블럭, BOE 정보)
+				     SELECT  PL.ENTERPRISEID
+				        ,   PL.PLANTID
+				        ,   MAX(PL.PACKINGHDRID) KEEP(DENSE_RANK FIRST  ORDER BY PL.CREATEDTIME DESC)  AS  PACKINGHDRID
+				        ,   PL.LOTID
+				        ,   NVL(MAX(HR.DC) KEEP(DENSE_RANK FIRST  ORDER BY PL.CREATEDTIME DESC)
+                                , MAX(DT.DC) KEEP(DENSE_RANK FIRST  ORDER BY DT.CREATEDTIME DESC)
+                                )           		   AS DC       -- (21.07.12) 주차 헤더 우선 없으면 DTL
+                        ,  MAX(HR.BOXNO) KEEP(DENSE_RANK FIRST  ORDER BY PL.CREATEDTIME DESC) AS MAX_BOXNO  -- 박스번호
+                        ,  MAX(B.DOCUMENTNO) AS DOCUMENTNO          -- 전표번호
+				      FROM PCM_PACKING_LOT          	PL
+				      INNER JOIN PCM_PACKING_HDR    	HR
+				      ON PL.ENTERPRISEID    		= HR.ENTERPRISEID
+				      AND PL.PLANTID        		= HR.PLANTID
+				      AND PL.PACKINGHDRID   	= HR.PACKINGHDRID
+                      -- 전산인 경우만
+                      AND NVL(HR.COMPUTERYN, 'N') = 'N'
+                      -- (21.07.12) 추가 상세에 DC정보
+                      INNER JOIN PCM_PACKING_DTL        DT
+                       ON DT.ENTERPRISEID    			= HR.ENTERPRISEID
+				      AND DT.PLANTID        				= HR.PLANTID
+				      AND DT.PACKINGHDRID   			= HR.PACKINGHDRID
+                      -- 전표 정보
+                      LEFT JOIN PCM_BOXPACKING B        -- 인계된 LOT 정보 확인
+					  ON PL.LOTID 							= B.LOTID
+                                      
+                      WHERE 1 = 1
+                      AND B.DOCUMENTNO 	= #{P_BOXNO}		-- 전표 번호
+                      
+				      GROUP BY PL.ENTERPRISEID
+				             , PL.PLANTID
+				             , PL.LOTID
+                   
+                   
+                   UNION ALL
+                   
+                   -- (2블럭 정보)
+                   SELECT  PL.ENTERPRISEID
+					        ,   PL.PLANTID
+					        ,   MAX(PL.PACKINGHDRID) KEEP(DENSE_RANK FIRST  ORDER BY PL.CREATEDTIME DESC)  AS  PACKINGHDRID
+					        ,   PL.LOTID
+	                        ,   NVL(MAX(HR.DC) KEEP(DENSE_RANK FIRST  ORDER BY PL.CREATEDTIME DESC)
+	                                , MAX(PL.DC) KEEP(DENSE_RANK FIRST  ORDER BY PL.CREATEDTIME DESC)
+	                                )           		   AS DC       -- (21.07.12) 주차 헤더 우선 없으면 DTL
+	                        ,  MAX(HR.BOXNO) KEEP(DENSE_RANK FIRST  ORDER BY PL.CREATEDTIME DESC) AS MAX_BOXNO  -- 박스번호
+	                        ,  MAX(B.DOCUMENTNO) AS DOCUMENTNO          -- 전표번호
+				      FROM PCM_PACKING_DTL          	PL
+				      INNER JOIN PCM_PACKING_HDR    	HR
+				      ON PL.ENTERPRISEID    		= HR.ENTERPRISEID
+				      AND PL.PLANTID        		= HR.PLANTID
+				      AND PL.PACKINGHDRID   	= HR.PACKINGHDRID
+                      -- 전산인 경우만
+                      AND NVL(HR.COMPUTERYN, 'N') = 'N'      
+                      -- 전표 정보
+                      LEFT JOIN PCM_BOXPACKING B        -- 인계된 LOT 정보 확인
+					  ON PL.LOTID 					= B.LOTID
+                      WHERE 1 = 1
+                      AND PL.LOTID IS NOT NULL
+                      AND B.DOCUMENTNO 	= #{P_BOXNO}		-- 전표 번호
+                      
+				      GROUP BY PL.ENTERPRISEID
+				             , PL.PLANTID
+				             , PL.LOTID
+				        
+				)
+				
+				
+				SELECT	PK.BOXNO
+					,	L.PARENTLOTID
+					,	PK.LOTID
+					,	PD.PRODUCTDEFID
+					,	PD.PRODUCTDEFVERSION
+					,	PD.PRODUCTDEFNAME
+					,	L.WEEK
+					--,	PK.BOXWEEK					AS PACKINGWEEK
+					,	PW.DC					    AS PACKINGWEEK
+					,	PK.QTY						AS PCSQTY
+					,   '0' 						AS CHK
+					-- (21.06.21) PANEL수량 추가
+                    --,   L.PANELQTY
+                    -- (21.07.12) 올림처리 포장인계 에서 올림 처리함
+                    --, NVL(CEIL(L.PANELQTY),0)   AS PANELQTY
+                    -- (21.07.14) 올림처리 및 수량이 안맞아서 계산 처리 함 
+                    , CEIL(COALESCE(PK.QTY,0) / PD.PCSPNL)	AS PANELQTY
+                    
+                    ,   PW.MAX_BOXNO                -- (21.07.12) 박스번호 조회
+				FROM	PCM_BOXPACKING				PK
+				
+				INNER JOIN PCM_LOT					L	ON	PK.LOTID = L.LOTID
+				INNER JOIN BAS_PRODUCTDEFINITION		PD	ON 	L.PRODUCTDEFID = PD.PRODUCTDEFID
+														AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+														
+				-- (21.06.10) 포장시 주차 정보 
+                LEFT JOIN T_PACK_WEEK              PW
+                ON PW.LOTID                         =   PK.LOTID										
+							
+				WHERE 	PK.BOXNO = #{P_BOXNO}
+				
+				
+				--(21.06.21) 정렬 추가 lot 순으로 해둠
+                order by PK.LOTID
+	</select>	
+	
+	
+	<!--
+		설		명	: 재포장 완료 List 조회
+		생	성	자	: 김진현 
+		생	성	일	: 2020-04-15 
+		수  정   이  력	: 
+	-->
+	<select id="selectRePackCompList" parameterType="map" resultType="hashmap">
+	    
+			SELECT 	/*selectRePackCompList - 재포장 완료 List 조회*/
+				   P.ENTERPRISEID
+				 , P.PLANTID
+				 , P.REPACKINGNO            
+				 , DT.PACKEDQTY				-- 완료수량
+				 , P.PRODUCTDEFID           -- 품목코드
+				 --, IT.ITEMNAME              AS PRODUCTDEFNAME-- 품목명
+				 , P.PRODUCTDEFNAME              AS PRODUCTDEFNAME-- 품목명
+				 , P.PRODUCTDEFVERSION      -- 버전
+				 , P.AREAID                 -- 자원코드
+				 , R.DESCRIPTION            AS AREANAME -- 자원(명)
+				 , TO_CHAR(DT.ENROLLEDATE, 'YYYY-MM-DD HH24:MI:SS')    AS ENROLLEDATE          -- IF수신일시
+				 , DT.CREATOR
+				 , TO_CHAR(DT.CREATEDTIME, 'YYYY-MM-DD') AS CREATEDTIME
+				 , DT.MODIFIER
+				 , TO_CHAR(DT.MODIFIEDTIME, 'YYYY-MM-DD') AS MODIFIEDTIME
+				 , WH.WAREHOUSENAME
+				  
+			  FROM PCM_REPACKINGPRODUCTDONE DT
+				INNER JOIN PCM_REPACKINGPRODUCT P
+				ON    DT.ENTERPRISEID = P.ENTERPRISEID
+				AND   DT.PLANTID      = P.PLANTID
+				AND   DT.REPACKINGNO  = P.REPACKINGNO
+				LEFT JOIN BAS_RESOURCE          R         -- 자원
+				ON   R.RESOURCEID = P.AREAID
+				AND R.VALIDSTATE = 'Valid'
+				LEFT OUTER JOIN BAS_AREA        A        
+				ON  A.AREAID = R.AREAID
+				LEFT JOIN BAS_ITEMMASTER        IT        -- 품목코드
+				ON IT.ITEMID = P.PRODUCTDEFID
+				LEFT JOIN BAS_WAREHOUSE         WH        -- 창고  
+				ON  WH.ENTERPRISEID = P.ENTERPRISEID
+				AND WH.PLANTID      = P.PLANTID
+				AND WH.VALIDSTATE   = 'Valid'
+				AND WH.WAREHOUSEID  = DT.STOCKWAREHOUSEID       
+			  WHERE 1 = 1 
+				AND DT.VALIDSTATE = 'valid'
+				AND TO_CHAR(DT.ENROLLEDATE,'yyyymmddhh24miss')		<![CDATA[>=]]> #{P_CONPERIOD_PERIODFR}
+				AND	TO_CHAR(DT.ENROLLEDATE,'yyyymmddhh24miss')		<![CDATA[<]]>  #{P_CONPERIOD_PERIODTO}
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and !(PRODUCTDEFID eq '*'.toString()) ">
+				  AND UPPER(P.PRODUCTDEFID) LIKE  '%' || UPPER(#{PRODUCTDEFID})|| '%'
+				</if>
+				
+				AND P.ENTERPRISEID 	= #{ENTERPRISEID}
+				AND P.PLANTID 		= #{PLANTID}
+				
+				 GROUP BY P.ENTERPRISEID
+                        , P.PLANTID
+                        , P.REPACKINGNO  
+                        , DT.PACKEDQTY
+                        , P.PRODUCTDEFID
+                        , P.PRODUCTDEFNAME
+                        , P.PRODUCTDEFVERSION
+                        , P.AREAID
+                        , R.DESCRIPTION 
+                        , DT.ENROLLEDATE
+                        , DT.CREATOR
+                        , DT.CREATEDTIME
+                        , DT.MODIFIER
+                        , DT.MODIFIEDTIME
+                        , WH.WAREHOUSENAME
+				
+				ORDER BY DT.ENROLLEDATE DESC
+				
+    </select>
+	
+	
+	 
+
+</mapper>

@@ -1,0 +1,899 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS02500Dao">
+    <select id="selectRcList" parameterType="map" resultType="hashmap">
+		    /* smh.bas.dao.BAS02500Dao.selectRcList */    
+		   	WITH CHANGEPOINT AS 
+				    (
+		            SELECT  X.*
+		            FROM 
+		            (
+		                SELECT  CP.CHANGEPOINTNO        --변경점 관리번호
+		                    ,   CP.REQUESTDEPARTMENT    --변경점 신청부서
+                        	,   NVL(CD.DEPT_NM, CP.REQUESTDEPARTMENT)             AS REQUESTDEPARTMENTNAME
+		                    ,   CP.SUBJECT              --변경제목
+		                    ,   CP.PRODUCTDEFID         --품목(기존)
+		                    ,   CP.PRODUCTDEFVERSION    
+		                    ,   CP.REQUESTDATE
+		                    ,   CP.REASONCOMMENTS       AS CHANGEREASON
+		                    ,   CP.CREATOR              AS REQUESTORID --요청자
+		                    ,   MAX(QA."sequence")        AS SEQUENCE
+		                    ,  CP.ENTERPRISEID
+		                            ,   CP.PLANTID
+		                FROM    QAM_CHANGEPOINT          CP
+                     	LEFT OUTER JOIN CMD_DEPTS       CD ON CP.REQUESTDEPARTMENT = CD.DEPT_CD
+                                                        AND CD.Use_Yn = 'Y'
+		                INNER JOIN QAM_QCAPPROVAL        QA  ON  CP.CHANGEPOINTNO = QA.APPROVALNO
+		                                                    AND QA.APPROVALTYPE = 'ChangePointManagement'                                                        
+		                WHERE   1 = 1
+		                <if test="PLANTID != null and PLANTID !='' ">
+		                	AND CP.PLANTID = #{PLANTID}
+		                </if>
+						<if test="P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='' ">
+							<![CDATA[
+								AND	CP.REQUESTDATE >= to_timestamp( #{P_PERIOD_PERIODFR} || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+							]]>
+						</if>
+						<if test="P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='' ">
+							<![CDATA[
+								AND	CP.REQUESTDATE <= to_timestamp( #{P_PERIOD_PERIODTO} || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+							]]>
+						</if>
+		       			<if test="ITEMID != null and ITEMID !='' ">
+		                    	  AND EXISTS
+		                                    (
+		                                        SELECT  1
+		                                        FROM    UFN_SELECTSTRINGTOSPLIT2(#{ITEMID}, ',', '|')      LMP
+		                                        WHERE   CP.PRODUCTDEFID = LMP.VALUE
+		                                        AND     (CP.PRODUCTDEFVERSION = LMP.VALUE2 OR LMP.VALUE2 = '')
+		                                    )
+		                    </if>    
+		                GROUP BY CP.CHANGEPOINTNO
+		                    ,    CP.REQUESTDEPARTMENT
+		                    ,    CP.SUBJECT
+		                    ,    CP.PRODUCTDEFID
+		                    ,    CP.PRODUCTDEFVERSION
+		                    ,    CP.REQUESTDATE
+		                    ,    CP.REASONCOMMENTS
+		                    ,    CP.CREATOR
+		                    ,    CP.ENTERPRISEID
+		                    ,    CP.PLANTID
+                            ,	 CD.DEPT_NM                            
+		            )X
+		            INNER JOIN QAM_QCAPPROVAL      QQ  ON  X.CHANGEPOINTNO = QQ.APPROVALNO
+		                                              AND X.SEQUENCE = QQ."sequence"
+		                                              AND COALESCE(QQ.APPROVALSTATE, '') = 'Approval'
+		            WHERE 1 = 1
+		        ),  PCR AS 
+		        (
+		            SELECT  C.CHANGEPOINTNO        --변경점 관리번호
+		                        ,   C.REQUESTDEPARTMENT    --변경점 신청부서
+                            	,   C.REQUESTDEPARTMENTNAME
+		                        ,   C.SUBJECT              --변경제목
+		                        ,   C.PRODUCTDEFID         --품목(기존)
+		                        ,   C.PRODUCTDEFVERSION    
+		                        ,   C.REQUESTDATE           AS REQUESTDATE
+		                        ,   C.CHANGEREASON
+		                        ,   C.REQUESTORID
+		                        ,   G.STATUS                AS RCSTATEID
+		                        ,   G.RCPRODUCTDEFID
+		                        ,   G.RCPRODUCTDEFVERSION
+		                        ,   G.GOVERNANCENO
+		                        ,   G.GOVERNANCETYPE
+		                        ,   G.IMPLEMENTATIONTYPE
+		                        ,   C.ENTERPRISEID
+		                        ,   C.PLANTID
+		                        ,   G.FILEID
+		                        ,   G.CONFIRMDATE
+		                        ,	G.PRODUCTCLASS
+		                    FROM    CHANGEPOINT             C
+		                    LEFT JOIN BAS_GOVERNANCE         G   ON  C.CHANGEPOINTNO = G.PCRNO
+		                                                        AND C.PRODUCTDEFID = G.PRODUCTDEFID
+		                                                        AND C.PRODUCTDEFVERSION = G.PRODUCTDEFVERSION
+		                                                        AND C.ENTERPRISEID = G.ENTERPRISEID
+		                                                        AND C.PLANTID = G.PLANTID                      											
+                      											AND    (G.WORKCLASS IS NULL OR G.WORKCLASS != 'Same')
+		                                                        AND COALESCE(G.GOVERNANCETYPE, '') = 'RunningChange'
+		                                                        											    
+		          WHERE  1 = 1
+		        <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' ">
+		        	--생산구분
+		        	AND G.PRODUCTCLASS = #{PRODUCTIONTYPE}
+		        </if>
+		        <if test="SPECOWNER != null and SPECOWNER !='' ">
+		        	AND G.SPECPERSON = #{SPECOWNER}
+		        </if>
+		        <if test="RCSTATE != null and RCSTATE !='' ">
+		        	AND COALESCE(G.STATUS, 'Request') = #{RCSTATE}
+		        </if>
+		        ),  GOVERNANCE AS 
+		        (
+		            SELECT  G.PCRNO               AS CHANGEPOINTNO
+		                ,   ''                    AS REQUESTDEPARTMENT
+                    	,   ''                    AS REQUESTDEPARTMENTNAME
+		                ,   ''                    AS SUBJECT
+		                ,   G.PRODUCTDEFID  
+		                ,   G.PRODUCTDEFVERSION
+		                ,   G.CREATEDTIME         AS REQUESTDATE
+		                ,   G.REASON              AS CHANGEREASON
+		                ,   G.CREATOR        AS REQUESTORID
+		                ,   G.STATUS              AS RCSTATEID
+		                ,   G.RCPRODUCTDEFID
+		                ,   G.RCPRODUCTDEFVERSION
+		                ,   G.GOVERNANCENO
+		                ,   G.GOVERNANCETYPE
+		                ,   G.IMPLEMENTATIONTYPE
+		                 ,  G.ENTERPRISEID
+		                 ,  G.PLANTID
+		                 ,   G.FILEID
+		                 ,   G.CONFIRMDATE
+		                 ,	G.PRODUCTCLASS
+		            FROM    BAS_GOVERNANCE         G
+		            WHERE   1 = 1
+		            AND    (G.WORKCLASS IS NULL OR G.WORKCLASS != 'Same')
+		            AND     COALESCE(G.GOVERNANCETYPE, '') = 'RunningChange'
+		            AND     G.PCRNO IS NULL
+		              <if test="PLANTID != null and PLANTID !='' ">
+		              	AND G.PLANTID = #{PLANTID}
+		              </if>
+				<if test="P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='' ">
+					<![CDATA[
+						AND	G.REQUESTDATE >= to_timestamp( #{P_PERIOD_PERIODFR} || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+					]]>
+				</if>
+				<if test="P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='' ">
+					<![CDATA[
+						AND	G.REQUESTDATE <= to_timestamp( #{P_PERIOD_PERIODTO} || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+					]]>
+				</if>
+				<if test="ITEMID != null and ITEMID !='' ">
+		            	  AND EXISTS
+		                            (
+		                                SELECT  1
+		                                FROM    UFN_SELECTSTRINGTOSPLIT2(#{ITEMID}, ',', '|')      LMP
+		                                WHERE   G.PRODUCTDEFID = LMP.VALUE
+		                                AND     (G.PRODUCTDEFVERSION = LMP.VALUE2 OR LMP.VALUE2 = '')
+		                            )
+		            </if>
+		   		<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' ">
+		        	--생산구분
+		        	AND G.PRODUCTCLASS = #{PRODUCTIONTYPE}
+		        </if>
+		        <if test="SPECOWNER != null and SPECOWNER !='' ">
+		        	AND G.SPECPERSON = #{SPECOWNER}
+		        </if>  
+		        <if test="RCSTATE != null and RCSTATE !='' ">
+		        	AND COALESCE(G.STATUS, 'Request') = #{RCSTATE}
+		        </if>
+		        )
+		        SELECT  Y.CHANGEPOINTNO        --변경점 관리번호
+		                    ,   Y.REQUESTDEPARTMENT    --변경점 신청부서
+                        	,   Y.REQUESTDEPARTMENTNAME
+		                    ,   Y.SUBJECT              --변경제목
+		                    ,   TO_CHAR(Y.REQUESTDATE, 'YYYY-MM-DD') AS REQUESTDATE
+		                    ,   TO_CHAR(Y.REQUESTDATE, 'YYYY-MM-DD HH24:MI:SS') AS REQUESTDATE_YYYYMMDDHHMISS
+		                    --기존
+		                    ,   Y.PRODUCTDEFID         --품목(기존)
+		                    ,   Y.PRODUCTDEFVERSION
+		                    ,   IM.ITEMNAME
+		                    ,   PI.SPECIFICATIONMAN         AS EXISTSPECOWNER
+                        	,   U1.USERNAME                AS EXISTSPECOWNERNAME
+		                    ,   PI.CUSTOMERID               AS EXISTCUSTOMER
+                        	,   BC.CUSTOMERNAME             AS EXISTCUSTOMERNAME
+		                    --변경
+		                    ,   Y.RCPRODUCTDEFID
+		                    ,   Y.RCPRODUCTDEFVERSION
+		                    ,   RIM.ITEMNAME                AS RCITEMNAME
+		                    ,   RPI.SPECIFICATIONMAN        AS TRANSSPECOWNER
+                        	,   U2.USERNAME                 AS TRANSSPECOWNERNAME
+		                    ,   RPI.CUSTOMERID              AS TRANSCUSTOMER
+                        	,   BC2.CUSTOMERNAME            AS TRANSCUSTOMERNAME
+		                    ,   CASE WHEN Y.PRODUCTDEFID = Y.RCPRODUCTDEFID THEN 'OurCompany'
+		                             WHEN Y.PRODUCTDEFID <![CDATA[<>]]> Y.RCPRODUCTDEFID THEN 'Customer'
+		                        END RCDIVISION                   
+		                    ,   Y.IMPLEMENTATIONTYPE    --적용구분                   
+		                    ,   Y.CHANGEREASON
+		                    ,   Y.REQUESTORID
+		                    ,   COALESCE(U.USERNAME, Y.REQUESTORID)     AS REQUESTORNAME
+		                    ,   Y.RCSTATEID
+		                    ,   COALESCE(D.DICTIONARYNAME, Y.RCSTATEID) AS RCSTATE
+		                    ,   Y.GOVERNANCENO
+		                    ,   Y.GOVERNANCETYPE
+		                    ,   Y.ENTERPRISEID
+		                    ,   Y.PLANTID
+		                    ,   TO_CHAR(Y.CONFIRMDATE, 'YYYY-MM-DD') AS CONFIRMDATE
+		                    ,	Y.PRODUCTCLASS
+		                FROM 
+		                (
+		                    SELECT  *
+		                    FROM    PCR
+		                    UNION
+		                    SELECT  *
+		                    FROM    GOVERNANCE
+		                )Y
+		                LEFT JOIN BAS_ITEMMASTER         IM  ON  Y.PRODUCTDEFID = IM.ITEMID
+		                                                    AND Y.PRODUCTDEFVERSION = IM.ITEMVERSION
+		                                                    AND Y.ENTERPRISEID = IM.ENTERPRISEID
+		                LEFT JOIN BAS_ITEMMASTER         RIM ON  Y.RCPRODUCTDEFID = RIM.ITEMID
+		                                                    AND Y.RCPRODUCTDEFVERSION = RIM.ITEMVERSION
+		                                                    AND Y.ENTERPRISEID = RIM.ENTERPRISEID
+		                LEFT JOIN BAS_PRODUCTITEMSPEC    PI  ON  Y.PRODUCTDEFID = PI.ITEMID
+		                                                    AND Y.PRODUCTDEFVERSION = PI.ITEMVERSION
+		                                                    AND Y.ENTERPRISEID = PI.ENTERPRISEID
+                    	LEFT JOIN BAS_CUSTOMER           BC ON PI.CUSTOMERID = BC.CUSTOMERID
+		                LEFT JOIN BAS_PRODUCTITEMSPEC    RPI ON  Y.RCPRODUCTDEFID = RPI.ITEMID
+		                                                    AND Y.RCPRODUCTDEFVERSION = RPI.ITEMVERSION
+		                                                    AND Y.ENTERPRISEID = RPI.ENTERPRISEID
+                    	LEFT JOIN BAS_CUSTOMER           BC2 ON RPI.CUSTOMERID = BC2.CUSTOMERID
+		                LEFT JOIN CMD_USER_V               U   ON  Y.REQUESTORID = U.USERID
+	                    LEFT JOIN CMD_USER_V               U1   ON  PI.SPECIFICATIONMAN = U1.USERID
+	                    LEFT JOIN CMD_USER_V               U2   ON  RPI.SPECIFICATIONMAN = U2.USERID
+		                LEFT JOIN cmd_lookup_values               CD  ON  Y.RCSTATEID = CD.LOOKUP_CODE
+		                                                    AND CD.LOOKUP_TYPE = 'RCState'
+		                LEFT JOIN CMD_DICTIONARY         D   ON  CD.DICTIONARYID = D.DICTIONARYID
+		                                                    AND D.LANGUAGETYPE = #{LANGUAGETYPE}
+		                WHERE  1 = 1        
+				<if test="CUSTOMER_ID != null and CUSTOMER_ID !='' ">
+		           AND EXISTS
+		                       (
+		                           SELECT  1
+		                           FROM    ufn_selectStringToSplit(#{CUSTOMER_ID}, ',')      LMP
+		                           WHERE   PI.CUSTOMERID = LMP.VALUE
+		                       )
+		        </if>
+		        
+		        <if test="REQUESTER != null and REQUESTER !='' ">
+		        	AND Y.REQUESTORID = #{REQUESTER}
+		        </if>  
+		     
+		        GROUP BY Y.CHANGEPOINTNO
+		                    ,    Y.REQUESTDEPARTMENT    --변경점 신청부서
+		                    ,    Y.SUBJECT              --변경제목
+		                    ,    Y.REQUESTDATE
+		                    ,    Y.REQUESTDATE
+		                    ,    Y.PRODUCTDEFID         --품목(기존)
+		                    ,    Y.PRODUCTDEFVERSION
+		                    ,    IM.ITEMNAME
+		                    ,    PI.SPECIFICATIONMAN
+		                    ,    PI.CUSTOMERID
+		                    ,    Y.RCPRODUCTDEFID
+		                    ,    Y.RCPRODUCTDEFVERSION
+		                    ,    RIM.ITEMNAME
+		                    ,    RPI.SPECIFICATIONMAN
+		                    ,    RPI.CUSTOMERID                   
+		                    ,    Y.IMPLEMENTATIONTYPE    --적용구분                   
+		                    ,    Y.CHANGEREASON
+		                    ,    Y.REQUESTORID
+		                    ,    COALESCE(U.USERNAME, Y.REQUESTORID)
+		                    ,    Y.RCSTATEID
+		                    ,    COALESCE(D.DICTIONARYNAME, Y.RCSTATEID)
+		                    ,    Y.GOVERNANCENO
+		                    ,    Y.GOVERNANCETYPE
+		                    ,    Y.ENTERPRISEID
+		                    ,    Y.PLANTID
+                        	,    Y.REQUESTDEPARTMENTNAME
+                        	,    BC.CUSTOMERNAME   
+                        	,	BC2.CUSTOMERNAME
+	                        ,    U1.USERNAME
+	                        ,    U2.USERNAME      
+	                        ,	Y.CONFIRMDATE  
+	                        ,	Y.PRODUCTCLASS
+		        ORDER BY Y.REQUESTDATE DESC
+    </select>
+    
+        <!-- ID 신규채번 -->
+	<select id="selectNewItemID"  statementType="CALLABLE" parameterType="map">
+		/* smh.bas.dao.BAS02500Dao.selectNewItemID */
+		{#{O_NEWID,mode=OUT,jdbcType=VARCHAR ,javaType=string} = call BAS_COMMON_PKG.FN_GET_ID(
+										   #{CLASSID}
+										  ,'RC'||TO_CHAR(SYSDATE, 'YYYYMMDD')
+				 						  ,#{CREATOR}
+				 						  ,'5'
+										)
+	     }
+    </select>
+
+    <select id="SelectRoutingListByProduct" parameterType="map" resultType="hashmap">
+		    /* smh.bas.dao.BAS02500Dao.SelectRoutingListByProduct */    
+			SELECT  PP.PLANTID
+				    ,   PP.USERSEQUENCE
+            ,   PP.PROCESSSEGMENTID
+            ,   PP.PROCESSSEGMENTVERSION
+            ,   COALESCE(D.DICTIONARYNAME, PS.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+            ,   ''                      AS PROCESSCHANGETYPE
+            ,   ''                      AS MATERIALCHANGETYPE
+            ,   ''                      AS SPECCHANGETYPE
+            ,   ''                      AS TOOLCHANGETYPE
+            ,   PP.PATHSEQUENCE
+            ,   PP.PROCESSDEFID
+            ,   PP.PROCESSDEFVERSION
+            ,   PD.PRODUCTDEFID
+            ,   PD.PRODUCTDEFVERSION
+            ,   PD.PRODUCTDEFNAME
+        FROM    BAS_PROCESSPATH          PP
+        INNER JOIN BAS_PROCESSDEFINITION PSD ON  PP.PROCESSDEFID = PSD.PROCESSDEFID
+                                            AND PP.PROCESSDEFVERSION = PSD.PROCESSDEFVERSION
+        INNER JOIN BAS_PRODUCTDEFINITION PD  ON  PSD.PROCESSDEFID = PD.PROCESSDEFID
+                                            AND PSD.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+        INNER JOIN BAS_PROCESSSEGMENT    PS  ON  PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                            AND PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+        LEFT JOIN CMD_DICTIONARY         D   ON  PS.PROCESSSEGMENTNAME = D.DICTIONARYID
+                                            AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE }
+        WHERE   1 = 1
+        AND     PD.PRODUCTDEFID = #{ITEMID}
+        AND     PD.PRODUCTDEFVERSION = #{ITEMVERSION}
+        AND	   PP.VALIDSTATE	= 'Valid'
+        ORDER BY PP.PATHSEQUENCE ASC
+    </select>
+       <select id="SelectRoutingListByProductCompare" parameterType="map" resultType="hashmap">
+		    /* smh.bas.dao.BAS02500Dao.SelectRoutingListByProductCompare */    
+		WITH PROCESSSEGMENT AS
+				(
+				    SELECT  A.PROCESSSEGMENTID  AS A_PROCESSSEGMENTID
+				        ,   B.PROCESSSEGMENTID  AS B_PROCESSSEGMENTID
+				        ,   CASE WHEN A.PROCESSSEGMENTID IS NULL THEN 1 ELSE 0 END A_NULL
+				        ,   CASE WHEN B.PROCESSSEGMENTID IS NULL THEN 1 ELSE 0 END B_NULL
+				        ,   A.USERSEQUENCE A_USERSEQUENCE
+				        ,   B.USERSEQUENCE B_USERSEQUENCE
+				    FROM 
+				    (
+				        SELECT  PP.*
+				        FROM    BAS_PROCESSPATH          PP
+				        INNER JOIN BAS_PRODUCTDEFINITION PD  ON  PP.PROCESSDEFID = PD.PROCESSDEFID
+				                                            AND PP.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+				        WHERE   1 = 1
+				        AND     PD.PRODUCTDEFID = #{TARGET_PRODUCTDEFID}
+				        AND     PD.PRODUCTDEFVERSION = #{TARGET_PRODUCTDEFVERSION}
+				        AND 	  PP.VALIDSTATE = 'Valid' 
+				    )A
+				    FULL OUTER JOIN
+				    (
+				        SELECT  PP.*
+				        FROM    BAS_PROCESSPATH          PP
+				        INNER JOIN BAS_PRODUCTDEFINITION PD  ON  PP.PROCESSDEFID = PD.PROCESSDEFID
+				                                            AND PP.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+				        WHERE   1 = 1
+				        AND     PD.PRODUCTDEFID = #{SOURCE_PRODUCTDEFID}
+				        AND     PD.PRODUCTDEFVERSION = #{SOURCE_PRODUCTDEFVERSION}
+				        AND 	  PP.VALIDSTATE = 'Valid'
+				    )B  ON A.PROCESSSEGMENTID = B.PROCESSSEGMENTID
+				), PROCESSSEGMENTLIST AS 
+				(
+				    SELECT  COALESCE(A_PROCESSSEGMENTID, B_PROCESSSEGMENTID)    AS PROCESSSEGMENTID
+				    <choose>
+			          <when test="ISLEFT eq 'Y'.toString()">
+			          	,   CASE WHEN SUM(A_NULL) != SUM(B_NULL) THEN 'Delete' WHEN  MAX(A_USERSEQUENCE) != MAX(B_USERSEQUENCE) THEN 'Move' ELSE '' END PROCESSCHANGETYPE --왼쪽일때
+			          </when>
+			          <otherwise>
+			          	,   CASE WHEN SUM(A_NULL) != SUM(B_NULL) THEN 'Add'    WHEN  MAX(A_USERSEQUENCE) != MAX(B_USERSEQUENCE) THEN 'Move' ELSE '' END PROCESSCHANGETYPE
+			          </otherwise>
+			        </choose>				    	
+				    FROM    PROCESSSEGMENT
+				    GROUP BY COALESCE(A_PROCESSSEGMENTID, B_PROCESSSEGMENTID)
+				), BOM AS
+				(
+				    SELECT  A.PROCESSSEGMENTID  AS A_PROCESSSEGMENTID
+				        ,   B.PROCESSSEGMENTID  AS B_PROCESSSEGMENTID
+				        ,   A.*
+				        ,   B.*
+				        ,   CASE WHEN A.MATERIALDEFID IS NULL THEN 1 ELSE 0 END AS A_NULL
+				        ,   CASE WHEN B.MATERIALDEFID IS NULL THEN 1 ELSE 0 END AS B_NULL
+				    FROM
+				    (   SELECT  * 
+				        FROM    BAS_BILLOFMATERIAL
+				        WHERE   1 = 1
+				        AND     PRODUCTDEFID = #{TARGET_PRODUCTDEFID}
+				        AND     PRODUCTDEFVERSION = #{TARGET_PRODUCTDEFVERSION}
+				        AND 	   VALIDSTATE = 'Valid'
+				    )A
+				    FULL OUTER JOIN
+				    (
+				        SELECT  * 
+				        FROM    BAS_BILLOFMATERIAL
+				        WHERE   1 = 1
+				        AND     PRODUCTDEFID = #{SOURCE_PRODUCTDEFID}
+				        AND     PRODUCTDEFVERSION = #{SOURCE_PRODUCTDEFVERSION}
+				        AND 	   VALIDSTATE = 'Valid'
+				    )B  ON  A.PROCESSSEGMENTID = B.PROCESSSEGMENTID
+				        AND A.PROCESSSEGMENTVERSION = B.PROCESSSEGMENTVERSION
+				        AND A.MATERIALTYPE = B.MATERIALTYPE
+				        AND A.MATERIALDEFID = B.MATERIALDEFID
+				        AND A.MATERIALDEFVERSION = B.MATERIALDEFVERSION
+				            
+				),  BOMLIST AS 
+				(
+				    SELECT  COALESCE(A_PROCESSSEGMENTID, B_PROCESSSEGMENTID)            AS PROCESSSEGMENTID
+				    <choose>
+			          <when test="ISLEFT eq 'Y'.toString()">
+			          <![CDATA[
+			          	  ,   CASE WHEN SUM(A_NULL) =  SUM(B_NULL) AND SUM(A_NULL) = 0 THEN ''
+				                 WHEN SUM(A_NULL) >= SUM(B_NULL) THEN 'Delete'
+				                 WHEN SUM(A_NULL) <  SUM(B_NULL) THEN 'Add' 
+				            END MATERIALCHANGETYPE --왼쪽
+				           ]]>
+			          </when>
+			          <otherwise>
+			          	<![CDATA[
+			      		,   CASE WHEN SUM(A_NULL) =  SUM(B_NULL) AND SUM(A_NULL) = 0 THEN ''
+				                 WHEN SUM(A_NULL) >  SUM(B_NULL) THEN 'Delete'
+				                 WHEN SUM(A_NULL) <= SUM(B_NULL) THEN 'Add' 
+				            END MATERIALCHANGETYPE
+				         ]]>
+			          </otherwise>
+			        </choose>			        
+				    FROM    BOM
+				    GROUP BY COALESCE(A_PROCESSSEGMENTID, B_PROCESSSEGMENTID)
+				),  SPEC AS
+				(
+				    SELECT  A.PROCESSSEGMENTID  AS A_PROCESSSEGMENTID
+				        ,   B.PROCESSSEGMENTID  AS B_PROCESSSEGMENTID
+				        ,   CASE WHEN A.INSPITEMID IS NULL THEN 1 ELSE 0 END AS A_NULL
+				        ,   CASE WHEN B.INSPITEMID IS NULL THEN 1 ELSE 0 END AS B_NULL
+				    FROM 
+				    (
+				        SELECT  PP.PROCESSSEGMENTID
+				            ,   SPD.SPECCLASSID
+				            ,   IR.INSPITEMID
+				            ,   IR.INSPITEMVERSION
+				        FROM    BAS_PRODUCTDEFINITION    PD
+				        INNER JOIN BAS_PROCESSPATH       PP  ON  PD.PROCESSDEFID = PP.PROCESSDEFID
+				                                            AND PD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				                                            AND PP.VALIDSTATE = 'Valid'
+				        INNER JOIN BAS_SPECATTRIBUTE     SA  ON  PP.PROCESSSEGMENTID = SA.PROCESSSEGMENTID
+				        INNER JOIN BAS_INSPECTIONITEMREL IR  ON  PD.PRODUCTDEFID = IR.RESOURCEID
+				                                            AND PD.PRODUCTDEFVERSION = IR.RESOURCEVERSION
+				                                            AND PP.PROCESSSEGMENTID = IR.PROCESSSEGID
+				                                            AND SA.INSPITEMID = IR.INSPITEMID
+				        INNER JOIN BAS_SPECDEFINITION    SD  ON  IR.SPECCLASSID = SD.SPECCLASSID
+				                                            AND IR.ENTERPRISEID = SD.ENTERPRISEID
+				                                            AND IR.PLANTID = SD.PLANTID
+				                                            AND IR.SPECSEQUENCE = SD.SPECSEQUENCE
+				        INNER JOIN BAS_SPECDETAIL        SPD ON  SD.SPECSEQUENCE = SPD.SPECSEQUENCE
+				                                            AND SD.SPECCLASSID = SPD.SPECCLASSID
+                                                    AND SD.DEFAULTCHARTTYPE = SPD.CONTROLTYPE
+                WHERE   1 = 1
+                AND     PD.PRODUCTDEFID = #{TARGET_PRODUCTDEFID}
+                AND     PD.PRODUCTDEFVERSION = #{TARGET_PRODUCTDEFVERSION}
+            )A
+            FULL OUTER JOIN
+            (
+                SELECT  PP.PROCESSSEGMENTID
+                    ,   SPD.SPECCLASSID
+                    ,   IR.INSPITEMID
+                    ,   IR.INSPITEMVERSION
+                FROM    BAS_PRODUCTDEFINITION    PD
+                INNER JOIN BAS_PROCESSPATH       PP  ON  PD.PROCESSDEFID = PP.PROCESSDEFID
+                                                    AND PD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+                                                    AND PP.VALIDSTATE = 'Valid'
+                INNER JOIN BAS_SPECATTRIBUTE     SA  ON  PP.PROCESSSEGMENTID = SA.PROCESSSEGMENTID
+                INNER JOIN BAS_INSPECTIONITEMREL IR  ON  PD.PRODUCTDEFID = IR.RESOURCEID
+                                                    AND PD.PRODUCTDEFVERSION = IR.RESOURCEVERSION
+                                                    AND PP.PROCESSSEGMENTID = IR.PROCESSSEGID
+                                                    AND SA.INSPITEMID = IR.INSPITEMID
+                INNER JOIN BAS_SPECDEFINITION    SD  ON  IR.SPECCLASSID = SD.SPECCLASSID
+                                                    AND IR.ENTERPRISEID = SD.ENTERPRISEID
+                                                    AND IR.PLANTID = SD.PLANTID
+                                                    AND IR.SPECSEQUENCE = SD.SPECSEQUENCE
+                INNER JOIN BAS_SPECDETAIL        SPD ON  SD.SPECSEQUENCE = SPD.SPECSEQUENCE
+                                                    AND SD.SPECCLASSID = SPD.SPECCLASSID
+                                                    AND SD.DEFAULTCHARTTYPE = SPD.CONTROLTYPE
+                WHERE   1 = 1
+                AND     PD.PRODUCTDEFID = #{SOURCE_PRODUCTDEFID}
+                AND     PD.PRODUCTDEFVERSION = #{SOURCE_PRODUCTDEFVERSION}
+            )B  ON  A.PROCESSSEGMENTID = B.PROCESSSEGMENTID
+                AND A.INSPITEMID = B.INSPITEMID
+                AND A.INSPITEMVERSION = B.INSPITEMVERSION
+        ), SPECLIST AS 
+        (
+            SELECT  COALESCE(A_PROCESSSEGMENTID, B_PROCESSSEGMENTID)    AS PROCESSSEGMENTID
+				<choose>
+			          <when test="ISLEFT eq 'Y'.toString()">
+			          <![CDATA[
+			                ,   CASE WHEN SUM(A_NULL) = SUM(B_NULL) AND SUM(A_NULL) = 0 THEN ''
+			                         WHEN SUM(A_NULL) >= SUM(B_NULL) THEN 'Delete'
+			                         WHEN SUM(A_NULL) <  SUM(B_NULL) THEN 'Add' 
+			                    END SPECCHANGETYPE --왼쪽
+				           ]]>
+			          </when>
+			          <otherwise>
+			          	<![CDATA[
+			                ,   CASE WHEN SUM(A_NULL) =  SUM(B_NULL) AND SUM(A_NULL) = 0 THEN ''
+			                         WHEN SUM(A_NULL) >  SUM(B_NULL) THEN 'Delete'
+			                         WHEN SUM(A_NULL) <= SUM(B_NULL) THEN 'Add' 
+			                    END SPECCHANGETYPE
+				         ]]>
+			          </otherwise>
+			        </choose>
+            FROM    SPEC
+            GROUP BY COALESCE(A_PROCESSSEGMENTID, B_PROCESSSEGMENTID)
+        ), DURABLE AS 
+        (
+            SELECT  A.PROCESSSEGMENTID  AS A_PROCESSSEGMENTID
+                ,   B.PROCESSSEGMENTID  AS B_PROCESSSEGMENTID
+                ,   A.*
+                ,   B.*
+                ,   CASE WHEN A.RESOURCEID IS NULL THEN 1 ELSE 0 END A_NULL
+                ,   CASE WHEN B.RESOURCEID IS NULL THEN 1 ELSE 0 END B_NULL
+            FROM 
+            (
+                SELECT  BOR.*
+                FROM    BAS_BILLOFRESOURCE       BOR
+                INNER JOIN TOM_DURABLEDEFINITION DD  ON  BOR.RESOURCEID = DD.DURABLEDEFID
+                                                    AND BOR.RESOURCEVERSION = DD.DURABLEDEFVERSION
+                WHERE   1 = 1
+                AND     BOR.RESOURCETYPE = 'Durable'
+                AND     BOR.PRODUCTDEFID = #{TARGET_PRODUCTDEFID}
+                AND     BOR.PRODUCTDEFVERSION = #{TARGET_PRODUCTDEFVERSION}
+            )A
+            FULL OUTER JOIN 
+            (
+                SELECT  BOR.*
+                FROM    BAS_BILLOFRESOURCE       BOR
+                INNER JOIN TOM_DURABLEDEFINITION DD  ON  BOR.RESOURCEID = DD.DURABLEDEFID
+                                                    AND BOR.RESOURCEVERSION = DD.DURABLEDEFVERSION
+                WHERE   1 = 1
+                AND     BOR.RESOURCETYPE = 'Durable'
+                AND     BOR.PRODUCTDEFID = #{SOURCE_PRODUCTDEFID}
+                AND     BOR.PRODUCTDEFVERSION = #{SOURCE_PRODUCTDEFVERSION}
+            )B  ON  A.PROCESSSEGMENTID = B.PROCESSSEGMENTID
+                AND A.PROCESSSEGMENTVERSION = B.PROCESSSEGMENTVERSION
+                AND A.RESOURCETYPE = B.RESOURCETYPE
+                AND A.RESOURCEID = B.RESOURCEID
+                AND A.RESOURCEVERSION = B.RESOURCEVERSION
+        ), DURABLELIST AS 
+        (
+            SELECT  COALESCE(A_PROCESSSEGMENTID, B_PROCESSSEGMENTID)    AS PROCESSSEGMENTID
+            <choose>
+			          <when test="ISLEFT eq 'Y'.toString()">
+			          <![CDATA[
+							,   CASE WHEN SUM(A_NULL) = SUM(B_NULL) AND SUM(A_NULL) = 0 THEN ''
+			                         WHEN SUM(A_NULL) >= SUM(B_NULL) THEN 'Delete'
+			                         WHEN SUM(A_NULL) <  SUM(B_NULL) THEN 'Add' 
+			                    END TOOLCHANGETYPE --왼쪽
+				           ]]>
+			          </when>
+			          <otherwise>
+			          	<![CDATA[
+			                ,   CASE WHEN SUM(A_NULL) =  SUM(B_NULL) AND SUM(A_NULL) = 0 THEN ''
+			                         WHEN SUM(A_NULL) >  SUM(B_NULL) THEN 'Delete'
+			                         WHEN SUM(A_NULL) <= SUM(B_NULL) THEN 'Add' 
+			                    END TOOLCHANGETYPE
+				         ]]>
+			          </otherwise>
+			        </choose>			        
+            FROM    DURABLE
+            GROUP BY COALESCE(A_PROCESSSEGMENTID, B_PROCESSSEGMENTID)
+        )
+        SELECT  PP.PLANTID
+            ,   PP.USERSEQUENCE
+            ,   PP.PROCESSSEGMENTID
+            ,   PP.PROCESSSEGMENTVERSION
+            ,   COALESCE(D.DICTIONARYNAME, PS.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+            ,   PL.PROCESSCHANGETYPE
+            ,   CASE WHEN PL.PROCESSCHANGETYPE = 'Delete' THEN '' ELSE BOM.MATERIALCHANGETYPE END MATERIALCHANGETYPE
+            ,   CASE WHEN PL.PROCESSCHANGETYPE = 'Delete' THEN '' ELSE SL.SPECCHANGETYPE     END SPECCHANGETYPE  
+            ,   CASE WHEN PL.PROCESSCHANGETYPE = 'Delete' THEN '' ELSE TL.TOOLCHANGETYPE     END TOOLCHANGETYPE
+            ,   PP.PATHSEQUENCE
+            ,   PP.PROCESSDEFID
+            ,   PP.PROCESSDEFVERSION
+            ,   PD.PRODUCTDEFID
+            ,   PD.PRODUCTDEFVERSION
+        FROM    BAS_PROCESSPATH          PP
+        INNER JOIN BAS_PROCESSDEFINITION PSD ON  PP.PROCESSDEFID = PSD.PROCESSDEFID
+                                            AND PP.PROCESSDEFVERSION = PSD.PROCESSDEFVERSION
+        INNER JOIN BAS_PRODUCTDEFINITION PD  ON  PSD.PROCESSDEFID = PD.PROCESSDEFID
+                                            AND PSD.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+        INNER JOIN BAS_PROCESSSEGMENT    PS  ON  PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                            AND PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+                                            AND PS.VALIDSTATE = 'Valid'	
+        LEFT JOIN CMD_DICTIONARY         D   ON  PS.PROCESSSEGMENTNAME = D.DICTIONARYID
+                                            AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN PROCESSSEGMENTLIST    PL  ON  PP.PROCESSSEGMENTID = PL.PROCESSSEGMENTID
+        LEFT JOIN BOMLIST               BOM ON  PP.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+        LEFT JOIN SPECLIST              SL  ON  PP.PROCESSSEGMENTID = SL.PROCESSSEGMENTID
+        LEFT JOIN DURABLELIST           TL  ON  PP.PROCESSSEGMENTID = TL.PROCESSSEGMENTID
+        WHERE   1 = 1    
+        AND     PD.PRODUCTDEFID = #{TARGET_PRODUCTDEFID}
+        AND     PD.PRODUCTDEFVERSION = #{TARGET_PRODUCTDEFVERSION}
+        AND 	   PP.VALIDSTATE = 'Valid'
+        ORDER BY TO_NUMBER(PP.USERSEQUENCE) ASC
+    </select>
+       <select id="GetBomConsumableList" parameterType="map" resultType="hashmap">
+		    /* smh.bas.dao.BAS02500Dao.GetBomConsumableList */    
+				SELECT  BOM.MATERIALDEFID
+					      ,CD.CONSUMABLEDEFNAME AS MATERIALDEFNAME
+					      ,BOM.MATERIALDEFVERSION
+					      ,BOM.QTY
+					      ,BOM.PROCESSSEGMENTID
+					      ,BOM.PROCESSSEGMENTVERSION
+				FROM   BAS_BILLOFMATERIAL BOM
+				INNER  JOIN BAS_CONSUMABLEDEFINITION CD   ON     BOM.MATERIALDEFID = CD.CONSUMABLEDEFID
+				                                          					AND     BOM.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION
+				WHERE  1 = 1
+				AND    BOM.PRODUCTDEFID 						=	#{ITEMID}
+				AND    BOM.PRODUCTDEFVERSION 			= 	#{ITEMVERSION}
+				AND    BOM.PROCESSDEFID 						= 	#{PROCESSDEFID}
+				AND    BOM.PROCESSDEFVERSION 				= 	#{PROCESSDEFVERSION}
+				AND    BOM.PROCESSSEGMENTID 				= 	#{PROCESSSEGMENTID}
+          		AND    BOM.PROCESSSEGMENTVERSION 		= 	#{PROCESSSEGMENTVERSION}
+        		ORDER BY BOM.MATERIALDEFID ASC
+    </select>
+    
+       <select id="GetProcessSpecList" parameterType="map" resultType="hashmap">
+		    /* smh.bas.dao.BAS02500Dao.GetProcessSpecList */    
+					SELECT  PP.PROCESSSEGMENTID
+				    ,   SPD.SPECCLASSID
+				    ,   IR.INSPITEMID
+				    ,   IR.INSPITEMVERSION
+				    ,   COALESCE(DC.DICTIONARYNAME, II.INSPITEMNAME)    AS INSPITEM
+				    ,   SD.WORKCONDITION        AS LOCATION
+				    ,   SPD.CONTROLTYPE
+				    ,   TO_NUMBER(COALESCE(SPD.SL,  0))     AS SL	 --목표값
+                    ,   TO_NUMBER(COALESCE(SPD.USL, 0))     AS USL   --SPEC 상한
+                    ,   TO_NUMBER(COALESCE(SPD.LSL, 0))     AS LSL   --SPEC 하한
+                    ,   TO_NUMBER(COALESCE(SPD.UCL, 0))     AS UCL   --CONTROL LIMIT 상한값
+                    ,   TO_NUMBER(COALESCE(SPD.CL,  0))     AS CL    --CONTROL LIMIT 중앙값
+                    ,   TO_NUMBER(COALESCE(SPD.LCL, 0))     AS LCL   --CONTROL LIMIT 하한값
+                    ,   TO_NUMBER(COALESCE(SPD.UOL, 0))     AS UOL   --OUTLIER 상한값
+                    ,   TO_NUMBER(COALESCE(SPD.LOL, 0))     AS LOL   --OUTLIER 하한값
+            FROM    BAS_PRODUCTDEFINITION    PD
+            INNER JOIN BAS_PROCESSPATH       PP  ON  PD.PROCESSDEFID = PP.PROCESSDEFID
+                                                AND PD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+            INNER JOIN BAS_SPECATTRIBUTE     SA  ON  PP.PROCESSSEGMENTID = SA.PROCESSSEGMENTID
+            INNER JOIN BAS_INSPECTIONITEMREL IR  ON  PD.PRODUCTDEFID = IR.RESOURCEID
+                                                AND PD.PRODUCTDEFVERSION = IR.RESOURCEVERSION
+                                                AND PP.PROCESSSEGMENTID = IR.PROCESSSEGID
+                                                AND SA.INSPITEMID = IR.INSPITEMID
+            INNER JOIN BAS_SPECDEFINITION    SD  ON  IR.SPECCLASSID = SD.SPECCLASSID
+                                            AND IR.ENTERPRISEID = SD.ENTERPRISEID
+                                            AND IR.PLANTID = SD.PLANTID
+                                            AND IR.SPECSEQUENCE = SD.SPECSEQUENCE
+        INNER JOIN BAS_SPECDETAIL        SPD ON  SD.SPECSEQUENCE = SPD.SPECSEQUENCE
+                                            AND SD.SPECCLASSID = SPD.SPECCLASSID
+                                            AND SD.DEFAULTCHARTTYPE = SPD.CONTROLTYPE
+            LEFT JOIN BAS_INSPITEM           II  ON  IR.INSPITEMID = II.INSPITEMID
+                                                AND IR.INSPITEMVERSION = II.INSPITEMVERSION
+            LEFT JOIN CMD_DICTIONARY      DC  ON  II.INSPITEMNAME = DC.DICTIONARYID
+                              AND DC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}                                    
+            WHERE   1 = 1
+            AND     PD.PRODUCTDEFID = #{ITEMID}
+            AND     PD.PRODUCTDEFVERSION = #{ITEMVERSION}
+            AND     PP.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+            AND     PP.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+            ORDER BY IR.INSPITEMID
+    </select>
+    
+       <select id="GetBorDurableList" parameterType="map" resultType="hashmap">
+		    /* smh.bas.dao.BAS02500Dao.GetBorDurableList */    
+		SELECT BOR.RESOURCEID AS TOOLCODE
+			      ,COALESCE(DC.DICTIONARYNAME, DD.DURABLEDEFNAME) AS TOOLNAME
+			      ,BOR.RESOURCEVERSION AS DURABLEDEFVERSION
+			      ,DD.DURABLETYPE
+			      ,BOR.PRODUCTDEFID
+			      ,BOR.PRODUCTDEFVERSION
+			      ,IM.ITEMNAME
+			      ,RESOURCETYPE
+			FROM   BAS_BILLOFRESOURCE BOR
+			INNER  JOIN TOM_DURABLEDEFINITION DD                  ON     BOR.RESOURCEID = DD.DURABLEDEFID
+			                                                      AND    BOR.RESOURCEVERSION = DD.DURABLEDEFVERSION
+			LEFT    JOIN BAS_ITEMMASTER       IM                  ON     BOR.PRODUCTDEFID         = IM.ITEMID
+					                                                  AND    BOR.PRODUCTDEFVERSION    = IM.ITEMVERSION
+					                                                  AND    BOR.ENTERPRISEID         = IM.ENTERPRISEID         
+			LEFT   JOIN CMD_DICTIONARY DC                         ON     DD.DURABLEDEFNAME = DC.DICTIONARYID
+			                                                      AND    DC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			 WHERE  	1 = 1
+				AND   BOR.PRODUCTDEFID 					= #{ITEMID}
+                AND   BOR.PRODUCTDEFVERSION 			= #{ITEMVERSION}
+                AND   BOR.PROCESSDEFID 					= #{PROCESSDEFID}
+                AND   BOR.PROCESSDEFVERSION 			= #{PROCESSDEFVERSION}
+                AND   BOR.PROCESSSEGMENTID 			= #{PROCESSSEGMENTID}
+                AND   BOR.PROCESSSEGMENTVERSION 	= #{PROCESSSEGMENTVERSION}
+				AND   RESOURCETYPE = 'Durable'
+    </select>
+    
+	<delete id="deleteGovernance" parameterType="map">
+ 	 /* smh.bas.dao.BAS02500Dao.deleteGovernance */
+ 	 	DELETE FROM BAS_GOVERNANCE WHERE GOVERNANCENO = #{GOVERNANCENO} 	 					    
+    </delete>
+    
+	<delete id="deleteRunningChange" parameterType="map">
+ 	 /* smh.bas.dao.BAS02500Dao.deleteRunningChange */
+ 	 	DELETE FROM QAM_CHANGEPOINT WHERE CHANGEPOINTNO = #{CHANGEPOINTNO} 	 					    
+    </delete>
+
+	<delete id="DeleteGovernanceData" parameterType="map">
+ 	 /* smh.bas.dao.BAS02500Dao.DeleteGovernanceData */
+ 	 	DELETE FROM BAS_GOVERNANCE 
+ 	 	WHERE PRODUCTDEFID = #{PRODUCTDEFID}
+ 	 		AND  	 PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+ 	 		AND  	 RCPRODUCTDEFID = #{RCPRODUCTDEFID}
+ 	 		AND  	 RCPRODUCTDEFVERSION = #{RCPRODUCTDEFVERSION}		
+ 	 		AND    (WORKCLASS IS NULL OR WORKCLASS != 'Same')			    
+    </delete>
+    
+	<insert id="InsertGovernanceData" parameterType="map">
+ 	 /* smh.bas.dao.BAS02500Dao.InsertGovernanceData */
+MERGE INTO BAS_GOVERNANCE BR
+    	USING DUAL
+    	        	ON ( BR.GOVERNANCENO = #{GOVERNANCENO})
+              WHEN  MATCHED THEN  
+              UPDATE SET
+ 	 		PRODUCTCLASS 	= 	(SELECT PRODUCTIONTYPE 
+ 	 									FROM BAS_ITEMMASTER BI
+									   WHERE BI.ITEMID = #{RCPRODUCTDEFID} 
+									   	  AND BI.ITEMVERSION = #{RCPRODUCTDEFVERSION}
+									   	  AND BI.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+									   	  AND ROWNUM = 1)
+							,CONFIRMDATE = DECODE(#{STATUS}, 'Confirm', SYSDATE, 'Cancel', null)
+							,REASON							=	#{CHANGEREASON}
+							,SPECPERSON					=	#{SPECPERSON}
+							,IMPLEMENTATIONTYPE		=	#{IMPLEMENTATIONTYPE}
+							,CUSTOMERID					=	#{CUSTOMERID}
+							,PRODUCTDEFID					=	#{PRODUCTDEFID}
+							,PRODUCTDEFVERSION			=	#{PRODUCTDEFVERSION}
+							,RCPRODUCTDEFID				=	#{RCPRODUCTDEFID}
+							,RCPRODUCTDEFVERSION		= 	#{RCPRODUCTDEFVERSION}
+							,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = #{LASTTXNID}     
+					        ,LASTTXNUSER = #{MODIFIER}     
+					        ,LASTTXNTIME = SYSDATE   
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+			WHEN NOT MATCHED THEN
+			INSERT 
+			 	 	(GOVERNANCENO
+					,GOVERNANCETYPE
+					,DEPARTMENT
+					,ENTERPRISEID
+					,REASON
+					,PLANTID
+					,SPECPERSON
+					,STATUS
+					,REQUESTDATE
+					,IMPLEMENTATIONTYPE
+					,PCRNO
+					,PCRREQUESTER
+					,PCRDATE
+					,CUSTOMERID
+					,PRODUCTDEFID
+					,PRODUCTDEFVERSION
+					,RCPRODUCTDEFID
+					,RCPRODUCTDEFVERSION
+					,PRODUCTCLASS
+					,CREATOR
+					,CREATEDTIME
+					,MODIFIER
+					,MODIFIEDTIME
+					,LASTTXNHISTKEY
+					,LASTTXNID
+					,LASTTXNUSER
+					,LASTTXNTIME
+					,LASTTXNCOMMENT
+					,VALIDSTATE
+					)
+		VALUES		
+		(#{GOVERNANCENO}
+		,'RunningChange'
+		,#{REQUESTDEPARTMENT}
+		,#{SESSION_ENTERPRISEID}
+		,#{CHANGEREASON}
+		,#{SESSION_SITETYPE}		
+		,#{SPECPERSON}		
+		,#{STATUS}		
+		,SYSDATE
+		,#{IMPLEMENTATIONTYPE}
+		,#{CHANGEPOINTNO}
+		,#{REQUESTORID}
+		,#{REQUESTDATE}
+		,#{CUSTOMERID}
+		,#{PRODUCTDEFID}
+		,#{PRODUCTDEFVERSION}
+		,#{RCPRODUCTDEFID}
+		,#{RCPRODUCTDEFVERSION}		
+		,(SELECT PRODUCTIONTYPE FROM BAS_ITEMMASTER BI
+		   WHERE BI.ITEMID = #{RCPRODUCTDEFID} 
+		   	  AND BI.ITEMVERSION = #{RCPRODUCTDEFVERSION}
+		   	  AND BI.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+		   	  AND ROWNUM = 1		   	  
+		   )
+		,#{CREATOR}
+		,SYSDATE
+		,#{MODIFIER}
+		,SYSDATE
+		,#{LASTTXNHISTKEY}
+		,#{LASTTXNID}
+		,#{LASTTXNUSER}
+		,SYSDATE
+		,#{LASTTXNCOMMENT}
+		,'Valid'
+		) 		
+    </insert> 
+ 
+     
+	<update id="UpdateGovernanceData" parameterType="map">
+ 	 /* smh.bas.dao.BAS02500Dao.UpdateGovernanceData */
+ 	 	UPDATE BAS_GOVERNANCE SET
+ 	 		STATUS 				= DECODE(#{STATUS}, 'Cancel', 'Request', #{STATUS})
+ 	 		,CONFIRMDATE = DECODE(#{STATUS}, 'Confirm', SYSDATE, 'Cancel', null)
+			,MODIFIER = #{MODIFIER}     
+	        ,MODIFIEDTIME = SYSDATE     
+	        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+	        ,LASTTXNID = #{LASTTXNID}     
+	        ,LASTTXNUSER = #{MODIFIER}     
+	        ,LASTTXNTIME = SYSDATE   
+	        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+ 	 	WHERE GOVERNANCENO = #{GOVERNANCENO} 	 					    
+    </update>
+    
+     <select id="GetSubAssemblyBOMList" parameterType="map" resultType="hashmap">
+		    /* smh.bas.dao.BAS02500Dao.GetSubAssemblyBOMList */    
+			WITH  BOMTREE 
+               ( 
+                         ASSEMBLYITEMID
+                        ,ASSEMBLYITEMVERSION
+                        ,ASSEMBLYITEMBOMID
+                ) AS 
+                  (
+                           SELECT  *
+                            from (
+                                 SELECT
+                                     P.ASSEMBLYITEMID       ASSEMBLYITEMID
+                                    ,P.ASSEMBLYITEMVERSION  ASSEMBLYITEMVERSION
+                                    ,A.ASSEMBLYBOMID        ASSEMBLYITEMBOMID_HALF
+                                 FROM
+                                    BAS_BOMCOMPONENT               A
+                                 INNER JOIN BAS_ASSEMBLYBILLOFMATERIAL P   ON  P.ASSEMBLYBOMID = A.ASSEMBLYBOMID
+                                                                         AND  P.ENTERPRISEID  = A.ENTERPRISEID
+                                 WHERE P.ENTERPRISEID   =#{SESSION_ENTERPRISEID} 
+                                   AND P.ASSEMBLYITEMID = #{RCPRODUCTDEFID} 
+                                   AND P.ASSEMBLYITEMVERSION =#{RCPRODUCTDEFVERSION} 
+                                   AND ROWNUM = 1 
+                                ) A
+                        UNION all  
+                        SELECT
+                            A.COMPONENTITEMID      ASSEMBLYITEMID
+                           ,A.COMPONENTITEMVERSION ASSEMBLYITEMVERSION
+                           ,A.COMPONENTBOMID       ASSEMBLYITEMBOMID
+                        FROM
+                           BAS_BOMCOMPONENT A
+                        INNER JOIN BAS_ASSEMBLYBILLOFMATERIAL P ON
+                               P.ASSEMBLYBOMID = A.ASSEMBLYBOMID
+                        INNER JOIN BAS_OPERATION  OP  ON  A.OPERATIONID = OP.OPERATIONID
+                        INNER JOIN BOMTREE BG ON
+                               P.ASSEMBLYITEMID      = BG.ASSEMBLYITEMID 
+                           AND P.ASSEMBLYITEMVERSION = BG.ASSEMBLYITEMVERSION 
+                   )
+                  SELECT
+                        BT.ASSEMBLYITEMID
+                       ,BT.ASSEMBLYITEMVERSION
+                 FROM  BOMTREE BT
+                 INNER JOIN BAS_ITEMMASTER IM  ON IM.ITEMID = BT.ASSEMBLYITEMID 
+                                             AND IM.ITEMVERSION = BT.ASSEMBLYITEMVERSION
+                                             AND IM.MASTERDATACLASSID = 'SubAssembly'
+        WHERE BT.ASSEMBLYITEMVERSION = #{RCPRODUCTDEFVERSION} 
+    </select>
+    
+  <select id="selectGovernanceData" parameterType="map" resultType="hashmap">
+		    /* smh.bas.dao.BAS02500Dao.selectGovernanceData */    
+		SELECT S.PRODUCTDEFID
+		       ,S.PRODUCTDEFVERSION
+		       ,IM1.ITEMNAME
+		       ,S.RCPRODUCTDEFID
+		       ,S.RCPRODUCTDEFVERSION
+		       ,IM1.ITEMNAME AS RCITEMNAME
+		       ,S.GOVERNANCENO
+		FROM   BAS_GOVERNANCE S
+		  LEFT OUTER JOIN BAS_ITEMMASTER IM1 ON IM1.ITEMID = S.PRODUCTDEFID             
+		                                     AND IM1.ITEMVERSION = S.PRODUCTDEFVERSION
+		  LEFT OUTER JOIN BAS_ITEMMASTER IM2 ON IM2.ITEMID = S.RCPRODUCTDEFID             
+		                                     AND IM2.ITEMVERSION = S.RCPRODUCTDEFVERSION
+		WHERE  1=1
+		  AND (S.WORKCLASS IS NULL OR S.WORKCLASS != 'Same')
+		  AND S.GOVERNANCETYPE = 'RunningChange'
+		  AND S.GOVERNANCENO = #{GOVERNANCENO}
+
+    </select>
+</mapper>

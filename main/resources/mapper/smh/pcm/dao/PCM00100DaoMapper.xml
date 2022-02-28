@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM00100Dao">
+
+
+    <!-- S/O LIST--> 
+     <select id="selectSalesOrderList" parameterType="map" resultType="hashmap">
+             SELECT TO_CHAR(SO.SALESORDERDATE, 'YYYYMMDD') AS SALESORDERDATE
+                  , SO.SALESORDERID
+                  , SO.LINENO
+                  , SO.PRODUCTDEFID
+                  , SO.PRODUCTDEFVERSION
+                  , PD.PRODUCTDEFNAME AS PRODUCTDEFNAME
+                  , SO.CUSTOMERID
+                  , CTM.CUSTOMERNAME
+                  , PCM_EXCHANGE_FN(UP.PLANTID, SYSDATE, UP.CURRENCY_CODE, UP.UNITPRICE) AS  UNITPRICE  
+                  , SO.ORDERQTY
+                  , SO.JOBTYPE
+                  , DC1.DICTIONARYNAME AS JOBTYPENAME
+                  , SO.PRODUCTIONTYPE
+                  , DC2.DICTIONARYNAME AS PRODUCTIONTYPENAME
+                  , TO_CHAR(SO.DELIVERYDATE, 'YYYYMMDD') AS DELIVERYDATE
+                  , PI.SALESMAN  AS SALESCHARGE
+                  , US3.USER_NM  AS SALESCHARGENAME
+                  , PI.SPECIFICATIONMAN
+                  , US4.USER_NM  AS SPECIFICATIONCHARGENAME
+                  , PD.RTRSHT
+                  , PD.LAYER
+                  , PD.PCSSIZEXAXIS
+                  , PD.PCSSIZEYAXIS
+                  , PD.PCSPNL
+                  , PD.PNLMM
+                  , PD.PCSMM
+                  , SO.PLANTID
+                  , '' AS ORIGINALLINENO
+                  , CASE WHEN SOA.SALESORDERID IS NULL THEN 'N' 
+                         ELSE 'Y' END AS ISREGAPPROVAL
+                  , NVL(SOA.APPROVALQTY,0) AS APPROVALQTY
+                  , NVL(SO.ORDERQTY,0) - NVL(SOA.APPROVALQTY,0) AS RESIDUALQTY
+                  , SO.INVENTORYCATEGORY
+                  , SO.STATE
+                  , SO.ENTERPRISEID
+               FROM BAS_SALESORDER SO
+    LEFT OUTER JOIN BAS_PRODUCTDEFINITION PD ON SO.PRODUCTDEFID 		= PD.PRODUCTDEFID
+                                            AND SO.PRODUCTDEFVERSION 	= PD.PRODUCTDEFVERSION
+    LEFT OUTER JOIN BAS_PRODUCTITEMSPEC   PI ON PD.PRODUCTDEFID 		= PI.ITEMID
+                                            AND PD.PRODUCTDEFVERSION 	= PI.ITEMVERSION
+    LEFT OUTER JOIN BAS_CUSTOMER  CTM        ON SO.CUSTOMERID 			= CTM.CUSTOMERID
+    LEFT OUTER JOIN CMD_LOOKUP_VALUES  CD1   ON SO.JOBTYPE 				= CD1.LOOKUP_CODE
+                                            AND CD1.LOOKUP_TYPE 		= 'JobType'
+    LEFT OUTER JOIN CMD_DICTIONARY DC1       ON CD1.DICTIONARYID 		= DC1.DICTIONARYID
+                                            AND DC1.LANGUAGETYPE 		= #{LANGUAGETYPE}
+    LEFT OUTER JOIN CMD_LOOKUP_VALUES  CD2   ON SO.PRODUCTIONTYPE 		= CD2.LOOKUP_CODE
+                                            AND CD2.LOOKUP_TYPE 		= 'ProductionType'
+    LEFT OUTER JOIN CMD_DICTIONARY DC2       ON CD2.DICTIONARYID 		= DC2.DICTIONARYID
+                                            AND DC2.LANGUAGETYPE 		= #{LANGUAGETYPE}
+    LEFT OUTER JOIN CMD_USERS  US1           ON SO.SALESCHARGE 			= US1.USER_ID
+    LEFT OUTER JOIN CMD_USERS  US2           ON SO.SPECIFICATIONCHARGE 	= US2.USER_ID
+    LEFT OUTER JOIN CMD_USERS  US3           ON PI.SALESMAN 	        = US3.USER_ID
+    LEFT OUTER JOIN CMD_USERS  US4           ON PI.SPECIFICATIONMAN 	= US4.USER_ID
+    LEFT OUTER JOIN BAS_UNITPRICEFORMES UP   ON SO.PRODUCTDEFID         = UP.PRODUCTDEFID 
+                                            AND SO.PRODUCTDEFVERSION    = UP.PRODUCTDEFVERSION 
+                                            AND SYSDATE BETWEEN UP.APPLY_START_DATE AND NVL(UP.APPLY_END_DATE, TO_DATE('9999-12-31 23:59:59','YYYY-MM-DD HH24:MI:SS'))    
+    LEFT OUTER JOIN (    SELECT SALESORDERID
+                              , ORG_LINENO    AS LINENO
+                              , SUM(ORDERQTY) AS APPROVALQTY
+                           FROM BAS_SALEORDERAPPROVAL
+                       GROUP BY SALESORDERID, ORG_LINENO
+                    )  SOA                 ON SO.SALESORDERID = SOA.SALESORDERID
+                                          AND SO.LINENO = SOA.LINENO
+              WHERE 1=1
+     <if test = "PLANTID != null and PLANTID !='' ">  
+                AND SO.PLANTID = #{PLANTID}
+     </if>
+     <if test = "ITEMID != null and ITEMID !='' ">    
+                  AND SO.PRODUCTDEFID IN ( SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+                                            FROM  (SELECT  #{ITEMID} AS ORG_DATA FROM DUAL)
+                                      CONNECT BY  INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+                                         )  
+          
+     </if>
+     <if test = "PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' "> 
+                AND SO.PRODUCTIONTYPE = #{PRODUCTIONTYPE}           /* 생산구분 */
+     </if>
+     <if test = "ISREGAPPROVAL != null and ISREGAPPROVAL !='' "> 
+                AND CASE WHEN SOA.SALESORDERID IS NULL THEN 'N' 
+                         ELSE 'Y' 
+                    END = #{ISREGAPPROVAL}                
+     </if>
+     <if test = "LINENO != null and LINENO !='' ">  
+                AND SO.LINENO = #{LINENO}
+     </if> 
+      <if test = "SALESORDERID != null and SALESORDERID !='' ">  
+                AND  SO.SALESORDERID = #{SALESORDERID}
+     </if> 
+                AND SO.SALESORDERDATE >= TO_DATE(#{PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+                AND SO.SALESORDERDATE  <![CDATA[<]]>  TO_DATE(#{PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+           ORDER BY SO.SALESORDERDATE
+                  , SO.SALESORDERID
+                  , LPAD(SO.LINENO, 5, '0')
+                 
+    </select>
+    
+    <select id="selectSalesOrderDo" parameterType="map" resultType="hashmap">
+		               SELECT '0' AS CHK
+		                    , SO.SALESORDERDATE
+		                    , SO.SALESORDERID
+		                    , SO.LINENO
+		                    , SO.ORG_LINENO
+		                    , SO.PRODUCTDEFID
+		                    , SO.PRODUCTDEFVERSION
+		                    , PD.PRODUCTDEFNAME AS PRODUCTDEFNAME
+		                    , SO.CUSTOMERID
+		                    , CTM.CUSTOMERNAME
+		                    , PCM_EXCHANGE_FN(UP.PLANTID, SYSDATE, UP.CURRENCY_CODE, UP.UNITPRICE) AS  UNITPRICE  
+		                    , SO.ORDERQTY
+		                    , SO.JOBTYPE
+		                    , DC1.DICTIONARYNAME AS JOBTYPENAME
+		                    , SO.PRODUCTIONTYPE
+		                    , DC2.DICTIONARYNAME AS PRODUCTIONTYPENAME
+		                    , TO_CHAR(SO.DELIVERYDATE, 'YYYY-MM-DD') AS DELIVERYDATE
+		                    , PI.SALESMAN  AS SALESCHARGE
+                            , US3.USER_NM  AS SALESCHARGENAME
+                            , PI.SPECIFICATIONMAN
+                            , US4.USER_NM  AS SPECIFICATIONCHARGENAME
+		                    , PD.RTRSHT
+		                    , PD.LAYER
+		                    , PD.PCSSIZEXAXIS
+		                    , PD.PCSSIZEYAXIS
+		                    , PD.PCSPNL
+		                    , PD.PNLMM
+		                    , PD.PCSMM
+		                    , SO.PLANTID
+		                    , '' AS ORIGINALLINENO
+		                    , SOM.ORDERQTY AS ORDERQTY2
+		                    , 0 AS PNL
+		                    , 0 AS MM
+		                    , NVL(SO.ISAPPROVAL,'N') ISAPPROVAL
+		                    , SO.CREATOR
+		                    , SO.INVENTORYCATEGORY
+		                    , SO.STATE
+		                    , SO.ENTERPRISEID
+		               FROM BAS_SALEORDERAPPROVAL SO
+		    LEFT OUTER JOIN BAS_PRODUCTDEFINITION PD    ON SO.PRODUCTDEFID         = PD.PRODUCTDEFID
+		                                               AND SO.PRODUCTDEFVERSION    = PD.PRODUCTDEFVERSION
+		    LEFT OUTER JOIN BAS_PRODUCTITEMSPEC   PI    ON PD.PRODUCTDEFID 		   = PI.ITEMID
+                                                       AND PD.PRODUCTDEFVERSION    = PI.ITEMVERSION
+		    LEFT OUTER JOIN BAS_CUSTOMER CTM            ON SO.CUSTOMERID           = CTM.CUSTOMERID
+		    LEFT OUTER JOIN CMD_LOOKUP_VALUES CD1       ON SO.JOBTYPE              = CD1.LOOKUP_CODE
+		                                               AND CD1.LOOKUP_TYPE         = 'JobType'
+		    LEFT OUTER JOIN CMD_DICTIONARY DC1          ON CD1.DICTIONARYID        = DC1.DICTIONARYID
+		                                               AND DC1.LANGUAGETYPE        = #{LANGUAGETYPE}
+		    LEFT OUTER JOIN CMD_LOOKUP_VALUES CD2       ON SO.PRODUCTIONTYPE       = CD2.LOOKUP_CODE
+		                                               AND CD2.LOOKUP_TYPE         = 'ProductionType'
+		    LEFT OUTER JOIN CMD_DICTIONARY DC2          ON CD2.DICTIONARYID        = DC2.DICTIONARYID
+		                                               AND DC2.LANGUAGETYPE        = #{LANGUAGETYPE}
+		    LEFT OUTER JOIN CMD_USERS  US1              ON SO.SALESCHARGE         = US1.USER_ID
+		    LEFT OUTER JOIN CMD_USERS  US2              ON SO.SPECIFICATIONCHARGE = US2.USER_ID
+            LEFT OUTER JOIN CMD_USERS  US3              ON PI.SALESMAN 	           = US3.USER_ID
+            LEFT OUTER JOIN CMD_USERS  US4              ON PI.SPECIFICATIONMAN 	   = US4.USER_ID		    
+		    LEFT OUTER JOIN BAS_SALESORDER SOM          ON SO.SALESORDERID = SOM.SALESORDERID
+		                                               AND SO.ORG_LINENO = SOM.LINENO
+		    LEFT OUTER JOIN BAS_UNITPRICEFORMES 		UP   ON SO.PRODUCTDEFID         = UP.PRODUCTDEFID 
+				                                        AND SO.PRODUCTDEFVERSION    = UP.PRODUCTDEFVERSION 
+				                                        AND SYSDATE BETWEEN UP.APPLY_START_DATE AND NVL(UP.APPLY_END_DATE, TO_DATE('9999-12-31 23:59:59','YYYY-MM-DD HH24:MI:SS'))
+		    WHERE SO.SALESORDERID = #{SALESORDERID}
+		      AND SO.LINENO LIKE  #{LINENO}<![CDATA[|| '.%']]>   
+		 ORDER BY LPAD(SO.LINENO, 5, '0')
+    </select>
+     <select id="selectProductVersionList" parameterType="map" resultType="hashmap">
+    		   SELECT PD.PRODUCTDEFID
+					, PD.PRODUCTDEFVERSION AS CODEID
+					, PD.PRODUCTDEFVERSION AS CODENAME
+					, PD.CUSTOMERID
+					, CTM.CUSTOMERNAME
+				FROM BAS_PRODUCTDEFINITION	PD
+	 LEFT OUTER JOIN BAS_CUSTOMER	CTM ON	PD.CUSTOMERID = CTM.CUSTOMERID
+			   WHERE PD.PRODUCTCLASSID    = 'Product'
+				 AND PD.PRODUCTDEFID      =  #{PRODUCTDEFID}
+				
+    </select>
+    
+    <update id="updateSalesOrderDo" parameterType="map">
+		 UPDATE BAS_SALEORDERAPPROVAL
+		        SET PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				  , UNITPRICE         = #{UNITPRICE}
+				  , ORDERQTY          = #{ORDERQTY}
+				  , ISCONFIRMATION    = 'N'
+				  , DELIVERYDATE      = #{DELIVERYDATE}
+				  , LASTTXNID         = #{LASTTXNID}
+				  , MODIFIEDTIME      = SYSDATE
+				  , MODIFIER          = #{MODIFIER}
+				  , LASTTXNHISTKEY    = #{LASTTXNHISTKEY}
+				  , LASTTXNUSER       = #{MODIFIER}
+				  , LASTTXNTIME       = SYSDATE
+			  WHERE SALESORDERID      = #{SALESORDERID} 		
+		        AND LINENO            = #{LINENO}
+		        AND PLANTID           = #{PLANTID}
+		        AND ENTERPRISEID      = #{ENTERPRISEID}
+		            
+    </update>
+    
+     <insert id="insertSalesOrderDo" parameterType="map">
+         INSERT INTO BAS_SALEORDERAPPROVAL
+         (   SALESORDERID
+           , LINENO
+           , ENTERPRISEID
+           , PLANTID
+           , PRODUCTDEFVERSION
+           , PRODUCTDEFID
+           , CUSTOMERID
+           , INVENTORYCATEGORY
+           , UNITPRICE
+           , ORDERQTY
+           , JOBTYPE
+           , PRODUCTIONTYPE
+           , SALESCHARGE
+           , SPECIFICATIONCHARGE
+           , STATE
+           , ISAPPROVAL
+           , ISCONFIRMATION
+           , DELIVERYDATE
+           , SALESORDERDATE
+           , VALIDSTATE
+           , LASTTXNID
+           , CREATOR
+           , CREATEDTIME
+           , LASTTXNHISTKEY
+           , LASTTXNUSER
+           , LASTTXNTIME
+           , ORG_LINENO
+        ) VALUES(  #{SALESORDERID}
+                 , #{LINENO}
+                 , #{ENTERPRISEID}
+                 , #{PLANTID}
+                 , #{PRODUCTDEFVERSION}
+                 , #{PRODUCTDEFID}
+                 , #{CUSTOMERID}
+                 , #{INVENTORYCATEGORY}
+                 , #{UNITPRICE}
+                 , #{ORDERQTY}
+                 , #{JOBTYPE}
+                 , #{PRODUCTIONTYPE}
+                 , #{SALESCHARGE}
+                 , #{SPECIFICATIONCHARGE}  
+                 , #{STATE}                
+                 , #{ISAPPROVAL}
+                 , 'N'
+                 , TO_DATE(#{DELIVERYDATE}, 'YYYYMMDD')
+                 , #{SALESORDERDATE}
+                 , 'Valid'
+                 , #{LASTTXNID}
+                 , #{CREATOR}
+                 , SYSDATE
+                 , #{LASTTXNHISTKEY}
+                 , #{CREATOR}
+                 , SYSDATE
+                 , #{ORG_LINENO}
+               )
+		            
+    </insert>
+    <delete id="deleteSalesOrderDo" parameterType="map">
+    	DELETE FROM BAS_SALEORDERAPPROVAL
+    	 WHERE SALESORDERID      = #{SALESORDERID} 		
+		   AND LINENO            = #{LINENO}
+		   AND PLANTID           = #{PLANTID}
+		   AND ENTERPRISEID      = #{ENTERPRISEID}
+    </delete>
+    <delete id="deleteMfmProductionOrder" parameterType="map">
+    	DELETE FROM MFM_PRODUCTIONORDER
+    	 WHERE PRODUCTIONORDERID = #{SALESORDERID} 		
+		   AND LINENO            = #{LINENO}
+		
+    </delete>    
+    <update id="updateSalesOrder" parameterType="map">
+        UPDATE BAS_SALESORDER 
+           SET ISALLOCATE     = 'N'
+             , LASTTXNID      = #{LASTTXNID}
+             , MODIFIEDTIME   = SYSDATE
+             , MODIFIER       = #{MODIFIER}
+             , LASTTXNHISTKEY = #{LASTTXNHISTKEY}
+             , LASTTXNUSER    = #{MODIFIER}
+             , LASTTXNTIME    = SYSDATE 
+         WHERE SALESORDERID   = #{SALESORDERID} 
+           AND LINENO         = #{ORG_LINENO} 
+           AND ENTERPRISEID   = #{ENTERPRISEID} 
+           AND PLANTID        = #{PLANTID}
+    </update>
+ 
+    <select id="selectSalesOrderApproval" parameterType="map" resultType="hashmap">
+           SELECT ROW_NUMBER() OVER(PARTITION BY SOA.SALESORDERID , LPAD(SOA.GRPLINENO, 5, '0')  ORDER BY SOA.SALESORDERID , LPAD(SOA.GRPLINENO, 5, '0'), LPAD(SOA.LINENO, 5, '0'))  AS NO
+                , SOA.SALESORDERID
+                , SOA.GRPLINENO
+                , SOA.LINENO 
+                , SOA.PRODUCTDEFID 
+                , SOA.PRODUCTDEFVERSION 
+                , PD.PRODUCTDEFNAME 
+                , SO.PRODUCTIONTYPE
+                , SO.CUSTOMERID
+                , CST.CUSTOMERNAME
+                , PCM_EXCHANGE_FN(UP.PLANTID, SYSDATE, UP.CURRENCY_CODE, UP.UNITPRICE) AS  UNITPRICE  
+                , SOA.ORDERQTY    AS ORDERQTY
+                , NVL(SOA.ORDERQTY / PD.PCSPNL,0) AS PNL
+                , NVL(SOA.ORDERQTY / PD.PCSPNL,0) AS MM
+                , SOA.ORDERAMT AS SALESAMT
+                , SO.SALESORDERDATE
+                , PI.SALESMAN  AS SALESCHARGE
+                , US4.USER_NM  AS SALESCHARGENAME
+                , SO.DELIVERYDATE
+                , SO.CREATEDTIME
+                , SO.CREATOR
+                , US2.USER_NM  AS CREATORNAME
+                , SO.SPECAPPROVALDATE
+                , CASE WHEN SO.SPECAPPROVALDATE IS NULL THEN NULL
+                       ELSE SO.LASTTXNUSER END AS APPROVER
+                , CASE WHEN SO.SPECAPPROVALDATE IS NULL THEN NULL
+                       ELSE US3.USER_NM END  AS APPROVERNAME
+                , DECODE(NVL(SO.ISAPPROVAL,'N'),'N','',SO.ISAPPROVAL) AS ISAPPROVAL
+             FROM ( SELECT SOA.SALESORDERID
+                         , SOA.PRODUCTDEFID
+                         , SOA.PRODUCTDEFVERSION
+                         , SOA.ORG_LINENO  AS GRPLINENO
+                         , SOA.LINENO
+                         , SUM(SOA.ORDERQTY) AS ORDERQTY
+                         , SUM(SOA.ORDERQTY*SOA.UNITPRICE) AS ORDERAMT
+                      FROM BAS_SALEORDERAPPROVAL SOA
+                     WHERE SOA.ORG_LINENO IS NOT NULL
+                 <if test = "SALESORDERID != null and SALESORDERID !='' ">  
+                       AND  SOA.SALESORDERID = #{SALESORDERID}
+                </if>
+                <if test = "ITEMID != null and ITEMID !='' ">    
+                       AND SOA.PRODUCTDEFID IN ( SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+                                                   FROM  (SELECT  #{ITEMID} AS ORG_DATA FROM DUAL)
+                                             CONNECT BY  INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+                                               )   
+                     
+                </if>
+                <if test = "PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' "> 
+                       AND  SOA.PRODUCTIONTYPE = #{PRODUCTIONTYPE}           /* 생산구분 */
+                </if>
+                <if test = "LINENO != null and LINENO !='' ">  
+                       AND SOA.LINENO = #{LINENO}
+                </if>
+                       AND SOA.SALESORDERDATE >= TO_DATE(#{PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+                       AND SOA.SALESORDERDATE  <![CDATA[<]]>  TO_DATE(#{PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+                  GROUP BY SOA.SALESORDERID 
+                         , SOA.PRODUCTDEFID 
+                         , SOA.PRODUCTDEFVERSION 
+                         , SOA.ORG_LINENO
+                         , SOA.LINENO
+                 
+                  ) SOA
+    LEFT OUTER JOIN BAS_SALEORDERAPPROVAL SO ON SOA.SALESORDERID      = SO.SALESORDERID
+                                            AND SOA.LINENO            = SO.LINENO
+    LEFT OUTER JOIN BAS_PRODUCTDEFINITION PD ON SOA.PRODUCTDEFID      = PD.PRODUCTDEFID
+                                            AND SOA.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+    LEFT OUTER JOIN BAS_PRODUCTITEMSPEC   PI ON PD.PRODUCTDEFID 	  = PI.ITEMID
+                                            AND PD.PRODUCTDEFVERSION  = PI.ITEMVERSION
+    LEFT OUTER JOIN BAS_CUSTOMER  CST        ON SO.CUSTOMERID         = CST.CUSTOMERID
+    LEFT OUTER JOIN CMD_USERS   US1          ON SO.SALESCHARGE        = US1.USER_ID
+    LEFT OUTER JOIN CMD_USERS   US2          ON SO.CREATOR            = US2.USER_ID
+    LEFT OUTER JOIN CMD_USERS   US3          ON SO.LASTTXNUSER        = US3.USER_ID
+    LEFT OUTER JOIN CMD_USERS   US4          ON PI.SALESMAN 	      = US4.USER_ID
+    LEFT OUTER JOIN CMD_USERS   US5          ON PI.SPECIFICATIONMAN   = US5.USER_ID
+    LEFT OUTER JOIN BAS_UNITPRICEFORMES 		UP   ON SO.PRODUCTDEFID         = UP.PRODUCTDEFID 
+	                                        AND SO.PRODUCTDEFVERSION    = UP.PRODUCTDEFVERSION 
+	                                        AND SYSDATE BETWEEN UP.APPLY_START_DATE AND NVL(UP.APPLY_END_DATE, TO_DATE('9999-12-31 23:59:59','YYYY-MM-DD HH24:MI:SS'))
+              WHERE ((SOA.SALESORDERID IS NOT NULL AND SOA.GRPLINENO IS NOT NULL) OR
+                     (SOA.SALESORDERID IS NULL AND SOA.GRPLINENO IS NULL AND SOA.LINENO IS NULL))
+    </select>
+    <select id="selectSalesOrderCnt" parameterType="map" resultType="int"> 
+       SELECT COUNT(*) AS CNT
+         FROM PCM_LOT
+        WHERE PRODUCTIONORDERID = #{SALESORDERID}
+          AND LINENO            = #{LINENO} 
+          AND PLANTID           = #{PLANTID}
+		  AND ENTERPRISEID      = #{ENTERPRISEID} 
+    </select>  
+</mapper>

@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mtm.dao.MTMCommonDao">
+<!-- TOM 공통 DAO (조회조건 및 Grid 컴포넌트) -->      
+    
+    <!-- Site 조회  -->
+    <select id="selectMtmPlantList" parameterType="map" resultType="hashmap">
+    	--
+		-- GetPlantList
+		-- Version:00001
+	   	
+	   	
+	   	<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+		    SELECT
+		         NULL AS CODE
+		        ,#{CMB_TYPE} AS NAME		                
+		    FROM DUAL
+		    UNION ALL
+		</if>
+	   	
+	   	
+	   	SELECT /* smh.mtm.dao.MTM00001Dao.selectMtmPlantList */
+	      		PLANTID		AS CODE,
+	      		PLANTNAME	AS NAME
+	    FROM BAS_PLANT
+	   	WHERE (
+	   		  ENTERPRISEID = #{ENTERPRISEID} 
+	   		  OR 
+	   		  UPPER(ENTERPRISEID) LIKE '%' || UPPER(#{ENTERPRISEID}) || '%'
+	   		  )
+	    AND VALIDSTATE = 'Valid'
+	</select>
+	
+	
+	<!-- 자재관리 자재그룹코드 조회  -->
+    <select id="selectMtmMtrGrpCodeList" parameterType="map" resultType="hashmap">
+    	--
+	    --GetConsumableclassListByCsm
+	    --Version:10001
+	    
+	    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+		    SELECT
+		         NULL AS CODE
+		        ,#{CMB_TYPE} AS NAME		                
+		    FROM DUAL
+		    UNION ALL
+		</if>
+	    
+		SELECT	/* smh.mtm.dao.MTM00001Dao.selectMtmMtrGrpCodeList */
+				SCD.CONSUMABLECLASSID    	AS CODE
+			,	NVL(DIC.DICTIONARYNAME,SCD.CONSUMABLECLASSID)   AS NAME
+		FROM 	BAS_CONSUMABLECLASS     SCD
+		LEFT 	OUTER JOIN CMD_DICTIONARY	DIC	ON	DIC.DICTIONARYID = SCD.CONSUMABLECLASSNAME
+		                                     	AND	DIC.LANGUAGETYPE =  #{SESSION_LANGUAGETYPE}
+		WHERE	1=1
+		AND		SCD.VALIDSTATE   = 'Valid'
+	</select>
+	
+	<!-- 자재 버전 -->
+	<select id="selectMtmMtrVerList" parameterType="map" resultType="hashmap">
+    	--
+		-- GetConsumabledefinitionVersionByCsm
+		-- Version:10001
+		
+		<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+		    SELECT
+		         NULL AS CODE
+		        ,#{CMB_TYPE} AS NAME		                
+		    FROM DUAL
+		    UNION ALL
+		</if>
+		SELECT 	/* smh.mtm.dao.MTM00001Dao.selectMtmMtrVerList */
+				CONSUMABLEDEFVERSION 	   AS CODE
+			,	CONSUMABLEDEFVERSION       AS NAME
+		FROM 	BAS_CONSUMABLEDEFINITION     SCD
+		WHERE	1 = 1   
+		AND		CONSUMABLEDEFID= #{CONSUMABLEDEFID}
+		<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+	    	AND	ENTERPRISEID	= #{ENTERPRISEID}
+	    </if> 
+		
+		
+	</select>
+	
+	<!-- 창고명 팝업 -->
+	<select id="selectWhNmPopupList" parameterType="map" resultType="hashmap">
+    	--
+	    --GetWarehouseidListByCsm
+	    --Version:10001
+	    
+		SELECT
+				/* smh.mtm.dao.MTM00001Dao.selectWhNmPopupList */
+				
+				DISTINCT MWH.WAREHOUSEID
+			,	MWH.WAREHOUSENAME
+		<if test="USERID != null and USERID !='' ">
+			FROM    BAS_AREA           ARA 
+			INNER JOIN BAS_WAREHOUSE 	MWH ON  MWH.PLANTID      = ARA.PLANTID
+		    	                            				AND MWH.WAREHOUSEID  = ARA.WAREHOUSEID
+			INNER JOIN FN_AREA(#{USERID}) SAR	ON ARA.AREAID   			= SAR.AREAID		
+	    	     										AND ARA.ENTERPRISEID  	= SAR.ENTERPRISEID
+	        											AND ARA.PLANTID   		= SAR.PLANTID		    	                            				
+		</if>
+		<if test="USERID == null or USERID =='' ">
+			FROM    BAS_WAREHOUSE           MWH
+		</if>
+		
+		WHERE	1=1
+		
+		<if test="USERID != null and USERID !='' ">
+		AND		ARA.PLANTID      = #{P_PLANTID}
+		AND 		ARA.VALIDSTATE = 'Valid'
+		AND 		MWH.VALIDSTATE = 'Valid'
+		</if>
+		
+		<if test="USERID == null or USERID =='' ">
+		AND		MWH.PLANTID      = #{P_PLANTID}
+		AND 		MWH.VALIDSTATE = 'Valid'
+		</if>
+		
+		<if test="P_WAREHOUSENAME != null and P_WAREHOUSENAME !='' and !(P_WAREHOUSENAME eq '*'.toString()) ">
+			AND		(UPPER(MWH.WAREHOUSEID)         LIKE '%' || UPPER(#{P_WAREHOUSENAME}) || '%'
+		 	OR		 UPPER(MWH.WAREHOUSENAME) LIKE '%' || UPPER(#{P_WAREHOUSENAME}) || '%')
+		</if>
+		
+		ORDER BY MWH.WAREHOUSEID
+		
+	</select>
+	
+	
+	<!-- 자재명 팝업 조회  -->
+	<select id="selectConsumableList" parameterType="map" resultType="hashmap">
+    	--
+	    --GetConsumabledefinitionListByCsm
+	    --Version:10001
+		SELECT	/* smh.mtm.dao.MTM00001Dao.selectConsumableList */
+				SCD.CONSUMABLECLASSID
+			,	SCD.CONSUMABLEDEFID  
+			,	SCD.CONSUMABLEDEFVERSION
+			,	SCD.CONSUMABLEDEFNAME  AS CONSUMABLEDEFNAME
+			,	SCD.UNIT
+			,	SCD.ISLOTMNG
+		FROM 	BAS_CONSUMABLEDEFINITION     SCD
+		WHERE	1=1    			
+    			<if test="CONSUMABLECLASSID != null and CONSUMABLECLASSID !='' and !(CONSUMABLECLASSID eq '*'.toString()) ">
+					AND	SCD.CONSUMABLECLASSID =  #{CONSUMABLECLASSID}
+				</if>
+				<if test="CONSUMABLEDEFNAME != null and CONSUMABLEDEFNAME !='' and !(CONSUMABLEDEFNAME eq '*'.toString()) ">
+					AND		(UPPER(SCD.CONSUMABLEDEFID)   LIKE '%' || UPPER(#{CONSUMABLEDEFNAME}) || '%'
+				 	OR		 UPPER(SCD.CONSUMABLEDEFNAME) LIKE '%' || UPPER(#{CONSUMABLEDEFNAME}) || '%')
+				</if>
+				AND		SCD.VALIDSTATE   = 'Valid'
+	</select>
+	
+	
+	<!-- 요청 유형  -->
+	<select id="selectRequestType" parameterType="map" resultType="hashmap">
+	
+		<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+		    SELECT
+		         NULL AS CODE
+		        ,#{CMB_TYPE} AS NAME		                
+		    FROM DUAL
+		    UNION ALL
+		</if>
+		
+    	SELECT /* smh.mtm.dao.MTM00001Dao.selectRequestType */	
+			   CD.LOOKUP_CODE			AS CODE
+			 , DIC.DICTIONARYNAME		AS NAME
+		  FROM CMD_LOOKUP_VALUES		CD
+		  LEFT OUTER JOIN CMD_DICTIONARY   DIC ON  DIC.DICTIONARYID = CD.DICTIONARYID
+			                                  AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		 WHERE CD.LOOKUP_TYPE   = 'ConsumableRequestType'
+		   AND CD.LOOKUP_CODE  != 'RQ0000' 
+		   AND CD.ENABLED_FLAG  = 'Y'
+	</select>
+	
+	
+		
+	
+
+</mapper>

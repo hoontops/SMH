@@ -1,0 +1,481 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.tom.dao.TOM00800Dao">
+<!-- 치공구 이동출고 -->    
+
+	<!-- TAB1 Grid : 치공구 이동출고의 내역 목록을 조회한다. -->
+	<select id="selectMoveToolStatusListByToolList" parameterType="map" resultType="hashmap">
+		--
+		-- GetMoveToolStatusListByTool
+		-- Version:10001
+			SELECT
+					TO_CHAR(TMOV.SENDDATE,'YYYY-MM-DD HH24:MI:SS') AS SENDDATE		--출고일자
+				,	TMOV.TOOLMOVETYPE			AS TOOLMOVETYPEID		--이동구분코드
+				,	DICM.DICTIONARYNAME			AS TOOLMOVETYPE			--이동구분
+				,	TMOV.DURABLELOTID			AS TOOLNUMBER			--Tool번호
+				,	DCDF.DICTIONARYNAME			AS TOOLNAME				--Tool명칭
+				,	TMOV.PLANTID				AS SENDPLANTID			--출고SITE아이디
+				,	DCSD.DICTIONARYNAME			AS SENDPLANT			--출고SITE
+				,	TMOV.AREAID					AS SENDAREAID			--출고작업장아이읻
+				,	DCAS.DICTIONARYNAME			AS SENDAREA				--출고작업장
+				,	TMOV.TOPLANTID				AS RECEIPTPLANTID		--입고SITE아이디
+				,	DCRC.DICTIONARYNAME			AS RECEIPTPLANT			--입고SITE
+				,	TMOV.TOAREAID				AS RECEIPTAREAID		--입고작업장아이디
+				,	DCAC.DICTIONARYNAME			AS RECEIPTAREA			--입고작업장
+				
+				,	NVL(SAR.ISMODIFY, 'N') 		AS ISMOIDFY
+				,	TO_CHAR(TMOV.RECEIPTDATE,'YYYY-MM-DD') AS RECEIPTDATE --입고일
+				,	TMOV.RECEIPTUSER			AS RECEIPTUSERID		--입고자아이디
+				,	USRC.USER_NM				AS RECEIPTUSER			--입고자
+				,	TMOV.SENDUSER				AS SENDUSERID			--출고자아이디
+				,	USRS.USER_NM				AS SENDUSER				--출고자				
+				,	DRDF.DURABLECLASSID			AS TOOLTYPEID
+				
+				,	FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLTYPE				--Tool구분
+				,	DRDF.FORM					AS TOOLFORMCODE
+				,	FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS TOOLFORM	--Tool형식
+				,   DRDF.TOOLKIND				AS TOOLKINDID
+				,	FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND --TOOL종류
+				
+				,	DRLT.DURABLEDEFID					AS DURABLEDEFID
+				,	DRLT.DURABLEDEFVERSION			AS DURABLEDEFVERSION
+				
+				,	'0'							AS CHK
+			FROM	TOM_TOOLMOVE						TMOV
+			INNER JOIN TOM_DURABLELOT				DRLT	ON	TMOV.DURABLELOTID		= DRLT.DURABLELOTID
+			INNER JOIN TOM_DURABLEDEFINITION	DRDF	ON	DRLT.DURABLEDEFID		= DRDF.DURABLEDEFID					
+																		AND	DRLT.DURABLEDEFVERSION	= DRDF.DURABLEDEFVERSION
+			INNER JOIN CMD_DICTIONARY				DCDF	ON	DRDF.DURABLEDEFNAME		= DCDF.DICTIONARYID
+																		AND DCDF.LANGUAGETYPE		= #{LANGUAGETYPE}
+																		AND  DCDF.USE_YN                = 'Y'
+			LEFT OUTER JOIN CMD_LOOKUP_VALUES	CDMV	ON	TMOV.TOOLMOVETYPE		= CDMV.LOOKUP_CODE
+																		AND CDMV.LOOKUP_TYPE		= 'ToolMoveType'
+			LEFT OUTER JOIN CMD_DICTIONARY		DICM	ON	CDMV.DICTIONARYID		= DICM.DICTIONARYID
+																		--AND	DICM.USE_YN				= 'Y'
+																		AND	DICM.LANGUAGETYPE		= #{LANGUAGETYPE}
+			LEFT OUTER JOIN BAS_PLANT				PTSD	ON	TMOV.PLANTID			= PTSD.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY		DCSD	ON	PTSD.PLANTNAME			= DCSD.DICTIONARYID
+																		AND	DCSD.LANGUAGETYPE		= #{LANGUAGETYPE}
+																		--AND	DCSD.USE_YN				= 'Y'
+			LEFT OUTER JOIN BAS_AREA					ARSD	ON	TMOV.AREAID				= ARSD.AREAID
+			LEFT OUTER JOIN CMD_DICTIONARY		DCAS	ON	ARSD.AREANAME			= DCAS.DICTIONARYID
+																		AND	DCAS.LANGUAGETYPE		= #{LANGUAGETYPE}
+																		AND	DCAS.USE_YN				= 'Y'
+			LEFT OUTER JOIN BAS_PLANT				PTRC	ON	TMOV.TOPLANTID			= PTRC.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY		DCRC	ON	PTRC.PLANTNAME			= DCRC.DICTIONARYID
+																		AND	DCRC.LANGUAGETYPE		= #{LANGUAGETYPE}
+																		--AND	DCRC.USE_YN				= 'Y'
+			LEFT OUTER JOIN BAS_AREA					ARRC	ON	TMOV.TOAREAID			= ARRC.AREAID
+			LEFT OUTER JOIN CMD_DICTIONARY		DCAC	ON	ARRC.AREANAME			= DCAC.DICTIONARYID
+																		AND	DCAC.LANGUAGETYPE		= #{LANGUAGETYPE}
+																		AND	DCAC.USE_YN				= 'Y'
+			LEFT OUTER JOIN CMD_USERS				USRC	ON	TMOV.RECEIPTUSER			= USRC.USER_ID		--입고자
+			LEFT OUTER JOIN CMD_USERS				USRS	ON	TMOV.SENDUSER			= USRS.USER_ID		--출고자	
+			INNER JOIN FN_AREA(#{CURRENTLOGINID}) 
+																SAR	ON	SAR.ENTERPRISEID		= TMOV.ENTERPRISEID
+																		AND	SAR.PLANTID				= TMOV.PLANTID
+																		AND	SAR.AREAID				= TMOV.AREAID
+			WHERE	TMOV.VALIDSTATE			= 'Valid'
+			--AND		DRCL.DURABLECLASSTYPE	= 'Tool'
+			<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+				AND		TMOV.ENTERPRISEID		= #{ENTERPRISEID}
+			</if>
+			<if test="PLANTID != null and PLANTID !='' ">
+				AND		TMOV.PLANTID			= #{PLANTID}
+			</if>
+			<if test="AREAID != null and AREAID !='' ">
+				AND		TMOV.AREAID				= #{AREAID}
+			</if>			
+			<if test="TOOLMOVETYPE != null and TOOLMOVETYPE !='' ">
+				AND		TMOV.TOOLMOVETYPE		= #{TOOLMOVETYPE}
+			</if>
+			<if test="SENDDATE_PERIODFR != null and SENDDATE_PERIODFR !='' ">
+				AND		TMOV.SENDDATE 			<![CDATA[>=]]> TO_DATE(REPLACE(#{SENDDATE_PERIODFR},'-',''), 'YYYYMMDD')
+			</if>
+			<if test="SENDDATE_PERIODTO != null and SENDDATE_PERIODTO !='' ">
+				AND		TMOV.SENDDATE			<![CDATA[<=]]> TO_DATE(REPLACE(#{SENDDATE_PERIODTO},'-',''), 'YYYYMMDD')
+			</if>
+			<if test="DURABLELOTID != null and DURABLELOTID !='' ">
+				AND		UPPER(TMOV.DURABLELOTID)		LIKE '%' || UPPER(#{DURABLELOTID}) || '%'
+			</if>
+			<if test="ISRECEIPT eq 'N'.toString() ">
+				AND		TMOV.RECEIPTDATE		IS NULL
+			</if>	
+			<if test="ISRECEIPT eq 'Y'.toString() ">
+				AND		TMOV.RECEIPTDATE		IS NOT NULL
+			</if>
+			<if test="TOPLANTID != null and TOPLANTID !='' ">
+				AND		TMOV.TOPLANTID			= #{TOPLANTID}		
+			</if>
+			<if test="TOAREAID != null and TOAREAID !='' ">
+				AND		TMOV.TOAREAID			= #{TOAREAID}		--입고작업장
+			</if>
+			ORDER BY		TO_CHAR(TMOV.SENDDATE,'YYYY-MM-DD') || TO_CHAR(TMOV.MODIFIEDTIME,' HH24:MI:SS'),	TMOV.DURABLELOTID
+	</select>
+	
+	<!-- TAB2 Grid : 치공구 이동출고를 입력하기 위한 목록을 조회한다.  -->
+	<select id="selectMoveToolInputListByToolList" parameterType="map" resultType="hashmap">
+		--
+		-- GetMoveToolInputListByTool
+		-- Version:10001
+			SELECT
+					DRLT.DURABLELOTID				AS TOOLNUMBER			--Tool번호		
+				,	DCDF.DICTIONARYNAME			AS TOOLNAME				--Tool명칭	
+				,	DRLT.PLANTID					AS SENDPLANTID			--출고SITE아이디
+				,	DCPL.DICTIONARYNAME				AS SENDPLANT			--출고SITE
+				,	''								AS RECEIPTPLANTID		--입고SITE아이디
+				,	'X'								AS RECEIPTAREAID		--입고작업장아이디
+				,	''								AS RECEIPTAREA			--입고작업장
+				,	DRLT.AREAID						AS SENDAREAID			--출고작업장아이디
+				,	DCAR.DICTIONARYNAME				AS SENDAREA				--출고작업장
+				,	PDDF.PRODUCTDEFID				AS PRODUCTDEFID			--품목코드
+				,	PDDF.PRODUCTDEFVERSION			AS PRODUCTDEFVERSION	--품목버전
+				,	PDDF.PRODUCTDEFNAME				AS PRODUCTDEFNAME		--품목명
+				
+				,	DRDF.DURABLECLASSID				AS TOOLTYPEID
+				,	FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLTYPE				--Tool구분
+				,	DRDF.FORM						AS TOOLFORMCODE
+				,	FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS TOOLFORM	--Tool형식
+				,   DRDF.TOOLKIND					AS TOOLKINDID
+				,	FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND --TOOL종류
+				
+				,	DRLT.DURABLEDEFID					AS DURABLEDEFID
+				,	DRLT.DURABLEDEFVERSION			AS DURABLEDEFVERSION
+				
+				,   '0' AS CHK
+				,	' ' AS TOOLMOVETYPEID
+				,	' ' AS TOOLMOVETYPE
+				
+			FROM		TOM_DURABLELOT					DRLT
+			INNER JOIN TOM_DURABLEDEFINITION	DRDF	ON	DRLT.DURABLEDEFID		= DRDF.DURABLEDEFID
+																		AND	DRLT.DURABLEDEFVERSION	= DRDF.DURABLEDEFVERSION
+			INNER JOIN CMD_DICTIONARY				DCDF	ON	DRDF.DURABLEDEFNAME		= DCDF.DICTIONARYID
+																		AND DCDF.LANGUAGETYPE		= #{LANGUAGETYPE}
+																		AND  DCDF.USE_YN                = 'Y'
+			INNER JOIN BAS_PRODUCTDEFINITION		PDDF	ON	DRDF.PRODUCTDEFID		= PDDF.PRODUCTDEFID
+																		AND	DRDF.PRODUCTDEFVERSION	= PDDF.PRODUCTDEFVERSION
+			LEFT OUTER JOIN BAS_PLANT				PLSD	ON	DRLT.PLANTID			= PLSD.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY		DCPL	ON	PLSD.PLANTNAME			= DCPL.DICTIONARYID
+																		AND	DCPL.LANGUAGETYPE		= #{LANGUAGETYPE}
+																		AND  DCPL.USE_YN                = 'Y'
+			LEFT OUTER JOIN BAS_AREA					ARSD	ON	DRLT.AREAID				= ARSD.AREAID
+			LEFT OUTER JOIN CMD_DICTIONARY		DCAR	ON	ARSD.AREANAME			= DCAR.DICTIONARYID
+																		AND	DCAR.LANGUAGETYPE		= #{LANGUAGETYPE}			
+																		AND  DCAR.USE_YN                = 'Y'																
+			WHERE	DRDF.VALIDSTATE			= 'Valid'
+			AND		DRLT.DURABLESTATE		= 'Available'
+			AND		DRLT.ISHOLD				= 'N'
+			--AND		DRCL.DURABLECLASSTYPE	= 'Tool'
+			<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+				AND		DRLT.ENTERPRISEID		= #{ENTERPRISEID}
+			</if>
+			<if test="PLANTID != null and PLANTID !='' ">
+				AND		DRLT.PLANTID			= #{PLANTID}
+			</if>
+			<if test="AREAID != null and AREAID !='' ">
+				AND		DRLT.AREAID				= #{AREAID}			--출고작업장(입력화면)
+			</if>
+			<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+				AND		PDDF.PRODUCTDEFID		= #{PRODUCTDEFID}
+			</if>
+			<if test="CURRENTLOGINID != null and CURRENTLOGINID !='' ">
+				AND		EXISTS (
+							SELECT 
+								1
+							FROM	FN_AREA(#{CURRENTLOGINID}) SAR
+							WHERE	SAR.ENTERPRISEID		= DRLT.ENTERPRISEID
+							AND		SAR.PLANTID				= DRLT.PLANTID
+							AND		SAR.AREAID				= DRLT.AREAID
+				)
+			</if>
+			AND		DRLT.DURABLELOTID		NOT IN (
+																	SELECT	TRDL.DURABLELOTID
+																	FROM	TOM_TOOLREQUESTDETAILLOT		TRDL
+																	WHERE	TRDL.VALIDSTATE				= 'Valid'
+																	AND		TRDL.DURABLEDEFID			= DRDF.DURABLEDEFID
+																	AND		TRDL.DURABLEDEFVERSION		= DRDF.DURABLEDEFVERSION
+																	AND		TRDL.DURABLELOTID			= DRLT.DURABLELOTID
+																	AND		TRDL.RECEIPTDATE			IS NULL									
+																	)
+			AND		DRLT.DURABLELOTID		NOT IN (
+													SELECT	TMOV.DURABLELOTID
+													FROM	TOM_TOOLMOVE					TMOV
+													WHERE	TMOV.VALIDSTATE				= 'Valid'
+													AND		TMOV.DURABLELOTID			= DRLT.DURABLELOTID
+													AND		TMOV.AREAID					= DRLT.AREAID
+													AND		TMOV.RECEIPTDATE			IS NULL
+											)
+			ORDER BY 	DRLT.DURABLELOTID
+	</select>
+	
+	<select id="selectDulableLot" parameterType="map" resultType="hashmap">
+		SELECT ISHOLD
+		FROM TOM_DURABLELOT
+		WHERE DURABLELOTID = #{TOOLNUMBER}
+    </select>
+	
+	<update id="updateDulableLot" parameterType="map">
+		UPDATE TOM_DURABLELOT
+		SET 
+			ISHOLD 					= 'Y',
+			DURABLESTATE			= 'Available',
+		    
+		    MODIFIER				= #{MODIFIER},
+			MODIFIEDTIME 			= SYSDATE,
+			LASTTXNHISTKEY 		= #{LASTTXNHISTKEY},
+			LASTTXNID				= #{LASTTXNID},
+			LASTTXNUSER 			= #{LASTTXNUSER},
+			LASTTXNTIME 			= SYSDATE,
+			LASTTXNCOMMENT 	= #{LASTTXNCOMMENT}
+		WHERE DURABLELOTID 	= #{TOOLNUMBER}
+    </update>
+    
+    <!-- @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ -->
+    <insert id="insertDurableLotHistory" parameterType="map">
+		INSERT INTO TOM_DURABLELOTHISTORY
+			(
+			 TXNHISTKEY,
+			 DURABLELOTID, 			--PK
+			 
+			 DURABLELOTGROUPID,
+			 DURABLEDEFID, 			--치공구ID
+			 DURABLEDEFVERSION, 	--치공구Ver
+			 DURABLELOTNAME, 
+			 ENTERPRISEID, 
+			 
+			 PLANTID, 					--입고사이트ID
+			 AREAID,						--입고작업장ID
+			 PREVPLANTID,				--출고사이트ID
+			 PREVAREAID,				--출고작업장ID
+			 
+			 VENDORID,
+			 ISHOLD,
+			 DURABLELOTQTY,
+			 DURABLESTATE,
+			 
+			 CREATOR,
+		     CREATEDTIME,
+		     MODIFIER,
+		     MODIFIEDTIME, 
+			 TXNGROUPHISTKEY, 
+		     TXNID,
+		     TXNUSER, 
+		     TXNTIME,
+		     TXNREASONCODECLASS, 
+		     TXNREASONCODE,
+		     TXNCOMMENT,
+		     
+		     TXNID2,
+		     TXNCOMMENT2
+		 	) VALUES (
+		 	 #{LASTTXNHISTKEY},
+		 	 #{TOOLNUMBER},
+		 	 
+		 	 NULL,
+		 	 #{DURABLEDEFID},
+		 	 #{DURABLEDEFVERSION},
+		 	 #{DURABLELOTNAME},
+		 	 #{ENTERPRISEID},
+		 	 
+		 	 #{PLANTID},				--입고사이트ID
+		 	 #{AREAID},				--입고작업장ID
+		 	 #{PREVPLANTID},		--출고사이트ID
+		 	 #{PREVAREAID},		--출고작업장ID		 	 
+		 	 
+		 	 #{VENDORID},
+		 	 'Y',
+		 	 1,
+		 	 'Available',
+		 	 
+		 	 #{CREATOR},
+			 SYSDATE,
+			 #{MODIFIER},
+			 SYSDATE,
+		 	 #{TXNGROUPHISTKEY},
+		 	 #{LASTTXNID},
+		 	 #{LASTTXNUSER},		 	 
+		 	 SYSDATE,
+		 	 '',
+		 	 '',
+		 	 '',
+		 	 #{TXNID2},
+		 	 #{TXNCOMMENT2}
+			)
+    </insert>
+    
+    <!-- 사용하지 않음 : 2021-07-06
+    <select id="selectToolMove" parameterType="map" resultType="hashmap">
+		SELECT DURABLELOTID
+		FROM TOM_TOOLMOVE
+		WHERE DURABLELOTID = #{TOOLNUMBER}
+		AND SENDDATE = TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+    </select>
+    -->
+    
+    <insert id="insertToolMove" parameterType="map">
+		INSERT INTO TOM_TOOLMOVE
+			(
+			 DURABLELOTID,
+			 
+			 AREAID,			
+			 PLANTID,
+			 ENTERPRISEID,
+			 TOOLMOVETYPE,		--TOOL이동구분
+			 SENDUSER,
+			 SENDDATE,
+			 LOTHISTKEY,		--출고 HistKey
+			 
+			 TOAREAID,
+			 TOPLANTID,
+			 
+			 CREATOR,
+			 CREATEDTIME,
+			 MODIFIER,
+			 MODIFIEDTIME,
+			 LASTTXNHISTKEY,
+			 LASTTXNID,
+			 LASTTXNUSER,
+			 LASTTXNTIME,
+			 LASTTXNCOMMENT,
+			 VALIDSTATE
+			 )
+		VALUES
+			(
+			#{TOOLNUMBER},
+			
+			#{SENDAREAID},
+			#{SENDPLANTID},
+			#{SESSION_ENTERPRISEID},
+			#{TOOLMOVETYPEID},
+			#{SENDUSER},
+			SYSDATE,
+			#{LOTHISTKEY2},
+			
+			#{RECEIPTAREAID},
+			#{RECEIPTPLANTID},
+			
+			#{CREATOR},					<!-- TR -->
+			SYSDATE,
+			#{MODIFIER},
+			SYSDATE,
+			#{LASTTXNHISTKEY},
+			#{LASTTXNID},
+			#{LASTTXNUSER},
+			SYSDATE,
+			#{LASTTXNCOMMENT},
+			#{VALIDSTATE}
+			)
+    </insert>
+    
+    <!-- 사용하지 않음 : 2021-07-06 :: 이동출고 처리시 SENDDATE 일자 시분초 저장으로 수정
+    <update id="updateToolMove" parameterType="map">
+		UPDATE TOM_TOOLMOVE
+		SET AREAID			= #{SENDAREAID},			
+			PLANTID			= #{SENDPLANTID},
+			ENTERPRISEID	= #{SESSION_ENTERPRISEID},
+			TOOLMOVETYPE	= #{TOOLMOVETYPEID},
+			SENDUSER		= #{SESSION_USER_ID},
+			LOTHISTKEY		= #{LOTHISTKEY},
+			
+			TOAREAID        = #{RECEIPTAREAID},
+			TOPLANTID       = #{RECEIPTPLANTID},
+			
+			MODIFIER		= #{MODIFIER},
+			MODIFIEDTIME 	= SYSDATE,
+			LASTTXNHISTKEY 	= #{LASTTXNHISTKEY},
+			LASTTXNID		= #{LASTTXNID},
+			LASTTXNUSER 	= #{LASTTXNUSER},
+			LASTTXNTIME 	= SYSDATE,
+			LASTTXNCOMMENT 	= #{LASTTXNCOMMENT},
+			VALIDSTATE		= #{VALIDSTATE}
+		WHERE DURABLELOTID = #{TOOLNUMBER}
+		AND SENDDATE = TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+    </update>
+    -->
+    
+    <!-- 출고 취소 -->
+    <!-- 사용하지 않음 : 2021-07-06
+    <update id="updateToolMoveCancel" parameterType="map">
+		DELETE FROM TOM_TOOLMOVE
+		WHERE DURABLELOTID = #{TOOLNUMBER}
+		AND SENDDATE = TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+    </update>
+    -->    
+    
+    
+    
+    
+	<!-- 치공구 이동 출고 저장시 데이터 검증 -->
+	<select id="selectCheckAvailableLotStatusMoveByTool" parameterType="map" resultType="hashmap">
+		--
+		-- GetCheckAvailableLotStatusMoveByTool
+		-- Version:10001
+			SELECT 
+					COUNT(DRLT.DURABLELOTID)||''	AS DURABLECOUNT
+			FROM	TOM_DURABLELOT 			DRLT
+			WHERE	DRLT.DURABLESTATE		= 'Available'
+			AND		DRLT.DURABLELOTID		IN (
+												     		SELECT DATA AS COL_VALUE 
+												            FROM TABLE(CAST(FN_TO_ROWS(#{DURABLELOTIDS}) AS TP_SIMPLE_TABLE))
+												           )
+	</select>
+	
+	<!-- 치공구 이동 출고 저장시 데이터 검증 -->
+	<select id="selectCheckAvailableRequestToolMoveByTool" parameterType="map" resultType="hashmap">
+		--
+		-- GetCheckAvailableRequestToolMoveByTool
+		-- Version:10001
+			SELECT
+					COUNT(TRDL.DURABLELOTID)	AS REQUESTCOUNT
+			FROM	TOM_TOOLREQUESTDETAILLOT		TRDL
+			WHERE	TRDL.RECEIPTDATE			IS NULL
+			AND		TRDL.DURABLELOTID			IN (
+													     		SELECT DATA AS COL_VALUE 
+													            FROM TABLE(CAST(FN_TO_ROWS(#{DURABLELOTIDS}) AS TP_SIMPLE_TABLE))
+													           )
+			AND		TRDL.VALIDSTATE				= 'Valid'
+	</select>	
+	
+	<!-- 치공구 이동 출고 저장시 데이터 검증 -->
+	<select id="selectCheckAvailableToolMoveByTool" parameterType="map" resultType="hashmap">
+		--
+		-- GetCheckAvailableToolMoveByTool
+		-- Version:10001
+			SELECT
+					COUNT(*)					AS MOVECOUNT
+			FROM	TOM_TOOLMOVE					TMOV
+			WHERE	TMOV.RECEIPTDATE			IS NULL
+			AND		TMOV.VALIDSTATE				= 'Valid'
+			AND		TMOV.DURABLELOTID			IN (
+													     		SELECT DATA AS COL_VALUE 
+													            FROM TABLE(CAST(FN_TO_ROWS(#{DURABLELOTIDS}) AS TP_SIMPLE_TABLE))
+													           )
+	</select>
+	
+	
+	<!-- ************************************************************** -->
+	<!-- ************************************************************** -->
+	<!-- 치공구 이동 입고 저장시, 데이터 검증 :: 2021-06-17 APPENDED -->
+	<!-- ************************************************************** -->
+	<!-- ************************************************************** -->
+	<select id="selectCheckAvailableToolMoveInputByTool" parameterType="map" resultType="hashmap">
+		--
+		-- GetCheckAvailableToolMoveByTool
+		-- Version:10001
+			SELECT
+					COUNT(*)					AS MOVECOUNT
+			FROM	TOM_TOOLMOVE					TMOV
+			WHERE	TMOV.RECEIPTDATE			IS NOT NULL		--입고일이 저장되어 있으면, 입고저장시 에러 발생하게 처리
+			AND		TMOV.LASTTXNID				= '/tom00800/saveMoveSendTool.do.TOM00800ServiceImpl.saveMoveSendTool.insertToolMove'
+			AND		TMOV.VALIDSTATE				= 'Valid'
+			AND		TMOV.DURABLELOTID			IN (
+													     		SELECT DATA AS COL_VALUE 
+													            FROM TABLE(CAST(FN_TO_ROWS(#{DURABLELOTIDS}) AS TP_SIMPLE_TABLE))
+													           )
+	</select>
+	
+	
+    
+</mapper>

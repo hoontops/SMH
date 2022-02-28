@@ -1,0 +1,104 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 도움말 관리
+    설명          : 도움말 CRUD
+    작성자       : 진성하
+    최초작성일 : 2017.03.16
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.04.24     진성하     최초  생성
+     2017.04.30     진성하     저장 로직 변경
+     2017.11.xx     진성하     메뉴테이블의 USE_YN 조건 변경
+-->
+<mapper namespace="com.nbdf.cmd.cm.cmhm.dao.CMHM00100Dao">
+    <!-- 메뉴조회 -->
+	<select id="selectManualMenuList" resultType="hashmap" parameterType="hashmap">
+	 /* com.nbdf.cmd.cm.cmhm.dao.CMHM00100Dao.selectManualMenuList */
+		SELECT
+         JOB_MENU_ID
+         ,MENU_NM
+         ,MENU_RM
+         ,USE_YN
+         ,MENU_GRP
+         ,MENU_SEQ
+         ,MENU_LVS 
+         ,PGE_URL
+         ,UPPER_MENU
+         ,UPPER_MENU0
+         ,DICTIONARYID
+         ,DICTIONARYNAME
+        FROM (
+            SELECT 0 AS JOB_MENU_ID,
+               'ROOT' AS MENU_NM,
+               'ROOT' AS MENU_RM,
+               'Y' AS USE_YN,
+               NULL AS MENU_GRP,
+               0 AS MENU_SEQ,
+               0 as MENU_LVS,
+               NULL AS UPPER_MENU,
+               NULL AS UPPER_MENU0,
+               NULL  AS PGE_URL,
+               NULL AS DICTIONARYID,
+               NULL AS DICTIONARYNAME
+            FROM DUAL 
+          UNION ALL               
+	          SELECT
+	             D.JOB_MENU_ID
+	             , D.MENU_NM
+	             , D.MENU_RM
+	             , D.USE_YN
+	             , D.MENU_GRP
+	             , D.MENU_SEQ
+	             , D.MENU_LVS
+	             , D.UPPER_MENU
+	             , NVL(D.UPPER_MENU,0) AS UPPER_MENU0
+	             , D.PGE_URL
+	             , D.DICTIONARYID
+      		     , (select x.dictionaryname from cmd_dictionary x where x.dictionaryid = D.dictionaryid and x.languagetype=#{SESSION_LANGUAGETYPE}) AS DICTIONARYNAME
+	          FROM CMD_JOB_MENU_MNG D
+	           WHERE 1=1
+	           AND USE_YN ='Y'
+	           AND MENU_LVS <![CDATA[<]]> 3
+	          )START WITH UPPER_MENU IS NULL CONNECT
+        BY PRIOR JOB_MENU_ID = UPPER_MENU ORDER SIBLINGS BY MENU_SEQ
+
+	</select>
+    <!-- 상세 -->
+	<select id="selectManualMenuDtlList" resultType="hashmap" parameterType="hashmap">
+	 /* com.nbdf.cmd.cm.cmhm.dao.CMHM00100Dao.selectManualMenuDtlList */
+	  SELECT
+         D.JOB_MENU_ID
+         , D.MENU_NM
+         , D.MENU_RM
+         , D.USE_YN
+         , D.MENU_GRP
+         , D.MENU_SEQ
+         , D.MENU_LVS
+         , D.UPPER_MENU
+         , NVL(D.UPPER_MENU,0) AS UPPER_MENU0
+         , D.PGE_URL
+         , D.DICTIONARYID
+ 		 , (select x.dictionaryname from cmd_dictionary x where x.dictionaryid = D.dictionaryid and x.languagetype=#{SESSION_LANGUAGETYPE}) AS DICTIONARYNAME
+ 		 , (SELECT COUNT(*) 
+ 		 	FROM cmd_atch_files A, cmd_atch_files_mpngs B
+ 		 	WHERE A.ATCH_FILE_ID = B.ATCH_FILE_ID
+ 		 	AND B.ATCH_TY_CD = 'MANUAL'
+ 		 	AND B.ATCH_SRC_KEY = TO_CHAR(D.JOB_MENU_ID)) FILE_CNT
+ 		 , DECODE((SELECT COUNT(*) 
+ 		 	FROM cmd_atch_files A, cmd_atch_files_mpngs B
+ 		 	WHERE A.ATCH_FILE_ID = B.ATCH_FILE_ID
+ 		 	AND B.ATCH_TY_CD = 'MANUAL'
+ 		 	AND B.ATCH_SRC_KEY = TO_CHAR(D.JOB_MENU_ID)),0,'N','Y') AS FILE_YN
+      FROM CMD_JOB_MENU_MNG D
+      WHERE 1=1
+      AND UPPER_MENU = #{UPPER_MENU}
+      AND USE_YN = 'Y'
+	  ORDER BY MENU_SEQ
+
+	</select>
+
+</mapper>

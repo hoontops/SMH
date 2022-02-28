@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+	PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+	"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 메시지 관리
+    설명          : 메시지 테이블 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2017.03.01
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.03.01     진성하     최초  생성
+     2017.04.28     진성하     SQL 표준 작성 가이드 적용
+-->
+
+<!-- 메시지 관리 -->
+<mapper namespace="com.nbdf.cmd.cm.cmmm.dao.CMMM01100Dao">
+
+    <sql id="whoCol" >
+    , CREATED_BY
+    , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD HH24:MI') AS CREATION_DATE
+    , LAST_UPDATED_BY
+    , TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD HH24:MI') AS LAST_UPDATE_DATE
+    </sql>
+
+    <!-- 메시지 상세 조회(메시지 목록에서 그리드 더블 클릭시) -->
+	<select id="selectMsgList" resultType="hashmap">
+	  SELECT  /* "com.nbdf.cmd.cm.cmmm.dao.CMMM01100Dao.selectMsgList" */
+                  ROWNUM AS NUM
+                  , MSG_KND_CD
+                  , MSG_SEQ
+                  , GET_CODE_F('CMD_MSG_KND', MSG_KND_CD) AS MSG_KND_NM        /* 메시지종류 */
+                  , MSG_KND_CD                                                                         /* 메시지종류코드 */
+                  , (MSG_KND_CD || MSG_SEQ) AS CODE                     /* 메시지코드 */
+                  , MSG_COMMENTS                                                                      /* 메시지 내용 */
+                  , DECODE(USE_YN, 'Y' ,1 ,'N' , 0 ) AS USE_YN                                  /* 사용여부 */
+                  <include refid="whoCol" />
+        FROM  CMD_MSGS
+        WHERE 1=1
+         <if test="USE_YN != null and USE_YN != ''">
+                AND USE_YN = #{USE_YN}   /* 사용여부 상세조회 */
+        </if>
+	</select>
+
+    <!-- 메시지 조건 조회(조회버큰 클릭시 수행) -->
+    <select id="selectMsgSearch" resultType="hashmap">
+    SELECT  /* "com.nbdf.cmd.cm.cmmm.dao.CMMM01100Dao.selectMsgSearch" */
+           *
+    FROM (
+        SELECT ROWNUM AS RNUM, T.* FROM (
+              SELECT   LANGUAGETYPE                         /* LANGUAGETYPE */
+                         , GET_CODE_F('CMD_MSG_KND', MSG_KND_CD) AS MSG_KND_NM        /* 메시지종류 */
+                         , (MSG_KND_CD || MSG_SEQ)  AS CODE    /* 메시지코드 */
+                         , MSG_COMMENTS                                                                     /* 메시지 내용 */
+                         , DECODE(USE_YN, 'Y' ,1 ,'N' , 0 ) AS USE_YN                                  /* 사용여부 */
+                         , MSG_KND_CD
+                         , (SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT = CMD_MSGS.CREATED_BY) as CREATE_USER_NM             /* 최초생성자명 */
+                         , (SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT = CMD_MSGS.LAST_UPDATED_BY) as UPDATE_USER_NM    /* 최종수정자명 */
+                         <include refid="whoCol" />
+               FROM    CMD_MSGS
+               WHERE 1=1
+               <if test="LANGUAGETYPE != null and LANGUAGETYPE != ''">
+                  AND LANGUAGETYPE = #{LANGUAGETYPE}   /* LANGUAGETYPE */
+               </if>
+               <if test="MSG_KND_CD != null and MSG_KND_CD != ''">
+                  AND MSG_KND_CD = #{MSG_KND_CD}   /* 메시지 종류 */
+               </if>
+               <if test="USE_YN != null and USE_YN != ''">
+                  AND USE_YN = #{USE_YN}   /* 사용여부 상세조회 */
+               </if>
+	           <if test="MSG_COMMENTS != null and MSG_COMMENTS != ''">         /* 메시지 내용 */
+	             AND MSG_COMMENTS      LIKE '%' ||  #{MSG_COMMENTS} || '%'
+	           </if>
+               ORDER BY CREATION_DATE DESC
+		   )T WHERE 1=1
+		   <if test="CODE != null and CODE != ''">               /* 메시지 코드 */
+                 AND CODE LIKE UPPER('%' ||  #{CODE} || '%')
+           </if>
+        <if test= "P_END != null and P_END != ''">
+         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+    ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+      AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+    <!-- 메시지 count 조회(조회버큰 클릭시 수행) -->
+    <select id="selectMsgCount" resultType="hashmap">
+            SELECT   /* "com.nbdf.cmd.cm.cmmm.dao.CMMM01100Dao.selectMsgCount" */
+                        COUNT(*) AS COUNT
+             FROM    CMD_MSGS
+             WHERE 1=1
+             <if test="LANGUAGETYPE != null and LANGUAGETYPE != ''">
+              AND LANGUAGETYPE = #{LANGUAGETYPE}   /* LANGUAGETYPE */
+             </if>
+             <if test="MSG_KND_CD != null and MSG_KND_CD != ''">
+             AND MSG_KND_CD = #{MSG_KND_CD}   /* 메시지 종류 */
+             </if>
+             <if test="USE_YN != null and USE_YN != ''">
+             AND USE_YN = #{USE_YN}   /* 사용여부 상세조회 */
+             </if>
+             <if test="MSG_COMMENTS != null and MSG_COMMENTS != ''">         /* 메시지 내용 */
+                 AND MSG_COMMENTS      LIKE '%' ||  #{MSG_COMMENTS} || '%'
+             </if>
+             <if test="CODE != null and CODE != ''">               /* 메시지 코드 */
+                 AND (MSG_KND_CD || MSG_SEQ) LIKE UPPER('%' ||  #{CODE} || '%')
+             </if>
+    </select>
+
+    <!-- 메시지 저장(저장버튼을 클릭하였을 경우 수행) -->
+    <insert id="insertMsg">
+    INSERT  /* "com.nbdf.cmd.cm.cmmm.dao.CMMM01100Dao.insertMsg" */
+    INTO     CMD_MSGS
+                (MSG_KND_CD
+                , MSG_SEQ
+                , LANGUAGETYPE
+                , MSG_COMMENTS
+                , USE_YN
+                , CREATED_BY
+                , CREATION_DATE
+                )
+    VALUES 	(
+                #{MSG_KND_CD}
+                , ( SELECT
+                                LPAD(NVL(MAX(MSG_SEQ), 0)+1, 4, '0') AS NEW_MSG_SEQ
+				    FROM    CMD_MSGS
+					WHERE   1=1
+							    AND MSG_KND_CD = #{MSG_KND_CD}                                   /*  메시지 종류 코드 2자리 IM EM SM */
+			       )
+			    , #{LANGUAGETYPE}
+			    , #{MSG_COMMENTS}
+			    , #{USE_YN}
+			    , #{CREATED_BY}
+			    , SYSDATE
+			    )
+    </insert>
+
+   <!-- 메시지 삭제 -->
+    <delete id="deleteMsg">
+    DELETE  /* "com.nbdf.cmd.cm.cmmm.dao.CMMM01100Dao.deleteMsg" */
+    FROM    CMD_MSGS
+    WHERE  MSG_KND_CD = #{MSG_KND_CD}
+    AND  MSG_SEQ = #{MSG_SEQ}
+    AND  LANGUAGETYPE = #{LANGUAGETYPE}
+    </delete>
+
+    <!-- 메시지 수정 -->
+    <update id="updateMsg">
+    UPDATE  /* "com.nbdf.cmd.cm.cmmm.dao.CMMM01100Dao.updateMsg" */  CMD_MSGS
+    SET       <if test="USE_YN == 0">
+                    , USE_YN = 'N'
+                </if>
+                <if test="USE_YN == 1">
+                    , USE_YN = 'Y'
+                </if>
+              , MSG_COMMENTS = #{MSG_COMMENTS}
+              , LAST_UPDATED_BY = #{LAST_UPDATED_BY}          /* 최종수정자ID */
+              , LAST_UPDATE_DATE = SYSDATE                            /* 최종수정자ID */
+    WHERE  MSG_KND_CD = #{MSG_KND_CD}
+    AND  MSG_SEQ = #{MSG_SEQ}
+    AND  LANGUAGETYPE = #{LANGUAGETYPE}
+    </update>
+
+    <!--메시지 전체 조회(넥사크로에서 공통으로 사용) -->
+    <select id="selectCmMsg" resultType="hashmap">
+    SELECT  /* "com.nbdf.cmd.cm.cmmm.dao.CMMM01100Dao.selectCmMsg" */
+               (MSG_KND_CD || MSG_SEQ) AS CODE
+               , MSG_COMMENTS AS CODENAME
+               , MSG_KND_CD
+    FROM   CMD_MSGS
+    WHERE USE_YN = 'Y'
+    ORDER BY DECODE(MSG_KND_CD, 'EM', 2, 'IM', 1, 'SM', 3)
+   </select>
+ </mapper>

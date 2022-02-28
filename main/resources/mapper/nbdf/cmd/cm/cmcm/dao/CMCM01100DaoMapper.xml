@@ -1,0 +1,513 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 공통코드
+    설명          : 공통코드 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2017.03.10
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.03.10      진성하     최초  생성
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao">
+
+	 <sql id="whoCol" >
+		 , CREATED_BY
+		 , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD') as CREATION_DATE
+		 , LAST_UPDATED_BY
+		 , TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DATE
+	 </sql>
+
+	 <sql id="selectGrpCdCol" >
+		 GRP_CD
+		 , GRP_NM
+		 , CD_DESC, RM
+		 , DECODE(USE_YN, 'Y' ,'1' ,'N' , '0' ) AS USE_YN
+		 , DECODE(ALT_ENBL_YN, 'Y' ,'1' ,'N' , '0' ) AS ALT_ENBL_YN
+		 , GRP_CD AS OLD_GRP_CD
+	 </sql>
+
+    <!-- 특정코드 1개의 코드의 사용여부 및 비고정보  조회(업무 메뉴별 로그 등록에서 사용) -->
+     <select id="selectCmCdOneUse" resultType="hashmap">
+         SELECT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.selectCmCdOneUse"  */
+                   ENABLED_FLAG AS USE_YN,
+                   MEANING AS RM
+         FROM CMD_LOOKUP_VALUES
+         WHERE 1=1
+         AND   LOOKUP_TYPE =  #{GRP_CD}
+         AND   LOOKUP_CODE = #{CM_CD}
+     </select>
+
+    <!-- 그룹코드 조회 -->
+	 <select id="selectGrpCdList" resultType="hashmap">
+		 SELECT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.selectGrpCdList"  */
+		            <include refid="selectGrpCdCol" />
+		            <include refid="whoCol" />
+		             , (SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT = CMD_GRP_CDS.CREATED_BY) as CREATE_USER_NM             /* 최초생성자명 */
+		             , (SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT = CMD_GRP_CDS.LAST_UPDATED_BY) as UPDATE_USER_NM    /* 최종수정자명 */
+		 FROM CMD_GRP_CDS
+		 WHERE 1=1
+		  <if test="CND != '' and CND !=null ">
+		      <if test="CND.equals('GRP_CD') and TEXT != null and TEXT != ''">
+		          AND GRP_CD LIKE UPPER('%' ||  #{TEXT} || '%')
+		      </if>
+		      <if test="CND.equals('GRP_NM') and TEXT != null ">
+		          AND GRP_NM LIKE UPPER('%' ||  #{TEXT} || '%')
+		      </if>
+		      <if test="CND.equals('CD_DESC') and TEXT != null ">
+		          AND CD_DESC  LIKE '%' ||  #{TEXT} || '%'
+		       </if>
+		      <if test="CND.equals('USE_YN') and TEXT != null ">
+		          AND USE_YN LIKE '%' ||  #{TEXT} || '%'
+		      </if>
+		 </if>
+		  <if test="USE_YN != '' and USE_YN !=null ">
+		        AND USE_YN = #{USE_YN}
+		   </if>
+	 </select>
+
+    <!-- 상세코드 조회 -->
+	 <select id="selectCdList" resultType="hashmap">
+	 
+      SELECT * 
+      FROM (
+                SELECT ROWNUM AS RNUM, T.* FROM (
+					 SELECT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.selectCdList"  */
+					           ORDR
+					           , GRP_CD
+					           , CM_CD
+					           , CD_NM
+					           , CD_DESC
+					           , RM
+					           , DECODE (USE_YN,'Y',1,'N',0) AS USE_YN
+					           , DECODE (ALT_ENBL_YN,'Y',1,'N',0) AS ALT_ENBL_YN
+					           , CM_CD AS OLD_CM_CD
+					          <include refid="whoCol" />
+					           , (SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT = CMD_CM_CDS.CREATED_BY) as CREATE_USER_NM             /* 최초생성자명 */
+			                   , (SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT = CMD_CM_CDS.LAST_UPDATED_BY) as UPDATE_USER_NM    /* 최종수정자명 */
+					            , ATTRIBUTE1
+					            , ATTRIBUTE2
+					            , ATTRIBUTE3
+					            , ATTRIBUTE4
+					            , ATTRIBUTE5
+					 FROM CMD_CM_CDS
+					 WHERE 1=1
+					   <if test="GRP_CD != '' and GRP_CD !=null ">
+					       AND GRP_CD =  #{GRP_CD}
+					   </if>
+					 ORDER BY GRP_CD, ORDR
+                  )T WHERE 1=1
+                    <if test= "P_END != null and P_END != ''">
+                     AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+                    </if>
+        ) WHERE 1=1
+        <if test= "P_START != null and P_START != ''">
+        AND  RNUM >= #{P_START}
+        </if>
+	 </select>
+
+    <!-- 그룹코드 삭제 -->
+	 <update id="deleteGrpCd" parameterType="hashmap">
+		 DELETE /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.deleteGrpCd"  */
+		 FROM   CMD_GRP_CDS
+		 WHERE GRP_CD = #{GRP_CD}
+	 </update>
+
+    <!-- 상세코드 삭제 -->
+	 <update id="deleteCd" parameterType="hashmap">
+		 DELETE /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.deleteCd"  */
+		 FROM   CMD_CM_CDS
+		 WHERE CM_CD = #{CM_CD}
+	 </update>
+
+	 <!-- 그룹코드가 삭제 되었을 경우 호출 됨 상세코드 삭제 -->
+     <update id="deleteAllCd" parameterType="hashmap">
+         DELETE /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.deleteAllCd"  */
+         FROM   CMD_CM_CDS
+         WHERE GRP_CD = #{GRP_CD}
+     </update>
+
+    <!-- 그룹코드 수정 -->
+	 <update id="updateGrpCd" parameterType="hashmap">
+		 UPDATE /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.updateGrpCd"  */ CMD_GRP_CDS
+		 SET      GRP_CD = #{GRP_CD}
+		            , GRP_NM = #{GRP_NM}
+		            , CD_DESC = #{CD_DESC}
+		            <if test="USE_YN == 0">
+		               , USE_YN = 'N'
+		            </if>
+		            <if test="USE_YN == 1">
+		               , USE_YN = 'Y'
+		            </if>
+		            <if test="ALT_ENBL_YN == 0">
+                       , ALT_ENBL_YN = 'N'
+                    </if>
+                    <if test="ALT_ENBL_YN == 1">
+                       , ALT_ENBL_YN = 'Y'
+                    </if>
+		            , LAST_UPDATED_BY = #{LAST_UPDATED_BY}          /* 최종수정자ID */
+		            , LAST_UPDATE_DATE = SYSDATE                            /* 최종수정자ID */
+	    WHERE  GRP_CD = #{OLD_GRP_CD}
+	 </update>
+
+    <!-- 그룹코드 저장 -->
+	 <update id="insertGrpCd" parameterType="hashmap">
+		 INSERT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.insertGrpCd"  */
+		 INTO    CMD_GRP_CDS
+		            (GRP_NM
+		            , GRP_CD
+		            , CD_DESC
+		            , CREATED_BY
+		            , CREATION_DATE
+		            , LAST_UPDATED_BY
+		            , LAST_UPDATE_DATE
+		            , USE_YN
+		            , ALT_ENBL_YN
+		            )
+		 VALUES (
+		             #{GRP_NM}
+		             , #{GRP_CD}
+		             , #{CD_DESC}
+		             , #{CREATED_BY}
+		             , SYSDATE
+		             , #{LAST_UPDATED_BY}
+		             , SYSDATE
+		            <if test="USE_YN == 0 || USE_YN == null">
+		                , 'N'
+		            </if>
+		            <if test="USE_YN == 1">
+		                , 'Y'
+		            </if>
+		            <if test="ALT_ENBL_YN == 0 || USE_YN == null">
+                       , 'N'
+                    </if>
+                    <if test="ALT_ENBL_YN == 1">
+                       , 'Y'
+                    </if>
+		             )
+	 </update>
+
+    <!-- 상세코드 수정 -->
+	 <update id="updateCd" parameterType="hashmap">
+	 UPDATE /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.updateCd"  */ CMD_CM_CDS
+	 SET      CD_NM = #{CD_NM}
+	            , CM_CD = #{CM_CD}
+	            , CD_DESC = #{CD_DESC}
+	            <if test="USE_YN == 0">
+	               , USE_YN = 'N'
+	            </if>
+	            <if test="USE_YN == 1">
+	               , USE_YN = 'Y'
+	            </if>
+	            , RM = #{RM}
+	            , LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+	            , LAST_UPDATE_DATE = SYSDATE
+	            , ATTRIBUTE1 = #{ATTRIBUTE1}
+	            , ATTRIBUTE2 = #{ATTRIBUTE2}
+	            , ATTRIBUTE3 = #{ATTRIBUTE3}
+	            , ATTRIBUTE4 = #{ATTRIBUTE4}
+	            , ATTRIBUTE5 = #{ATTRIBUTE5}
+	 WHERE  GRP_CD = #{GRP_CD}                          /* 그룹코드 */
+	 AND      CM_CD = #{OLD_CM_CD}                            /* 공통코드 */
+	 </update>
+
+	     <!-- 상세코드(그룹코드 전체  수정) -->
+     <update id="updateAllCd" parameterType="hashmap">
+     UPDATE /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.updateAllCd"  */ CMD_CM_CDS
+     SET      GRP_CD = #{GRP_CD}
+                , LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+                , LAST_UPDATE_DATE = SYSDATE
+     WHERE  GRP_CD = #{OLD_GRP_CD}                          /* 그룹코드 */
+     </update>
+
+    <!-- 상세코드 저장 -->
+	 <update id="insertCd" parameterType="hashmap">
+	 INSERT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.insertCd"  */
+	 INTO    CMD_CM_CDS
+	            (ORDR
+	            , CM_CD
+	            , GRP_CD
+	            , CD_NM
+	            , CD_DESC
+	            , CREATED_BY
+	            , CREATION_DATE
+	            , LAST_UPDATED_BY
+	            , LAST_UPDATE_DATE
+	            , USE_YN
+	            , ALT_ENBL_YN
+	            , RM
+	            , ATTRIBUTE1
+	            , ATTRIBUTE2
+	            , ATTRIBUTE3
+	            , ATTRIBUTE4
+	            , ATTRIBUTE5
+	            )
+	 VALUES (
+	            #{ORDR}
+	            , #{CM_CD}
+	            , #{GRP_CD}
+	            , #{CD_NM}
+	            , #{CD_DESC}
+	            , #{CREATED_BY}
+	            , SYSDATE
+	            , #{LAST_UPDATED_BY}
+	            , SYSDATE
+	            <if test="USE_YN == 0 || USE_YN == null">
+	               , 'N'
+	            </if>
+	            <if test="USE_YN == 1">
+	               , 'Y'
+	           </if>
+	           , #{ALT_ENBL_YN}
+	           , #{RM}
+				, #{ATTRIBUTE1}
+				, #{ATTRIBUTE2}
+				, #{ATTRIBUTE3}
+				, #{ATTRIBUTE4}
+				, #{ATTRIBUTE5}
+	           
+	             )
+	 </update>
+
+
+	  <!-- 상세코드 조회(엑셀다운로드) -->
+     <select id="selectExcelDn" resultType="hashmap">
+         SELECT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.selectExcelDn"  */
+                   ORDR
+                   , GRP_CD
+                   , CM_CD
+                   , CD_NM
+                   , CD_DESC
+                   , RM
+                   , DECODE (USE_YN,'Y',1,'N',0) AS USE_YN
+                   , DECODE (ALT_ENBL_YN,'Y',1,'N',0) AS ALT_ENBL_YN
+		            , ATTRIBUTE1
+		            , ATTRIBUTE2
+		            , ATTRIBUTE3
+		            , ATTRIBUTE4
+		            , ATTRIBUTE5
+                  <include refid="whoCol" />
+         FROM CMD_CM_CDS
+         WHERE
+           GRP_CD IN
+           <foreach item="item" index="index" collection="list" open="(" separator="," close=")" >
+                #{item}
+           </foreach>
+        ORDER BY GRP_CD, ORDR
+     </select>
+
+    <!-- 코드(그룹코드/상세코드 조회 넥사크로 공통에서 사용 -->
+	 <select id="selectCmCode" resultType="hashmap">
+		 SELECT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.selectCmCode"  */
+		            ROWNUM AS NUM
+		            , CM_CD
+		            , CD_NM
+		            , B.CD_DESC
+		            , A.GRP_CD AS GRP_CD
+		            , GRP_NM
+		            , A.CD_DESC AS GRP_CD_DESC
+		            , B.RM
+		            , B.ATTRIBUTE1
+		            , B.ATTRIBUTE2
+		            , B.ATTRIBUTE3
+		            , B.ATTRIBUTE4
+		            , B.ATTRIBUTE5
+		 FROM    CMD_GRP_CDS A,
+		            CMD_CM_CDS B
+		 WHERE  A.GRP_CD = B.GRP_CD
+		 AND      A.USE_YN = 'Y'
+		 AND      B.USE_YN = 'Y'
+		 <if test="CM_CD != null and CM_CD != ''">
+		      AND      CM_CD = #{CM_CD}   /* 공통코드 */
+		 </if>
+		 <if test="GRP_CD != null and GRP_CD != ''">
+		      AND      A.GRP_CD = #{GRP_CD}   /* 공통코드 */
+		 </if>
+		 ORDER BY B.ORDR
+	 </select>
+
+	 <!-- 그룹코드 저장(연계 테이블) -->
+     <update id="insertGrpCdIfs" parameterType="hashmap">
+         INSERT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.insertGrpCdIfs"  */
+         INTO    CMD_GRP_CDS_IFS
+                    (GRP_NM
+                    , GRP_CD
+                    , CD_DESC
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , USE_YN
+                    , ALT_ENBL_YN
+                    , TRAN_ID
+                    , LINK_DEAL_DTM
+                    , LINK_STAT_CD
+                    , CUD_KEY
+                    )
+         VALUES (
+                     #{GRP_NM}
+                     , #{GRP_CD}
+                     , #{CD_DESC}
+                     , #{CREATED_BY}
+                     , SYSDATE
+                    <if test="USE_YN == 0 || USE_YN == null">
+                        , 'N'
+                    </if>
+                    <if test="USE_YN == 1">
+                        , 'Y'
+                    </if>
+                    <if test="ALT_ENBL_YN == 0 || ALT_ENBL_YN == null">
+                        , 'N'
+                    </if>
+                    <if test="ALT_ENBL_YN == 1">
+                        , 'Y'
+                    </if>
+                    , CMD_GET_TRAN_ID_F('CMD')
+                    ,  NULL
+                    , #{LINK_STAT_CD}
+                    , #{CUD_KEY}
+                     )
+     </update>
+
+     <!-- 그룹코드 삭제(연계 테이블) -->
+     <update id="deleteGrpCdIfs" parameterType="hashmap">
+         DELETE /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.deleteGrpCdIfs"  */
+         FROM   CMD_GRP_CDS_IFS
+         WHERE GRP_CD = #{GRP_CD}
+     </update>
+
+     <!-- 상세코드 저장(연계 테이블) -->
+     <update id="insertCdIfs" parameterType="hashmap">
+     INSERT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.insertCdIfs"  */
+     INTO    CMD_CM_CDS_IFS
+                (ORDR
+                , CM_CD
+                , GRP_CD
+                , CD_NM
+                , CD_DESC
+                , CREATED_BY
+                , CREATION_DATE
+                , USE_YN
+                , ALT_ENBL_YN
+                , TRAN_ID
+                , LINK_DEAL_DTM
+                , LINK_STAT_CD
+                , CUD_KEY
+                )
+     VALUES (
+                #{ORDR}
+                , #{CM_CD}
+                , #{GRP_CD}
+                , #{CD_NM}
+                , #{CD_DESC}
+                , #{CREATED_BY}
+                , SYSDATE
+                <if test="USE_YN == 0 || USE_YN == null">
+                   , 'N'
+                </if>
+                <if test="USE_YN == 1">
+                   , 'Y'
+               </if>
+               , #{ALT_ENBL_YN}
+               , CMD_GET_TRAN_ID_F('CMD')
+               ,  NULL
+               , #{LINK_STAT_CD}
+               , #{CUD_KEY}
+                 )
+     </update>
+
+     <!-- 상세코드 전체 저장(연계 테이블)
+           * 그룹코드를 삭제(혹은 변경) 하였을 경우 하위 상세코드 전체가 삭제(변경)됨
+      -->
+     <update id="insertAllCdIfs" parameterType="hashmap">
+     INSERT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.insertAllCdIfs"  */
+     INTO    CMD_CM_CDS_IFS
+                (ORDR
+                , CM_CD
+                , GRP_CD
+                , CD_NM
+                , CD_DESC
+                , CREATED_BY
+                , CREATION_DATE
+                , USE_YN
+                , ALT_ENBL_YN
+                , TRAN_ID
+                , LINK_DEAL_DTM
+                , LINK_STAT_CD
+                , CUD_KEY
+                )
+     SELECT
+               ORDR
+               , CM_CD
+               , GRP_CD
+               , CD_NM
+               , CD_DESC
+               , CREATED_BY
+               , SYSDATE
+               , USE_YN
+               , ALT_ENBL_YN
+               , CMD_GET_TRAN_ID_F('CMD')
+               , NULL
+               , #{LINK_STAT_CD}
+               , #{CUD_KEY}
+       FROM CMD_CM_CDS
+       WHERE GRP_CD = #{GRP_CD}
+     </update>
+
+     <!-- DB서버시간 가져오기1 (YYYYMMDDHH24MISS) -->
+     <select id="selectServerDbTime" resultType="hashmap">
+         SELECT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.selectServerDbTime"  */
+                TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS') as TODAY_TIME
+         FROM DUAL
+     </select>
+
+     <!-- DB서버시간 가져오기2 (YYYYMMDD) -->
+     <select id="selectServerDbToday" resultType="hashmap">
+         SELECT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.selectServerDbToday"  */
+                TO_CHAR(SYSDATE, 'YYYYMMDD') as TODAY
+         FROM DUAL
+     </select>
+
+     <!-- 상세코드 전체 저장(연계 테이블)
+          * 그룹코드를 삭제(혹은 변경) 하였을 경우 하위 상세코드 전체가 삭제(변경)됨
+             그룹코드에 해당하는 상세코드 전체를 C로 INSERT 한다.
+     -->
+     <!--
+     <update id="inertAddAllCdIfs" parameterType="hashmap">
+     INSERT /* "com.nbdf.cmd.cm.cmcm.dao.CMCM01100Dao.inertAddAllCdIfs"  */
+     INTO    CMD_CM_CDS_IFS
+                (ORDR
+                , CM_CD
+                , GRP_CD
+                , CD_NM
+                , CD_DESC
+                , CREATED_BY
+                , CREATION_DATE
+                , USE_YN
+                , ALT_ENBL_YN
+                , TRAN_ID
+                , LINK_DEAL_DTM
+                , LINK_STAT_CD
+                , CUD_KEY
+                )
+     SELECT
+                 ORDR
+               , CM_CD
+               , #{GRP_CD}
+               , CD_NM
+               , CD_DESC
+               , CREATED_BY
+               , CREATION_DATE
+               , USE_YN
+               , ALT_ENBL_YN
+               , CMD_GET_TRAN_ID_F('CMD')
+               ,  NULL
+               , #{LINK_STAT_CD}
+               , #{CUD_KEY}
+       FROM CMD_CM_CDS_IFS
+       WHERE GRP_CD = #{OLD_GRP_CD}
+     </update>
+ -->
+</mapper>

@@ -1,0 +1,1632 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM03400Dao">
+<!-- AFFECT LOT산정-->
+
+    <!--
+    ************************************************************
+    * 조회조건 sql
+    ************************************************************
+    -->
+    <!-- 품목 관련 검색 조건 -->
+    <sql id="whereForList_productdefidfragment">
+        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+            AND (     WR.PRODUCTDEFID = #{PRODUCTDEFID}
+                  AND (WR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} OR WR.PRODUCTDEFVERSION IS NULL)
+                )/*품목*/
+        </if>
+    </sql>
+    
+    
+    
+    <!-- AFFECT LOT산정  조회 조건 
+         DESC: QAM_AFFECTLOT_V 조회조건
+    -->
+    <sql id="whereForList_fragment">
+        <include refid="whereForList_productdefidfragment" /> <!-- 품목-->
+        <if test="LOTID != null and LOTID !='' ">
+        AND   WR.LOTID     = #{LOTID}
+        </if>
+        <if test="WEEK != null and WEEK !='' ">
+        AND   WR.WEEK = #{WEEK}  /*주차*/
+        </if>
+        <if test="BOXNO != null and BOXNO !='' ">
+        AND   WR.BOXNO = #{BOXNO}  /*BOX NO*/
+        </if>
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}  /*SITE*/
+        </if>
+        <if test="TOPPROCESSSEGMENTID != null and TOPPROCESSSEGMENTID !='' ">
+        AND   WR.TOP_PROCESSSEGMENTID = #{TOPPROCESSSEGMENTID} /*대공정*/
+        </if>
+        <if test="MIDDLEPROCESSSEGMENTID != null and MIDDLEPROCESSSEGMENTID !='' ">            
+        AND   WR.MID_PROCESSSEGMENTID = #{MIDDLEPROCESSSEGMENTID} /*중공정*/
+        </if>          
+        <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+        AND   WR.PROCESSSEGMENTID = #{PROCESSSEGMENTID}  /*표준공정*/
+        </if>
+        <if test="AREAID != null and AREAID !='' ">
+        AND   WR.AREAID = #{AREAID}  /*작업장*/
+        </if>
+        <if test="RESOURCEID != null and RESOURCEID !='' ">
+        AND   WR.RESOURCEID = #{RESOURCEID}  /*자원*/
+        </if>
+        <if test="EQUIPMENTID != null and EQUIPMENTID !='' ">
+        AND   WR.EQUIPMENTID IN ( SELECT VALUE FROM  UFN_SELECTSTRINGTOSPLIT(UPPER(#{EQUIPMENTID}), ',') ) /*설비*/
+        </if>
+        <choose>
+        	<when test="MIDDLEPROCESSSEGMENTID eq '7026'.toString() || MIDDLEPROCESSSEGMENTID eq '7534'.toString() || MIDDLEPROCESSSEGMENTID eq '7030'.toString() || MIDDLEPROCESSSEGMENTID eq '7536'.toString()">
+		        <if test="WORKENDUSER != null and WORKENDUSER !='' ">
+		        	AND   WR.INSPECTOR = #{WORKENDUSER}  /*작업자*/
+		        </if>
+        	</when>
+        	<otherwise>
+        		<if test="WORKENDUSER != null and WORKENDUSER !='' ">
+		            AND   WR.WORKENDUSER = #{WORKENDUSER}  /*작업자*/		        
+		        </if>        		
+        	</otherwise>
+        </choose>
+        <if test="DURABLECLASSID != null and DURABLECLASSID !='' ">
+        AND   WR.DURABLECLASSID = #{DURABLECLASSID}  /*치공구구분*/
+        </if>
+        <if test="DURABLEDEFID != null and DURABLEDEFID !='' ">
+        AND   WR.DURABLEDEFID = #{DURABLEDEFID}  /*치공구명*/
+        </if>
+        <if test="DURABLELOTID != null and DURABLELOTID !='' ">
+        AND   WR.DURABLELOTID = #{DURABLELOTID}  /*치공구 NO*/
+        </if>
+        <if test="RAWMATERIALDEFID != null and RAWMATERIALDEFID !='' ">
+        AND   WR.RAWMATERIALDEFID = #{RAWMATERIALDEFID}  /*원자재명*/
+        </if>
+        <if test="RAWMATERIALLOTID != null and RAWMATERIALLOTID !='' ">
+        AND   WR.RAWMATERIALLOTID = #{RAWMATERIALLOTID}  /*원자재 LOT*/
+        </if>
+        <if test="SUBASSEMDEFID != null and SUBASSEMDEFID !='' ">
+        AND   WR.SUBASSEMDEFID = #{SUBASSEMDEFID}  /*반제품명*/
+        </if>
+        <if test="SUBASSEMLOTID != null and SUBASSEMLOTID !='' ">
+        AND   WR.SUBASSEMLOTID = #{SUBASSEMLOTID}  /*반제품 LOT*/
+        </if>
+    </sql>
+
+    <!-- 투입일자 관련 검색 조건 -->
+    <sql id="whereForList_rootlotstartfragment">
+        <if  test="P_LOTSTARTDATEFR != null and P_LOTSTARTDATEFR !='' and P_LOTSTARTDATETO != null and P_LOTSTARTDATETO !=''">
+        AND LT.ROOTLOTSTARTDATE BETWEEN TO_DATE(#{P_LOTSTARTDATEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_LOTSTARTDATETO}, 'YYYY-MM-DD HH24:MI:SS')/*투입일*/
+        </if>
+    </sql>
+
+    <!-- 작업일자 관련 검색 조건 -->
+    <sql id="whereForList_workdatefragment">
+        <if test="P_WORKRESULTDATEFR != null and P_WORKRESULTDATEFR !='' and P_WORKRESULTDATETO != null and P_WORKRESULTDATETO !=''">
+        <choose>
+            <when test='LOTWORKRESULTDATETYPE == "RECEIVETIME" '>
+            AND WR.RECEIVETIME BETWEEN TO_DATE(#{P_WORKRESULTDATEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_WORKRESULTDATETO}, 'YYYY-MM-DD HH24:MI:SS')/*인수일*/
+            </when>
+            <when test='LOTWORKRESULTDATETYPE == "WORKSTARTTIME" '>
+            AND WR.WORKSTARTTIME BETWEEN TO_DATE(#{P_WORKRESULTDATEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_WORKRESULTDATETO}, 'YYYY-MM-DD HH24:MI:SS')/*작업시작일*/
+            </when>
+            <when test='LOTWORKRESULTDATETYPE == "WORKENDTIME" '>
+            AND WR.WORKENDTIME BETWEEN TO_DATE(#{P_WORKRESULTDATEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_WORKRESULTDATETO}, 'YYYY-MM-DD HH24:MI:SS')/*작업완료일*/
+            </when>
+            <when test='LOTWORKRESULTDATETYPE == "SENDTIME" '>
+            AND WR.SENDTIME BETWEEN TO_DATE(#{P_WORKRESULTDATEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_WORKRESULTDATETO}, 'YYYY-MM-DD HH24:MI:SS')/*인계일*/
+            </when>
+        </choose>
+        </if>
+    </sql>
+
+    <!-- 작업일자 관련 검색 조건 -->
+    <sql id="whereForList_searchdatefragment">
+        <include refid="whereForList_rootlotstartfragment" />
+        <include refid="whereForList_workdatefragment" />
+    </sql>
+        
+    <!-- 팝업관련 검색 조건 -->
+    <sql id="whereForList_popupfragment">
+        <include refid="whereForList_productdefidfragment" /> <!-- 품목-->
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}/*SITE*/
+        </if>
+        <if test="TOPPROCESSSEGMENTID != null and TOPPROCESSSEGMENTID !='' ">
+        AND   WR.PROCESSSEGMENTID IN (SELECT PPC.PROCESSSEGMENTID 
+                                      FROM   BAS_PROCESSSEGMENTID_HIERARCHY_V PPC
+                                      WHERE  PPC.TOP_PROCESSSEGMENTID = #{TOPPROCESSSEGMENTID}) /*대공정*/
+        </if>
+        <if test="MIDDLEPROCESSSEGMENTID != null and MIDDLEPROCESSSEGMENTID !='' ">
+        AND   WR.PROCESSSEGMENTID IN (SELECT PPC.PROCESSSEGMENTID 
+                                      FROM   BAS_PROCESSSEGMENTID_HIERARCHY_V PPC
+                                      WHERE  PPC.MID_PROCESSSEGMENTID = #{MIDDLEPROCESSSEGMENTID}) /*중공정*/
+        </if>        
+        <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+        AND   WR.PROCESSSEGMENTID = #{PROCESSSEGMENTID}  /*표준공정*/
+        </if>
+    </sql>
+    
+    <!--단일조회시에 조건 
+     -->
+    <sql id="whereForList_ischeckfragment">
+        <if test="LOTID != null and LOTID !='' ">
+        AND   WR.LOTID     = #{LOTID}
+        </if>
+        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+        AND (WR.PRODUCTDEFID = #{PRODUCTDEFID}
+             AND (WR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} OR WR.PRODUCTDEFVERSION IS NULL)) /*품목*/
+        </if>
+        <if test="WEEK != null and WEEK !='' ">
+        AND   WR.WEEK = #{WEEK}  /*주차*/
+        </if>
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}  /*SITE*/
+        </if>
+        <if test="TOPPROCESSSEGMENTID != null and TOPPROCESSSEGMENTID !='' ">
+        AND   HV.TOP_PROCESSSEGMENTID = #{TOPPROCESSSEGMENTID} /*대공정*/
+        </if>
+        <if test="MIDDLEPROCESSSEGMENTID != null and MIDDLEPROCESSSEGMENTID !='' ">
+        AND   HV.MID_PROCESSSEGMENTID = #{MIDDLEPROCESSSEGMENTID} /*중공정*/
+        </if>          
+        <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+        AND   WR.PROCESSSEGMENTID = #{PROCESSSEGMENTID}  /*표준공정*/
+        </if>
+        <if test="AREAID != null and AREAID !='' ">
+        AND   WR.AREAID = #{AREAID}  /*작업장*/
+        </if>
+        <if test="RESOURCEID != null and RESOURCEID !='' ">
+        AND   WR.RESOURCEID = #{RESOURCEID}  /*자원*/
+        </if>    
+    </sql>
+    
+	                
+    
+    <!--
+    ************************************************************
+    * AFFECT LOT 조회
+    ************************************************************
+    -->
+    <!-- AFFECT LOT산정 조회 AS-IS : SelectAffectLotList ver. 10001-->
+    <select id="selectQamAffectLotList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03400Dao.selectQamAffectLotList  */
+        WITH ROOTLOTINFO AS
+        (
+            SELECT X.ROOTLOTID
+              FROM (
+                        SELECT WR.ROOTLOTID
+                        FROM QAM_AFFECT_LOT_V WR
+                        WHERE 1=1
+                        <!-- WHERE 절 -->
+                        <if test="P_LOTSTARTDATEFR != null and P_LOTSTARTDATEFR !='' and P_LOTSTARTDATETO != null and P_LOTSTARTDATETO !=''">
+                        AND   WR.ROOTLOTSTARTDATE BETWEEN TO_DATE(#{P_LOTSTARTDATEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_LOTSTARTDATETO}, 'YYYY-MM-DD HH24:MI:SS')/*투입일*/
+                        </if>
+                        <include refid="whereForList_workdatefragment" />
+                        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+                        AND   WR.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+                        </if>
+                        <include refid="whereForList_fragment" />
+                    )X
+            GROUP BY X.ROOTLOTID
+        ),
+        MAINDATA AS (
+            SELECT Z.LOTID
+            FROM (
+                    SELECT L.LOTID, L.PARENTLOTID ,LEVEL AS LVL
+                    FROM   PCM_LOT L
+                    START WITH L.LOTID IN (SELECT RL.ROOTLOTID FROM ROOTLOTINFO RL)
+                    CONNECT BY  NOCYCLE PRIOR  LOTID = PARENTLOTID
+            ) Z
+            LEFT JOIN PCM_LOT    L    ON     Z.LOTID = L.LOTID
+            WHERE NVL(L.ISDEFECTED, 'N') = 'N'
+        ),
+        LOTGENEAL AS (
+            SELECT L.LOTID, L.PARENTLOTID ,LEVEL AS LVL
+            FROM   PCM_LOT L
+            WHERE  NVL(L.ISDEFECTED, 'N') = 'N' <!-- 2021.08.11 TOBE Modify 불량 LOT 제외 -->
+            START WITH L.LOTID IN (SELECT MD.LOTID FROM MAINDATA MD)
+            CONNECT BY  NOCYCLE PRIOR  LOTID = PARENTLOTID
+        ),
+        LOTLEVEL AS (
+            SELECT X.*
+                 , RANK() OVER (PARTITION BY LOTID, TO_NUMBER(X.USERSEQUENCE) ORDER BY LVL) AS RNK
+                 <!-- LOTID별 USERSEQUENCE가 동일할 경우 조회대상에서 제외됨(M210707F001-2-FG-002-A01)
+                 , RANK() OVER (PARTITION BY TO_NUMBER(X.USERSEQUENCE) ORDER BY LVL) AS RNK -->
+            FROM
+            (
+                SELECT GL.*
+                     , CASE WHEN NVL(WR.ISREWORK, 'N') = 'N' THEN WR.PROCESSDEFID
+                          ELSE PAT.PROCESSDEFID
+                          END AS PROCESSDEFID
+                     , CASE WHEN NVL(WR.ISREWORK, 'N') = 'N' THEN WR.PROCESSDEFVERSION
+                          ELSE PAT.PROCESSDEFVERSION
+                          END AS PROCESSDEFVERSION
+                     , WR.PROCESSSEGMENTID
+                     , CASE WHEN NVL(WR.ISREWORK, 'N') = 'N' THEN WR.USERSEQUENCE
+                          ELSE PAT.USERSEQUENCE
+                          END AS USERSEQUENCE
+                     , CASE WHEN NVL(WR.ISREWORK, 'N') = 'Y' THEN WR.PROCESSDEFID
+                          END AS SUBPROCESSDEFID
+                     , CASE WHEN NVL(WR.ISREWORK, 'N') = 'Y' THEN WR.PROCESSDEFVERSION
+                          END AS SUBPROCESSDEFVERSION
+                     , CASE WHEN NVL(WR.ISREWORK, 'N') = 'Y' THEN WR.PROCESSSEGMENTID
+                          END AS SUBPROCESSSEGMENTID
+                     , CASE WHEN NVL(WR.ISREWORK, 'N') = 'Y' THEN WR.USERSEQUENCE
+                          ELSE '0' END AS SUBUSERSEQUENCE
+                     , WR.WORKCOUNT
+                     , CASE WHEN NVL(WR.ISREWORK, 'N') = 'Y' OR NVL(WR.WORKCOUNT, 0) > 0 THEN 'IsRework'
+                          ELSE 'Normal' END AS ISREWORK
+                     , WR.TXNHISTKEY
+                FROM      LOTGENEAL           GL
+                LEFT JOIN PCM_LOTWORKRESULT   WR   ON   GL.LOTID = WR.LOTID
+                LEFT JOIN BAS_PROCESSPATH     PAT  ON   SPLIT_PART(WR.PROCESSPATHSTACK, '.', 1) = PAT.PROCESSPATHID
+                WHERE NVL(WR.RESULTTYPE, 'NORMAL') = 'NORMAL'
+                AND   (NVL(WR.WORKCOUNT, 0) = 0 OR NVL(WR.REWORKCOUNT, 0) = 0)
+            ) X
+        ),
+        RESULTMAX AS
+        (
+            SELECT MAX(TO_NUMBER(WR.USERSEQUENCE))  AS MAX_SEQUENCE
+            FROM      LOTGENEAL          GL
+            LEFT JOIN PCM_LOTWORKRESULT  WR  ON  GL.LOTID = WR.LOTID
+            WHERE LVL = 1
+        ),
+        WORKSUBRESULT1 AS
+        (
+	        <![CDATA[
+	        SELECT WR.LOTID
+	             , LT.ROOTLOTID
+	             , WR.PRODUCTDEFID
+	             , WR.PRODUCTDEFVERSION
+	             , WR.PROCESSDEFID
+	             , WR.PROCESSDEFVERSION
+	             , HV.TOP_PROCESSSEGMENTID
+	             , HV.MID_PROCESSSEGMENTID
+	             , WR.PROCESSSEGMENTID
+	             , TO_NUMBER(WR.USERSEQUENCE)                          AS  USERSEQUENCE
+	             , LV.SUBPROCESSSEGMENTID
+	             , TO_NUMBER(LV.SUBUSERSEQUENCE)                       AS SUBUSERSEQUENCE
+	             , LV.ISREWORK
+	             , WR.ENTERPRISEID
+	             , WR.PLANTID
+	             , WR.AREAID
+	             , WR.REWORKTYPE
+	             , WR.REWORKCOUNT
+	             , LT.ROOTLOTSTARTDATE
+	             , WR.RECEIVETIME
+	             , WR.WORKSTARTTIME
+	             , WR.WORKENDTIME
+	             , WR.SENDTIME
+	             , WR.WEEK
+	             , WR.RESOURCEID
+	             , WR.WORKENDUSER
+	             , WR.PROCESSSEGMENTVERSION
+	             , WR.WORKCOUNT
+	             , LV.RNK
+	             , LT.LOTSTATE
+	             , LT.PROCESSSTATE
+	             , LT.PROCESSSEGMENTID                                  AS LOT_PROCESSSEGMENTID
+	             , LT.PROCESSSEGMENTVERSION                             AS LOT_PROCESSSEGMENTVERSION
+            FROM       LOTLEVEL             LV
+            INNER JOIN PCM_LOTWORKRESULT    WR   ON   LV.LOTID              = WR.LOTID
+                                                 AND  LV.PROCESSSEGMENTID   = WR.PROCESSSEGMENTID
+                                                 AND  LV.USERSEQUENCE       = WR.USERSEQUENCE
+                                                 AND  LV.WORKCOUNT          = WR.WORKCOUNT
+                                                 AND  LV.TXNHISTKEY         = WR.TXNHISTKEY
+            INNER JOIN PCM_LOT              LT   ON   WR.LOTID              = LT.LOTID
+            LEFT  JOIN BAS_PROCESSSEGMENTID_HIERAR_V 
+                                            HV   ON   WR.PROCESSSEGMENTID      = HV.PROCESSSEGMENTID
+                                                 AND  WR.PROCESSSEGMENTVERSION = HV.PROCESSSEGMENTVERSION            
+            CROSS JOIN RESULTMAX            RM
+            WHERE 1=1
+            AND   NVL(WR.RESULTTYPE, 'NORMAL') = 'NORMAL'
+            AND   TO_NUMBER(WR.USERSEQUENCE) <= RM.MAX_SEQUENCE
+            ]]>
+            <if test="ISCHECK eq 'Y'.toString()">
+            <include refid="whereForList_searchdatefragment" />
+            <include refid="whereForList_ischeckfragment" />
+            </if>            
+    ),
+    WORKSUBRESULT2 AS
+    (
+        <![CDATA[
+        SELECT WR.LOTID
+             , LT.ROOTLOTID
+             , WR.PRODUCTDEFID
+             , WR.PRODUCTDEFVERSION
+             , LV.PROCESSDEFID
+             , LV.PROCESSDEFVERSION
+             , HV.TOP_PROCESSSEGMENTID
+             , HV.MID_PROCESSSEGMENTID
+             , LV.PROCESSSEGMENTID
+             , TO_NUMBER(LV.USERSEQUENCE) AS USERSEQUENCE
+             , LV.SUBPROCESSSEGMENTID
+             , TO_NUMBER(LV.SUBUSERSEQUENCE) AS SUBUSERSEQUENCE
+             , LV.ISREWORK
+             , WR.ENTERPRISEID
+             , WR.PLANTID
+             , WR.AREAID
+             , WR.REWORKTYPE
+             , WR.REWORKCOUNT
+             , LT.ROOTLOTSTARTDATE
+             , WR.RECEIVETIME
+             , WR.WORKSTARTTIME
+             , WR.WORKENDTIME
+             , WR.SENDTIME
+             , WR.WEEK
+             , WR.RESOURCEID
+             , WR.WORKENDUSER
+             , WR.PROCESSSEGMENTVERSION
+             , WR.WORKCOUNT
+             , LV.RNK
+             , LT.LOTSTATE
+             , LT.PROCESSSTATE
+             , LT.PROCESSSEGMENTID                                      AS LOT_PROCESSSEGMENTID
+             , LT.PROCESSSEGMENTVERSION                                 AS LOT_PROCESSSEGMENTVERSION
+            FROM       LOTLEVEL            LV
+            INNER JOIN PCM_LOTWORKRESULT   WR   ON   LV.LOTID                   = WR.LOTID
+                                                AND  LV.ISREWORK                = 'IsRework'
+                                                AND  LV.SUBPROCESSDEFID         = WR.PROCESSDEFID
+                                                AND  LV.SUBPROCESSDEFVERSION    = WR.PROCESSDEFVERSION
+                                                AND  LV.SUBPROCESSSEGMENTID     = WR.PROCESSSEGMENTID
+                                                AND  LV.SUBUSERSEQUENCE         = WR.USERSEQUENCE
+                                                AND  LV.WORKCOUNT               = WR.WORKCOUNT
+                                                AND  LV.TXNHISTKEY              = WR.TXNHISTKEY
+            INNER JOIN PCM_LOT             LT   ON   WR.LOTID                   = LT.LOTID
+            LEFT  JOIN BAS_PROCESSSEGMENTID_HIERAR_V 
+                                            HV   ON   WR.PROCESSSEGMENTID      = HV.PROCESSSEGMENTID
+                                                 AND  WR.PROCESSSEGMENTVERSION = HV.PROCESSSEGMENTVERSION
+            CROSS JOIN RESULTMAX           RM
+            WHERE 1=1
+            AND   NVL(WR.RESULTTYPE, 'NORMAL') = 'NORMAL'
+            AND   TO_NUMBER(WR.USERSEQUENCE) <= RM.MAX_SEQUENCE
+            ]]>
+            <if test="ISCHECK eq 'Y'.toString()">
+            <include refid="whereForList_searchdatefragment" />
+            <include refid="whereForList_ischeckfragment" />
+            </if>
+    ),
+    WORKRESULT AS
+    (
+        SELECT ZX.LOTID                                                                                 /*LOT NO*/
+             , ZX.ROOTLOTID                                                                             /*ROOT LOT NO*/
+             , CT.CUSTOMERID                                                                            /*고객사 ID*/
+             , CT.CUSTOMERNAME                                                                          /*고객사명*/
+             , PD.PRODUCTDEFNAME                                                                        /*품목명*/
+             , ZX.PRODUCTDEFID                                                                          /*품목코드*/
+             , ZX.PRODUCTDEFVERSION                                                                     /*Rev*/
+             , ZX.PROCESSSEGMENTID                                                                      /*표준공정 ID*/
+             , DC1.DICTIONARYNAME                                      AS PROCESSSEGMENTNAME            /*표준공정명*/
+             , CASE WHEN ZX.ISREWORK = 'Normal' THEN TO_CHAR(ZX.USERSEQUENCE)
+                  ELSE ZX.USERSEQUENCE|| '.' ||ZX.SUBUSERSEQUENCE END  AS PROCESSSEQUENCE               /*공정순서*/
+             , ZX.PLANTID                                                                               /*Site*/             
+             , NVL(DC2.DICTIONARYNAME, AR.AREANAME)                    AS AREANAME                      /*작업장*/
+             , NVL(DC3.DICTIONARYNAME, CD1.MEANING)                    AS WORKTYPE                      /*작업구분*/
+             , TO_CHAR(ZX.ROOTLOTSTARTDATE, 'yyyy-MM-dd HH24:MI:SS')   AS ROOTLOTSTARTDATE              /*ROOTLOT 투입일시*/
+             , TO_CHAR(ZX.RECEIVETIME, 'yyyy-MM-dd HH24:MI:SS')        AS RECEIVEDATE                   /*인수일시*/
+             , TO_CHAR(ZX.WORKSTARTTIME, 'yyyy-MM-dd HH24:MI:SS')      AS STARTDATE                     /*작업시작일시*/
+             , TO_CHAR(ZX.WORKENDTIME, 'yyyy-MM-dd HH24:MI:SS')        AS WORKENDDATE                   /*작업완료일시*/
+             , TO_CHAR(ZX.SENDTIME, 'yyyy-MM-dd HH24:MI:SS')           AS LOTSENDDATE                   /*인계일시*/
+             , ZX.WEEK                                                                                  /*주차*/
+             , BP.BOXNO                                                                                 /*BOX NO*/
+             , ZX.RESOURCEID                                                                            /*자원 ID*/
+             , RS.DESCRIPTION                                          AS RESOURCENAME                  /*자원명*/
+             , CASE WHEN ZX.MID_PROCESSSEGMENTID IN ('7030','7536','7026','7534') THEN PLW.WORKERNAME
+               ELSE ZX.WORKENDUSER
+               END  WORKENDUSER                                                                         /*작업자*/             
+             <!-- 2021.08.12 TOBE Modify 외주작업장에서 검사할 경우 사용자정보가 없어 WORKENDUSER 컬럼에 작업장의 작업자이름이 들어오므로 
+                                         사용자정보에 일치하는 값이 없을 경우 WORKENDUSER 정보를 보여줌              -->
+             , CASE WHEN ZX.MID_PROCESSSEGMENTID IN ('7030','7536','7026','7534') THEN QI.INSPECTORNAME
+               ELSE NVL(CUS.USER_NM, ZX.WORKENDUSER)
+               END  WORKENDUSERNM	                                                                    /*작업자명*/
+             <!-- 2021.08.11 TOBE Modify 명칭에 '/'가 들어갈 경우 중복제거가 되지 않아 특수문자(한자 6)로 변경함 -->
+             , REGEXP_REPLACE(LISTAGG(DL.DURABLELOTID,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY DL.DURABLELOTID), '([^／]+)(／\1)*(／|$)', '\1\3') 
+                                                                       AS DURABLELOTID                  /*치공구 NO*/             
+             , REGEXP_REPLACE(LISTAGG(DL.DURABLEDEFID,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY DL.DURABLEDEFID), '([^／]+)(／\1)*(／|$)', '\1\3')
+                                                                       AS DURABLEDEFID                  /*치공구 ID*/
+             , REGEXP_REPLACE(LISTAGG(DC5.DICTIONARYNAME,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY DL.DURABLEDEFID), '([^／]+)(／\1)*(／|$)', '\1\3') 
+                                                                       AS DURABLEDEFNAME                /*치공구명*/             
+             , REGEXP_REPLACE(LISTAGG(BM.MATERIALDEFID,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY BM.MATERIALDEFID), '([^／]+)(／\1)*(／|$)', '\1\3') 
+                                                                       AS RAWMATERIALDEFID              /*원자재 ID*/
+             , REGEXP_REPLACE(LISTAGG(CD.CONSUMABLEDEFNAME,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY BM.MATERIALDEFID), '([^／]+)(／\1)*(／|$)', '\1\3')
+                                                                       AS RAWMATERIALDEFNAME            /*원자재 명*/
+             , REGEXP_REPLACE(LISTAGG(CL.MATERIALLOTID,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY BM.MATERIALDEFID), '([^／]+)(／\1)*(／|$)', '\1\3') 
+                                                                       AS RAWMATERIALLOTID              /*원자재 LOT ID*/
+             , REGEXP_REPLACE(LISTAGG(BM1.MATERIALDEFID,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY BM1.MATERIALDEFID), '([^／]+)(／\1)*(／|$)', '\1\3') 
+                                                                       AS SUBASSEMDEFID                 /*반제품 ID*/
+             , REGEXP_REPLACE(LISTAGG(PD1.PRODUCTDEFNAME,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY BM1.MATERIALDEFID), '([^／]+)(／\1)*(／|$)', '\1\3')
+                                                                       AS SUBASSEMDEFNAME               /*반제품 명*/
+             , REGEXP_REPLACE(LISTAGG(CL1.MATERIALLOTID,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY BM1.MATERIALDEFID), '([^／]+)(／\1)*(／|$)', '\1\3') 
+                                                                       AS SUBASSEMLOTID                 /*반제품 LOT ID*/
+             , REGEXP_REPLACE(LISTAGG(LE.EQUIPMENTID,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY LE.EQUIPMENTID), '([^／]+)(／\1)*(／|$)', '\1\3') 
+                                                                       AS EQUIPMENTID                   /*설비 ID*/
+             , REGEXP_REPLACE(LISTAGG(EPDC.DICTIONARYNAME,'／' ON OVERFLOW TRUNCATE) WITHIN GROUP (ORDER BY LE.EQUIPMENTID), '([^／]+)(／\1)*(／|$)', '\1\3')
+                                                                       AS EQUIPMENTNAME                 /*설비명*/
+             , ZX.LOTSTATE                                                                              /*LOT상태*/
+             , ZX.PROCESSSTATE                                                                          /*재공상태*/
+             , LDC.DICTIONARYNAME                                      AS LOT_PROCESSSEGMENTNAME        /*LOT의 현재공정명*/
+             <!-- 2021.08.06 사용하지 않아 주석처리
+             , ZX.PROCESSDEFID                                                                          /*라우팅ID*/
+             , ZX.PROCESSDEFVERSION                                                                     /*라우팅버전*/             
+             , ZX.USERSEQUENCE                                                                          /*공정수순*/
+             , ZX.SUBPROCESSSEGMENTID
+             , ZX.SUBUSERSEQUENCE             
+             , ZX.AREAID
+             , ZX.REWORKTYPE                                                                            /*재작업구분*/
+             , ZX.REWORKCOUNT             
+             , EC.EQUIPMENTCLASSID                                                                      /*설비그룹 ID*/
+             , DC4.DICTIONARYNAME                                      AS EQUIPMENTCLASSNAME            /*설비그룹명*/
+             , DC.DURABLECLASSID                                                                        /*치공구구분*/
+             , DC6.DICTIONARYNAME                                      AS DURABLECLASSNAME              /*치공구구분명*/
+              -->
+        FROM
+        (
+            <![CDATA[
+            SELECT * 
+              FROM WORKSUBRESULT1 WS
+            WHERE (    ( WS.MID_PROCESSSEGMENTID != '1020' AND WS.RNK = 1 )
+                    OR ( WS.MID_PROCESSSEGMENTID  = '1020' AND WS.RNK >= 1))
+            UNION ALL
+            SELECT * 
+              FROM WORKSUBRESULT2 WS
+            WHERE (    (    WS.MID_PROCESSSEGMENTID != '1020' AND WS.RNK = 1 )
+                    OR ( WS.MID_PROCESSSEGMENTID  = '1020' AND WS.RNK >= 1))
+            ]]>
+        ) ZX
+        LEFT JOIN BAS_PRODUCTDEFINITION           PD     ON   PD.PRODUCTDEFID             = ZX.PRODUCTDEFID
+                                                         AND  PD.PRODUCTDEFVERSION        = ZX.PRODUCTDEFVERSION
+        LEFT JOIN BAS_CUSTOMER                    CT     ON   CT.CUSTOMERID               = PD.CUSTOMERID
+        LEFT JOIN PCM_BOXPACKING                  BP     ON   BP.LOTID                    = ZX.LOTID
+        LEFT JOIN BAS_PROCESSSEGMENT              SG     ON   SG.PROCESSSEGMENTID         = ZX.PROCESSSEGMENTID
+                                                         AND  SG.PROCESSSEGMENTVERSION    = ZX.PROCESSSEGMENTVERSION
+        LEFT JOIN CMD_DICTIONARY                  DC1    ON   SG.PROCESSSEGMENTNAME       = DC1.DICTIONARYID
+                                                         AND  DC1.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN BAS_AREA                        AR     ON   AR.AREAID                   = ZX.AREAID
+        LEFT JOIN CMD_DICTIONARY                  DC2    ON   DC2.DICTIONARYID            = AR.AREANAME
+                                                         AND  DC2.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN CMD_LOOKUP_VALUES               CD1    ON   CD1.LOOKUP_CODE             = ZX.ISREWORK
+                                                         AND  CD1.LOOKUP_TYPE             = 'LotWorkType'
+        LEFT JOIN CMD_DICTIONARY                  DC3    ON   DC3.DICTIONARYID            = CD1.DICTIONARYID
+                                                         AND  DC3.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_RESOURCE              RS     ON   RS.RESOURCEID               = ZX.RESOURCEID        
+        <!--2021.08.06 사용하지 않아 주석처리
+        LEFT OUTER JOIN BAS_EQUIPMENTCLASS        EC     ON   EC.EQUIPMENTCLASSID         = RS.EQUIPMENTCLASSID
+        LEFT OUTER JOIN CMD_DICTIONARY            DC4    ON   DC4.DICTIONARYID            = EC.EQUIPMENTCLASSNAME
+                                                         AND  DC4.LANGUAGETYPE            = {SESSION_LANGUAGETYPE}--> 
+        LEFT OUTER JOIN PCM_LOTEQUIPMENT          LE     ON   LE.LOTID                    = ZX.LOTID
+                                                         AND  LE.PROCESSSEGMENTID         = ZX.PROCESSSEGMENTID
+                                                         AND  LE.PROCESSSEGMENTVERSION    = ZX.PROCESSSEGMENTVERSION
+                                                         AND  LE.WORKCOUNT                = ZX.WORKCOUNT
+        LEFT JOIN 	BAS_EQUIPMENT	       	      EP	 ON   LE.EQUIPMENTID              = EP.EQUIPMENTID
+        LEFT JOIN 	CMD_DICTIONARY                EPDC   ON   EPDC.DICTIONARYID           = EP.EQUIPMENTNAME
+                                                         AND  EPDC.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN PCM_LOTDURABLE            CML    ON   CML.LOTID                   = ZX.LOTID
+                                                         AND  CML.PROCESSSEGMENTID        = ZX.PROCESSSEGMENTID
+                                                         AND  CML.PROCESSSEGMENTVERSION   = ZX.PROCESSSEGMENTVERSION
+                                                         AND  CML.WORKCOUNT               = ZX.WORKCOUNT
+        LEFT OUTER JOIN TOM_DURABLELOT            DL     ON   DL.DURABLELOTID             = CML.DURABLELOTID
+                                                         AND  DL.AREAID                   = ZX.AREAID
+                                                         AND  DL.ENTERPRISEID             = ZX.ENTERPRISEID
+                                                         AND  DL.PLANTID                  = ZX.PLANTID
+        LEFT OUTER JOIN TOM_DURABLEDEFINITION     DD     ON   DL.DURABLEDEFID             = DD.DURABLEDEFID
+                                                         AND  DL.DURABLEDEFVERSION        = DD.DURABLEDEFVERSION<!-- 2021.08.11 TOBE Add-->
+        LEFT OUTER JOIN CMD_DICTIONARY            DC5    ON   DC5.DICTIONARYID            = DD.DURABLEDEFNAME
+                                                         AND  DC5.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN TOM_DURABLECLASS          DC     ON   DC.DURABLECLASSID           = DD.DURABLECLASSID
+        LEFT OUTER JOIN CMD_DICTIONARY            DC6    ON   DC6.DICTIONARYID            = DC.DURABLECLASSNAME
+                                                         AND  DC6.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_BILLOFMATERIAL        BM     ON   BM.PRODUCTDEFID             = ZX.PRODUCTDEFID
+                                                         AND  BM.PRODUCTDEFVERSION        = ZX.PRODUCTDEFVERSION
+                                                         AND  BM.MATERIALTYPE             = 'Consumable'
+                                                         AND  BM.PROCESSSEGMENTID         = ZX.PROCESSSEGMENTID
+                                                         AND  BM.PROCESSDEFID             = ZX.PROCESSDEFID
+                                                         AND  BM.PROCESSDEFVERSION        = ZX.PROCESSDEFVERSION
+                                                         AND  BM.PROCESSSEGMENTVERSION    = ZX.PROCESSSEGMENTVERSION 
+        LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION  CD     ON   CD.CONSUMABLEDEFID          = BM.MATERIALDEFID
+                                                         AND  CD.CONSUMABLEDEFVERSION     = BM.MATERIALDEFVERSION
+                                                         <!-- 2021.07.22 TOBE Modify 6210000164일 경우 BAS_BILLOFMATERIAL은 Consumable인데 BAS_CONSUMABLEDEFINITION은 Subsidiary
+                                                         AND  CD.CONSUMABLECLASSID        = 'RawMaterial'-->
+        LEFT OUTER JOIN MTM_CONSUMEMATERIALLOT    CL     ON   CL.LOTID                    = ZX.LOTID
+                                                         AND  CL.MATERIALTYPE             = 'Consumable'
+                                                         AND  CL.PRODUCTDEFID             = BM.PRODUCTDEFID
+                                                         AND  CL.PRODUCTDEFVERSION        = BM.PRODUCTDEFVERSION
+                                                         AND  CL.PROCESSDEFID             = BM.PROCESSDEFID
+                                                         AND  CL.PROCESSDEFVERSION        = BM.PROCESSDEFVERSION
+                                                         AND  CL.PROCESSSEGMENTID         = BM.PROCESSSEGMENTID
+                                                         AND  CL.PROCESSSEGMENTVERSION    = BM.PROCESSSEGMENTVERSION
+                                                         AND  CL.CONSUMABLEDEFID          = BM.MATERIALDEFID
+                                                         AND  CL.CONSUMABLEDEFVERSION     = BM.MATERIALDEFVERSION
+        LEFT OUTER JOIN BAS_BILLOFMATERIAL        BM1    ON   BM1.PRODUCTDEFID            = ZX.PRODUCTDEFID
+                                                         AND  BM1.PRODUCTDEFVERSION       = ZX.PRODUCTDEFVERSION
+                                                         AND  BM1.MATERIALTYPE            = 'Product'
+                                                         AND  BM1.PROCESSSEGMENTID        = ZX.PROCESSSEGMENTID
+                                                         AND  BM1.PROCESSDEFID            = ZX.PROCESSDEFID
+                                                         AND  BM1.PROCESSDEFVERSION       = ZX.PROCESSDEFVERSION
+                                                         AND  BM1.PROCESSSEGMENTVERSION   = ZX.PROCESSSEGMENTVERSION                                                         
+        LEFT OUTER JOIN BAS_PRODUCTDEFINITION     PD1    ON   PD1.PRODUCTDEFID            = BM1.MATERIALDEFID
+                                                         AND  PD1.PRODUCTDEFVERSION       = BM1.MATERIALDEFVERSION
+                                                         AND  PD1.PRODUCTCLASSID          = 'SubAssembly'
+        LEFT OUTER JOIN MTM_CONSUMEMATERIALLOT    CL1    ON   CL1.LOTID                   = ZX.LOTID
+                                                  <!-- 2021.07.22 자재정보가 반제품이나 반제품 하위에 제품이 있을 경우에는 제품으로 이 테이블에 저장하므로 타입을 연결할 경우 누락됨 2042445A4CL00021
+                                                         AND  CL1.MATERIALTYPE            = 'Product' -->
+                                                         AND  CL1.PRODUCTDEFID            = BM1.PRODUCTDEFID
+                                                         AND  CL1.PRODUCTDEFVERSION       = BM1.PRODUCTDEFVERSION
+                                                         AND  CL1.PROCESSDEFID            = BM1.PROCESSDEFID
+                                                         AND  CL1.PROCESSDEFVERSION       = BM1.PROCESSDEFVERSION
+                                                         AND  CL1.PROCESSSEGMENTID        = BM1.PROCESSSEGMENTID
+                                                         AND  CL1.PROCESSSEGMENTVERSION   = BM1.PROCESSSEGMENTVERSION 
+                                                         AND  CL1.CONSUMABLEDEFID         = BM1.MATERIALDEFID
+                                                         AND  CL1.CONSUMABLEDEFVERSION    = BM1.MATERIALDEFVERSION                                                         
+        LEFT JOIN BAS_PROCESSSEGMENT              LBP    ON   LBP.PROCESSSEGMENTID        = ZX.LOT_PROCESSSEGMENTID
+                                                         AND  LBP.PROCESSSEGMENTVERSION   = ZX.LOT_PROCESSSEGMENTVERSION
+        LEFT JOIN CMD_DICTIONARY                  LDC    ON   LBP.PROCESSSEGMENTNAME      = LDC.DICTIONARYID
+                                                         AND  LDC.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}                                                         
+        LEFT JOIN CMD_USERS                       CUS    ON   CUS.USER_ID                 = ZX.WORKENDUSER
+        /*2021.07.22 반제품일 경우 하위 제품에 연결된 원자재Lot를 가져오기 위해 추가*/
+        LEFT JOIN (
+                   SELECT  BC.MAINPRODUCTID
+                          ,BC.MAINPRODUCTVERSION
+                          ,BC.COMPONENTITEMID      AS ITEMID
+                          ,BC.COMPONENTITEMVERSION AS ITEMVERSION
+                          ,BC.OPERATIONID
+                          ,BO.PROCESSSEGMENTID
+                          ,CONNECT_BY_ISLEAF       AS LEAFS
+                    FROM   BAS_BOMCOMPONENT BC
+                        ,  BAS_OPERATION    BO
+                    WHERE  BO.OPERATIONID       = BC.OPERATIONID
+                      AND  BO.ENTERPRISEID      = BC.ENTERPRISEID
+                    CONNECT BY NOCYCLE BC.MAINPRODUCTID      = PRIOR BC.COMPONENTITEMID
+                                  AND  BC.MAINPRODUCTVERSION = PRIOR BC.COMPONENTITEMVERSION
+                                                ) X      ON   X.MAINPRODUCTID            = BM1.MAINMATERIALDEFID
+                                                         AND  X.MAINPRODUCTVERSION       = BM1.MAINMATERIALDEFVERSION
+                                                         AND  X.PROCESSSEGMENTID         = BM1.PROCESSSEGMENTID
+                                                         AND  X.MAINPRODUCTID            = CL1.PRODUCTDEFID
+                                                         AND  X.MAINPRODUCTVERSION       = CL1.PRODUCTDEFVERSION
+                                                         AND  X.PROCESSSEGMENTID         = CL1.PROCESSSEGMENTID
+                                                         AND  X.LEAFS                    = 1    
+        LEFT JOIN PCM_LOTWORKER                   PLW    ON   ZX.LOTID                   = PLW.LOTID
+                                                         AND  ZX.PRODUCTDEFID            = PLW.PROCESSDEFID
+                                                         AND  ZX.PRODUCTDEFVERSION       = PLW.PRODUCTDEFVERSION
+                                                         AND  ZX.PROCESSSEGMENTID        = PLW.PROCESSSEGMENTID
+                                                         AND  ZX.PROCESSSEGMENTVERSION   = PLW.PROCESSSEGMENTVERSION
+                                                         AND  NVL(ZX.WORKCOUNT, 0)       = NVL(PLW.WORKCOUNT, 0)
+                                                         AND  TO_NUMBER(ZX.USERSEQUENCE) = TO_NUMBER(PLW.USERSEQUENCE) 
+        LEFT JOIN QAM_QCINSPECTOR                 QI     ON   PLW.WORKERNAME             = QI.INSPECTORID
+        WHERE 1=1
+        <if test="ISCHECK eq 'Y'.toString()">
+            <if test="BOXNO != null and BOXNO !='' ">
+            AND   BP.BOXNO = #{BOXNO}  /*BOX NO*/
+            </if>
+            <if test="EQUIPMENTID != null and EQUIPMENTID !='' ">
+            AND   LE.EQUIPMENTID IN (SELECT regexp_substr(#{EQUIPMENTID}, '[^,]+', 1, LEVEL)
+                                       FROM dual
+                                     CONNECT BY LEVEL <![CDATA[<=]]> length(#{EQUIPMENTID})-length(replace(#{EQUIPMENTID},',',''))+1)/*설비*/
+            </if>
+            <choose>
+                <when test="MIDDLEPROCESSSEGMENTID eq '7026'.toString() || MIDDLEPROCESSSEGMENTID eq '7534'.toString() || MIDDLEPROCESSSEGMENTID eq '7030'.toString() || MIDDLEPROCESSSEGMENTID eq '7536'.toString()">
+                    <if test="WORKENDUSER != null and WORKENDUSER !='' ">
+                        AND   PLW.WORKERNAME = #{WORKENDUSER}  /*작업자*/
+                    </if>
+                </when>
+                <otherwise>
+                    <if test="WORKENDUSER != null and WORKENDUSER !='' ">
+                        AND   ZX.WORKENDUSER = #{WORKENDUSER}  /*작업자*/
+                    </if>
+                </otherwise>
+            </choose>
+            <if test="DURABLECLASSID != null and DURABLECLASSID !='' ">
+            AND   DC.DURABLECLASSID = #{DURABLECLASSID}  /*치공구구분*/
+            </if>
+            <if test="DURABLEDEFID != null and DURABLEDEFID !='' ">
+            AND   DL.DURABLEDEFID = #{DURABLEDEFID}  /*치공구명*/
+            </if>
+            <if test="DURABLELOTID != null and DURABLELOTID !='' ">
+            AND   DL.DURABLELOTID = #{DURABLELOTID}  /*치공구 NO*/
+            </if>
+            <if test="RAWMATERIALDEFID != null and RAWMATERIALDEFID !='' ">
+            AND   BM.MATERIALDEFID = #{RAWMATERIALDEFID}  /*원자재명*/
+            </if>
+            <if test="RAWMATERIALLOTID != null and RAWMATERIALLOTID !='' ">
+            AND   CL.MATERIALLOTID = #{RAWMATERIALLOTID}  /*원자재 LOT*/
+            </if>
+            <if test="SUBASSEMDEFID != null and SUBASSEMDEFID !='' ">
+            AND   BM1.MATERIALDEFID = #{SUBASSEMDEFID}  /*반제품명*/
+            </if>
+            <if test="SUBASSEMLOTID != null and SUBASSEMLOTID !='' ">
+            AND   CL1.MATERIALLOTID = #{SUBASSEMLOTID}  /*반제품 LOT*/
+            </if>
+        </if>                
+        GROUP BY ZX.LOTID                /*LOT NO*/
+               , ZX.ROOTLOTID            /*ROOT LOT NO*/
+               , CT.CUSTOMERID           /*고객사 ID*/
+               , CT.CUSTOMERNAME         /*고객사명*/
+               , PD.PRODUCTDEFNAME       /*품목명*/
+               , ZX.PRODUCTDEFID         /*품목코드*/
+               , ZX.PRODUCTDEFVERSION    /*Rev*/
+               , ZX.PROCESSDEFID
+               , ZX.PROCESSDEFVERSION
+               , ZX.PROCESSSEGMENTID     /*표준공정 ID*/
+               , DC1.DICTIONARYNAME
+               , ZX.ISREWORK
+               , ZX.USERSEQUENCE
+               , ZX.PLANTID
+               , ZX.AREAID
+               , DC2.DICTIONARYNAME
+               , AR.AREANAME
+               , DC3.DICTIONARYNAME
+               , CD1.MEANING
+               , ZX.ROOTLOTSTARTDATE     /*투입일시*/
+               , ZX.RECEIVETIME          /*인수일시*/
+               , ZX.WORKSTARTTIME        /*작업시작일시*/
+               , ZX.WORKENDTIME          /*작업완료일시*/
+               , ZX.SENDTIME             /*인계일시*/
+               , ZX.WEEK                 /*주차*/
+               , BP.BOXNO                /*BOX NO*/
+               , ZX.RESOURCEID           /*자원 ID*/
+               , RS.DESCRIPTION
+               , CASE WHEN MID_PROCESSSEGMENTID IN ('7030','7536','7026','7534') THEN PLW.WORKERNAME
+                 ELSE ZX.WORKENDUSER
+                 END
+               , CASE WHEN MID_PROCESSSEGMENTID IN ('7030','7536','7026','7534') THEN QI.INSPECTORNAME
+                 ELSE NVL(CUS.USER_NM, ZX.WORKENDUSER)
+                 END
+               , ZX.LOTSTATE
+               , ZX.PROCESSSTATE
+               , LDC.DICTIONARYNAME
+               , ZX.SUBUSERSEQUENCE    
+               <!--2021.08.06
+               , ZX.SUBPROCESSSEGMENTID           
+               , ZX.REWORKTYPE
+               , ZX.REWORKCOUNT               
+               , EC.EQUIPMENTCLASSID     /*설비그룹 ID*/
+               , DC4.DICTIONARYNAME
+               , DC.DURABLECLASSID       /*치공구구분*/
+               , DC6.DICTIONARYNAME               
+               -->
+        )
+        SELECT DISTINCT WR.*
+        FROM           WORKRESULT               WR
+        <!-- 2021.08.03 사용하지 않는데 왜 조인을 사용하지는 알수 없어 일단 주석
+             CROSS JOIN     RESULTMAX                RM
+         -->
+        WHERE          1=1
+        ORDER BY TO_NUMBER(WR.PROCESSSEQUENCE), WR.ROOTLOTID, WR.LOTID
+    </select>
+
+    <!--
+    ************************************************************
+    * 검색조건 팝업 조회
+    ************************************************************
+    -->
+    <!-- AFFECT LOT 산정 > Lot 조회 팝업 그리드 데이터를 조회 한다.  AS-IS : GetLotIdList ver. 10002  -->
+    <select id="selectLotIdList"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectLotIdList  : LOT */
+        WITH WIPLIST
+        AS
+        (
+            SELECT L.LOTID
+                 , L.WORKCOUNT
+                 , L.LOTTYPE
+                 , L.PRODUCTDEFID
+                 , L.PRODUCTDEFVERSION
+                 , PD.PRODUCTDEFNAME
+                 , L.PROCESSDEFID
+                 , L.PROCESSSEGMENTID
+                 , L.USERSEQUENCE
+                 , L.PLANTID
+                 , L.AREAID
+                 , FN_QAM_GET_DICTIONARYNAME(AR.AREANAME, #{SESSION_LANGUAGETYPE})           AS AREANAME
+                 , NVL(PD.RTRSHT, 'SHT')                                                     AS RTRSHT
+                 , L.UNIT
+                 , L.QTY
+                 , L.PCSQTY
+                 , L.PANELQTY
+                 , (PD.PCSMM * L.QTY)                                                        AS M2QTY
+                 , PO.PLANENDTIME
+                 , FN_QAM_GET_DICTIONARYNAME(SG.PROCESSSEGMENTNAME, #{SESSION_LANGUAGETYPE}) AS PROCESSSEGMENTNAME
+            FROM            PCM_LOT              L
+            LEFT OUTER JOIN BAS_AREA             AR   ON   AR.AREAID                       = L.AREAID
+            INNER JOIN BAS_PRODUCTDEFINITION     PD   ON   L.PRODUCTDEFID                  = PD.PRODUCTDEFID
+                                                      AND  L.PRODUCTDEFVERSION             = PD.PRODUCTDEFVERSION
+            LEFT JOIN MFM_PRODUCTIONORDER        PO   ON   L.PRODUCTIONORDERID             = PO.PRODUCTIONORDERID
+                                                      AND  L.LINENO                        = PO.LINENO
+            INNER JOIN BAS_PROCESSSEGMENT        SG   ON   L.PROCESSSEGMENTID              = SG.PROCESSSEGMENTID
+                                                      AND  L.PROCESSSEGMENTVERSION         = SG.PROCESSSEGMENTVERSION
+            LEFT JOIN BAS_PROCESSSEGMENTCLASS    MSC  ON   SG.PROCESSSEGMENTCLASSID        = MSC.PROCESSSEGMENTCLASSID 
+                                                      AND  MSC.PROCESSSEGMENTCLASSTYPE     = 'TopProcessSegmentClass'<!-- 중공정-->
+            LEFT JOIN BAS_PROCESSSEGMENTCLASS    TSC  ON   MSC.PARENTPROCESSSEGMENTCLASSID = TSC.PROCESSSEGMENTCLASSID
+                                                      AND  TSC.PROCESSSEGMENTCLASSTYPE     = 'MiddleProcessSegmentClass' <!--대공정-->
+            WHERE   1 = 1
+            <if test="PROCESSSEGMENTTYPE != null and PROCESSSEGMENTTYPE !='' ">
+                AND SG.PROCESSSEGMENTTYPE = #{PROCESSSEGMENTTYPE}
+            </if>
+            <if test="TXTPRODUCTDEFNAME2 != null and TXTPRODUCTDEFNAME2 !='' ">
+                AND PD.PRODUCTDEFID = #{TXTPRODUCTDEFNAME2}
+            </if>
+            <if test="PRODUCTDEFIDNAME != null and PRODUCTDEFIDNAME !='' ">
+                AND (    UPPER(L.PRODUCTDEFID) LIKE UPPER(#{PRODUCTDEFIDNAME}) || '%'
+                     OR  UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(#{PRODUCTDEFIDNAME}) || '%' )
+            </if>
+            <if test="TXTLOTID != null and TXTLOTID !='' ">
+                AND UPPER(L.LOTID) LIKE '%' || UPPER(#{TXTLOTID}) || '%'
+            </if>
+            <if test="CBOCUSTOMER != null and CBOCUSTOMER !='' and  !'*'.equals(CBOCUSTOMER) ">
+                AND EXISTS
+                        (
+                            SELECT    1
+                            FROM    ufn_selectStringToSplit(#{CBOCUSTOMER}, ',')    C
+                            WHERE    PO.CUSTOMERID = C.VALUE
+                        )
+            </if>
+            <if test="TXTPROCESSSEGMENT != null and TXTPROCESSSEGMENT !='' ">
+                AND L.PROCESSSEGMENTID =  #{TXTPROCESSSEGMENT}
+            </if>
+            <if test="CBOPRODUCTIONTYPE != null and CBOPRODUCTIONTYPE !='' and  !'*'.equals(CBOPRODUCTIONTYPE) ">
+                AND EXISTS
+                        (
+                            SELECT  1
+                            FROM    UFN_SELECTSTRINGTOSPLIT(#{CBORTRSHT}, ',')    PT
+                            WHERE   L.LOTTYPE = PT.VALUE
+                        )
+            </if>
+            <if test="CBORTRSHT != null and CBORTRSHT !='' and  !'*'.equals(CBORTRSHT) ">
+                AND NVL(PIS.RTRSHT, 'SHT') = #{CBORTRSHT}
+            </if>
+            <if test="CBOTOPPROCESS != null and CBOTOPPROCESS !='' and  !'*'.equals(CBOTOPPROCESS) ">
+                AND MPS.PROCESSSEGMENTID = #{CBOTOPPROCESS}
+            </if>
+            <if test="CBOMIDDLEPROCESS != null and CBOMIDDLEPROCESS !='' and  !'*'.equals(CBOMIDDLEPROCESS) ">
+                AND TPS.PROCESSSEGMENTID = #{CBOMIDDLEPROCESS}
+            </if>
+        )
+        SELECT L.*
+             , TRUNC(PLANENDTIME) - TRUNC(SYSDATE) AS LEFTDATE
+             , WR.RECEIVEPCSQTY         /*인수Step 수량*/
+             , WR.RECEIVEPANELQTY
+             , WR.WORKSTARTPCSQTY       /*시작 Step 수량*/
+             , WR.WORKSTARTPANELQTY
+             , WR.WORKENDPCSQTY         /*완료 Step 수량*/
+             , WR.WORKENDPANELQTY
+             , WR.SENDPCSQTY            /*인계 Step 수량*/
+             , WR.SENDPANELQTY
+             , (  NVL(WR.RECEIVELEADTIME, 0) + NVL(WR.WORKSTARTLEADTIME, 0) +
+                  NVL(WR.WORKENDLEADTIME, 0) + NVL(WR.SENDLEADTIME, 0)  ) AS LEADTIME /*공정 LeadTime*/
+        FROM      WIPLIST                      L
+        LEFT JOIN PCM_LOTWORKRESULT            WR    ON   L.LOTID            = WR.LOTID
+                                                     AND  L.PROCESSSEGMENTID = WR.PROCESSSEGMENTID
+                                                     AND  L.USERSEQUENCE     = WR.USERSEQUENCE
+                                                     AND  L.WORKCOUNT        = WR.WORKCOUNT
+    </select>
+
+
+    <!-- Affect Lot 산정 > 품목 리스트를 조회한다.  AS-IS : GetProductListByCustomer ver. 10001  -->
+    <select id="selectProductListByCustomer"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectProductListByCustomer  : 품목*/
+        SELECT PD.PRODUCTDEFID
+             , PD.PRODUCTDEFNAME
+             , PD.PRODUCTDEFVERSION
+             , PD.PRODUCTDEFID || '|' || PD.PRODUCTDEFVERSION    AS     PRODUCTDEFIDVERSION
+        FROM       PCM_LOT                       LT
+        INNER JOIN PCM_LOTWORKRESULT             WR    ON   WR.LOTID                         = LT.LOTID
+        LEFT OUTER JOIN BAS_PRODUCTDEFINITION    PD    ON   PD.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                       AND  PD.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>       
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}
+        </if>
+        <if test="PRODUCTDEFIDNAME != null and PRODUCTDEFIDNAME !='' ">
+        AND   (PD.PRODUCTDEFID LIKE '%' || #{PRODUCTDEFIDNAME} || '%' OR PD.PRODUCTDEFNAME LIKE '%' || #{PRODUCTDEFIDNAME} || '%')
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>  
+        GROUP BY PD.PRODUCTDEFID
+               , PD.PRODUCTDEFNAME
+               , PD.PRODUCTDEFVERSION
+               , PD.PRODUCTDEFID || '|' || PD.PRODUCTDEFVERSION
+        ORDER BY PD.PRODUCTDEFID
+               , PD.PRODUCTDEFNAME
+               , PD.PRODUCTDEFVERSION
+    </select>
+
+
+    <!-- Affect Lot 산정 > Lot의 MK주차를 조회한다.  AS-IS : GetProductMKWeekByProductdefid ver. 10001  -->
+    <select id="selectProductMKWeekByProductdefid"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectProductMKWeekByProductdefid : 주차  */
+        SELECT WR.WEEK
+        FROM       PCM_LOT                       LT
+        INNER JOIN PCM_LOTWORKRESULT             WR    ON   WR.LOTID                         = LT.LOTID
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>        
+        WHERE WR.WEEK IS NOT NULL
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_productdefidfragment" />
+        <if test="WEEK != null and WEEK !='' ">
+        AND   (WR.WEEK = #{WEEK} OR WR.WEEK LIKE '%' || #{WEEK} || '%')
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>
+        GROUP BY WR.WEEK
+        ORDER BY WR.WEEK
+    </select>
+
+    <!-- Affect Lot 산정 > Lot의 BOX NO를 조회한다.  AS-IS : GetProductBoxNoByProductdefid ver. 10001  -->
+    <select id="selectProductBoxNoByProductdefid"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectProductBoxNoByProductdefid  : BOX NO*/
+        SELECT BP.BOXNO
+        FROM       PCM_LOT                       LT
+        INNER JOIN PCM_LOTWORKRESULT             WR    ON   WR.LOTID                              = LT.LOTID
+        INNER JOIN PCM_BOXPACKING                BP    ON   BP.LOTID                              = WR.LOTID
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>          
+        WHERE BP.BOXNO IS NOT NULL
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_productdefidfragment" />
+        <if test="BOXNO != null and BOXNO !='' ">
+        AND   BP.BOXNO LIKE '%' || #{BOXNO} || '%'
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>        
+        GROUP BY BP.BOXNO
+        ORDER BY BP.BOXNO
+    </select>
+    
+    <!-- Affect Lot 산정 > Lot의 대공정를 조회한다. -->
+    <select id="selectTopProcessSegmentIdByProductdefid"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectTopProcessSegmentIdByProductdefid  : 대공정*/
+        SELECT PPC.PROCESSSEGMENTCLASSID         AS TOPPROCESSSEGMENTCLASSID          /*대공정 ID*/
+             , D3.DICTIONARYNAME                 AS TOPPROCESSSEGMENTCLASSNAME        /*대공정 명*/
+        FROM            PCM_LOT                  LT
+        INNER JOIN      PCM_LOTWORKRESULT        WR   ON   WR.LOTID                         = LT.LOTID
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT       PS   ON   PS.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                      AND  PS.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_DICTIONARY           D1   ON   D1.DICTIONARYID                  = PS.PROCESSSEGMENTNAME
+                                                      AND  D1.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS  PSC  ON   PSC.PROCESSSEGMENTCLASSID        = PS.PROCESSSEGMENTCLASSID
+        LEFT OUTER JOIN CMD_DICTIONARY           D2   ON   D2.DICTIONARYID                  = PSC.PROCESSSEGMENTCLASSNAME
+                                                      AND  D2.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS  PPC  ON   PPC.PROCESSSEGMENTCLASSID        = PSC.PARENTPROCESSSEGMENTCLASSID
+        LEFT OUTER JOIN CMD_DICTIONARY           D3   ON   D3.DICTIONARYID                  = PPC.PROCESSSEGMENTCLASSNAME
+                                                      AND  D3.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>                                                         
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_productdefidfragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}/*SITE*/
+        </if>
+        <if test="TOPPROCESSSEGMENTID != null and TOPPROCESSSEGMENTID !='' ">
+        AND   (   WR.PROCESSSEGMENTID IN (SELECT PPC.PROCESSSEGMENTID 
+                                          FROM   BAS_PROCESSSEGMENTID_HIERARCHY_V PPC
+                                          WHERE  PPC.TOP_PROCESSSEGMENTID LIKE #{TOPPROCESSSEGMENTID}||'%')
+               OR D3.DICTIONARYNAME LIKE '%' || #{TOPPROCESSSEGMENTID} || '%' ) /*대공정*/            
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>            
+        GROUP BY PPC.PROCESSSEGMENTCLASSID, D3.DICTIONARYNAME
+        ORDER BY PPC.PROCESSSEGMENTCLASSID
+    </select>
+    
+    
+    <!-- Affect Lot 산정 > Lot의 중공정를 조회한다.-->
+    <select id="selectMiddleProcessSegmentIdByProductdefid"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectMiddleProcessSegmentIdByProductdefid  : 중공정*/
+        SELECT PPC.PROCESSSEGMENTCLASSID         AS TOPPROCESSSEGMENTCLASSID          /*대공정 ID*/
+             , D3.DICTIONARYNAME                 AS TOPPROCESSSEGMENTCLASSNAME        /*대공정 명*/
+             , PSC.PROCESSSEGMENTCLASSID         AS MIDPROCESSSEGMENTCLASSID          /*중공정 ID*/
+             , D2.DICTIONARYNAME                 AS MIDPROCESSSEGMENTCLASSNAME        /*중공정 명*/
+        FROM            PCM_LOT                  LT
+        INNER JOIN      PCM_LOTWORKRESULT        WR   ON   WR.LOTID                         = LT.LOTID
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT       PS   ON   PS.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                      AND  PS.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_DICTIONARY           D1   ON   D1.DICTIONARYID                  = PS.PROCESSSEGMENTNAME
+                                                      AND  D1.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS  PSC  ON   PSC.PROCESSSEGMENTCLASSID        = PS.PROCESSSEGMENTCLASSID
+        LEFT OUTER JOIN CMD_DICTIONARY           D2   ON   D2.DICTIONARYID                  = PSC.PROCESSSEGMENTCLASSNAME
+                                                      AND  D2.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS  PPC  ON   PPC.PROCESSSEGMENTCLASSID        = PSC.PARENTPROCESSSEGMENTCLASSID
+        LEFT OUTER JOIN CMD_DICTIONARY           D3   ON   D3.DICTIONARYID                  = PPC.PROCESSSEGMENTCLASSNAME
+                                                      AND  D3.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if> 
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_productdefidfragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}/*SITE*/
+        </if>
+        <if test="TOPPROCESSSEGMENTID != null and TOPPROCESSSEGMENTID !='' ">
+        AND   WR.PROCESSSEGMENTID IN (SELECT PPC.PROCESSSEGMENTID 
+                                      FROM   BAS_PROCESSSEGMENTID_HIERARCHY_V PPC
+                                      WHERE  PPC.TOP_PROCESSSEGMENTID = #{TOPPROCESSSEGMENTID}) /*대공정*/
+        </if>           
+        <if test="MIDDLEPROCESSSEGMENTID != null and MIDDLEPROCESSSEGMENTID !='' ">
+        AND   (   WR.PROCESSSEGMENTID IN (SELECT PPC.PROCESSSEGMENTID 
+                                          FROM   BAS_PROCESSSEGMENTID_HIERARCHY_V PPC
+                                          WHERE  PPC.MID_PROCESSSEGMENTID LIKE #{MIDDLEPROCESSSEGMENTID}||'%')
+               OR D2.DICTIONARYNAME LIKE '%' || #{MIDDLEPROCESSSEGMENTID} || '%' ) /*중공정*/
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if> 
+        GROUP BY PPC.PROCESSSEGMENTCLASSID
+               , D3.DICTIONARYNAME
+               , PSC.PROCESSSEGMENTCLASSID
+               , D2.DICTIONARYNAME
+        ORDER BY TOPPROCESSSEGMENTCLASSID, MIDPROCESSSEGMENTCLASSID
+    </select>
+    
+    
+    <!-- Affect Lot 산정 > Lot의 표준공정를 조회한다.  AS-IS : GetProcessSegmentIdByProductdefid ver. 10001  -->
+    <select id="selectProcessSegmentIdByProductdefid"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectProcessSegmentIdByProductdefid  : 표준공정*/
+        SELECT PPC.PROCESSSEGMENTCLASSID         AS TOPPROCESSSEGMENTCLASSID          /*대공정 ID*/
+             , D3.DICTIONARYNAME                 AS TOPPROCESSSEGMENTCLASSNAME        /*대공정 명*/
+             , PSC.PROCESSSEGMENTCLASSID         AS MIDPROCESSSEGMENTCLASSID          /*중공정 ID*/
+             , D2.DICTIONARYNAME                 AS MIDPROCESSSEGMENTCLASSNAME        /*중공정 명*/
+             , WR.PROCESSSEGMENTID                                                    /*표준공정 ID*/
+             , D1.DICTIONARYNAME                 AS PROCESSSEGMENNAME                 /*표준공정 명*/
+        FROM            PCM_LOT                  LT
+        INNER JOIN      PCM_LOTWORKRESULT        WR   ON   WR.LOTID                         = LT.LOTID
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT       PS   ON   PS.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                      AND  PS.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_DICTIONARY           D1   ON   D1.DICTIONARYID                  = PS.PROCESSSEGMENTNAME
+                                                      AND  D1.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS  PSC  ON   PSC.PROCESSSEGMENTCLASSID        = PS.PROCESSSEGMENTCLASSID
+        LEFT OUTER JOIN CMD_DICTIONARY           D2   ON   D2.DICTIONARYID                  = PSC.PROCESSSEGMENTCLASSNAME
+                                                      AND  D2.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS  PPC  ON   PPC.PROCESSSEGMENTCLASSID        = PSC.PARENTPROCESSSEGMENTCLASSID
+        LEFT OUTER JOIN CMD_DICTIONARY           D3   ON   D3.DICTIONARYID                  = PPC.PROCESSSEGMENTCLASSNAME
+                                                      AND  D3.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if> 
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_productdefidfragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}/*SITE*/
+        </if>
+        <if test="TOPPROCESSSEGMENTID != null and TOPPROCESSSEGMENTID !='' ">
+        AND   WR.PROCESSSEGMENTID IN (SELECT PPC.PROCESSSEGMENTID 
+                                      FROM   BAS_PROCESSSEGMENTID_HIERARCHY_V PPC
+                                      WHERE  PPC.TOP_PROCESSSEGMENTID = #{TOPPROCESSSEGMENTID}) /*대공정*/
+        </if>
+        <if test="MIDDLEPROCESSSEGMENTID != null and MIDDLEPROCESSSEGMENTID !='' ">            
+        AND   WR.PROCESSSEGMENTID IN (SELECT PPC.PROCESSSEGMENTID 
+                                      FROM   BAS_PROCESSSEGMENTID_HIERARCHY_V PPC
+                                      WHERE  PPC.MID_PROCESSSEGMENTID = #{MIDDLEPROCESSSEGMENTID}) /*중공정*/
+        </if>            
+        <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+        AND   (WR.PROCESSSEGMENTID = #{PROCESSSEGMENTID} OR D1.DICTIONARYNAME LIKE '%' || #{PROCESSSEGMENTID} || '%' ) /*표준공정*/
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if> 
+        GROUP BY PPC.PROCESSSEGMENTCLASSID
+               , D3.DICTIONARYNAME
+               , PSC.PROCESSSEGMENTCLASSID
+               , D2.DICTIONARYNAME
+               , WR.PROCESSSEGMENTID
+               , D1.DICTIONARYNAME
+        ORDER BY PPC.PROCESSSEGMENTCLASSID
+               , PSC.PROCESSSEGMENTCLASSID
+               , WR.PROCESSSEGMENTID
+    </select>
+
+
+    <!-- Affect Lot 산정 > Lot의 작업장을 조회한다.  AS-IS : GetAreaIdByProcesssegmentId ver. 10001  -->
+    <select id="selectAreaIdByProcesssegmentId"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectAreaIdByProcesssegmentId  : 작업장*/
+        SELECT WR.AREAID
+             , D1.DICTIONARYNAME              AS AREANAME
+        FROM       PCM_LOT                    LT
+        INNER JOIN PCM_LOTWORKRESULT          WR   ON   WR.LOTID                         = LT.LOTID
+        INNER JOIN BAS_AREA                   AR   ON   AR.AREAID                        = WR.AREAID
+        LEFT OUTER JOIN CMD_DICTIONARY        D1   ON   D1.DICTIONARYID                  = AR.AREANAME
+                                                   AND  D1.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>                                                   
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_popupfragment" />
+        <if test="AREAID != null and AREAID !='' ">
+        AND   (WR.AREAID = #{AREAID} OR D1.DICTIONARYNAME LIKE '%' || #{AREAID} || '%' ) /*작업장*/
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if> 
+        GROUP BY WR.AREAID, D1.DICTIONARYNAME
+        ORDER BY WR.AREAID
+    </select>
+
+    <!-- Affect Lot 산정 > Lot의 자원 를 조회한다. AS-IS : GetResourceIdByEquipmentClassId ver. 10001  -->
+    <select id="selectResourceIdByEquipmentClassId"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectResourceIdByEquipmentClassId  : 자원*/
+        SELECT WR.RESOURCEID
+             , RS.DESCRIPTION                    AS RESOURCENAME
+        FROM       PCM_LOT                       LT
+        INNER JOIN PCM_LOTWORKRESULT             WR   ON   WR.LOTID                         = LT.LOTID
+        LEFT OUTER JOIN BAS_RESOURCE             RS   ON   RS.RESOURCEID                    = WR.RESOURCEID
+        LEFT OUTER JOIN BAS_EQUIPMENTCLASS       EC   ON   EC.EQUIPMENTCLASSID              = RS.EQUIPMENTCLASSID
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if> 
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_popupfragment" />
+        <if test="AREAID != null and AREAID !='' ">
+        AND   WR.AREAID = #{AREAID}/*작업장*/
+        </if>        
+        <if test="P_RESOURCEID != null and P_RESOURCEID !='' ">
+        AND   (WR.RESOURCEID     = #{P_RESOURCEID} OR RS.DESCRIPTION LIKE '%' || #{P_RESOURCEID} || '%' ) /*자원*/
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>
+        AND   NVL(WR.RESULTTYPE, 'NORMAL') <![CDATA[<>]]> 'SKIP' <!-- SKIP일 경우 제외 -->
+        GROUP BY WR.RESOURCEID, RS.DESCRIPTION
+        ORDER BY WR.RESOURCEID
+    </select>
+
+    <!-- Affect Lot 산정 > Lot의 설비(호기) 를 조회한다. AS-IS : GetEquipmentidByResourceId ver. 10001  -->
+    <select id="selectEquipmentidByResourceId"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectEquipmentidByResourceId  : 설비호기*/
+        SELECT EQ.EQUIPMENTID
+             , D1.DICTIONARYNAME                AS    EQUIPMENTIDNAME
+        FROM       PCM_LOT                      LT
+        INNER JOIN PCM_LOTWORKRESULT            WR   ON   WR.LOTID                         = LT.LOTID
+        LEFT OUTER JOIN BAS_RESOURCE            RS   ON   RS.RESOURCEID                    = WR.RESOURCEID
+        LEFT OUTER JOIN BAS_EQUIPMENTCLASS      EC   ON   EC.EQUIPMENTCLASSID              = RS.EQUIPMENTCLASSID
+        INNER JOIN PCM_LOTEQUIPMENT             LE   ON   LE.LOTID                         = WR.LOTID
+                                                     AND  LE.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                     AND  LE.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION
+                                                     AND  LE.WORKCOUNT                     = WR.WORKCOUNT
+        INNER JOIN BAS_EQUIPMENT                EQ   ON   EQ.EQUIPMENTID                   = LE.EQUIPMENTID
+        INNER JOIN CMD_DICTIONARY               D1   ON   D1.DICTIONARYID                  = EQ.EQUIPMENTNAME
+                                                     AND  D1.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>                                                      
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_popupfragment" />
+        <if test="AREAID != null and AREAID !='' ">
+        AND   WR.AREAID = #{AREAID}/*작업장*/
+        </if>         
+        <if test="P_RESOURCEID != null and P_RESOURCEID !='' ">
+        AND   WR.RESOURCEID = #{P_RESOURCEID} /*자원*/
+        </if>   
+        <if test="P_EQUIPMENTID != null and P_EQUIPMENTID !='' ">
+        AND   (EQ.EQUIPMENTID = #{P_EQUIPMENTID} OR D1.DICTIONARYNAME LIKE '%' || #{P_EQUIPMENTID} || '%' )            
+        </if>        
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>
+        AND   NVL(WR.RESULTTYPE, 'NORMAL') <![CDATA[<>]]> 'SKIP' <!-- SKIP일 경우 제외 -->
+        GROUP BY EQ.EQUIPMENTID, D1.DICTIONARYNAME
+        ORDER BY EQ.EQUIPMENTID
+    </select>
+
+
+    <!-- Affect Lot 산정 > Lot의 작업자를 조회한다. AS-IS : GetWorkstartUserByEquipmentid ver. 10001  -->
+    <select id="selectWorkstartUserByEquipmentid"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectWorkstartUserByEquipmentid  : 작업자*/
+        SELECT DISTINCT X.WORKENDUSER
+             , X.WORKENDUSERNAME
+          FROM (
+                SELECT CASE WHEN PHV.MID_PROCESSSEGMENTID IN ('7030','7536','7026','7534') THEN PLW.WORKERNAME
+                       ELSE WR.WORKENDUSER
+                       END  WORKENDUSER
+                     , CASE WHEN PHV.MID_PROCESSSEGMENTID IN ('7030','7536','7026','7534') THEN QI.INSPECTORNAME 
+                       ELSE UR.USER_NM
+                       END  WORKENDUSERNAME                       
+                FROM       PCM_LOT                        LT
+                INNER JOIN PCM_LOTWORKRESULT              WR   ON   WR.LOTID                         = LT.LOTID
+                                                               AND  NVL(WR.RESULTTYPE, 'NORMAL') <![CDATA[<>]]> 'SKIP'
+                LEFT OUTER JOIN BAS_RESOURCE              RS   ON   RS.RESOURCEID                    = WR.RESOURCEID
+                LEFT OUTER JOIN BAS_EQUIPMENTCLASS        EC   ON   EC.EQUIPMENTCLASSID              = RS.EQUIPMENTCLASSID
+                INNER JOIN PCM_LOTEQUIPMENT               LE   ON   LE.LOTID                         = WR.LOTID
+                                                               AND  LE.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                               AND  LE.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION
+                                                               AND  LE.WORKCOUNT                     = WR.WORKCOUNT
+                INNER JOIN BAS_EQUIPMENT                  EQ   ON   EQ.EQUIPMENTID                   = LE.EQUIPMENTID
+                INNER JOIN CMD_USERS                      UR   ON   UR.USER_ID                       = WR.WORKENDUSER
+                LEFT JOIN BAS_PROCESSSEGMENTID_HIERARCHY_V PHV ON   PHV.PROCESSSEGMENTID             = WR.PROCESSSEGMENTID
+                                                               AND  PHV.PROCESSSEGMENTVERSION        = WR.PROCESSSEGMENTVERSION
+                LEFT JOIN PCM_LOTWORKER                   PLW  ON   WR.LOTID                         = PLW.LOTID
+                                                               AND  WR.PRODUCTDEFID                  = PLW.PROCESSDEFID
+                                                               AND  WR.PRODUCTDEFVERSION             = PLW.PRODUCTDEFVERSION
+                                                               AND  WR.PROCESSSEGMENTID              = PLW.PROCESSSEGMENTID
+                                                               AND  WR.PROCESSSEGMENTVERSION         = PLW.PROCESSSEGMENTVERSION
+                                                               AND  NVL(WR.WORKCOUNT, 0)             = NVL(PLW.WORKCOUNT, 0)
+                                                               AND  TO_NUMBER(WR.USERSEQUENCE)       = TO_NUMBER(PLW.USERSEQUENCE) 
+                LEFT  JOIN QAM_QCINSPECTOR                QI   ON   PLW.WORKERNAME                   = QI.INSPECTORID
+
+		        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+		        INNER JOIN ( SELECT PLW.LOTID
+		                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+					           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+					              , PCM_LOTWORKRESULT              PLW
+					              , PCM_LOT                        PL
+					          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+					            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+					            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+					            AND PLW.LOTID                 = PL.LOTID
+					         GROUP BY PLW.LOTID   ) PAC
+					                                     ON   PAC.LOTID                      = WR.LOTID
+		        </if>          
+                WHERE 1=1
+                <include refid="whereForList_searchdatefragment" />
+                <include refid="whereForList_popupfragment" />
+                <if test="AREAID != null and AREAID !='' ">
+		        AND   WR.AREAID = #{AREAID}/*작업장*/
+		        </if>         
+		        <if test="P_RESOURCEID != null and P_RESOURCEID !='' ">
+		        AND   WR.RESOURCEID = #{P_RESOURCEID} /*자원*/
+		        </if>
+		        <if test="P_EQUIPMENTID != null and P_EQUIPMENTID !='' ">
+		        AND   EQ.EQUIPMENTID = #{P_EQUIPMENTID}            
+		        </if> 		        
+                <if test="P_WORKENDUSER != null and P_WORKENDUSER !='' ">
+                AND (WR.WORKENDUSER     = #{P_WORKENDUSER} OR UR.USER_NM LIKE '%' || #{P_WORKENDUSER} || '%' ) /*설비*/
+                </if>
+                <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+                AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+                </if>
+               ) X
+        WHERE X.WORKENDUSER IS NOT NULL
+        ORDER BY X.WORKENDUSER
+    </select>
+
+    <!-- Affect Lot 산정 > 치공구 명을 조회한다. AS-IS : GetdDurableDefIdByDurableClassId ver. 10001  -->
+    <select id="selectDurableDefIdByDurableClassId"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectDurableDefIdByDurableClassId  : 치공구 명*/
+        SELECT DD.DURABLEDEFID
+             , D1.DICTIONARYNAME            AS    DURABLEDEFNAME
+        FROM       PCM_LOT                  LT
+        INNER JOIN PCM_LOTWORKRESULT        WR   ON   WR.LOTID                         = LT.LOTID
+        INNER JOIN TOM_DURABLEDEFINITION    DD   ON   DD.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                 AND  DD.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+        INNER JOIN CMD_DICTIONARY           D1   ON   D1.DICTIONARYID                  = DD.DURABLEDEFNAME
+                                                 AND  D1.LANGUAGETYPE                  = #{SESSION_LANGUAGETYPE}
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>                                               
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND WR.PLANTID = #{PLANTID}/*SITE*/
+        </if>
+        <if test="DURABLECLASSID != null and DURABLECLASSID !='' ">
+        AND DD.DURABLECLASSID     = #{DURABLECLASSID}
+        </if>
+        <if test="DURABLEDEFID != null and DURABLEDEFID !='' ">
+        AND (DD.DURABLEDEFID = #{DURABLEDEFID} OR D1.DICTIONARYNAME LIKE '%' || #{DURABLEDEFID} || '%' )
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>  
+        AND   NVL(WR.RESULTTYPE, 'NORMAL') <![CDATA[<>]]> 'SKIP' <!-- SKIP일 경우 제외 -->
+        GROUP BY DD.DURABLEDEFID, D1.DICTIONARYNAME
+        ORDER BY DD.DURABLEDEFID
+    </select>
+
+
+    <!-- Affect Lot 산정 > 치공구 NO을 조회한다. AS-IS : GetdurablelotidByDurableDefId ver. 10001  -->
+    <select id="selectDurablelotidByDurableDefId"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectDurablelotidByDurableDefId  : 치공구 NO*/
+        SELECT DL.DURABLELOTID
+        FROM       PCM_LOT                 LT
+        INNER JOIN PCM_LOTWORKRESULT       WR   ON   WR.LOTID                         = LT.LOTID
+        INNER JOIN PCM_LOTDURABLE          CML  ON   CML.LOTID                        = WR.LOTID
+                                                AND  CML.PROCESSSEGMENTID             = WR.PROCESSSEGMENTID
+                                                AND  CML.WORKCOUNT                    = WR.WORKCOUNT
+        INNER JOIN TOM_DURABLELOT          DL   ON   DL.DURABLELOTID                  = CML.DURABLELOTID
+                                                AND  DL.AREAID                        = WR.AREAID
+                                                AND  DL.ENTERPRISEID                  = WR.ENTERPRISEID
+                                                AND  DL.PLANTID                       = WR.PLANTID
+        INNER JOIN TOM_DURABLEDEFINITION   DD   ON   DL.DURABLEDEFID                  = DD.DURABLEDEFID
+        INNER JOIN TOM_DURABLECLASS        DC   ON   DC.DURABLECLASSID                = DD.DURABLECLASSID
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>          
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID          = #{PLANTID}/*SITE*/
+        </if>
+        <if test="DURABLECLASSID != null and DURABLECLASSID !='' ">
+        AND   DD.DURABLECLASSID   = #{DURABLECLASSID}
+        </if>
+        <if test="DURABLEDEFID != null and DURABLEDEFID !='' ">
+        AND   DD.DURABLEDEFID     = #{DURABLEDEFID}
+        </if>
+        <if test="DURABLELOTID != null and DURABLELOTID !='' ">
+         AND  DL.DURABLELOTID     = #{DURABLELOTID}
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>
+        AND   NVL(WR.RESULTTYPE, 'NORMAL') <![CDATA[<>]]> 'SKIP' <!-- SKIP일 경우 제외 -->
+        GROUP BY DL.DURABLELOTID
+        ORDER BY DL.DURABLELOTID
+    </select>
+
+
+    <!-- Affect Lot 산정 > 원자재 명을 조회한다. AS-IS : GetMaterialDefId ver. 10001  -->
+    <select id="selectMaterialDefId"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectMaterialDefId  : 원자재 명*/
+        SELECT CD.CONSUMABLEDEFID             AS  MATERIALDEFID
+             , CD.CONSUMABLEDEFNAME           AS  MATERIALDEFNAME
+        FROM       PCM_LOT                    LT
+        INNER JOIN PCM_LOTWORKRESULT          WR    ON   WR.LOTID                         = LT.LOTID
+        INNER JOIN BAS_BILLOFMATERIAL         BM    ON   BM.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                    AND  BM.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+                                                    AND  BM.PROCESSDEFID                  = WR.PROCESSDEFID
+                                                    AND  BM.PROCESSDEFVERSION             = WR.PROCESSDEFVERSION
+                                                    AND  BM.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                    AND  BM.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION           
+                                                    AND  BM.MATERIALTYPE                  = 'Consumable'
+        INNER JOIN BAS_CONSUMABLEDEFINITION   CD    ON   CD.CONSUMABLEDEFID               = BM.MATERIALDEFID
+                                                    AND  CD.CONSUMABLEDEFVERSION          = BM.MATERIALDEFVERSION
+                                                    <!-- 6210000164일 경우 BAS_BILLOFMATERIAL은 Consumable인데 BAS_CONSUMABLEDEFINITION은 Subsidiary
+                                                    AND  CD.CONSUMABLECLASSID             = 'RawMaterial' -->
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>                                                  
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_productdefidfragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}/*SITE*/
+        </if>
+        <if test="MATERIALDEFID != null and MATERIALDEFID !='' ">
+        AND   (BM.MATERIALDEFID = #{MATERIALDEFID} OR CD.CONSUMABLEDEFNAME LIKE '%' || #{MATERIALDEFID} || '%' )
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>
+        AND   NVL(WR.RESULTTYPE, 'NORMAL') <![CDATA[<>]]> 'SKIP' <!-- SKIP일 경우 제외 -->
+        GROUP BY CD.CONSUMABLEDEFID, CD.CONSUMABLEDEFNAME
+        ORDER BY CD.CONSUMABLEDEFID
+    </select>
+
+
+    <!-- Affect Lot 산정 > 원자재 LOT을 조회한다. AS-IS : GetMateriallotidByMaterialDefId ver. 10001  -->
+    <select id="selectMateriallotidByMaterialDefId"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectMateriallotidByMaterialDefId  : 원자재 LOT*/
+        SELECT CL.MATERIALLOTID
+        FROM       PCM_LOT                    LT
+        INNER JOIN PCM_LOTWORKRESULT          WR    ON   WR.LOTID                         = LT.LOTID
+        INNER JOIN BAS_BILLOFMATERIAL         BM    ON   BM.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                    AND  BM.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+                                                    AND  BM.PROCESSDEFID                  = WR.PROCESSDEFID
+                                                    AND  BM.PROCESSDEFVERSION             = WR.PROCESSDEFVERSION
+                                                    AND  BM.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                    AND  BM.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION        
+                                                    AND  BM.MATERIALTYPE                  = 'Consumable'
+        INNER JOIN BAS_CONSUMABLEDEFINITION   CD    ON   CD.CONSUMABLEDEFID               = BM.MATERIALDEFID
+                                                    AND  CD.CONSUMABLEDEFVERSION          = BM.MATERIALDEFVERSION
+                                                    <!-- 6210000164일 경우 BAS_BILLOFMATERIAL은 Consumable인데 BAS_CONSUMABLEDEFINITION은 Subsidiary
+                                                    AND  CD.CONSUMABLECLASSID             = 'RawMaterial' -->
+        INNER JOIN MTM_CONSUMEMATERIALLOT     CL    ON   CL.LOTID                         = WR.LOTID
+                                                    AND  CL.PRODUCTDEFID                  = BM.PRODUCTDEFID
+                                                    AND  CL.PRODUCTDEFVERSION             = BM.PRODUCTDEFVERSION
+                                                    AND  CL.PROCESSDEFID                  = BM.PROCESSDEFID
+                                                    AND  CL.PROCESSDEFVERSION             = BM.PROCESSDEFVERSION
+                                                    AND  CL.PROCESSSEGMENTID              = BM.PROCESSSEGMENTID
+                                                    AND  CL.PROCESSSEGMENTVERSION         = BM.PROCESSSEGMENTVERSION                                                    
+	                                                AND  CL.MATERIALTYPE                  = 'Consumable'
+	                                                AND  CL.CONSUMABLEDEFID               = BM.MATERIALDEFID
+                                                    AND  CL.CONSUMABLEDEFVERSION          = BM.MATERIALDEFVERSION
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>                                                     
+        WHERE 1=1
+        AND   CL.MATERIALLOTID != '*'
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_productdefidfragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}/*SITE*/
+        </if>
+        <if test="MATERIALDEFID != null and MATERIALDEFID !='' ">
+        AND   CD.CONSUMABLEDEFID     = #{MATERIALDEFID}
+        </if>
+        <if test="MATERIALLOTID != null and MATERIALLOTID !='' ">
+        AND   CL.MATERIALLOTID     = #{MATERIALLOTID}
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>
+        AND   NVL(WR.RESULTTYPE, 'NORMAL') <![CDATA[<>]]> 'SKIP' <!-- SKIP일 경우 제외 -->
+        GROUP BY CL.MATERIALLOTID
+        ORDER BY CL.MATERIALLOTID
+    </select>
+
+
+    <!-- Affect Lot 산정 > 반제품명(가공품)을 조회한다. AS-IS : GetProductMaterialLotId ver. 10001  -->
+    <select id="selectProductMaterialLotId"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectProductMaterialLotId  : 반제품명(가공품)*/
+        SELECT PD.PRODUCTDEFID             AS MATERIALDEFID
+             , PD.PRODUCTDEFNAME           AS MATERIALDEFNAME
+        FROM       PCM_LOT                 LT
+        INNER JOIN PCM_LOTWORKRESULT       WR    ON   WR.LOTID                         = LT.LOTID
+        INNER JOIN BAS_BILLOFMATERIAL      BM    ON   BM.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                 AND  BM.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+                                                 AND  BM.PROCESSDEFID                  = WR.PROCESSDEFID
+                                                 AND  BM.PROCESSDEFVERSION             = WR.PROCESSDEFVERSION
+                                                 AND  BM.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                 AND  BM.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION  
+                                                 AND  BM.MATERIALTYPE                  = 'Product'
+        INNER JOIN BAS_PRODUCTDEFINITION   PD    ON   PD.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                 AND  PD.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+                                                 AND  PD.PRODUCTCLASSID                = 'SubAssembly'
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>                                                
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_productdefidfragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}/*SITE*/
+        </if>
+        <if test="MATERIALDEFIDPRODUCT != null and MATERIALDEFIDPRODUCT !='' ">
+        AND   (BM.PRODUCTDEFID = #{MATERIALDEFIDPRODUCT} OR PD.PRODUCTDEFNAME  LIKE '%' || #{MATERIALDEFIDPRODUCT} || '%' ) /*반제품명*/
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>
+        AND   NVL(WR.RESULTTYPE, 'NORMAL') <![CDATA[<>]]> 'SKIP' <!-- SKIP일 경우 제외 -->
+        GROUP BY PD.PRODUCTDEFID, PD.PRODUCTDEFNAME
+        ORDER BY PD.PRODUCTDEFID
+    </select>
+
+
+    <!-- Affect Lot 산정 > 반제품 LOT을 조회한다. AS-IS : GetMaterialLotIdByProductMaterialLotId ver. 10001  -->
+    <select id="selectMaterialLotIdByProductMaterialLotId"  parameterType="map"  resultType="hashmap"  >
+    /* smh.qam.dao.QAM03400Dao.selectMaterialLotIdByProductMaterialLotId  : 반제품 LOT*/
+        SELECT CL.MATERIALLOTID
+        FROM       PCM_LOT                 LT
+        INNER JOIN PCM_LOTWORKRESULT       WR    ON   WR.LOTID                         = LT.LOTID
+        INNER JOIN BAS_BILLOFMATERIAL      BM    ON   BM.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                 AND  BM.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+                                                 AND  BM.PROCESSDEFID                  = WR.PROCESSDEFID
+                                                 AND  BM.PROCESSDEFVERSION             = WR.PROCESSDEFVERSION
+                                                 AND  BM.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                 AND  BM.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION          
+                                                 AND  BM.MATERIALTYPE                  = 'Product'
+        INNER JOIN BAS_PRODUCTDEFINITION   PD    ON   PD.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                 AND  PD.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+                                                 AND  PD.PRODUCTCLASSID                = 'SubAssembly'
+        INNER JOIN MTM_CONSUMEMATERIALLOT  CL    ON   CL.LOTID                         = WR.LOTID
+                                                 AND  CL.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                 AND  CL.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+                                                 AND  CL.PROCESSDEFID                  = WR.PROCESSDEFID
+                                                 AND  CL.PROCESSDEFVERSION             = WR.PROCESSDEFVERSION
+                                                 AND  CL.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                 AND  CL.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION
+                                                 <!-- 2021.07.22 자재정보가 반제품이나 반제품 하위에 제품이 있을 경우에는 제품으로 이 테이블에 저장하므로 타입을 연결할 경우 누락됨 2042445A4CL00021
+                                                 AND  CL.MATERIALTYPE                  = 'Product' -->
+                                                 <!-- 2021.07.22 TOBE Add -->  
+                                                 AND  CL.CONSUMABLEDEFID               = BM.MATERIALDEFID
+                                                 AND  CL.CONSUMABLEDEFVERSION          = BM.MATERIALDEFVERSION                                               
+        INNER JOIN MTM_CONSUMEMATERIALLOT  CL    ON   CL.LOTID                         = WR.LOTID
+                                                 AND  CL.PRODUCTDEFID                  = WR.PRODUCTDEFID
+                                                 AND  CL.PRODUCTDEFVERSION             = WR.PRODUCTDEFVERSION
+                                                 AND  CL.PROCESSDEFID                  = WR.PROCESSDEFID
+                                                 AND  CL.PROCESSDEFVERSION             = WR.PROCESSDEFVERSION
+                                                 AND  CL.PROCESSSEGMENTID              = WR.PROCESSSEGMENTID
+                                                 AND  CL.PROCESSSEGMENTVERSION         = WR.PROCESSSEGMENTVERSION
+                                                 <!-- 2021.07.22 자재정보가 반제품이나 반제품 하위에 제품이 있을 경우에는 제품으로 이 테이블에 저장하므로 타입을 연결할 경우 누락됨 2042445A4CL00021
+                                                 AND  CL.MATERIALTYPE                  = 'Product' -->
+                                                 <!-- 2021.07.22 TOBE Add -->  
+                                                 AND  CL.CONSUMABLEDEFID               = BM.MATERIALDEFID
+                                                 AND  CL.CONSUMABLEDEFVERSION          = BM.MATERIALDEFVERSION
+        /*2021.07.22 반제품일 경우 하위 제품에 연결된 원자재Lot를 가져오기 위해 추가*/
+        LEFT JOIN (
+                   SELECT  BC.MAINPRODUCTID
+                          ,BC.MAINPRODUCTVERSION
+                          ,BC.COMPONENTITEMID      AS ITEMID
+                          ,BC.COMPONENTITEMVERSION AS ITEMVERSION
+                          ,BC.OPERATIONID
+                          ,BO.PROCESSSEGMENTID
+                          ,CONNECT_BY_ISLEAF       AS LEAFS
+                    FROM   BAS_BOMCOMPONENT BC
+                        ,  BAS_OPERATION    BO
+                    WHERE  BO.OPERATIONID       = BC.OPERATIONID
+                      AND  BO.ENTERPRISEID      = BC.ENTERPRISEID
+                    CONNECT BY NOCYCLE BC.MAINPRODUCTID      = PRIOR BC.COMPONENTITEMID
+                                  AND  BC.MAINPRODUCTVERSION = PRIOR BC.COMPONENTITEMVERSION
+                                                 ) X  ON   X.MAINPRODUCTID      = BM.MAINMATERIALDEFID
+                                                      AND  X.MAINPRODUCTVERSION = BM.MAINMATERIALDEFVERSION
+                                                      AND  X.PROCESSSEGMENTID   = BM.PROCESSSEGMENTID
+                                                      AND  X.MAINPRODUCTID      = CL.PRODUCTDEFID
+                                                      AND  X.MAINPRODUCTVERSION = CL.PRODUCTDEFVERSION
+                                                      AND  X.PROCESSSEGMENTID   = CL.PROCESSSEGMENTID
+                                                      AND  X.LEAFS = 1                                            
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        INNER JOIN ( SELECT PLW.LOTID
+                          , MIN(PLW.SENDTIME)  AS PACKINGTIME
+			           FROM BAS_PROCESSSEGMENTID_HIERAR_V  PHV
+			              , PCM_LOTWORKRESULT              PLW
+			              , PCM_LOT                        PL
+			          WHERE PHV.TOP_PROCESSSEGMENTID  = '80'
+			            AND PHV.PROCESSSEGMENTID      = PLW.PROCESSSEGMENTID
+			            AND PHV.PROCESSSEGMENTVERSION = PLW.PROCESSSEGMENTVERSION
+			            AND PLW.LOTID                 = PL.LOTID
+			         GROUP BY PLW.LOTID   ) PAC
+			                                     ON   PAC.LOTID                      = WR.LOTID
+        </if>                                                 
+        WHERE 1=1
+        <include refid="whereForList_searchdatefragment" />
+        <include refid="whereForList_productdefidfragment" />
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   WR.PLANTID = #{PLANTID}/*SITE*/
+        </if>
+        <if test="MATERIALDEFIDPRODUCT != null and MATERIALDEFIDPRODUCT !='' ">
+        AND   BM.PRODUCTDEFID = #{MATERIALDEFIDPRODUCT} /*반제품*/
+        </if>
+        <if test="MATERIALLOTIDPRODUCT != null and MATERIALLOTIDPRODUCT !='' ">
+        AND   CL.MATERIALLOTID = #{MATERIALLOTIDPRODUCT} /*반제품 LOT*/
+        </if>
+        <if test="P_SENDTIMEFR != null and P_SENDTIMEFR !='' and P_SENDTIMETO != null and P_SENDTIMETO !=''">
+        AND   PAC.PACKINGTIME BETWEEN TO_DATE(#{P_SENDTIMEFR}, 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_SENDTIMETO}, 'YYYY-MM-DD HH24:MI:SS')/*생산입고일(포장 작업완료일)*/
+        </if>
+        AND   NVL(WR.RESULTTYPE, 'NORMAL') <![CDATA[<>]]> 'SKIP' <!-- SKIP일 경우 제외 -->
+        GROUP BY CL.MATERIALLOTID
+        ORDER BY CL.MATERIALLOTID
+    </select>
+
+</mapper>

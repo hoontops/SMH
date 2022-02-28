@@ -1,0 +1,703 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS02200Dao">
+	
+	<!-- Product Info 조회-->
+    <select id="selectProductDEFInfo" parameterType="map" resultType="hashmap">
+    	/* smh.bas.dao.BAS02200Dao."selectProductDEFInfo" */
+				SELECT  MS.CUSTOMERNAME           								-- 고객사
+				       ,MA.ITEMID               	  	as PRODUCTDEFID			-- 품목코드
+				       ,MA.ITEMVERSION            		as PRODUCTDEFVERSION	-- 품목버전
+				       ,MA.MASTERDATACLASSID			as PRODUCTDEFCLASSID	-- 품목구분
+				       ,RT.COMPLETIONWAREHOUSEID  								-- 완료창고
+				       ,WH.WAREHOUSENAME										-- 완료창고명
+				       ,MA.ITEMNAME               		as PRODUCTDEFNAME		-- 품목명
+				       ,MA.UOMDEFID												-- UOM
+				       ,MS.JOBTYPE                								-- 작업구분
+				       ,JT.JOBTYPENAME											-- 작업구분명
+				       ,MA.PRODUCTIONTYPE										-- 생산구분
+				       ,B.PRODUCTIONTYPENAME       								-- 생산구분명
+				       ,MS.RTRSHT
+				       ,MS.PNLSIZEXAXIS
+				       ,MS.PNLSIZEYAXIS
+				       ,MS.PCSPNL												--배열수
+				       ,MS.PCSMM												--산출수
+				       ,MS.USELAYER												--사용층
+				       ,PISC.CHANGENOTE1				as REMARK				--비고
+				FROM BAS_ITEMMASTER MA
+				INNER JOIN BAS_PRODUCTITEMSPEC MS 				ON 	MS.ENTERPRISEID 		= MA.ENTERPRISEID
+				                                 				AND MS.ITEMID 				= MA.ITEMID
+				                                 				AND MS.ITEMVERSION 			= MA.ITEMVERSION
+				LEFT OUTER JOIN BAS_ROUTING    RT 				ON 	RT.ENTERPRISEID 		= MA.ENTERPRISEID
+				                                 				AND RT.ASSEMBLYITEMID 		= MA.ITEMID
+				                                 				AND RT.ASSEMBLYITEMVERSION	= MA.ITEMVERSION
+				LEFT OUTER JOIN BAS_WAREHOUSE  WH				ON 	WH.ENTERPRISEID 		= MA.ENTERPRISEID
+																AND WH.PLANTID				= #{PLANTID}
+				                                 				AND WH.WAREHOUSEID 			= RT.COMPLETIONWAREHOUSEID         
+				LEFT OUTER JOIN BAS_PRODUCTITEMSPECCOMMENT  PISC	ON 	PISC.ITEMID 			= MA.ITEMID
+																AND PISC.ITEMVERSION			= MA.ITEMVERSION                                 	                        	
+				LEFT JOIN 	(	
+								SELECT	C.LOOKUP_CODE CODEID
+						              , D.DICTIONARYNAME	AS PRODUCTIONTYPENAME
+								FROM CMD_LOOKUP_VALUES	C
+								LEFT OUTER JOIN	CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID
+								WHERE	1=1
+									AND		C.LOOKUP_TYPE = 'ProductionType'
+									AND		C.ENABLED_FLAG = 'Y'
+									AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+								) B										ON MA.PRODUCTIONTYPE = B.CODEID
+				LEFT JOIN 	(	
+								SELECT	C.LOOKUP_CODE CODEID
+						              , F.DICTIONARYNAME	AS JOBTYPENAME
+								FROM CMD_LOOKUP_VALUES	C
+								LEFT OUTER JOIN	CMD_DICTIONARY	F	ON	C.DICTIONARYID = F.DICTIONARYID
+								WHERE	1=1
+									AND		C.LOOKUP_TYPE = 'JobType'
+									AND		C.ENABLED_FLAG = 'Y'
+									AND		F.LANGUAGETYPE =#{SESSION_LANGUAGETYPE} 
+							) JT									ON 	MS.JOBTYPE =JT.CODEID   				
+				WHERE 1=1
+					AND MA.ENTERPRISEID 	= #{SESSION_ENTERPRISEID}
+					AND MA.ITEMID 			= #{ITEMID}
+					AND MA.ITEMVERSION 		= #{ITEMVERSION}
+					AND MA.VALIDSTATE = 'Valid' 
+	</select>
+	
+	<!-- Product Oper Resource 조회-->
+    <select id="selectOperationResource" parameterType="map" resultType="hashmap">
+	/* smh.bas.dao.BAS02200Dao."selectOperationResource" */
+				WITH  BOMTREE
+				(
+				     ROOT_ASSEMBLYITEMID
+				    ,ROOT_ASSEMBLYITEMVERSION
+				    ,PLANTID
+				    ,ASSEMBLYITEMID
+				    ,ASSEMBLYITEMVERSION
+				    ,BOMID
+				    ,SITE
+				    ,USERSEQUENCE
+				    ,COMPONENTSEQUENCE
+				    ,BOMSEQUENCE
+				    ,LVL
+				) AS (
+				    SELECT *
+				    FROM 
+				    (
+				        SELECT  P.ASSEMBLYITEMID        ROOT_ASSEMBLYITEMID
+				            ,   P.ASSEMBLYITEMVERSION   ROOT_ASSEMBLYITEMVERSION
+				            ,   A.PLANTID               PLANTID
+				            ,   P.ASSEMBLYITEMID        ASSEMBLYITEMID
+				            ,   P.ASSEMBLYITEMVERSION   ASSEMBLYITEMVERSION
+				            ,   CASE WHEN A.ASSEMBLYBOMID IS NOT NULL THEN A.ASSEMBLYBOMID ELSE A.COMPONENTBOMID END BOMID
+				            ,   P.PLANTID               AS SITE
+				            ,   ''						AS	USERSEQUENCE
+				       		  ,    A.COMPONENTSEQUENCE
+				       		  ,   '' 						AS	BOMSEQUENCE
+				            ,   1                       AS LVL
+				        FROM    BAS_BOMCOMPONENT                 A
+				        INNER JOIN BAS_ASSEMBLYBILLOFMATERIAL    P   ON  P.ASSEMBLYBOMID = A.ASSEMBLYBOMID
+				                                                    AND P.ENTERPRISEID  = A.ENTERPRISEID
+				                                                    AND P.VALIDSTATE = 'Valid'
+				        LEFT OUTER JOIN BAS_BOMCOMPONENT         B   ON  P.ASSEMBLYBOMID = B.COMPONENTBOMID
+				                                                    AND P.ENTERPRISEID = B.ENTERPRISEID
+				                                                    AND B.VALIDSTATE = 'Valid' 
+				        WHERE   P.ASSEMBLYITEMID = #{ITEMID}
+                  		  AND   P.ASSEMBLYITEMVERSION = #{ITEMVERSION}
+				          AND   B.COMPONENTBOMID IS NULL
+				          AND   ROWNUM = 1 
+				    )A
+				    UNION ALL
+				    SELECT  BG.ROOT_ASSEMBLYITEMID
+				       ,    BG.ROOT_ASSEMBLYITEMVERSION
+				       ,    A.PLANTID                           AS PLANTID         
+				       ,    A.COMPONENTITEMID					AS ASSEMBLYITEMID
+				       ,    A.COMPONENTITEMVERSION              AS ASSEMBLYITEMVERSION
+				       ,    CASE WHEN C.ASSEMBLYBOMID IS NOT NULL THEN C.ASSEMBLYBOMID ELSE A.COMPONENTBOMID END BOMID 
+				       ,    O.PLANTID                           AS SITE
+				       ,    O.USERSEQUENCE
+				       ,    A.COMPONENTSEQUENCE
+				       ,    CASE WHEN BG.BOMSEQUENCE IS NOT NULL THEN BG.BOMSEQUENCE || '.' || LPAD(TO_CHAR(O.USERSEQUENCE), 4, '0') || '.' || LPAD(TO_CHAR(A.COMPONENTSEQUENCE), 4, '0') 
+				                 ELSE LPAD(TO_CHAR(O.USERSEQUENCE), 4, '0') || '.' || LPAD(TO_CHAR(A.COMPONENTSEQUENCE), 4, '0')  
+                         END  AS  BOMSEQUENCE               
+               ,    BG.LVL + 1                          AS LVL
+            FROM    BAS_BOMCOMPONENT                     A
+            INNER JOIN BAS_ASSEMBLYBILLOFMATERIAL        P   ON P.ASSEMBLYBOMID = A.ASSEMBLYBOMID
+            	 														    AND P.VALIDSTATE = 'Valid'
+            INNER JOIN BAS_OPERATION                     O   ON O.OPERATIONID = A.OPERATIONID
+            															AND O.VALIDSTATE = 'Valid'
+            INNER JOIN BOMTREE                          BG   ON P.ASSEMBLYITEMID = BG.ASSEMBLYITEMID 
+                                                            AND P.ASSEMBLYITEMVERSION = BG.ASSEMBLYITEMVERSION 
+            INNER JOIN BAS_ASSEMBLYBILLOFMATERIAL       C    ON C.ASSEMBLYITEMID = A.COMPONENTITEMID
+                                                            AND C.ASSEMBLYITEMVERSION = A.COMPONENTITEMVERSION
+                                                            AND C.VALIDSTATE = 'Valid'
+                                                            )
+                                                            
+        SELECT  
+            BT.ROOT_ASSEMBLYITEMID
+            ,BT.ROOT_ASSEMBLYITEMVERSION
+            ,BT.ASSEMBLYITEMID          AS ITEMID
+            ,BT.ASSEMBLYITEMVERSION        AS ITEMVERSION
+            ,PI.PNLSIZEXAXIS                    AS PNLX
+                      ,PI.PNLSIZEYAXIS                    AS PNLY
+            ,CASE WHEN BT.BOMSEQUENCE IS NULL THEN LPAD(TO_CHAR(MO.USERSEQUENCE), 4, '0')  
+             ELSE  BT.BOMSEQUENCE || '.' || LPAD(TO_CHAR(MO.USERSEQUENCE), 4, '0')
+             END AS NEWSEQ
+            ,MO.PLANTID
+            ,MO.USERSEQUENCE
+            ,MO.PROCESSSEGMENTID
+            ,MO.PROCESSUOM 
+            ,PN.DICTIONARYNAME                  AS PROCESSSEGMENTNAME
+            ,MO.DESCRIPTION 
+            ,PG.ISREQUIREDOPERATIONSPEC
+            ,PG.SUBSEGMENTID1
+            ,NULL AS OUTSOURCINGSPECNO
+            ,PG.PROCESSSEGMENTCLASSID            
+            , TO_CHAR(MO.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+            ,CU.USER_NM             AS CREATOR            
+            , TO_CHAR(MO.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+            ,MU.USER_NM             AS MODIFIER
+		      ,(SELECT COUNT(*)
+		        FROM   BAS_INSPECTIONITEMREL BI
+		        WHERE  BI.SPECCLASSID = 'OperationSpec'
+		        AND    BI.RESOURCEID = BT.ASSEMBLYITEMID --품목ID
+		        AND    BI.RESOURCEVERSION = BT.ASSEMBLYITEMVERSION --품목 버전       
+		        AND    BI.PROCESSSEGID = MO.PROCESSSEGMENTID --공정아이디;
+		        ) CNT
+        FROM   BOMTREE          BT
+         INNER JOIN BAS_OPERATION          MO    ON MO.MAINPRODUCTID      = BT.ASSEMBLYITEMID
+                                                AND MO.MAINPRODUCTVERSION    = BT.ASSEMBLYITEMVERSION
+                                                AND MO.VALIDSTATE = 'Valid'
+         LEFT JOIN BAS_PRODUCTITEMSPEC       PI  ON BT.ASSEMBLYITEMID       = PI.ITEMID
+                                                AND BT.ASSEMBLYITEMVERSION  = PI.ITEMVERSION
+        LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT PG ON PG.PROCESSSEGMENTID    = MO.PROCESSSEGMENTID 
+                                                AND PG.ENTERPRISEID        = MO.ENTERPRISEID
+                                                AND PG.VALIDSTATE = 'Valid'
+        LEFT OUTER JOIN CMD_DICTIONARY        PN ON PN.DICTIONARYID        = PG.PROCESSSEGMENTNAME
+                              AND PN.LANGUAGETYPE  =#{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN CMD_USERS                 CU  ON CU.USER_ID            = MO.CREATOR
+        LEFT OUTER JOIN CMD_USERS                 MU  ON MU.USER_ID            = MO.MODIFIER
+        
+        WHERE BT.ASSEMBLYITEMID = #{ITEMID}
+           AND BT.ASSEMBLYITEMVERSION = #{ITEMVERSION}
+        ORDER BY NEWSEQ    
+    </select>
+    
+    
+	<!-- 공정스팩 조회-->
+    <select id="selectOperationSpecList" parameterType="map" resultType="hashmap">
+	/* smh.bas.dao.BAS02200Dao.selectOperationSpecList */
+					
+				SELECT  SA.SPECSEQUENCE                  AS   SPECSEQUENCE 
+					  	, SA.PROCESSSEGID   			     AS   PROCESSSEGMENTID
+				      , SA.INSPITEMID 
+				      , II.INSPITEMVERSION
+				      , SA.INSPECTIONDEFID
+				      , SA.INSPECTIONDEFVERSION
+				      , SA.RESOURCETYPE
+				      , IID.DICTIONARYNAME               AS   INSPITEMNAME
+				      , SA.SPECCLASSID 
+				      , SN.WORKCONDITION                 AS   LOCATION
+				      , SN.DEFAULTCHARTTYPE
+				      , SD.LCL
+				      , SD.CL
+				      , SD.UCL
+				      , SD.LSL
+				      , SD.SL
+				      , SD.USL
+				      , SD.LOL
+				      , SD.UOL
+				      , CU.USER_NM						 AS CREATOR
+				      , TO_CHAR(SD.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+				      , MU.USER_NM						 AS MODIFIER
+				      , TO_CHAR(SD.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+              		  , SA.RESOURCEID
+              		  , SA.RESOURCEVERSION
+              		  , SD.COPPERTHICKNESS
+              		  , SD.OSL
+              		  , SD.OUSL
+              		  , SD.OLSL
+              		  , II.SPECTRANSTYPE
+					FROM    BAS_INSPECTIONITEMREL               SA      
+					LEFT JOIN   BAS_SPECDEFINITION              SN      ON  SA.SPECSEQUENCE 	= SN.SPECSEQUENCE
+					LEFT JOIN   BAS_SPECDETAIL                  SD      ON  SA.SPECSEQUENCE 	= SD.SPECSEQUENCE  
+	                                   AND SA.SPECCLASSID   = SD.SPECCLASSID
+	        LEFT JOIN   BAS_INSPITEM                    II      ON  SA.ENTERPRISEID   = II.ENTERPRISEID
+	                                   AND SA.INSPITEMID    = II.INSPITEMID   
+	        LEFT OUTER JOIN CMD_DICTIONARY              IID     ON  II.INSPITEMNAME   = IID.DICTIONARYID
+	                                   AND IID.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}
+	        LEFT OUTER JOIN CMD_USERS                    CU       ON  CU.USER_ID        = SD.CREATOR
+	              LEFT OUTER JOIN CMD_USERS                    MU       ON  MU.USER_ID        = SD.MODIFIER
+	                                         
+	        WHERE   1=1
+	        AND     SA.SPECCLASSID     = 'OperationSpec'
+	        AND     SA.ENTERPRISEID   = #{SESSION_ENTERPRISEID}
+	        AND     SA.RESOURCEID     = #{ITEMID}        --품목ID
+	        AND     SA.RESOURCEVERSION   = #{ITEMVERSION}   --품목 버전       
+	        AND     SA.PROCESSSEGID   = #{PROCESSSEGMENTID}     --공정아이디;
+	        
+	        UNION ALL
+	        
+	        SELECT  IIR.SPECSEQUENCE                  AS   SPECSEQUENCE 
+	            , SA.PROCESSSEGMENTID
+	            , SA.INSPITEMID 
+	            , II.INSPITEMVERSION
+	            , ISD.INSPECTIONDEFID
+	            , ISD.INSPECTIONDEFVERSION
+	            , IC.RESOURCETYPE
+	            , IID.DICTIONARYNAME                AS INSPITEMNAME
+	            , 'OperationSpec'                   AS SPECCLASSID 
+	            , NULL AS LOCATION
+	            , NULL AS DEFAULTCHARTTYPE
+	            , NULL AS LCL
+	            , NULL AS CL
+	            , NULL AS UCL
+	            , NULL AS LSL
+	            , NULL AS SL
+	            , NULL AS USL
+	            , NULL AS LOL
+	            , NULL AS UOL
+	            , NULL AS CREATOR
+	            , NULL AS CREATEDTIME
+	            , NULL AS MODIFIER
+	            , NULL AS MODIFIEDTIME
+              	, SA.PROCESSSEGMENTID AS RESOURCEID
+      			, NVL(IIR.RESOURCEVERSION, #{ITEMVERSION}) AS RESOURCEVERSION
+      			, NULL AS COPPERTHICKNESS
+	       		  ,  NULL AS OSL
+	       		  ,  NULL AS OUSL
+	       		  ,  NULL AS OLSL
+	       		  ,II.SPECTRANSTYPE
+	        FROM    BAS_SPECATTRIBUTE                   SA     
+	        INNER JOIN BAS_INSPECTIONDEFINITION        ISD   ON ISD.INSPECTIONCLASSID = SA.INSPITEMCLASSID
+	                                                     AND ISD.ENTERPRISEID     = SA.ENTERPRISEID
+	                                                     AND ISD.INSPECTIONDEFID= 'OperationInspection-OperationInspection' 
+	        INNER JOIN BAS_INSPECTIONCLASS        IC    ON IC.INSPECTIONCLASSID  = ISD.INSPECTIONCLASSID
+	                                  AND IC.ENTERPRISEID     = ISD.ENTERPRISEID
+	        LEFT JOIN  BAS_INSPITEM                     II      ON  SA.ENTERPRISEID    = II.ENTERPRISEID
+	                                  AND SA.INSPITEMID      = II.INSPITEMID
+	        LEFT OUTER JOIN CMD_DICTIONARY              IID    ON  II.INSPITEMNAME    = IID.DICTIONARYID
+	                                  AND IID.LANGUAGETYPE   = #{SESSION_LANGUAGETYPE}
+	        LEFT OUTER JOIN BAS_INSPECTIONITEMREL      IIR     ON IIR.SPECCLASSID      = 'OperationSpec'
+	                                  AND IIR.RESOURCEID      = #{ITEMID}        --품목ID
+	                                  AND IIR.RESOURCEVERSION  = #{ITEMVERSION}    --품목 버전       
+	                                  AND IIR.PROCESSSEGID    = SA.PROCESSSEGMENTID
+	                                  AND IIR.INSPITEMID     = SA.INSPITEMID
+	                                  AND IIR.INSPITEMVERSION  = II.INSPITEMVERSION
+	                                  AND IIR.INSPECTIONDEFID = 'OperationInspection-OperationInspection'
+	        WHERE   1=1
+	        AND     SA.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	        AND     SA.ENTERPRISEID   = #{SESSION_ENTERPRISEID}
+	        AND     SA.DEFAULTDISPLAY = 'Y'
+	        AND     IIR.SPECSEQUENCE IS NULL               
+    </select>
+    
+ <update id="updateInspectionitemrel" parameterType="map">
+ 	 /* smh.bas.dao.BAS02200Dao.updateInspectionitemrel */
+ 	 	UPDATE BAS_INSPECTIONITEMREL SET
+ 	 						SPECCLASSID = 'OperationSpec'	
+ 	 						,RESOURCETYPE = #{RESOURCETYPE}
+ 	 						,DESCRIPTION = #{DESCRIPTION}
+ 	 						,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = #{LASTTXNID}     
+					        ,LASTTXNUSER = #{MODIFIER}     
+					        ,LASTTXNTIME = SYSDATE   
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+				WHERE  INSPITEMID 					= #{INSPITEMID}
+				AND    INSPITEMVERSION 			= #{INSPITEMVERSION}
+				AND    INSPECTIONDEFID 			= #{INSPECTIONDEFID}
+				AND    INSPECTIONDEFVERSION 	= #{INSPECTIONDEFVERSION}
+				AND    RESOURCEID 					= #{RESOURCEID}
+				AND    RESOURCEVERSION 			= #{RESOURCEVERSION}
+				AND    PROCESSSEGID 				= #{PROCESSSEGMENTID}
+				AND    PROCESSEGVERSION			= '*'
+				AND    SPECSEQUENCE 				= #{SPECSEQUENCE}					    
+    </update>
+
+	<insert id="insertInspectionitemrel" parameterType="map">
+ 	 /* smh.bas.dao.BAS02200Dao.insertInspectionitemrel */
+ 	 	INSERT INTO BAS_INSPECTIONITEMREL
+				 	 	(INSPITEMID
+						,INSPITEMVERSION
+						,INSPECTIONDEFID
+						,INSPECTIONDEFVERSION
+						,RESOURCEID
+						,RESOURCEVERSION
+						,PROCESSSEGID
+						,PROCESSEGVERSION
+						,RESOURCETYPE
+						,ENTERPRISEID
+						,PLANTID
+						,SPECCLASSID
+						,SPECSEQUENCE
+						,ISNCR
+						,NCRDECISIONDEGREE
+						,CREATOR
+						,CREATEDTIME
+						,MODIFIER
+						,MODIFIEDTIME
+						,LASTTXNHISTKEY
+						,LASTTXNID
+						,LASTTXNUSER
+						,LASTTXNTIME
+						,LASTTXNCOMMENT
+						,VALIDSTATE) 
+				    VALUES
+					    (#{INSPITEMID}
+						,#{INSPITEMVERSION}
+						,#{INSPECTIONDEFID}
+						,#{INSPECTIONDEFVERSION}
+						,#{RESOURCEID}
+						,#{RESOURCEVERSION}
+						,#{PROCESSSEGMENTID}
+						,'*'
+						,#{RESOURCETYPE}
+						,#{SESSION_ENTERPRISEID}
+						,#{SESSION_SITETYPE}
+						,'OperationSpec'
+						,#{SPECSEQUENCE}
+						,#{ISNCR}
+						,#{NCRDECISIONDEGREE}
+						,#{CREATOR}  
+				        ,SYSDATE  
+				        ,#{MODIFIER}  
+				        ,SYSDATE  
+				        ,#{LASTTXNHISTKEY}  
+				        ,#{LASTTXNID}
+				        ,#{CREATOR} 
+				        ,SYSDATE
+				        ,#{LASTTXNCOMMENT}  
+						,'Valid') 
+				    	
+    </insert>
+    
+       <!-- 공정Spec 중복체크 -->
+	<select id="GetExistInspectionItemRel"  parameterType="map" resultType="hashmap">
+		  /* smh.bas.dao.BAS02200Dao.GetExistInspectionItemRel */	
+					SELECT INSPITEMID
+						      ,INSPITEMVERSION
+						      ,INSPECTIONDEFID
+						      ,INSPECTIONDEFVERSION
+						      ,RESOURCEID
+						      ,RESOURCEVERSION
+						      ,PROCESSSEGID
+						      ,PROCESSEGVERSION
+						      ,RESOURCETYPE
+						      ,ENTERPRISEID
+						      ,PLANTID
+						      ,VALIDTYPE
+						      ,UNIT
+						      ,SEQUENCE
+						      ,TANKSIZE
+						      ,CALCULATIONTYPE
+						      ,ANALYSISCONST
+						      ,FOMULATYPE
+						      ,QTYCONST
+						      ,SPECCLASSID
+						      ,SPECSEQUENCE
+						      ,ISINSPECTIONREQUIRED
+						      ,INSPECTORDEGREE
+						      ,ISAQL
+						      ,AQLINSPECTIONLEVEL
+						      ,AQLDEFECTLEVEL
+						      ,AQLDECISIONDEGREE
+						      ,AQLCYCLE
+						      ,ISNCR
+						      ,NCRINSPECTIONQTY
+						      ,NCRCYCLE
+						      ,NCRDECISIONDEGREE
+						      ,NCRDEFECTRATE
+						      ,NCRLOTSIZE
+						      ,QTYUNIT
+						      ,INSPECTIONUNIT
+						      ,DESCRIPTION
+						      ,CREATOR
+						      ,CREATEDTIME
+						      ,MODIFIER
+						      ,MODIFIEDTIME
+						      ,LASTTXNHISTKEY
+						      ,LASTTXNID
+						      ,LASTTXNUSER
+						      ,LASTTXNTIME
+						      ,LASTTXNCOMMENT
+						      ,VALIDSTATE
+						FROM   BAS_INSPECTIONITEMREL T
+						WHERE  INSPITEMID 					= #{INSPITEMID}
+						AND    INSPITEMVERSION 			= #{INSPITEMVERSION}
+						AND    INSPECTIONDEFID 			= #{INSPECTIONDEFID}
+						AND    INSPECTIONDEFVERSION 	= #{INSPECTIONDEFVERSION}
+						AND    RESOURCEID 					= #{RESOURCEID}
+						AND    RESOURCEVERSION 			= #{RESOURCEVERSION}
+						AND    PROCESSSEGID 				= #{PROCESSSEGMENTID}
+						AND    PROCESSEGVERSION			= '*'
+						AND    SPECSEQUENCE 				= #{SPECSEQUENCE}
+    </select>
+
+  <update id="upsertSpecdefinition" parameterType="map">
+ 	 /* smh.bas.dao.BAS02200Dao.upsertSpecdefinition */
+    	MERGE INTO BAS_SPECDEFINITION BR
+    	USING DUAL
+    	        	ON ( BR.SPECSEQUENCE = #{SPECSEQUENCE})
+              WHEN  MATCHED THEN  
+	              UPDATE SET 
+	              	         DEFAULTCHARTTYPE = #{DEFAULTCHARTTYPE}     
+					        ,WORKCONDITION = #{LOCATION}       
+					        ,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = #{LASTTXNID}     
+					        ,LASTTXNUSER = #{MODIFIER}     
+					        ,LASTTXNTIME = SYSDATE   
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+			WHEN NOT MATCHED THEN
+				INSERT ( SPECSEQUENCE
+							,SPECCLASSID
+							,ENTERPRISEID
+							,PLANTID
+							,PROCESSSEGMENTID
+							,PRODUCTDEFID
+							,INSPITEMID
+							,WORKCONDITION
+							,DEFAULTCHARTTYPE
+							,VALIDSTATE
+							,RESOURCEID
+							,RESOURCEVERSION
+							,CREATOR
+							,CREATEDTIME
+							,MODIFIER
+							,MODIFIEDTIME
+							,LASTTXNHISTKEY
+							,LASTTXNID
+							,LASTTXNUSER
+							,LASTTXNTIME
+							,LASTTXNCOMMENT) 
+				    VALUES(  #{SPECSEQUENCE}
+				    			,'OperationSpec'
+								,#{SESSION_ENTERPRISEID}
+								,#{SESSION_SITETYPE}
+								,#{PROCESSSEGMENTID}
+								,#{RESOURCEID}
+								,#{INSPITEMID}
+								,#{LOCATION}
+								,#{DEFAULTCHARTTYPE}						
+								,#{VALIDSTATE}
+								,#{RESOURCEID}
+								,#{RESOURCEVERSION}
+								,#{CREATOR}  
+						        ,SYSDATE  
+						        ,#{MODIFIER}  
+						        ,SYSDATE  
+						        ,#{LASTTXNHISTKEY}  
+						        ,#{LASTTXNID}
+						        ,#{CREATOR} 
+						        ,SYSDATE
+						        ,#{LASTTXNCOMMENT})
+    </update>    
+    
+  <update id="upsertSpecdetailData" parameterType="map">
+ 	 /* smh.bas.dao.BAS02200Dao.upsertSpecdetailData */
+ 	 DECLARE
+ 	 	V_CNT NUMBER DEFAULT 0;
+ 	 BEGIN
+ 	 
+ 	 BEGIN
+			SELECT COUNT(*)
+			  INTO V_CNT
+			 FROM BAS_SPECDETAIL BR
+    	    WHERE  BR.SPECSEQUENCE = #{SPECSEQUENCE}
+    	       AND BR.CONTROLTYPE = #{DEFAULTCHARTTYPE};
+    	EXCEPTION WHEN no_data_found THEN
+    		V_CNT := 0; 
+		END;				
+		        
+		 /* 설비 I/F 입력,수정 Data Insert*/
+ 	 	   INSERT INTO INF_BAS_SPECDETAIL
+ 	 	    (PLANTID
+			,PROCESS_ID
+			,ITEM_ID
+			,ITEM_VERSION
+			,INSPECT_CODE
+			,SPEC_STD_LIMIT
+			,SPEC_UPPER_LIMIT
+			,SPEC_LOWER_LIMIT
+			,USE_YN
+			,IF_CRUD
+			,IF_DATE
+			,IF_PROCESS_TYPE
+			,IF_PROCESS_TIME
+			,IF_PROCESS_COMMENT
+			,IF_SEQUENCE)
+			VALUES
+			(
+			#{SESSION_SITETYPE}
+			,#{PROCESSSEGMENTID}
+			,#{RESOURCEID}
+			,#{RESOURCEVERSION}
+			,#{INSPITEMID}
+			,TO_NUMBER(#{OSL})
+			,TO_NUMBER(#{OUSL})
+			,TO_NUMBER(#{OLSL})
+			,'Y'
+			,DECODE(V_CNT, 0, 'C','U')
+			,SYSDATE
+			,'N'
+			,NULL
+			,NULL			
+			,INF_TOM_PROCESSSPEC_S.NEXTVAL
+			);				
+ 	 
+    	MERGE INTO BAS_SPECDETAIL BR
+    	USING DUAL
+    	        	ON ( BR.SPECSEQUENCE = #{SPECSEQUENCE}
+    	        	    AND BR.CONTROLTYPE = #{DEFAULTCHARTTYPE})
+              WHEN  MATCHED THEN  
+	              UPDATE SET 
+	              	         LSL	= #{LSL}
+					        ,SL		= #{SL}
+					        ,USL	= #{USL}
+					        ,LCL	= #{LCL}
+					        ,CL		= #{CL}
+					        ,UCL	= #{UCL}
+					        ,LOL	= #{LOL}
+					        ,UOL	= #{UOL}
+					        ,COPPERTHICKNESS = #{COPPERTHICKNESS}
+	              	        ,OLSL	= #{OLSL}
+					        ,OSL	= #{OSL}
+					        ,OUSL	= #{OUSL}
+					        ,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = #{LASTTXNID}     
+					        ,LASTTXNUSER = #{MODIFIER}     
+					        ,LASTTXNTIME = SYSDATE   
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+			WHEN NOT MATCHED THEN
+				INSERT ( SPECSEQUENCE
+							,SPECCLASSID
+							,CONTROLTYPE
+							,SL
+							,USL
+							,LSL
+							,LCL
+							,CL
+							,UCL
+							,LOL
+							,UOL
+							,COPPERTHICKNESS
+							,OSL
+							,OUSL
+							,OLSL
+							,VALIDSTATE
+							,CREATOR
+							,CREATEDTIME
+							,MODIFIER
+							,MODIFIEDTIME
+							,LASTTXNHISTKEY
+							,LASTTXNID
+							,LASTTXNUSER
+							,LASTTXNTIME
+							,LASTTXNCOMMENT) 
+				    VALUES(  #{SPECSEQUENCE}
+								,'OperationSpec'
+								,#{DEFAULTCHARTTYPE}
+								,#{SL}
+								,#{USL}
+								,#{LSL}
+       							,#{LCL}
+						        ,#{CL}
+						        ,#{UCL}
+						        ,#{LOL}
+						        ,#{UOL}
+								,#{COPPERTHICKNESS}
+								,#{OSL}
+								,#{OUSL}
+								,#{OLSL}
+								,'Valid'
+								,#{CREATOR}  
+						        ,SYSDATE  
+						        ,#{MODIFIER}  
+						        ,SYSDATE  
+						        ,#{LASTTXNHISTKEY}  
+						        ,#{LASTTXNID}
+						        ,#{CREATOR} 
+						        ,SYSDATE
+						        ,#{LASTTXNCOMMENT});
+		
+			        
+						        
+	END;
+    </update>
+    
+ <delete id="deleteInspectionitemrelData" parameterType="map">
+ 	 /* smh.bas.dao.BAS02200Dao.deleteInspectionitemrelData */
+ 	 DECLARE
+ 	 BEGIN
+ 	 	
+ 	 	   /* 설비 I/F 삭제 Data Insert*/
+ 	 	   INSERT INTO INF_BAS_SPECDETAIL
+ 	 	    (PLANTID
+			,PROCESS_ID
+			,ITEM_ID
+			,ITEM_VERSION
+			,INSPECT_CODE
+			,SPEC_STD_LIMIT
+			,SPEC_UPPER_LIMIT
+			,SPEC_LOWER_LIMIT
+			,USE_YN
+			,IF_CRUD
+			,IF_DATE
+			,IF_PROCESS_TYPE
+			,IF_PROCESS_TIME
+			,IF_PROCESS_COMMENT
+			,IF_SEQUENCE)
+			VALUES
+			(
+			#{SESSION_SITETYPE}
+			,#{PROCESSSEGMENTID}
+			,#{RESOURCEID}
+			,#{RESOURCEVERSION}
+			,#{INSPITEMID}
+			,TO_NUMBER(#{OSL})
+			,TO_NUMBER(#{OUSL})
+			,TO_NUMBER(#{OLSL})
+			,'N'
+			,'D'
+			,SYSDATE
+			,'N'
+			,NULL
+			,NULL			
+			,INF_TOM_PROCESSSPEC_S.NEXTVAL
+			);
+ 	 	   
+ 	 	DELETE FROM BAS_INSPECTIONITEMREL 
+ 	 	WHERE INSPITEMID						= #{INSPITEMID}
+ 	 	   AND INSPITEMVERSION			= #{INSPITEMVERSION}
+ 	 	   AND INSPECTIONDEFID				= #{INSPECTIONDEFID}
+ 	 	   AND INSPECTIONDEFVERSION		= #{INSPECTIONDEFVERSION}
+ 	 	   AND RESOURCEID					= #{RESOURCEID}
+ 	 	   AND RESOURCEVERSION			= #{RESOURCEVERSION}
+ 	 	   AND PROCESSSEGID					= #{PROCESSSEGMENTID}
+ 	 	   AND PROCESSEGVERSION 			= #{PROCESSEGVERSION};
+ 	 	   
+ 	 	   
+ 	 END;
+  	 					    
+    </delete>
+        
+ <delete id="deleteSpecdefinitionData" parameterType="map">
+ 	 /* smh.bas.dao.BAS02200Dao.deleteSpecdefinitionData */
+ 	 	DELETE FROM BAS_SPECDEFINITION WHERE SPECSEQUENCE = #{SPECSEQUENCE} 	 					    
+    </delete>
+    
+    
+ <delete id="deleteSpecdetailData" parameterType="map">
+ 	 /* smh.bas.dao.BAS02200Dao.deleteSpecdetailData */
+ 	 	DELETE FROM BAS_SPECDETAIL 
+ 	 	WHERE SPECSEQUENCE = #{SPECSEQUENCE}
+ 	 	   AND CONTROLTYPE = #{DEFAULTCHARTTYPE} 					    
+    </delete>
+    
+ </mapper>

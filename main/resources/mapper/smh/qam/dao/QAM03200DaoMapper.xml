@@ -1,0 +1,326 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM03200Dao">
+<!-- LOT별 수축율 측정-->
+
+    <!-- LOT별 수축율 측정정보 조회-->
+    <select id="selectQamShrinkmeasureList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03200Dao.selectQamShrinkmeasureList  */
+    SELECT A.SHRINKMEASUREID
+		, A.SHRINKMEASURECODE
+		, A.VALUE_X1
+		, A.VALUE_X2
+		, A.VALUE_Y1
+		, A.VALUE_Y2
+		, A.VALUE_XY1
+		, A.VALUE_XY2
+		, A.CREATOR
+		, A.CREATEDTIME
+		, A.MODIFIER
+		, A.MODIFIEDTIME
+		, A.LASTTXNHISTKEY
+		, A.LASTTXNID
+		, A.LASTTXNUSER
+		, A.LASTTXNTIME
+		, A.LASTTXNCOMMENT
+		, A.VALIDSTATE
+		, B.LOTID 
+		, B.MEASUREPNL
+		, B.GAUGER
+		, B.EQUIPMENTID
+		, B.EQUIPMENTDATAFM
+		, B.PROCESSSEGMENTID
+		, B.PROCESSSEGMENTVERSION 
+		, B.PROCESSSTATE
+		, FN_QAM_GET_DICTIONARYNAME(EQ.EQUIPMENTNAME, #{SESSION_LANGUAGETYPE}) AS EQUIPMENTNAME
+	 FROM QAM_SHRINKMEASUREDETAIL A
+	 	, QAM_SHRINKMEASUREMASTER B
+	 	, CMD_LOOKUP_VALUES C
+	 	, BAS_EQUIPMENT EQ
+	 WHERE A.SHRINKMEASUREID = B.SHRINKMEASUREID
+	 AND C.LOOKUP_TYPE = 'ShrinkMeasureCode'
+	 AND A.SHRINKMEASURECODE = C.LOOKUP_CODE(+)
+	 AND B.EQUIPMENTID = EQ.EQUIPMENTID(+)
+	<if test="LOTID != null and LOTID !='' ">
+		AND B.LOTID = #{LOTID}
+	</if>
+	<if test="PLANTID != null and PLANTID !='' ">
+		AND B.PLANTID = #{PLANTID}
+	</if>
+	<if test="VALIDSTATE != null and VALIDSTATE !='' ">
+		AND A.VALIDSTATE = #{VALIDSTATE}
+	</if>
+	<if test="SHRINKMEASUREID != null and SHRINKMEASUREID !='' ">
+		AND A.SHRINKMEASUREID = #{SHRINKMEASUREID}
+	</if>
+	<if test="SHRINKMEASUREID != null and SHRINKMEASUREID !='' ">
+		AND A.SHRINKMEASUREID = #{SHRINKMEASUREID}
+	</if>
+	<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+		AND B.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	</if>
+	<if test="PROCESSSEGMENTVERSION != null and PROCESSSEGMENTVERSION !='' ">
+		AND B.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	</if>
+	<if test="PROCESSSTATE != null and PROCESSSTATE !='' ">
+		AND B.PROCESSSTATE = #{PROCESSSTATE}
+	</if>
+	ORDER BY C.DISPLAYSEQUENCE 
+	</select>
+	
+	<!-- LOT별 수축율 측정정보 > Lot 조회-->
+    <select id="selectQamLotInfo" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03200Dao.selectQamLotInfo  */
+    SELECT DISTINCT L.LOTID      /*LOT ID*/
+         , L.PRODUCTDEFID        /*품목코드*/
+         , L.PRODUCTDEFVERSION   /*REV*/
+         , PD.PRODUCTDEFNAME     /*품목명*/
+         , L.AREAID              /*작업장ID*/
+         , NVL(SD1.DICTIONARYNAME,L.AREAID)  AS AREANAME  /*작업장명*/
+         , L.PLANTID             /*SITE*/
+         , L.USERSEQUENCE        /*공정수순*/
+         , L.PROCESSSEGMENTID    /*공정ID*/
+         , L.PROCESSSEGMENTVERSION --공정 Version*/
+         , NVL(SD2.DICTIONARYNAME,L.PROCESSSEGMENTID)  AS PROCESSSEGMENTNAME  --공정명*/
+         , FN_PROCESSSTATECONV(L.PROCESSSTATE) AS WIPPROCESSSTATE
+         , L.PROCESSSTATE  --작업상태*/
+         , NVL(SD3.DICTIONARYNAME,L.PROCESSSTATE)  AS PROCESSSTATENAME  --작업상태명*/
+         , L.ISLOCKING     /*LOCKING*/
+         , PCSQTY          /*PCS수량*/
+         , PANELQTY        /*PNL수량*/
+         ,TO_CHAR(L.LOTSTARTDATE, 'YYYY-MM-DD HH24:MI:SS') AS LOTSTARTDATE /*LOT의 투입일자*/
+         , L.ENTERPRISEID
+         , L.REWORKCOUNT
+      FROM PCM_LOT                 L   /*LOT 정보*/
+         , BAS_PRODUCTDEFINITION   PD  /*제품정보*/
+         , BAS_AREA                SA  /*작업장*/
+         , CMD_DICTIONARY          SD1 /*작업장명*/
+         , BAS_PROCESSSEGMENT      PS  /*공정정보*/
+         , CMD_DICTIONARY          SD2 /*공정명*/
+         , CMD_LOOKUP_VALUES       LV1 /*작업상태*/
+         , CMD_DICTIONARY          SD3 /*작업상태명*/
+    WHERE 1=1
+      AND L.PRODUCTDEFID            = PD.PRODUCTDEFID
+      AND L.PRODUCTDEFVERSION       = PD.PRODUCTDEFVERSION   
+      AND L.AREAID                  = SA.AREAID
+      AND SA.AREANAME               = SD1.DICTIONARYID
+      AND SD1.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+      AND L.PROCESSSEGMENTID        = PS.PROCESSSEGMENTID
+      AND L.PROCESSSEGMENTVERSION   = PS.PROCESSSEGMENTVERSION
+      AND PS.PROCESSSEGMENTNAME     = SD2.DICTIONARYID
+      AND SD2.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+      AND FN_PROCESSSTATECONV(L.PROCESSSTATE) = LV1.LOOKUP_CODE
+      AND LV1.LOOKUP_TYPE           = 'WipProcessState'
+      AND LV1.DICTIONARYID          = SD3.DICTIONARYID
+      AND SD3.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+    <if test="LOTID != null and LOTID !='' ">
+        AND L.LOTID = #{LOTID}
+    </if>
+    <if test="PLANTID != null and PLANTID !='' ">
+        AND L.PLANTID = #{PLANTID}
+    </if>
+    <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+        AND A.VALIDSTATE = #{VALIDSTATE}
+    </if>
+	</select>
+	
+	<!-- LOT별 수축율 측정정보(MASTER) 등록 -->
+	<insert id="insertQamShrinkmeasuremaster" parameterType="map">
+    /* smh.qam.dao.QAM03200Dao.insertQamShrinkmeasuremaster  */
+    INSERT INTO QAM_SHRINKMEASUREMASTER (
+		SHRINKMEASUREID
+		, SHRINKPRODUCTID
+		, OPERATIONID
+		, LOTID
+		, ENTERPRISEID
+		, PLANTID
+		, AREAID
+		, PROCESSSEGMENTID
+		, PROCESSSEGMENTVERSION
+		, USERSEQUENCE
+		, PROCESSSTATE
+		, ISLOCKING
+		, PCSQTY
+		, PANELQTY
+		, LOTSTARTDATE
+		, MEASUREPNL
+		, GAUGER
+		, EQUIPMENTID
+		, EQUIPMENTDATAFM
+		, MEASUREDATE
+		, SCALEABNORMALYN
+		, COMPVAL_X1
+		, COMPVAL_X2
+		, COMPVAL_Y1
+		, COMPVAL_Y2
+		, COMPVAL_XY1
+		, COMPVAL_XY2
+		, OPERVAL_X1
+		, OPERVAL_X2
+		, OPERVAL_Y1
+		, OPERVAL_Y2
+		, OPERVAL_XY1
+		, OPERVAL_XY2
+		, OPERCOMPVAL_X1
+		, OPERCOMPVAL_X2
+		, OPERCOMPVAL_Y1
+		, OPERCOMPVAL_Y2
+		, OPERCOMPVAL_XY1
+		, OPERCOMPVAL_XY2
+		, PRODVAL_X1
+		, PRODVAL_X2
+		, PRODVAL_Y1
+		, PRODVAL_Y2
+		, PRODVAL_XY1
+		, PRODVAL_XY2
+		, PRODCOMPVAL_X1
+		, PRODCOMPVAL_X2
+		, PRODCOMPVAL_Y1
+		, PRODCOMPVAL_Y2
+		, PRODCOMPVAL_XY1
+		, PRODCOMPVAL_XY2
+		, CREATOR
+		, CREATEDTIME
+		, LASTTXNHISTKEY
+		, LASTTXNID
+		, LASTTXNUSER
+		, LASTTXNTIME
+		, LASTTXNCOMMENT
+		, VALIDSTATE
+	) VALUES ( 
+		#{SHRINKMEASUREID}
+		, #{SHRINKPRODUCTID}
+		, #{OPERATIONID}
+		, #{LOTID}
+		, #{ENTERPRISEID}
+		, #{PLANTID}
+		, #{AREAID}
+		, #{PROCESSSEGMENTID}
+		, #{PROCESSSEGMENTVERSION}
+		, #{USERSEQUENCE}
+		, #{PROCESSSTATE}
+		, #{ISLOCKING}
+		, #{PCSQTY}
+		, #{PANELQTY}
+		,TO_DATE(#{LOTSTARTDATE}, 'YYYY-MM-DD HH24:MI:SS')
+		, #{MEASUREPNL}
+		, #{GAUGER}
+		, #{EQUIPMENTID}
+		, #{EQUIPMENTDATAFM}
+		, SYSDATE
+		, #{SCALEABNORMALYN}
+		, #{COMPVAL_X1}
+		, #{COMPVAL_X2}
+		, #{COMPVAL_Y1}
+		, #{COMPVAL_Y2}
+		, #{COMPVAL_XY1}
+		, #{COMPVAL_XY2}
+		, #{OPERVAL_X1}
+		, #{OPERVAL_X2}
+		, #{OPERVAL_Y1}
+		, #{OPERVAL_Y2}
+		, #{OPERVAL_XY1}
+		, #{OPERVAL_XY2}
+		, #{OPERCOMPVAL_X1}
+		, #{OPERCOMPVAL_X2}
+		, #{OPERCOMPVAL_Y1}
+		, #{OPERCOMPVAL_Y2}
+		, #{OPERCOMPVAL_XY1}
+		, #{OPERCOMPVAL_XY2}
+		, #{PRODVAL_X1}
+		, #{PRODVAL_X2}
+		, #{PRODVAL_Y1}
+		, #{PRODVAL_Y2}
+		, #{PRODVAL_XY1}
+		, #{PRODVAL_XY2}
+		, #{PRODCOMPVAL_X1}
+		, #{PRODCOMPVAL_X2}
+		, #{PRODCOMPVAL_Y1}
+		, #{PRODCOMPVAL_Y2}
+		, #{PRODCOMPVAL_XY1}
+		, #{PRODCOMPVAL_XY2}
+		, #{CREATOR}
+		, SYSDATE
+		, #{LASTTXNHISTKEY}
+		, #{LASTTXNID}
+		, #{LASTTXNUSER}
+		, SYSDATE
+		, #{LASTTXNCOMMENT}
+		, 'Valid'
+	)
+    </insert>
+	
+	<!-- LOT별 수축율 측정정보(DETAIL) 등록 -->
+	<insert id="insertQamShrinkmeasuredetail" parameterType="map">
+    /* smh.qam.dao.QAM03200Dao.insertQamShrinkmeasuredetail  */
+    INSERT INTO QAM_SHRINKMEASUREDETAIL (
+		SHRINKMEASUREID
+		, SHRINKMEASURECODE
+		, VALUE_X1
+		, VALUE_X2
+		, VALUE_Y1
+		, VALUE_Y2
+		, VALUE_XY1
+		, VALUE_XY2
+		, CREATOR
+		, CREATEDTIME
+		, LASTTXNHISTKEY
+		, LASTTXNID
+		, LASTTXNUSER
+		, LASTTXNTIME
+		, LASTTXNCOMMENT
+		, VALIDSTATE
+	) VALUES ( 
+		#{SHRINKMEASUREID}
+		, #{SHRINKMEASURECODE}
+		, #{VALUE_X1}
+		, #{VALUE_X2}
+		, #{VALUE_Y1}
+		, #{VALUE_Y2}
+		, #{VALUE_XY1}
+		, #{VALUE_XY2}
+		, #{CREATOR}
+		, SYSDATE
+		, #{LASTTXNHISTKEY}
+		, #{LASTTXNID}
+		, #{LASTTXNUSER}
+		, SYSDATE
+		, #{LASTTXNCOMMENT}
+		, 'Valid'
+	)
+    </insert>
+    
+    <!-- LOT별 수축율 측정정보(MASTER) 삭제 -->
+	<delete id="deleteQamShrinkmeasuremaster" parameterType="map">
+    /* smh.qam.dao.QAM03200Dao.deleteQamShrinkmeasuremaster  */
+    DELETE FROM QAM_SHRINKMEASUREMASTER
+    WHERE SHRINKMEASUREID = #{SHRINKMEASUREID}
+    </delete>
+	
+	<!-- LOT별 수축율 측정정보(DETAIL) 삭제 -->
+	<delete id="deleteQamShrinkmeasuredetail" parameterType="map">
+    /* smh.qam.dao.QAM03200Dao.deleteQamShrinkmeasuredetail  */
+    DELETE FROM QAM_SHRINKMEASUREDETAIL
+	WHERE SHRINKMEASUREID = #{SHRINKMEASUREID}
+    </delete>
+    
+	<!-- 설비 팝업-->
+    <select id="selectQamEquipmentList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03200Dao.selectQamEquipmentList  */
+	SELECT EQ.EQUIPMENTID 
+				, CD.DICTIONARYNAME AS EQUIPMENTNAME
+				, EQ.MEASUREDATAFORMAT 
+	FROM      BAS_EQUIPMENT  EQ
+	LEFT JOIN CMD_DICTIONARY CD ON  EQ.EQUIPMENTNAME = CD.DICTIONARYID 
+								AND CD.LANGUAGETYPE	 = #{SESSION_LANGUAGETYPE}
+	WHERE  1=1
+	AND    EQ.EQUIPMENTTYPE = 'Measure'
+	AND    EQ.VALIDSTATE  = 'Valid'
+	<if test="SEARCH_KEY != null and SEARCH_KEY !='' ">
+	AND    (EQ.EQUIPMENTID  LIKE '%' || #{SEARCH_KEY} || '%' OR CD.DICTIONARYNAME LIKE '%' || #{SEARCH_KEY} || '%' ) 
+	</if>
+	ORDER BY EQ.EQUIPMENTNUM
+	</select>
+</mapper>

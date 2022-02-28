@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pay.dao.PAY40110Dao">
+
+    <!-- 연차휴가 발생내역 조회 -->
+    <select id="selectYearHoliInfo" parameterType="map" resultType="hashmap">
+        /* smh.pay.dao.PAY40110Dao.selectYearHoliInfo */
+        SELECT  HEYH.HJSPAY_EXCH_YEAR_HOLIDAY_SEQ       AS  HJSPAY_EXCH_YEAR_HOLIDAY_SEQ  							/* SEQUENCE     */
+               ,DECODE( HEYH.STATE, 'Y', NVL(HEYH.YEARLY_GRANT_HOLIDAY_DAY, 0), 0 ) AS  YEARLY_GRANT_HOLIDAY_DAY    /* 연차부여일수 */
+               ,NVL(HEYH.EXCHANGE_GRANT_HOLIDAY_DAY, 0) AS  EXCHANGE_GRANT_HOLIDAY_DAY    							/* 대휴부여일수 */
+               ,NVL(HEYH.YEARLY_USE_HOLIDAY_DAY, 0)     AS  YEARLY_USE_HOLIDAY_DAY        							/* 연휴사용일수 */
+               ,NVL(HEYH.EXCHANGE_USE_HOLIDAY_DAY, 0)   AS  EXCHANGE_USE_HOLIDAY_DAY      							/* 대휴사용일수 */
+               ,NVL(IN_A.EXCHANGE_HOLIDAY_TIME,0)       AS  EXCHANGE_HOLIDAY_TIME         							/* 연장근로시간 */
+           FROM   HJSPAY_EXCHANGE_YEARLY_HOLIDAY HEYH
+                  ,(SELECT HWA.PERSON_ID PERSON_ID
+                         ,SUM(TO_NUMBER(HWA.REQUEST_DAY)) EXCHANGE_HOLIDAY_TIME
+                   FROM   HJSPAY_WORK_APPLY HWA
+                   WHERE  HWA.STATUS IN ('20', '30') 																/* 승인     */
+                   AND    HWA.CALENDER_TYPE = '310'  																/* 연장근로 */
+                   AND    TO_CHAR(HWA.START_DATE, 'yyyy/mm') = #{START_MONTH}
+                   AND    HWA.PERSON_ID =  #{PERSON_ID}   															/* PERSON_ID */
+                   GROUP  BY HWA.PERSON_ID, HWA.CALENDER_TYPE) IN_A
+           WHERE  APPLY_YYYY =
+                       (   SELECT CASE
+                                      WHEN  (  SELECT  COUNT(*) AS CNT
+                                               FROM PER_ALL_ASSIGNMENTS_F          PAAF,
+                                                    PER_ALL_PEOPLE_F               PAPF
+                                               WHERE PAAF.PERSON_ID = PAPF.PERSON_ID
+                                               AND PAAF.EMPLOYMENT_CATEGORY = 'CONTRACT'
+                                               AND TRUNC(SYSDATE) BETWEEN PAAF.EFFECTIVE_START_DATE AND  PAAF.EFFECTIVE_END_DATE
+                                               AND TRUNC(SYSDATE) BETWEEN PAPF.EFFECTIVE_START_DATE AND  PAPF.EFFECTIVE_END_DATE
+                                               AND PAAF.PRIMARY_FLAG = 'Y'
+                                               AND PAPF.PERSON_ID = #{PERSON_ID}     								/* PERSON_ID */
+                                            )  = 0  THEN            SUBSTR(#{START_MONTH}, 1, 4)     				/* YYYY(년도)*/
+                                      ELSE
+
+                                      ( SELECT  SUBSTR(MAX(A.SEGMENT1), 1, 4)  AS NEWYEAR
+                                         FROM   FND_ID_FLEX_STRUCTURES F
+                                               ,PER_PERSON_ANALYSES    P
+                                               ,PER_ANALYSIS_CRITERIA  A
+                                         WHERE  F.ID_FLEX_STRUCTURE_CODE = 'HJS_HR_CONTRACT_DATE_INFO'
+                                         AND    P.ID_FLEX_NUM = F.ID_FLEX_NUM
+                                         AND    P.ANALYSIS_CRITERIA_ID = A.ANALYSIS_CRITERIA_ID
+                                         AND    TRUNC(SYSDATE) BETWEEN SUBSTR(A.SEGMENT1,1,7) AND SUBSTR(A.SEGMENT2,1,7)
+                                         AND    P.PERSON_ID =   #{PERSON_ID}  /* PERSON_ID */  )
+                                  END  APPLY_YYYY
+                           FROM  DUAL
+                       )
+                    AND  HEYH.PERSON_ID = IN_A.PERSON_ID(+)
+                    AND  HEYH.PERSON_ID = #{PERSON_ID}                 /* PERSON_ID */
+    </select>
+
+    <!-- 근태신청 현황 조회 -->
+    <select id="selectRequestAttendanceList" parameterType="map" resultType="hashmap">
+        /* smh.pay.dao.PAY40110Dao.selectRequestAttendanceList */
+        SELECT 0            							AS  CHECK_YN      											/*CheckBox*/
+        	  ,TO_CHAR(HWA.APPLY_DATE, 'YYYY-MM-DD')                  AS  APPLY_DATE      							/* 신청일자 */
+              ,DECODE(HWA.CALENDER_TYPE,
+                           '310', TO_CHAR(HWA.START_DATE, 'YYYY/MM/DD ') || TO_CHAR(HWA.START_DATE_TIME,'HH24:MI'),
+                           TO_CHAR(HWA.START_DATE, 'YYYY-MM-DD') )    AS  START_DATE      							/* 시작일자 */
+              ,DECODE(HWA.CALENDER_TYPE,
+                           '310', TO_CHAR(HWA.END_DATE, 'YYYY/MM/DD ') || TO_CHAR(HWA.END_DATE_TIME,'HH24:MI'),
+                           TO_CHAR(HWA.END_DATE, 'YYYY-MM-DD') )      AS  END_DATE        							/* 종료일자 */
+              ,HWA.REQUEST_DAY                                        AS  REQUEST_DAY     							/* 신청일수/시간 */
+              ,HWA.CALENDER_TYPE                                      AS  CALENDER_TYPE   							/* 구분 */
+              ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ATTENDANCE_TYPE', HWA.CALENDER_TYPE)
+                                                                      AS CALENDER_NAME 								/* 구분명 */
+              ,HWA.STATUS                                             AS  STATUS          							/* 상태 */
+              ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_APPROVAL_STATUS', HWA.STATUS)
+                                                                      AS STATUS_NAME 								/* 상태명 */
+              ,HWA.HJSPAY_WORK_APPLY_SEQ
+                                                                      AS HJSPAY_WORK_APPLY_SEQ  					/* SEQUENCE */
+          FROM HJSPAY_WORK_APPLY HWA
+         WHERE 1=1
+           AND HWA.PERSON_ID = #{PERSON_ID}  /*PERSON_ID*/
+           AND HWA.APPLY_DATE BETWEEN TO_DATE(#{START_MONTH}, 'YYYYMM') AND LAST_DAY(TO_DATE(#{START_MONTH}, 'YYYYMM'))  /*조회년월*/
+           <if test="CALENDER_TYPE != null and CALENDER_TYPE !='' ">
+           AND HWA.CALENDER_TYPE = #{CALENDER_TYPE}
+           </if>
+           AND NOT EXISTS ( SELECT 'x'
+                              FROM HJSPAY_WORK_APPLY HWA1
+                             WHERE HWA1.REQUEST_DAY <![CDATA[<]]> 0
+                               AND HWA1.STATUS = '20'
+                               AND HWA1.CALENDER_TYPE = '310'
+                               AND HWA1.HJSPAY_WORK_APPLY_SEQ = HWA.HJSPAY_WORK_APPLY_SEQ
+                          )
+        ORDER BY HWA.APPLY_DATE DESC
+    </select>
+
+    <!-- 근태신청 현황 상세조회 -->
+    <select id="selectRequestAttendanceInfo" parameterType="map" resultType="hashmap">
+        /* smh.pay.dao.PAY40110Dao.selectRequestAttendanceInfo */
+        SELECT  HJSPAY_WORK_APPLY_SEQ                   AS HJSPAY_WORK_APPLY_SEQ	/* 근태신청현황 PK */
+               ,PERSON_ID                               AS PERSON_ID               	/* PERSON_ID */
+               ,HJSPAY_ANNUAL_CREATION_PKG.GET_NAME_FNC(PERSON_ID) AS PERSON_NAME 	/* 성명 */
+               ,TO_CHAR(APPLY_DATE,'YYYY-MM-DD')        AS APPLY_DATE              	/* 근태신청일자 */
+               ,TO_CHAR(START_DATE,'YYYY-MM-DD')        AS START_DATE              	/* 근태시작일자 */
+               ,TO_CHAR(START_DATE_TIME,'HH24:MI')      AS START_DATE_TIME         	/* 근태시작시간 */
+               ,TO_CHAR(END_DATE,'YYYY-MM-DD')          AS END_DATE                	/* 근태종료일자 */
+               ,TO_CHAR(END_DATE_TIME,'HH24:MI')        AS END_DATE_TIME           	/* 근태종료시간 */
+               ,TO_CHAR(ALTER_WORK_DAY,'YYYY-MM-DD')	AS ALTER_WORK_DAY		   	/* 대체근무일 */
+               ,REQUEST_DAY                             AS REQUEST_DAY             	/* 근태신청일수/시간 */
+               ,''                                      AS ANNUAL_LEAVE_TIME       	/* 근태연휴시간 */
+               ,CALENDER_TYPE                           AS CALENDER_TYPE           	/* 근태구분 */
+               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ATTENDANCE_TYPE', CALENDER_TYPE)  
+                                                        AS CALENDER_TYPE_NAME 		/* 근태구분명 */
+               ,CONTENTS                                AS CONTENTS      			/* 근태신청 내용 */
+               ,BUSINESS_TYPE                           AS BUSINESS_TYPE 			/* 출장구분 */
+               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_BUSINESS_TYPE', BUSINESS_TYPE) 
+                                                        AS BUSINESS_TYPE_NAME  		/* 출장구분명 */
+               ,BUSINESS_LOCAL                          AS  BUSINESS_LOCAL   		/* 출장지역 */
+               ,STATUS                                  AS  STATUS           		/* 근태상태 */
+               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_APPROVAL_STATUS', STATUS)
+                                                        AS STATUS_NAME   			/* 상태명 */
+               ,APPROVAL_PERSON_ID                      AS APPROVAL_PERSON_ID 		/* 근태신청 승인자 사번 */
+               ,TO_DATE(APPROVAL_DATE,'YYYY-MM-DD')     AS APPROVAL_DATES     		/* 근태승인자승인일     */
+               ,APPROVAL_CONTENTS                       AS APPROVAL_CONTENTS  		/* 승인 내용            */
+               ,LAST_UPDATED_BY                         AS LAST_UPDATED_BY    		/* 최종 수정자          */
+               ,HJSPAY_ANNUAL_CREATION_PKG.GET_NAME_FNC(LAST_UPDATED_BY) 
+                                                        AS LAST_UPDATE_PERSON 		/* 최종 수정자 성명     */
+               ,OBJECT_VERSION_NUMBER                   AS OBJECT_VERSION_NUMBER
+          FROM HJSPAY_WORK_APPLY
+         WHERE HJSPAY_WORK_APPLY_SEQ = #{HJSPAY_WORK_APPLY_SEQ}
+    </select>
+
+
+    <!-- 신청내역 변경여부 확인 -->
+    <select id="selectDuplicateChk" parameterType="map" resultType="string">
+        /* smh.pay.dao.PAY40110Dao.selectDuplicateChk */
+        SELECT 'Y'
+             FROM HJSPAY_WORK_APPLY HC
+         WHERE HC.HJSPAY_WORK_APPLY_SEQ      = #{HJSPAY_WORK_APPLY_SEQ}		/*근태신청현황 PK*/
+           AND HC.OBJECT_VERSION_NUMBER      = #{OBJECT_VERSION_NUMBER}
+       </select>
+
+    <!-- 마감여부체크 -->
+    <select id="selectCheckCloseYn" parameterType="map" resultType="hashmap">
+        /* smh.pay.dao.PAY40110Dao.selectCheckCloseYn */
+        SELECT APPLY_YYYY
+             , COUNT(ATTRIBUTE1)  AS CLOSE_FLAG 
+          FROM HJSPAY_EXCHANGE_YEARLY_HOLIDAY
+         WHERE ATTRIBUTE1 = 'Y'
+           AND PERSON_ID = #{PERSON_ID}
+           AND APPLY_YYYY IN ( SUBSTR(#{START_DATE}, 1, 4), SUBSTR(#{END_DATE}, 1, 4) )		/* 신청년도 (FROM, TO)*/
+        GROUP BY APPLY_YYYY
+        ORDER BY APPLY_YYYY 
+    </select>
+
+    
+    <!-- 저장 중복 체크 -->
+    <select id="selectDuplicateDayChk" parameterType="map" resultType="string">
+    	/*smh.pay.dao.PAY40110Dao.selectDuplicateDayChk*/
+    	SELECT DECODE(COUNT(*), 0, 'N', 'Y') AS WORK_CHECK
+        FROM HJSPAY_WORK_APPLY HWA
+       WHERE 1=1
+         AND HWA.CALENDER_TYPE = '110'  															/* 근태구분 */
+         AND (TRUNC(TO_DATE(#{START_DATE}, 'YYYY/MM/DD')) BETWEEN HWA.START_DATE AND HWA.END_DATE   /* From */ 
+              OR
+              TRUNC(TO_DATE(#{END_DATE}, 'YYYY/MM/DD')) BETWEEN HWA.START_DATE AND HWA.END_DATE   	/* To */
+              OR
+              HWA.START_DATE BETWEEN TRUNC(TO_DATE(#{START_DATE}, 'YYYY/MM/DD')) AND TRUNC(TO_DATE(#{END_DATE}, 'YYYY/MM/DD'))
+              OR
+              HWA.END_DATE BETWEEN TRUNC(TO_DATE(#{START_DATE}, 'YYYY/MM/DD')) AND TRUNC(TO_DATE(#{END_DATE}, 'YYYY/MM/DD')))
+         AND HWA.PERSON_ID = #{PERSON_ID}  															/* 로그인 person id */
+    </select>
+
+    <!-- 날짜간의 일수계산WT -->
+    <select id="selectWorkDayCntWt" parameterType="map" resultType="hashmap">
+        /* smh.pay.dao.PAY40110Dao.selectWorkDayCntWt */
+        SELECT SUM( DAYCHECK ) AS HOLIDAY_DAY
+        FROM (       
+                SELECT 
+                        DEF.CALENDAR_DAY,
+                        CASE WHEN ( DEF.HOLIDAY + NVL(DEF2.HOLIDAY,0) > 0 ) 
+                             THEN 0
+                             ELSE 1
+                        END DAYCHECK
+                FROM (
+                        SELECT 
+                              TO_CHAR( (TO_DATE( #{START_DATE}, 'YYYY-MM-DD') + ROWNUM - 1), 'YYYY-MM-DD') AS CALENDAR_DAY,
+                              DECODE( 
+                                      TO_CHAR(   (TO_DATE( #{START_DATE}, 'YYYY-MM-DD') + ROWNUM - 1), 'D'),
+                                          1, 1,
+                                          7, 1, 
+                                          0 ) AS HOLIDAY
+                        FROM USER_OBJECTS
+                        WHERE ROWNUM <![CDATA[<=]]> TO_DATE( #{END_DATE}, 'YYYY-MM-DD' ) - TO_DATE(#{START_DATE}, 'YYYY-MM-DD') + 1
+                          AND ROWNUM > 0
+                     ) DEF,
+                     (
+                        SELECT  TO_CHAR(HOLIDAY_DATE,'YYYY-MM-DD') AS CALENDAR_DAY,
+                                /* 1 AS HOLIDAY 20110922 ERP R12 변경사항 반영*/ 
+                               DECODE(HCL_ID,NULL,0,1) AS HOLIDAY
+                        FROM    HXT_HOLIDAY_DAYS
+                        /*WHERE HCL_ID = 5*/
+                        WHERE HOLIDAY_DATE BETWEEN TO_DATE(#{START_DATE}, 'YYYY-MM-DD' ) and TO_DATE(#{END_DATE}, 'YYYY-MM-DD' )
+                     ) DEF2
+                WHERE 
+                      DEF.CALENDAR_DAY = DEF2.CALENDAR_DAY(+)
+                ORDER BY DEF.CALENDAR_DAY 
+             )
+        WHERE 1=1
+    </select>
+
+    <!-- 날짜간의 일수계산 -->
+    <select id="selectWorkDayCnt" parameterType="map" resultType="string">
+        /* smh.pay.dao.PAY40110Dao.selectWorkDayCnt */
+        SELECT TO_DATE (#{FROM_DATE}, 'YYYY-MM-DD') - TO_DATE (#{TO_DATE}, 'YYYY-MM-DD') + 1 AS WORK_DAY
+          FROM DUAL
+    </select>
+
+    <!-- 날짜간의 일수계산(시간) -->
+    <select id="selectDiffDay" parameterType="map" resultType="hashmap">
+        /* smh.pay.dao.PAY40110Dao.selectDiffDay */
+        SELECT #{START_DATE}             AS START_DATE
+             , #{START_DATE_TIME}        AS START_DATE_TIME
+             , #{END_DATE}               AS END_DATE
+             , #{END_DATE_TIME}          AS END_DATE_TIME
+             , TRUNC(TO_DATE(#{TEMP_END_DATE_TIME}, 'YYYYMMDDHH24MI') 
+                - TO_DATE(#{TEMP_START_DATE_TIME}, 'YYYYMMDDHH24MI')) AS DIFFDAY
+             , TRUNC((TO_DATE(#{TEMP_END_DATE_TIME}, 'YYYYMMDDHH24MI') 
+            - TO_DATE(#{TEMP_START_DATE_TIME}, 'YYYYMMDDHH24MI')) * 24) +
+          CASE  WHEN #{TEMP_START_DATE_TIME} = #{TEMP_END_DATE_TIME} THEN 0
+          		WHEN (TO_DATE(#{TEMP_END_DATE_TIME}, 'YYYYMMDDHH24MI') 
+            - TO_DATE(#{TEMP_START_DATE_TIME}, 'YYYYMMDDHH24MI')) * 24- TRUNC((TO_DATE(#{TEMP_END_DATE_TIME}, 'YYYYMMDDHH24MI') 
+            - TO_DATE(#{TEMP_START_DATE_TIME}, 'YYYYMMDDHH24MI')) * 24) > 0.5 THEN
+              1
+          ELSE
+              0.5
+          END AS DIFFTIME   
+          FROM DUAL
+    </select>
+    
+    <!-- 근태신청 등록 -->
+    <insert id="insertAttendance" parameterType="map" >
+        /*smh.pay.dao.PAY40110Dao.insertAttendance*/
+        INSERT INTO HJSPAY_WORK_APPLY
+        (
+          HJSPAY_WORK_APPLY_SEQ         /*근태신청현황 PK*/
+         ,PERSON_ID                     /*PERSON_ID*/
+         ,APPLY_DATE                    /*근태신청일자*/
+         ,START_DATE                    /*근태시작일자*/
+         ,START_DATE_TIME               /*근태시작시간*/
+         ,END_DATE                      /*근태종료일자*/
+         ,END_DATE_TIME                 /*근태종료시간*/
+         ,REQUEST_DAY                   /*근태신청일수/시간*/
+         ,CALENDER_TYPE                 /*근태구분*/
+         ,CONTENTS                      /*근태신청 내용 */
+         ,BUSINESS_TYPE                 /*출장구분(국내, 국외 구분) */
+         ,BUSINESS_LOCAL                /*출장지역*/
+         ,STATUS                        /*근태상태(대기,승인,철회대기,철회승인,반려)*/
+         ,APPROVAL_PERSON_ID            /*근태신청 승인자 사번*/
+         ,APPROVAL_DATE                 /*근태승인자승인일*/
+         ,APPROVAL_CONTENTS             /*승인 내용 */
+         ,ATTRIBUTE1                    /*대휴전환시 사용 MAnual_Flag : E=>SSHR에서 입력, S=>Concurrent실행시*/
+         ,ATTRIBUTE2                    /*관리자입력시 사용 (Admin : 관리자입력)*/
+         ,ATTRIBUTE3                    /**/
+         ,ATTRIBUTE4                    /**/
+         ,ATTRIBUTE5                    /**/
+         ,ATTRIBUTE6                    /**/
+         ,ATTRIBUTE7                    /**/
+         ,ATTRIBUTE8                    /**/
+         ,ATTRIBUTE9                    /**/
+         ,ATTRIBUTE10                   /**/
+         ,ATTRIBUTE11                   /**/
+         ,ATTRIBUTE12                   /**/
+         ,ATTRIBUTE13                   /**/
+         ,ATTRIBUTE14                   /**/
+         ,ATTRIBUTE15                   /**/
+         ,ATTRIBUTE16                   /**/
+         ,CREATED_BY                    /*자료 생성자*/
+         ,CREATION_DATE                 /*자료 생성일*/
+         ,LAST_UPDATED_BY               /*최종 수정자*/
+         ,LAST_UPDATE_DATE              /*최종 수정일*/
+         ,LAST_UPDATE_LOGIN             /*로그인 유저*/
+         ,OBJECT_VERSION_NUMBER         /**/
+         ,ALTER_WORK_DAY                /*대체 근무일*/
+        ) VALUES (
+           HJSPAY_WORK_APPLY_SEQ.NEXTVAL   					/*근태신청현황 PK*/
+         , #{PERSON_ID}                                 	/*PERSON_ID*/
+         , #{APPLY_DATE}                   					/*근태신청일자*/
+         , #{START_DATE}                   					/*근태시작일자*/
+         , #{START_DATE_TIME}              					/*근태시작시간*/
+         , #{END_DATE}                     					/*근태종료일자*/
+         , #{END_DATE_TIME}                					/*근태종료시간*/
+         , #{REQUEST_DAY}                  					/*근태신청일수/시간*/
+         , #{CALENDER_TYPE}                					/*근태구분*/
+         , #{CONTENTS}                     					/*근태신청 내용 */
+         , #{BUSINESS_TYPE}                					/*출장구분(국내, 국외 구분) */
+         , #{BUSINESS_LOCAL}               					/*출장지역*/
+         , #{STATUS}                       					/*근태상태(대기,승인,철회대기,철회승인,반려)*/
+         , #{APPROVAL_PERSON_ID}           					/*근태신청 승인자 사번*/
+         , #{APPROVAL_DATE}                					/*근태승인자승인일*/
+         , #{APPROVAL_CONTENTS}            					/*승인 내용 */
+         , #{ATTRIBUTE1}                   					/*대휴전환시 사용 MAnual_Flag : E=>SSHR에서 입력, S=>Concurrent실행시*/
+         , #{ATTRIBUTE2}                   					/*관리자입력시 사용 (Admin : 관리자입력)*/
+         , #{ATTRIBUTE3}                   					/**/
+         , #{ATTRIBUTE4}                   					/**/
+         , #{ATTRIBUTE5}                   					/**/
+         , #{ATTRIBUTE6}                   					/**/
+         , #{ATTRIBUTE7}                   					/**/
+         , #{ATTRIBUTE8}                   					/**/
+         , #{ATTRIBUTE9}                   					/**/
+         , #{ATTRIBUTE10}                  					/**/
+         , #{ATTRIBUTE11}                  					/**/
+         , #{ATTRIBUTE12}                  					/**/
+         , #{ATTRIBUTE13}                  					/**/
+         , #{ATTRIBUTE14}                  					/**/
+         , #{ATTRIBUTE15}                  					/**/
+         , #{ATTRIBUTE16}                  					/**/
+         , #{PERSONID}                    					/*자료 생성자*/
+         , SYSDATE                      					/*자료 생성일*/
+         , #{PERSONID}                    					/*최종 수정자*/
+         , SYSDATE                      					/*최종 수정일*/
+         , #{PERSONID}                    					/*로그인 유저*/
+         , #{OBJECT_VERSION_NUMBER}        					/**/
+         , #{ALTER_WORK_DAY}               					/*대체 근무일*/
+        )
+    </insert>
+
+
+    <!--근태신청내역 수정 -->
+    <update id="updateAttendance" parameterType="map">
+        /*smh.pay.dao.PAY40110Dao.updateAttendance*/
+        UPDATE HJSPAY_WORK_APPLY
+           SET APPLY_DATE                    = #{APPLY_DATE}                 /*근태신청일자*/
+             , START_DATE                    = #{START_DATE}                 /*근태시작일자*/
+             , START_DATE_TIME               = #{START_DATE_TIME}            /*근태시작시간*/
+             , END_DATE                      = #{END_DATE}                   /*근태종료일자*/
+             , END_DATE_TIME                 = #{END_DATE_TIME}              /*근태종료시간*/
+             , REQUEST_DAY                   = #{REQUEST_DAY}                /*근태신청일수/시간*/
+             , CALENDER_TYPE                 = #{CALENDER_TYPE}              /*근태구분*/
+             , CONTENTS                      = #{CONTENTS}                   /*근태신청 내용 */
+             , BUSINESS_TYPE                 = #{BUSINESS_TYPE}              /*출장구분(국내, 국외 구분) */
+             , BUSINESS_LOCAL                = #{BUSINESS_LOCAL}             /*출장지역*/
+             , STATUS                        = #{STATUS}                     /*근태상태(대기,승인,철회대기,철회승인,반려)*/
+             , APPROVAL_PERSON_ID            = #{APPROVAL_PERSON_ID}         /*근태신청 승인자 사번*/
+             , APPROVAL_DATE                 = #{APPROVAL_DATE}              /*근태승인자승인일*/
+             , APPROVAL_CONTENTS             = #{APPROVAL_CONTENTS}          /*승인 내용 */
+             , ATTRIBUTE1                    = #{ATTRIBUTE1}                 /*대휴전환시 사용 MAnual_Flag : E=>SSHR에서 입력, S=>Concurrent실행시*/
+             , ATTRIBUTE2                    = #{ATTRIBUTE2}                 /*관리자입력시 사용 (Admin : 관리자입력)*/
+             , LAST_UPDATED_BY               = #{PERSONID}                   /*최종 수정자*/
+             , LAST_UPDATE_DATE              = SYSDATE                       /*최종 수정일*/
+             , LAST_UPDATE_LOGIN             = #{PERSONID}                   /*로그인 유저*/
+             , OBJECT_VERSION_NUMBER         = #{OBJECT_VERSION_NUMBER}+1    /**/
+             , ALTER_WORK_DAY                = #{ALTER_WORK_DAY}             /*대체 근무일*/
+            WHERE HJSPAY_WORK_APPLY_SEQ      = #{HJSPAY_WORK_APPLY_SEQ}      /*근태신청현황 PK*/
+    </update>
+
+
+    <!--근태신청내역 삭제 -->
+    <delete id="deleteAttendance" parameterType="map">
+        /*smh.pay.dao.PAY40110Dao.deleteAttendance*/
+        DELETE FROM HJSPAY_WORK_APPLY
+         WHERE HJSPAY_WORK_APPLY_SEQ        = #{HJSPAY_WORK_APPLY_SEQ}     /*근태신청현황 PK*/
+    </delete>
+
+    <!--근태신청 철회 -->
+    <update id="updateAttendanceStatus" parameterType="map">
+        /*smh.pay.dao.PAY40110Dao.updateAttendanceStatus*/
+        UPDATE HJSPAY_WORK_APPLY
+           SET STATUS                        = #{STATUS}                   /*근태상태(대기,승인,철회대기,철회승인,반려)*/
+             , LAST_UPDATED_BY               = #{LAST_UPDATED_BY}          /*최종 수정자*/
+             , LAST_UPDATE_DATE              = SYSDATE                     /*최종 수정일*/
+             , LAST_UPDATE_LOGIN             = #{PERSONID}                 /*로그인 유저*/
+             , OBJECT_VERSION_NUMBER         = #{OBJECT_VERSION_NUMBER}+1  /**/             
+            WHERE HJSPAY_WORK_APPLY_SEQ      = #{HJSPAY_WORK_APPLY_SEQ}    /*근태신청현황 PK*/
+    </update>
+  
+</mapper>

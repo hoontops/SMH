@@ -1,0 +1,786 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM00300Dao">
+
+
+	<!-- S/O LIST -->
+	<select id="selectProductionOrderList" parameterType="map" resultType="hashmap">
+           SELECT PO.PRODUCTIONORDERID
+                , PO.LINENO
+                , PO.PRODUCTDEFID
+                , PO.PRODUCTDEFVERSION
+                , PD.PRODUCTDEFNAME
+                , NVL(PCM_EXCHANGE_FN(PO.PLANTID , SYSDATE , UP.CURRENCY_CODE, 1 * UP.UNITPRICE),0) AS SALESPRICE
+                , NVL(SD.DICTIONARYNAME,PD.LAYER) LAYER
+                , PD.PCSPNL
+                , PD.PCSMM
+                , PO.PLANQTY
+                , TO_NUMBER(CEIL(PO.PLANQTY / PD.PCSPNL)) AS PLANPNLQTY
+                , ROUND(PO.PLANQTY / PD.PCSMM,2) AS PLANMM
+                , NVL(PO.ISSPLIT, 'N') AS ISSPLIT
+                , CASE WHEN PO.STATE = 'Create' THEN 'N'
+                       WHEN PO.STATE IN ('LotCreate', 'LotInput') THEN 'Y'
+                  END AS ISLOTCREATE
+                , PO.ISSPECAPPROVE
+                , SO.PRODUCTIONTYPE
+                , PO.STATE
+                , PD.RTRSHT
+                , PO.PUREORDER
+                , PO.PUREINPUT
+                , PO.SURPLUSSTOCK
+                , PO.SURPLUSWIP
+                , PO.UNDERAGE
+                , PO.STDINPUTPNLQTY
+                , PO.LOTINPUTPNLQTY
+              /*  , PO.PLANENDTIME   -- 2021년 3월 9일 이창영 이사님 지시사항으로 사용하지 않음 (진짜) */
+                , TO_CHAR(SO.DELIVERYDATE, 'YYYYMMDD')  AS PLANENDTIME
+                , PO.INPUTSEQUENCE
+                , PO.PLANTID
+             FROM MFM_PRODUCTIONORDER PO
+       INNER JOIN BAS_PRODUCTDEFINITION PD   ON PO.PLANTID           = PD.PLANTID
+                                            AND PO.PRODUCTDEFID      = PD.PRODUCTDEFID
+                                            AND PO.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+       INNER JOIN BAS_SALEORDERAPPROVAL SO   ON PO.PRODUCTIONORDERID = SO.SALESORDERID
+                                            AND PO.LINENO            = SO.LINENO
+ <!--        INNER JOIN CMD_DAY DD                 ON PO.SALEORDERDATE BETWEEN DD.PROD_START_DT AND DD.PROD_END_DT 
+										    AND PO.PLANTID           = DD.PLANTID  -->
+  LEFT OUTER JOIN BAS_UNITPRICEFORMES   UP   ON UP.PRODUCTDEFID      = PO.PRODUCTDEFID 
+								            AND UP.PRODUCTDEFVERSION = PO.PRODUCTDEFVERSION 
+								         <!--   AND DD.DDAY  BETWEEN UP.APPLY_START_DATE AND NVL(UP.APPLY_END_DATE,TO_TIMESTAMP('9999-12-31 23:59:59','yyyy-MM-dd HH24:MI:SS'))	  -->  
+								            AND SYSDATE  BETWEEN UP.APPLY_START_DATE AND NVL(UP.APPLY_END_DATE,TO_TIMESTAMP('9999-12-31 23:59:59','yyyy-MM-dd HH24:MI:SS'))
+  LEFT OUTER JOIN CMD_LOOKUP_VALUES SC       ON PD.LAYER             = SC.LOOKUP_CODE
+                                            AND SC.LOOKUP_TYPE       = 'Layer'
+  LEFT OUTER JOIN CMD_DICTIONARY SD          ON SC.DICTIONARYID      = SD.DICTIONARYID
+                                            AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+            WHERE PO.PLANTID = #{PLANTID}
+              AND PO.ISSPECAPPROVE = 'Y'
+              AND PO.STATE IN ('Create', 'LotCreate')
+  <if test="PRODUCTIONORDERID != null and PRODUCTIONORDERID !='' ">
+              AND PO.PRODUCTIONORDERID IN (   SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+                                                FROM  (SELECT  #{PRODUCTIONORDERID} AS ORG_DATA FROM DUAL)
+                                          CONNECT BY  INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+                                          )
+  </if>
+  <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+              AND PO.PRODUCTDEFID IN (   SELECT TRIM(REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+                                          FROM  (SELECT  #{PRODUCTDEFID} AS ORG_DATA FROM DUAL)
+                                    CONNECT BY  INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+                                     )
+  </if>
+  <if test="LINENO != null and LINENO !='' and !(LINENO eq '*'.toString())">
+              AND PO.LINENO = #{LINENO}
+  </if>
+  <if test="ISSPLIT != null and ISSPLIT !='' ">
+              AND NVL(PO.ISSPLIT, 'N') = #{ISSPLIT}
+  </if>
+  <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' ">
+              AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE} /* 생산구분 */
+  </if>
+  <if test="ISCREATE != null and ISCREATE !='' and !(ISCREATE eq '*'.toString())">
+              AND ((PO.STATE = 'LotCreate' AND #{ISCREATE} = 'Y') OR (PO.STATE = 'Create' AND #{ISCREATE} = 'N'))
+  </if>
+  <if test="PRODUCTIONORDERDATE_PERIODFR != null and PRODUCTIONORDERDATE_PERIODFR !='' and PRODUCTIONORDERDATE_PERIODTO != null and PRODUCTIONORDERDATE_PERIODTO !=''">
+              AND PO.CREATEDTIME BETWEEN TO_DATE(#{P_PRODUCTIONORDERDATE_PERIODFR}', 'YYYY-MM-DD HH24:MI:SS') AND TO_DATE(#{P_PRODUCTIONORDERDATE_PERIODTO}', 'YYYY-MM-DD HH24:MI:SS')
+  </if>
+         ORDER BY PO.PRODUCTIONORDERID
+                , LPAD(PO.LINENO, 5, '0')
+	</select>
+	<select id="selectLotListByProductionOrder" parameterType="map"	resultType="hashmap">
+		      SELECT L.LOTID
+		           , L.ENTERPRISEID
+		           , L.PLANTID
+		           , L.PRODUCTIONORDERID
+		           , L.PRODUCTDEFID
+		           , L.PRODUCTDEFVERSION
+		           , L.PANELQTY AS PNLQTY
+		           , L.QTY
+		           , L.PANELPERQTY AS JOINTQTY
+		           , NVL(L.PUREINPUT,0) AS PUREINPUT
+		           , NVL(L.QTY,0) - NVL(L.PUREINPUT,0)  AS PUREINPUTLOSS
+		           , L.UNIT
+		           , CASE WHEN L.LOTSTATE = 'Created' THEN 'N'
+		                  ELSE 'Y'
+		             END AS ISINPUT
+		           , 'Y' AS ISLOTCREATE
+		           , L.DESCRIPTION
+		           , PD.PRODUCTDEFTYPE
+		        FROM PCM_LOT L
+		  INNER JOIN BAS_PRODUCTDEFINITION PD ON L.PRODUCTDEFID = PD.PRODUCTDEFID
+		                                     AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+          INNER JOIN MFM_PRODUCTIONORDER PO   ON L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+                                             AND L.LINENO            = PO.LINENO		                                     
+		       WHERE L.PRODUCTIONORDERID = #{PRODUCTIONORDERID}
+		         AND L.LINENO = #{LINENO}
+		         AND L.LOTID = L.ROOTLOTID
+		         AND L.LOTID = L.PARENTLOTID
+		         AND (   (PD.RTRSHT = 'RTR' AND L.ISREPRESENTROLLLOT  = 'Y' AND PD.MATERIALCLASS IN ('FG','SB'))
+		              OR (PD.RTRSHT = 'RTR' AND L.ISREPRESENTROLLLOT != 'Y' AND PD.MATERIALCLASS NOT IN ('FG','SB'))
+		              OR NVL(PD.RTRSHT,'SHT') = 'SHT'
+		             )   
+		       --  AND L.LOTCREATEDTYPE = 'Normal'
+	</select>
+	<select id="selectProductDefinitionListByProductionOrder" parameterType="map" resultType="hashmap">
+			  WITH BILLOFMATERIAL(
+			                        PLANTID
+			                      , PRODUCTDEFID
+			                      , PRODUCTDEFVERSION
+			                      , MATERIALDEFID
+			                      , MATERIALDEFVERSION
+			                      , MATERIALDEFNAME
+			                      , PROCESSDEFID
+			                      , PROCESSDEFVERSION
+			                      , RTRSHT
+			                      , QTY
+			                      , JOINTQTY
+			                      , UNIT
+			                      , ACTUALINPUTLOSS
+			                      , PUREORDERLOSS
+			                      , SEQ
+			                      , PRODUCTDEFTYPE 
+			                     )
+			  AS
+			  (
+			         SELECT PD.PLANTID
+			          , PD.PRODUCTDEFID
+			          , PD.PRODUCTDEFVERSION
+			          , PD.PRODUCTDEFID AS MATERIALDEFID
+			          , PD.PRODUCTDEFVERSION AS MATERIALDEFVERSION
+			          , PD.PRODUCTDEFNAME AS MATERIALDEFNAME
+			          , PD.PROCESSDEFID
+			          , PD.PROCESSDEFVERSION
+			          , PD.RTRSHT
+			          , 0 AS QTY
+			          , 1 AS JOINTQTY
+			          , PD.UNIT
+			          , 0 AS ACTUALINPUTLOSS
+			          , 0 AS PUREORDERLOSS
+			          , 0 AS SEQ
+			          , PD.PRODUCTDEFTYPE
+			          FROM BAS_PRODUCTDEFINITION PD
+			         WHERE PD.PLANTID           = #{PLANTID}
+			           AND PD.PRODUCTDEFID      = #{PRODUCTDEFID}
+			           AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			        UNION ALL
+			         SELECT P.PLANTID
+			          , P.PRODUCTDEFID
+			          , P.PRODUCTDEFVERSION
+			          , BOM.MATERIALDEFID
+			          , BOM.MATERIALDEFVERSION
+			          , PD.PRODUCTDEFNAME AS MATERIALDEFNAME
+			          , PD.PROCESSDEFID
+			          , PD.PROCESSDEFVERSION
+			          , PD.RTRSHT
+			          , 0 AS QTY
+			          , BOM.QTY AS JOINTQTY
+			          , PD.UNIT
+			          , 0 AS ACTUALINPUTLOSS
+			          , 0 AS PUREORDERLOSS
+			          , BOM."sequence" AS SEQ
+			          , PD.PRODUCTDEFTYPE
+			       FROM BILLOFMATERIAL P
+			 INNER JOIN BAS_BILLOFMATERIAL BOM ON P.PLANTID            = BOM.PLANTID
+			                                  AND P.MATERIALDEFID      = BOM.PRODUCTDEFID
+			                                  AND P.MATERIALDEFVERSION = BOM.PRODUCTDEFVERSION
+			                                  AND P.PROCESSDEFID       = BOM.PROCESSDEFID
+			                                  AND P.PROCESSDEFVERSION  = BOM.PROCESSDEFVERSION
+			                                  AND BOM.MATERIALTYPE     = 'Product'
+			  INNER JOIN BAS_PRODUCTDEFINITION PD ON BOM.PLANTID       = PD.PLANTID
+			                                     AND BOM.MATERIALDEFID = PD.PRODUCTDEFID
+			                                     AND BOM.MATERIALDEFVERSION = PD.PRODUCTDEFVERSION
+			  )
+			      SELECT 0 AS CHK
+			           , BOM.MATERIALDEFID AS PRODUCTDEFID
+			           , BOM.MATERIALDEFVERSION AS PRODUCTDEFVERSION
+			           , BOM.MATERIALDEFNAME AS PRODUCTDEFNAME
+			           , DECODE(NVL(BOM.RTRSHT, ''), '','SHT',BOM.RTRSHT) AS RTRSHT
+			           , 0 AS PNLQTY
+			           , 0 AS LOTSIZE
+			           , BOM.QTY
+			           , 0 AS PANEL
+			           , ROUND(BOM.JOINTQTY * PD.PCSPNL) AS JOINTQTY
+			           , BOM.JOINTQTY AS PNLJOINTQTY
+			           , BOM.UNIT
+			           , BOM.ACTUALINPUTLOSS
+			           , BOM.PUREORDERLOSS
+			           , MD.MATERIALCLASS
+			           , BOM.SEQ AS MATERIALSEQUENCE
+			           , CASE WHEN (  SELECT COUNT(*)
+			                            FROM PCM_LOT L
+			                           WHERE L.PRODUCTIONORDERID = #{PRODUCTIONORDERID}
+			                             AND L.LINENO            = #{LINENO}
+			                             AND L.PLANTID           = BOM.PLANTID
+			                             AND L.PRODUCTDEFID      = BOM.MATERIALDEFID
+			                             AND L.PRODUCTDEFVERSION = BOM.MATERIALDEFVERSION
+			                       ) > 0 THEN 'Y'
+			                  ELSE 'N'
+			             END AS ISLOTCREATE
+			           , BOM.PRODUCTDEFTYPE
+			           , BOM.PROCESSDEFID
+			           , BOM.PROCESSDEFVERSION
+			        FROM BILLOFMATERIAL BOM
+			  INNER JOIN BAS_PRODUCTDEFINITION PD ON BOM.PRODUCTDEFID      = PD.PRODUCTDEFID
+			                                     AND BOM.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+			  INNER JOIN BAS_PRODUCTDEFINITION MD ON BOM.PLANTID = MD.PLANTID
+			                                     AND BOM.MATERIALDEFID = MD.PRODUCTDEFID
+			                                     AND BOM.MATERIALDEFVERSION = MD.PRODUCTDEFVERSION
+			  <if test="ETCONLY = 'Y'">
+			     /*  WHERE MD.MATERIALCLASS NOT IN ('FG', 'SB')   사용하지 않음*/
+			  </if>
+			    ORDER BY BOM.SEQ
+	</select>
+	<select id="selectLineNo" parameterType="map" resultType="hashmap">
+		SELECT DISTINCT PO.LINENO AS CODEID
+		     , PO.LINENO AS COCENM
+		  FROM MFM_PRODUCTIONORDER PO
+	   	 WHERE PO.PLANTID = #{PLANTID}
+  <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+              AND
+ 	<foreach collection="PRODUCTDEFID" item="PRODUCTDEFID"  open="(" close=")" separator="OR">
+ 	                PO.PRODUCTDEFID like <![CDATA['%' ||]]> #{PRODUCTDEFID} <![CDATA[|| '%']]>
+ 	</foreach>              
+  </if> 
+  <if test="PRODUCTIONORDERID != null and PRODUCTIONORDERID !='' ">
+              AND
+ 	<foreach collection="PRODUCTIONORDERID" item="PRODUCTIONORDERID"  open="(" close=")" separator="OR">
+ 	                PO.PRODUCTIONORDERID like <![CDATA['%' ||]]> #{PRODUCTIONORDERID} <![CDATA[|| '%']]>
+ 	</foreach>              
+  </if>   	 
+      ORDER BY TO_NUMBER(SPLIT_PART(PO.LINENO, '.', 1))
+		    , TO_NUMBER(NVL(SPLIT_PART(PO.LINENO, '.', 2), 0))
+	</select>
+	<update id="updateProductionOrder_IsSplit" parameterType="map">
+		UPDATE MFM_PRODUCTIONORDER
+		   SET ISSPLIT           = #{ISSPLIT}
+		     , LASTTXNID         = #{LASTTXNID}
+		     , MODIFIEDTIME      = SYSDATE
+		     , MODIFIER          = #{MODIFIER}
+		     , LASTTXNHISTKEY    = #{LASTTXNHISTKEY}
+		     , LASTTXNUSER       = #{MODIFIER}
+		     , LASTTXNTIME       = SYSDATE
+		 WHERE PRODUCTIONORDERID = #{PRODUCTIONORDERID}
+		   AND LINENO            = #{LINENO}
+
+	</update>
+	<select id="getLotIdSheetMaxSequence" parameterType="map" resultType="hashmap">
+		SELECT NVL(MAX(SUBSTR(L.LOTID,9,3)), 0) + 1 AS SEQUENCE
+		     , NVL(MAX(SUBSTR(L.LOTID, 23, 3)), '000') AS LOTDEGREE
+		     , NVL(MAX(SUBSTR(L.LOTID,-3)) ,0) AS LASTSEQUENCE
+		  FROM PCM_LOT L
+		  WHERE L.LOTID LIKE <![CDATA[ '%'|| #{LOTID} || '%'  ]]>
+		    AND L.LOTCREATEDTYPE <![CDATA[<>]]> 'Defect'
+	</select>
+	<select id="getLotIdRollMaxSequence" parameterType="map" resultType="hashmap">
+		SELECT NVL(MAX(SUBSTR(L.LOTID,9,3)), 0) + 1 AS SEQUENCE
+		     , NVL(MAX(SUBSTR(L.LOTID, 18, 3)), '000') AS LOTDEGREE
+		     , NVL(MAX(SUBSTR(L.LOTID,-3)) ,0) AS LASTSEQUENCE
+		  FROM PCM_LOT L
+		  WHERE L.LOTID LIKE <![CDATA[ '%'|| #{LOTID} || '%'  ]]>
+		    AND L.LOTCREATEDTYPE <![CDATA[<>]]> 'Defect'
+	</select>
+	
+    <select id="checkRoutingInfoByProduct" parameterType="map" resultType="hashmap">
+	      SELECT PD.PRODUCTDEFID
+	           , PD.PRODUCTDEFVERSION
+	           , PD.PROCESSDEFID
+	           , PD.PROCESSDEFVERSION
+	           , PP.USERSEQUENCE
+	           , PP.PROCESSSEGMENTID
+	           , PP.PROCESSSEGMENTVERSION
+	           , PD.LAYER
+	           , PD.PCSARY
+	           , PP.PROCESSPATHID AS PROCESSPATHSTACK
+	          FROM BAS_PRODUCTDEFINITION PD
+	    INNER JOIN BAS_PROCESSDEFINITION RD ON PD.PROCESSDEFID      = RD.PROCESSDEFID
+	                                       AND PD.PROCESSDEFVERSION = RD.PROCESSDEFVERSION
+	    INNER JOIN BAS_PROCESSPATH  PP      ON RD.PROCESSDEFID      = PP.PROCESSDEFID
+	                                       AND RD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+	                                       AND PP.PATHTYPE LIKE 'Start%'
+	         WHERE PD.PRODUCTDEFID      = #{PRODUCTDEFID}
+	           AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	</select>	
+	<insert id="insertPcmLot" parameterType="map">
+
+		    INSERT
+		     INTO PCM_LOT
+		     (  LOTID
+		      , HASSUBLOT
+		      , PROCESSDEFID
+		      , PROCESSDEFVERSION
+		      , PROCESSPATHSTACK
+		      , USERSEQUENCE
+		      , PROCESSSEGMENTID
+		      , PROCESSSEGMENTVERSION
+		      , ORIGINALPLANTID
+		      , ROOTLOTID
+		      , LOTSTATE
+		      , PROCESSSTATE
+		      , ISHOLD
+		      , ISREWORK
+		      , REWORKCOUNT
+		      , TOTALREWORKCOUNT
+		      , PRODUCTIONORDERID
+		      , PRIORITY
+		      , DUEDATE
+		      , QTY
+		      , LOTTYPE
+		      , RAWMATERIALID
+		      , AREAID
+		      , PLANTID
+		      , DESCRIPTION
+		      , LOTNAME
+		      , LOTGROUPID
+		      , PARENTLOTID
+		      , ENTERPRISEID
+		      , PRODUCTDEFID
+		      , PRODUCTDEFVERSION
+		      , LINENO
+		      , LOTCREATEDTYPE
+		      , LOTINPUTTYPE
+		      , ISLOCKING
+		      , ISREPRESENTROLLLOT
+		      , LAYER
+		      , LOTSTDPANELQTY
+		      , UNIT
+		      , CREATEDQTY
+		      , PCSQTY
+		      , PANELQTY
+		      , PANELPERQTY
+		      , PUREINPUT
+		      , PUREORDER
+		      , STARTEDUSER
+		      , STARTEDDATE
+		      , HANDLETYPE
+		      , ISPRINTLOTCARD
+		      , ISFINALINSPECTPROGESS
+		      , ISFIRSTCREATELOT
+		      , ISOEM
+		      , CREATOR
+		      , CREATEDTIME
+		      , MODIFIER
+		      , MODIFIEDTIME
+		      , LASTTXNGROUPHISTKEY
+		      , LASTTXNID
+		      , LASTTXNUSER
+		      , LASTTXNTIME
+		      , LASTTXNHISTKEY
+		      , WORKCOUNT
+		     ) VALUES(    #{LOTID}
+		                , #{HASSUBLOT}
+		                , #{PROCESSDEFID}
+		                , #{PROCESSDEFVERSION}
+		                , #{PROCESSPATHSTACK}
+		                , #{USERSEQUENCE}
+		                , #{PROCESSSEGMENTID}
+		                , #{PROCESSSEGMENTVERSION}
+		                , #{ORIGINALPLANTID}
+		                , #{LOTID}
+		                , #{LOTSTATE}
+		                , #{PROCESSSTATE}
+		                , #{ISHOLD}
+		                , #{ISREWORK}
+		                , #{REWORKCOUNT}
+		                , #{TOTALREWORKCOUNT}
+		                , #{PRODUCTIONORDERID}
+		                , #{PRIORITY}
+		                , #{DUEDATE}
+		                , #{QTY}
+		                , #{LOTTYPE}
+		                , NULL
+		                , #{AREAID}
+		                , #{PLANTID}
+		                , NULL
+		                , #{LOTID}
+		                , NULL
+		                , #{LOTID}
+		                , #{ENTERPRISEID}
+		                , #{PRODUCTDEFID}
+		                , #{PRODUCTDEFVERSION}
+		                , #{LINENO}
+		                , #{LOTCREATEDTYPE}
+		                , #{LOTINPUTTYPE}
+		                , #{ISLOCKING}
+		                , #{ISREPRESENTROLLLOT}
+		                , #{LAYER}
+		                , #{LOTSTDPANELQTY}
+		                , #{UNIT}
+		                , #{CREATEDQTY}
+		                , #{PCSQTY}
+		                , #{PANELQTY}
+		                , #{PANELPERQTY}
+		                , #{PUREINPUT}
+		                , #{PUREORDER}
+		                , #{CREATOR}
+		                , SYSDATE
+		                , #{HANDLETYPE}
+		                , #{ISPRINTLOTCARD}
+		                , #{ISFINALINSPECTPROGESS}
+		                , #{ISFIRSTCREATELOT}
+		                , #{ISOEM}
+		                , #{CREATOR}
+		                , SYSDATE
+		                , #{MODIFIER}
+		                , SYSDATE
+		                , #{LASTTXNGROUPHISTKEY}
+		                , #{LASTTXNID}
+		                , #{CREATOR}
+		                , SYSDATE
+		                , #{LASTTXNHISTKEY}
+		                , #{WORKCOUNT}
+		             )
+	</insert>
+	<insert id="insertPcmLotGeneal" parameterType="map">
+			INSERT 
+			  INTO PCM_LOTGENEAL
+			  (  PROCESSDEFID
+			   , PROCESSDEFVERSION
+			   , PROCESSPATHID
+			   , USERSEQUENCE
+			   , PROCESSSEGMENTID
+			   , PROCESSSEGMENTVERSION
+			   , "DEPTH"
+			   , LOTID
+			   , ENTERPRISEID
+			   , PLANTID
+			   , AREAID
+			   , PRODUCTDEFID
+			   , PRODUCTDEFVERSION
+			   , ROOTLOTID
+			   , SOURCELOTID
+			   , DESTINATIONLOTID
+			   , CREATEDQTY
+			   , QTY
+			   , TXNHISTKEY
+			   , TXNUSER
+			   , TXNTIME
+			   , WORKCOUNT
+			  ) VALUES(  #{PROCESSDEFID}
+			           , #{PROCESSDEFVERSION}
+			           , #{PROCESSPATHID}
+			           , #{USERSEQUENCE}
+			           , #{PROCESSSEGMENTID}
+			           , #{PROCESSSEGMENTVERSION}
+			           , #{DEPTH}
+			           , #{LOTID}
+			           , #{ENTERPRISEID}
+			           , #{PLANTID}
+			           , #{AREAID}
+			           , #{PRODUCTDEFID}
+			           , #{PRODUCTDEFVERSION}
+			           , #{DEPT}
+			           , #{SOURCELOTID}
+			           , #{DESTINATIONLOTID}
+			           , #{CREATEDQTY}
+			           , #{QTY}
+			           , #{TXNHISTKEY}
+			           , #{CREATOR}
+			           , SYSDATE
+			           , #{WORKCOUNT}
+			          )	
+	</insert>
+	<update id="updatePcmLot" parameterType="map">
+			UPDATE PCM_LOT SET LINENO                   = #{LINENO}
+			                 , LOTTYPE                  = #{LOTTYPE}
+			                 , LOTCREATEDTYPE           = #{LOTCREATEDTYPE}
+			                 , LOTINPUTTYPE             = #{LOTINPUTTYPE}
+			                 , ISHOLD                   = #{ISHOLD}
+			                 , ISLOCKING                = #{ISLOCKING}
+			                 , ISREPRESENTROLLLOT       = #{ISREPRESENTROLLLOT}
+			                 , DUEDATE                  = #{DUEDATE}
+			                 , LAYER                    = #{LAYER}
+			                 , CREATEDQTY               = #{CREATEDQTY}
+			                 , LOTSTDPANELQTY           = #{LOTSTDPANELQTY}
+			                 , UNIT                     = #{UNIT}
+			                 , PCSQTY                   = #{PCSQTY}
+			                 , PANELQTY                 = #{PANELQTY}
+			                 , PANELPERQTY              = #{PANELPERQTY}
+			                 , PUREINPUT                = #{PUREINPUT}
+			                 , PUREORDER                = #{PUREORDER}
+			                 , STARTEDUSER              = #{MODIFIER}
+			                 , STARTEDDATE              = SYSDATE
+			                 , HANDLETYPE               = #{HANDLETYPE}
+			                 , LASTTXNID                = #{LASTTXNID}
+			                 , ISPRINTLOTCARD           = #{ISPRINTLOTCARD}
+			                 , ISFINALINSPECTPROGESS    = #{ISFINALINSPECTPROGESS}
+			                 , ISFIRSTCREATELOT         = #{ISFIRSTCREATELOT}
+			                 , ISOEM                    = #{ISOEM}
+			                 , MODIFIEDTIME             = SYSDATE
+			                 , MODIFIER                 = #{MODIFIER}
+			                 , LASTTXNGROUPHISTKEY      = #{LASTTXNGROUPHISTKEY}
+			                 , LASTTXNHISTKEY           = #{LASTTXNHISTKEY}
+			                 , LASTTXNUSER              = #{LASTTXNUSER}
+			                 , LASTTXNTIME              = SYSDATE
+			             WHERE LOTID                    = #{LOTID}	
+	</update>
+	<insert id="insertPcmLotHistory" parameterType="map">
+	   INSERT 
+		 INTO PCM_LOTHISTORY(  TXNHISTKEY
+		                     , LOTID
+		                     , PRODUCTIONORDERID
+		                     , LINENO
+		                     , LOTGROUPID
+		                     , LOTNAME
+		                     , ENTERPRISEID
+		                     , ORIGINALPLANTID
+		                     , PLANTID
+		                     , FACTORYID
+		                     , AREAID
+		                     , EQUIPMENTID
+		                     , LOCATIONID
+		                     , RECIPEDEFID
+		                     , RECIPEDEFVERSION
+		                     , PREVPRODUCTDEFID
+		                     , PREVPRODUCTDEFVERSION
+		                     , PRODUCTDEFID
+		                     , PRODUCTDEFVERSION
+		                     , PROCESSDEFID
+		                     , PROCESSDEFVERSION
+		                     , PROCESSPATHSTACK
+		                     , USERSEQUENCE
+		                     , PROCESSSEGMENTID
+		                     , PROCESSSEGMENTVERSION
+		                     , RAWMATERIALID
+		                     , ROOTLOTID
+		                     , PARENTLOTID
+		                     , CHILDLOTID
+		                     , CARRIERID
+		                     , LOTTYPE
+		                     , LOTCREATEDTYPE
+		                     , LOTINPUTTYPE
+		                     , ISREPRESENTROLLLOT
+		                     , HASSUBLOT
+		                     , PRIORITY
+		                     , DUEDATE
+		                     , EXPECTEDCOMPLETEDATE
+		                     , ROOTLOTSTARTDATE
+		                     , LOTSTARTDATE
+		                     , WEEK
+		                     , TRACKINUSER
+		                     , TRACKINTIME
+		                     , TRACKOUTUSER
+		                     , TRACKOUTTIME
+		                     , LOTSTATE
+		                     , PROCESSSTATE
+		                     , ISHOLD
+		                     , ISREWORK
+		                     , ISLOCKING
+		                     , REWORKTYPE
+		                     , REWORKREASONCODE
+		                     , ISPRINTLOTCARD
+		                     , ISPRINTRCLOTCARD
+		                     , LAYER
+		                     , CREATEDQTY
+		                     , LOTSTDPANELQTY
+		                     , UNIT
+		                     , DEFECTUNIT
+		                     , QTY
+		                     , DEFECTQTY
+		                     , PSEUDODEFECTQTY
+		                     , PCSQTY
+		                     , ARRAYQTY
+		                     , PANELQTY
+		                     , PANELPERQTY
+		                     , REWORKCOUNT
+		                     , TOTALREWORKCOUNT
+		                     , PUREORDER
+		                     , PUREINPUT
+		                     , SUBPROCESSDEFID
+		                     , SUBPROCESSDEFVERSION
+		                     , RECEIVEUSER
+		                     , RECEIVETIME
+		                     , STARTEDUSER
+		                     , STARTEDDATE
+		                     , SENDUSER
+		                     , SENDTIME
+		                     , HANDLETYPE
+		                     , DESCRIPTION
+		                     , CREATOR
+		                     , CREATEDTIME
+		                     , MODIFIER
+		                     , MODIFIEDTIME
+		                     , TXNGROUPHISTKEY
+		                     , TXNID
+		                     , TXNUSER
+		                     , TXNTIME
+		                     , TXNCOMMENT
+		                     , ISDEFECTED
+		                     , WORKCOUNT
+		                     , RESOURCEID
+		                     , MKLOTID
+		                     , PNLROOTLOTID
+		                     , PNLCREATEDQTY
+		                     , INPUTCONFIRMDATE
+		                     , INPUTCONFIRMUSER
+		                     , ISFINALINSPECTPROGESS
+		                     , LOTINPUTQTY
+		                     , ISFIRSTCREATELOT
+		                     , ISOEM) VALUES(  #{LASTTXNHISTKEY}
+		                                     , #{LOTID}
+		                                     , #{PRODUCTIONORDERID}
+		                                     , #{LINENO}
+		                                     , null
+		                                     , #{LOTNAME}
+		                                     , #{ENTERPRISEID}
+		                                     , #{ORIGINALPLANTID}
+		                                     , #{PLANTID}
+		                                     , null
+		                                     , #{AREAID}
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , #{PRODUCTDEFID}
+		                                     , #{PRODUCTDEFVERSION}
+		                                     , #{PROCESSDEFID}
+		                                     , #{PROCESSDEFVERSION}
+		                                     , #{PROCESSPATHSTACK}
+		                                     , #{USERSEQUENCE}
+		                                     , #{PROCESSSEGMENTID}
+		                                     , #{PROCESSSEGMENTVERSION}
+		                                     , null
+		                                     , #{ROOTLOTID}
+		                                     , #{PARENTLOTID}
+		                                     , null
+		                                     , null
+		                                     , #{LOTTYPE}
+		                                     , #{LOTCREATEDTYPE}
+		                                     , #{LOTINPUTTYPE}
+		                                     , #{ISREPRESENTROLLLOT}
+		                                     , #{HASSUBLOT}
+		                                     , #{PRIORITY}
+		                                     , #{DUEDATE}
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , #{LOTSTATE}
+		                                     , #{PROCESSSTATE}
+		                                     , #{ISHOLD}
+		                                     , #{ISREWORK}
+		                                     , #{ISLOCKING}
+		                                     , null
+		                                     , null
+		                                     , #{ISPRINTLOTCARD}
+		                                     , null
+		                                     , #{LAYER}
+		                                     , #{CREATEDQTY}
+		                                     , #{LOTSTDPANELQTY}
+		                                     , #{UNIT}
+		                                     , null
+		                                     , #{QTY}
+		                                     , null
+		                                     , null
+		                                     , #{PCSQTY}
+		                                     , null
+		                                     , #{PANELQTY}
+		                                     , #{PANELPERQTY}
+		                                     , #{REWORKCOUNT}
+		                                     , #{TOTALREWORKCOUNT}
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , #{CREATOR}
+		                                     , SYSDATE
+		                                     , null
+		                                     , null
+		                                     , #{HANDLETYPE}
+		                                     , null
+		                                     , #{CREATOR}
+		                                     , SYSDATE
+		                                     , #{MODIFIER}
+		                                     , SYSDATE
+		                                     , #{TXNGROUPHISTKEY}
+		                                     , #{TXNID}
+		                                     , #{TXNUSER}
+		                                     , SYSDATE
+		                                     , null
+		                                     , #{ISDEFECTED}
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , null
+		                                     , #{ISFINALINSPECTPROGESS}
+		                                     , null
+		                                     , #{ISFIRSTCREATELOT}
+		                                     , #{ISOEM}
+		                                    )	
+	</insert>
+	<update id="updateProductOrder" parameterType="map">
+		UPDATE MFM_PRODUCTIONORDER SET PUREORDER          = #{PUREORDER}
+		                             , PUREINPUT          = #{PUREINPUT}
+		                             , SURPLUSSTOCK       = #{SURPLUSSTOCK}
+		                             , SURPLUSWIP         = #{SURPLUSWIP}
+		                     <if test="STATE != null and STATE !='' ">
+		                             , STATE              = #{STATE}
+		                     </if>
+		                             , UNDERAGE           = #{UNDERAGE}
+		                             , STDINPUTPNLQTY     = #{STDINPUTPNLQTY}
+		                             , LOTINPUTPNLQTY     = #{LOTINPUTPNLQTY}
+		                             , INPUTSEQUENCE      = #{INPUTSEQUENCE}
+		                             , LASTTXNID          = #{LASTTXNID}
+		                             , MODIFIEDTIME       = SYSDATE
+		                             , MODIFIER           = #{MODIFIER}
+		                             , LASTTXNHISTKEY     = #{LASTTXNHISTKEY}
+		                             , LASTTXNUSER        = #{MODIFIER}
+		                             , LASTTXNTIME        = SYSDATE                             
+		                         WHERE PRODUCTIONORDERID  = #{PRODUCTIONORDERID} 
+		                           AND LINENO             = #{LINENO}	
+	</update>
+	<select id="getExistsLotWithLotStateIsNotCreated" parameterType="map" resultType="_int">
+	           SELECT   count(*) AS CNT
+				FROM	PCM_LOT	L
+				WHERE	L.PRODUCTIONORDERID  =  #{PRODUCTIONORDERID}
+				AND		L.LINENO             =  #{LINENO}
+				AND		L.PRODUCTDEFID       =  #{PRODUCTDEFID}
+				AND		L.PRODUCTDEFVERSION  =  #{PRODUCTDEFVERSION}
+				AND		L.LOTSTATE          !=  #{LOTSTATE} 
+	</select>
+	<select id="selectLot" parameterType="map" resultType="hashmap">
+	           SELECT
+						*
+				FROM	PCM_LOT	L
+				WHERE	L.PRODUCTIONORDERID  =  #{PRODUCTIONORDERID}
+				AND		L.LINENO             =  #{LINENO}
+				AND		L.PRODUCTDEFID       =  #{PRODUCTDEFID}
+				AND		L.PRODUCTDEFVERSION  =  #{PRODUCTDEFVERSION}
+				 
+	</select>
+	<delete id="deleteLot" parameterType="map">
+	  DELETE FROM PCM_LOT 
+       WHERE LOTID = #{LOTID}
+    </delete>
+    
+    <select id="getProductionOrderIdList" parameterType="map" resultType="hashmap">
+         SELECT PO.PRODUCTIONORDERID || '|' || PO.LINENO AS VALUEFIELD
+              , PO.PRODUCTIONORDERID
+              , PO.LINENO
+              , PO.PLANQTY
+              , PO.PRODUCTDEFID
+              , PD.PRODUCTDEFNAME
+             FROM MFM_PRODUCTIONORDER  PO
+  LEFT OUTER JOIN BAS_PRODUCTDEFINITION PD ON PO.PLANTID           = PD.PLANTID
+                                          AND PO.PRODUCTDEFID      = PD.PRODUCTDEFID
+                                          AND PO.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+            WHERE PO.PLANTID       = 'IFC'
+              AND PO.ISSPECAPPROVE = 'Y'
+              AND PO.STATE IN ('Create', 'LotCreate')
+      <if test="PRODUCTIONORDERID != null and PRODUCTIONORDERID !='' ">
+              AND PO.PRODUCTIONORDERID LIKE <![CDATA[ '%'|| #{PRODUCTIONORDERID} || '%'  ]]>
+      </if>
+         ORDER BY PO.PRODUCTIONORDERID ASC, TO_NUMBER(PO.LINENO) ASC 		   
+    </select>
+	
+</mapper>

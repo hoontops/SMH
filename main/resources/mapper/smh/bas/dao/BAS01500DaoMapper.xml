@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS01500Dao">
+	
+    <select id="selectUserList" parameterType="map" resultType="hashmap">
+	/* smh.bas.dao.BAS01500Dao.selectUserList */
+  SELECT DISTINCT (U.USERID) AS P_USERID
+                 ,U.USERNAME
+                 ,U.DEPARTMENT
+                 ,U.AREARESPONSIBILITY AS CONTROLRIGHT
+                 ,TO_CHAR(U.LAST_UPDATE_DATE, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+                 ,U1.USERNAME AS MODIFIER
+  FROM   CMD_USER_V U
+  LEFT   OUTER JOIN BAS_USERWORKCENTER UW    ON     U.USERID = UW.USERID
+  LEFT   OUTER JOIN CMD_USER_V U1       ON     U.LAST_UPDATED_BY = U1.ID
+  WHERE  1 = 1
+  	<!-- AND  U.PLANTID = #{SESSION_SITETYPE} -->
+	<if test="USERID != null and USERID !='' ">
+		AND EXISTS
+                                    (
+                                        SELECT  1
+                                        FROM    ufn_selectStringToSplit(#{USERID}, ',')      LMP
+                                        WHERE   U.USERID = LMP.VALUE
+                                    )
+	</if>
+	<if test="AREAID != null and AREAID !='' ">
+		AND    EXISTS (SELECT 1
+		        FROM   BAS_USERWORKCENTER UW
+		        WHERE  U.USERID = UW.USERID
+		        AND    UW.AREAID = #{AREAID})
+	</if>
+    ORDER BY USERNAME
+    </select>
+    
+    <select id="selectAreaList" parameterType="map" resultType="hashmap">
+	/* smh.bas.dao.BAS01500Dao.selectAreaList */
+			SELECT UW.USERID AS P_USERID
+				      ,UW.AREAID
+				      ,COALESCE(AD.DICTIONARYNAME, A.AREANAME) AS AREANAME
+				      ,UW.PLANTID
+				      ,COALESCE(C.MEANING, A.OWNTYPE) AS OWNTYPE
+				      ,VENDORNAME
+      				  ,W.WAREHOUSEID
+				      ,WAREHOUSENAME
+				      ,U1.USERNAME AS CREATOR
+				      ,TO_CHAR(UW.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+				      ,U2.USERNAME AS MODIFIER				      
+				      ,TO_CHAR(UW.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+			FROM   BAS_USERWORKCENTER UW
+			LEFT   JOIN BAS_AREA A                ON     UW.AREAID = A.AREAID
+			LEFT   JOIN CMD_DICTIONARY AD         ON     A.AREANAME = AD.DICTIONARYID
+			                                      AND    AD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			LEFT   JOIN CMD_LOOKUP_VALUES C       ON     C.LOOKUP_CODE = A.OWNTYPE
+			                                      AND    C.LOOKUP_TYPE = 'OwnType'
+			LEFT   JOIN BAS_VENDOR V              ON     V.VENDORID = A.VENDORID
+			                                      AND    V.ENTERPRISEID = A.ENTERPRISEID
+			                                      AND    V.PLANTID = A.PLANTID
+			LEFT   JOIN BAS_WAREHOUSE W           ON     W.WAREHOUSEID = A.WAREHOUSEID
+			                                      AND    W.ENTERPRISEID = A.ENTERPRISEID
+			                                      AND    W.PLANTID = A.PLANTID
+			LEFT   OUTER JOIN CMD_USER_V U1       ON     UW.CREATOR = U1.USERID
+			LEFT   OUTER JOIN CMD_USER_V U2       ON     UW.MODIFIER = U2.USERID
+			WHERE 1=1
+			AND  UW.USERID = #{P_USERID}    
+			AND  UW.PLANTID = #{SESSION_SITETYPE}
+			ORDER BY UW.AREAID
+    </select>
+    
+
+  <update id="upsertUser" parameterType="map">
+ 	 /* smh.bas.dao.BAS01500Dao.upsertUser */
+ 	 DECLARE
+ 	 BEGIN 	 
+ 	 		IF #{CONTROLRIGHT} = 'ProductionManager' THEN
+				
+				NULL;
+			END IF;
+			
+	 	 UPDATE CMD_USERS SET
+	 	 			AREARESPONSIBILITY = #{CONTROLRIGHT}
+	 	 	  	    ,LAST_UPDATED_BY = #{SESSION_ID}     
+			        ,LAST_UPDATE_DATE = SYSDATE
+			WHERE USER_ID	 = #{P_USERID};
+		END;					        
+    </update>    
+    
+  <update id="upsertArea" parameterType="map">
+ 	 /* smh.bas.dao.BAS01500Dao.upsertArea */
+    	INSERT INTO BAS_USERWORKCENTER BU
+    	 				( USERID
+						,AREAID
+						,ENTERPRISEID
+						,PLANTID
+						,VALIDSTATE
+						,CREATOR
+						,CREATEDTIME
+						,MODIFIER
+						,MODIFIEDTIME
+						,LASTTXNHISTKEY
+						,LASTTXNID
+						,LASTTXNUSER
+						,LASTTXNTIME
+						,LASTTXNCOMMENT) 
+		    VALUES(  #{P_USERID}
+						,#{AREAID}
+						,#{SESSION_ENTERPRISEID}
+						,#{SESSION_SITETYPE}
+						,'Valid'
+						,#{CREATOR}  
+				        ,SYSDATE  
+				        ,#{MODIFIER}  
+				        ,SYSDATE  
+				        ,#{LASTTXNHISTKEY}  
+				        ,#{LASTTXNID}
+				        ,#{CREATOR} 
+				        ,SYSDATE
+				        ,#{LASTTXNCOMMENT})
+    </update>
+    
+
+        
+ <delete id="deleteArea" parameterType="map">
+ 	 /* smh.bas.dao.BAS01500Dao.deleteArea */
+ 	 	DELETE FROM BAS_USERWORKCENTER BU 
+ 	 	WHERE BU.AREAID = #{AREAID}
+		   AND BU.USERID	= #{P_USERID} 	 					    
+    </delete>
+    
+    
+ </mapper>

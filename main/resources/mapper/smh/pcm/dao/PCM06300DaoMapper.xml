@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM06300Dao">
+
+	
+	<select id="selectLotHoldResult" parameterType="map" resultType="hashmap">
+	/* "SelectLotHoldResult" 10001 */
+	--id : selectLotHoldResult
+		SELECT
+						CASE WHEN COALESCE(LH.HOLDSTATUS, 'N') = 'Y' THEN 'HOLD'
+                             WHEN COALESCE(LH.HOLDSTATUS, 'N') = 'N' THEN 'RELEASE' 
+                        END AS CLASS
+                    ,   TO_CHAR(LH.HOLDTIME, 'YYYY-MM-DD HH24:MI:SS') 	AS HOLDDATE
+                    ,   L.PRODUCTDEFID
+                    ,	PD.PRODUCTDEFVERSION
+                    ,   PD.PRODUCTDEFNAME
+                    ,   L.LOTID
+                    ,   C.CUSTOMERNAME
+                    ,   L.LAYER
+                    ,   L.UNIT                              AS UOM
+                    ,   L.PANELPERQTY                       AS SUMMARY
+                    ,   L.QTY
+                    ,   L.QTY                               AS PCSQTY
+                    ,   CEIL(L.PANELQTY)                    AS PNLQTY
+                    ,   ROUND((L.QTY / PD.PCSMM), 2)   		AS OSPMM
+                    ,   (L.QTY *PO.SALESPRICE)				AS AMOUNTS
+                    ,   U.USER_NM                          	AS HOLDUSER
+                    ,   COALESCE(D4.DICTIONARYNAME, TPS.PROCESSSEGMENTCLASSNAME) AS TOPPROCESSSEGMENTCLASS
+                    ,   COALESCE(D3.DICTIONARYNAME, MPS.PROCESSSEGMENTCLASSNAME) AS MIDDLEPROCESSSEGMENTCLASS
+                    ,   L.ISHOLD                            AS CURRENTSTATUS
+                    ,   D2.DICTIONARYNAME                   AS CLASSIFY
+                    ,   D1.DICTIONARYNAME                   AS PCRNO
+                    ,   LH.HOLDCOMMENT                      --보류 코멘트
+                    ,   LH.RELEASECOMMENTS                  --해제 코멘트
+                    ,   TO_CHAR(LH.RELEASEDATE, 'YYYY-MM-DD HH24:MI:SS') AS RELEASEHOLDDATE
+                    --,	LH.RELEASEUSER
+                    ,	U.USER_NM 							AS RELEASEUSER
+				FROM        PCM_LOTHOLD              LH
+                INNER JOIN  PCM_LOT                  L   ON  LH.LOTID = L.LOTID
+                INNER JOIN  BAS_PRODUCTDEFINITION    PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                INNER JOIN  MFM_PRODUCTIONORDER      PO  ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+                                                        AND L.LINENO = PO.LINENO
+                INNER JOIN BAS_PROCESSSEGMENT        PS  ON  LH.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                                        AND LH.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+                LEFT  JOIN BAS_PROCESSSEGMENTCLASS   MPS ON  PS.PROCESSSEGMENTCLASSID = MPS.PROCESSSEGMENTCLASSID
+                                                        AND MPS.PROCESSSEGMENTCLASSTYPE = 'MiddleProcessSegmentClass'
+                LEFT  JOIN BAS_PROCESSSEGMENTCLASS   TPS ON  MPS.PARENTPROCESSSEGMENTCLASSID = TPS.PROCESSSEGMENTCLASSID
+                                                        AND TPS.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+                LEFT  JOIN CMD_DICTIONARY            D3  ON  MPS.PROCESSSEGMENTCLASSNAME = D3.DICTIONARYID
+                                                        AND D3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                LEFT  JOIN CMD_DICTIONARY            D4  ON  TPS.PROCESSSEGMENTCLASSNAME = D4.DICTIONARYID
+                                                        AND D4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                LEFT  JOIN  BAS_REASONCODE           RC  ON  LH.HOLDCODE = RC.REASONCODEID
+                LEFT  JOIN  CMD_DICTIONARY           D1  ON  RC.REASONCODENAME = D1.DICTIONARYID 
+                                                        AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                LEFT  JOIN  BAS_REASONCODECLASS      RCC ON  RC.REASONCODECLASSID = RCC.REASONCODECLASSID
+                LEFT  JOIN  CMD_DICTIONARY           D2  ON  RCC.REASONCODECLASSNAME = D2.DICTIONARYID
+                                                        AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                LEFT  JOIN  CMD_USERS                 U   ON  LH.HOLDUSER  = U.USER_ID
+                LEFT  JOIN  BAS_CUSTOMER             C   ON  PD.CUSTOMERID = C.CUSTOMERID
+				WHERE	1 = 1	
+				--조회일자
+				<if test="PERIOD_PERIODFR != '' and PERIOD_PERIODTO !=''"> 
+					AND     LH.CREATEDTIME <![CDATA[>=]]> TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYY-MM-DD HH24:MI:SS')
+				   	AND     LH.CREATEDTIME <![CDATA[<]]>  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYY-MM-DD HH24:MI:SS')
+				</if>	
+               	--품목코드
+               	<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+					AND	EXISTS
+						(
+					        SELECT 1 
+					        FROM UFN_SELECTSTRINGTOSPLIT2(#{PRODUCTDEFID_VERSION}, ',', '|') PMP 
+					        WHERE   L.PRODUCTDEFID = PMP.VALUE
+                            AND		(L.PRODUCTDEFVERSION = PMP.VALUE2 OR PMP.VALUE2 = '')
+				        )
+				</if> 	               	
+               	--품목명
+               	<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 
+					AND	EXISTS
+						(
+					        SELECT 1 
+					        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFNAME}, ',') PMP 
+					        WHERE	PD.PRODUCTDEFNAME LIKE PMP.VALUE
+				        )
+				</if> 	               	
+               	-- lotid		
+               	<if test="LOTID != null and LOTID !=''"> 
+					AND	EXISTS
+						(
+					        SELECT 1 
+					        FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',') PMP 
+					        WHERE	LH.LOTID = PMP.VALUE
+				        )
+				</if>		                                              		
+				-- SITE
+				<if test="PLANTID != null and PLANTID !=''"> 
+               		AND     L.PLANTID = #{PLANTID}
+               	</if>
+				--현상태
+				<if test="CURRENTSTATUS != null and CURRENTSTATUS !=''"> 
+               		AND     L.ISHOLD = #{CURRENTSTATUS}
+               	</if>
+               	
+				<if test='CURRENTSTATUS !="N"'> 			    
+			    UNION
+			    SELECT  'HOLD'                                          AS CLASS
+                    ,   TO_CHAR(LH.HOLDTIME, 'YYYY-MM-DD HH24:MI:SS')   AS HOLDDATE
+                    ,   L.PRODUCTDEFID
+                    ,	PD.PRODUCTDEFVERSION
+                    ,   PD.PRODUCTDEFNAME
+                    ,   L.LOTID
+                    ,   C.CUSTOMERNAME
+                    ,   L.LAYER
+                    ,   L.UNIT                              AS UOM
+                    ,   L.PANELPERQTY                       AS SUMMARY
+                    ,   L.QTY
+                    ,   L.QTY                               AS PCSQTY
+                    ,   CEIL(L.PANELQTY)                    AS PNLQTY
+                    ,   CASE WHEN PCSMM = 0 THEN 0 
+                        ELSE ROUND((L.QTY / PD.PCSMM), 2)
+                        END AS OSPMM
+                    ,   CASE WHEN PO.SALESPRICE = 0 THEN 0
+                        ELSE (L.QTY *PO.SALESPRICE)
+                        END AS AMOUNTS
+                    ,   U.USER_NM                          	AS HOLDUSER
+                    ,   COALESCE(D4.DICTIONARYNAME, TPS.PROCESSSEGMENTCLASSNAME) AS TOPPROCESSSEGMENTCLASS
+                    ,   COALESCE(D3.DICTIONARYNAME, MPS.PROCESSSEGMENTCLASSNAME) AS MIDDLEPROCESSSEGMENTCLASS
+                    ,   L.ISHOLD                            AS CURRENTSTATUS
+                    ,   D2.DICTIONARYNAME                   AS CLASSIFY
+                    ,   D1.DICTIONARYNAME                   AS PCRNO
+                    ,   LH.HOLDCOMMENT                      --보류 코멘트
+                    ,   LH.RELEASECOMMENTS                  --해제 코멘트
+                    ,   TO_CHAR(LH.RELEASEDATE, 'YYYY-MM-DD HH24:MI:SS') AS STOPRELEASEDATE
+                    --,	LH.RELEASEUSER
+                    ,	U.USER_NM 							AS RELEASEUSER
+                FROM    PCM_LOT                      L
+                INNER JOIN PCM_LOTHOLD               LH  ON  L.LOTID = LH.LOTID
+                INNER JOIN BAS_PRODUCTDEFINITION     PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                INNER JOIN MFM_PRODUCTIONORDER       PO  ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+                                                        AND L.LINENO = PO.LINENO
+                INNER JOIN BAS_PROCESSSEGMENT        PS  ON  LH.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                                        AND LH.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+                LEFT JOIN BAS_PROCESSSEGMENTCLASS    MPS ON  PS.PROCESSSEGMENTCLASSID = MPS.PROCESSSEGMENTCLASSID
+                                                        AND MPS.PROCESSSEGMENTCLASSTYPE = 'MiddleProcessSegmentClass'
+                LEFT JOIN BAS_PROCESSSEGMENTCLASS    TPS ON  MPS.PARENTPROCESSSEGMENTCLASSID = TPS.PROCESSSEGMENTCLASSID
+                                                        AND TPS.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+                LEFT JOIN CMD_DICTIONARY             D3  ON  MPS.PROCESSSEGMENTCLASSNAME = D3.DICTIONARYID
+                                                        AND D3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                LEFT JOIN CMD_DICTIONARY             D4  ON  TPS.PROCESSSEGMENTCLASSNAME = D4.DICTIONARYID
+                                                        AND D4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                LEFT JOIN BAS_REASONCODE             RC  ON  LH.HOLDCODE = RC.REASONCODEID
+                LEFT JOIN CMD_DICTIONARY             D1  ON  RC.REASONCODENAME = D1.DICTIONARYID 
+                                                        AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                LEFT JOIN  BAS_REASONCODECLASS       RCC ON  RC.REASONCODECLASSID = RCC.REASONCODECLASSID
+                LEFT JOIN  CMD_DICTIONARY            D2  ON  RCC.REASONCODECLASSNAME = D2.DICTIONARYID
+                                                        AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                LEFT JOIN  CMD_USERS                  U   ON  LH.HOLDUSER  = U.USER_ID
+                LEFT JOIN  BAS_CUSTOMER              C   ON  PD.CUSTOMERID = C.CUSTOMERID
+                WHERE   1 = 1
+                AND     L.LOTSTATE IN ('InProduction', 'InTransit')
+                AND 	COALESCE(L.ISHOLD, 'N') = 'Y'
+                --조회일자
+				<if test="PERIOD_PERIODFR != '' and PERIOD_PERIODTO !=''"> 
+					AND     LH.CREATEDTIME <![CDATA[>=]]> TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYY-MM-DD HH24:MI:SS')
+				   	AND     LH.CREATEDTIME <![CDATA[<]]>  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYY-MM-DD HH24:MI:SS')
+				</if>	                
+                --품목코드
+            	<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+				AND	EXISTS
+					(
+				        SELECT 1 
+				        FROM UFN_SELECTSTRINGTOSPLIT2(#{PRODUCTDEFID_VERSION}, ',', '|') PMP 
+				        WHERE   L.PRODUCTDEFID = PMP.VALUE
+                        AND		(L.PRODUCTDEFVERSION = PMP.VALUE2 OR PMP.VALUE2 = '')
+			        )
+				</if>                
+               	--품목명
+               	<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 
+					AND	EXISTS
+						(
+					        SELECT 1 
+					        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFNAME}, ',') PMP 
+					        WHERE	PD.PRODUCTDEFNAME LIKE PMP.VALUE
+				        )
+				</if> 	                 	
+               	-- lotid
+               	<if test="LOTID != null and LOTID !=''"> 
+					AND	EXISTS
+						(
+					        SELECT 1 
+					        FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',') PMP 
+					        WHERE	L.LOTID = PMP.VALUE
+				        )
+				</if>					                                             		
+				-- SITE
+				<if test="PLANTID != null and PLANTID !=''"> 
+               		AND     L.PLANTID = #{PLANTID}
+               	</if>				
+		    </if>
+	</select>
+</mapper>

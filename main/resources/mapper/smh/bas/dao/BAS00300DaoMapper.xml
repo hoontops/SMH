@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS00300Dao">
+
+    <!-- UOM Class 조회-->
+    <select id="selectUomClassList" parameterType="map" resultType="hashmap">
+    <![CDATA[
+    	/* smh.bas.dao.BAS00300Dao.selectUomClassList */
+    SELECT      UC.UOMCLASSID
+                ,  UC.UOMCLASSNAME
+                ,  UC.ENTERPRISEID
+                ,  UC.PLANTID
+                ,  U1.USER_NM   AS CREATOR                
+                , TO_CHAR(UC.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+                ,  U2.USER_NM    AS MODIFIER                
+                , TO_CHAR(UC.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+                ,  UC.VALIDSTATE
+                ,  D1.DICTIONARYID
+                ,  D2.DICTIONARYNAME AS VALIDSTATE_NM
+        FROM  BAS_UOMCLASS   UC
+        LEFT JOIN CMD_USERS     U1 ON UC.CREATOR = U1.USER_ID
+        LEFT JOIN CMD_USERS     U2 ON UC.MODIFIER = U2.USER_ID 
+        LEFT JOIN CMD_LOOKUP_VALUES D1 ON UC.VALIDSTATE = D1.LOOKUP_CODE AND D1.LOOKUP_TYPE = 'ValidState'   
+				LEFT JOIN CMD_DICTIONARY    D2 ON D1.DICTIONARYID = D2.DICTIONARYID AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        WHERE  1 = 1
+ 		]]>
+    <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+        AND UC.VALIDSTATE = #{VALIDSTATE}
+    </if>
+    <if test="CONDITIONVALUE != null and CONDITIONVALUE !='' "> 
+        AND ( UPPER(UC.UOMCLASSID) LIKE '%' || UPPER(#{CONDITIONVALUE}) || '%'
+            OR    UPPER(UC.UOMCLASSNAME) LIKE '%' || UPPER(#{CONDITIONVALUE}) || '%'
+            OR    UPPER(UC.ENTERPRISEID) LIKE '%' || UPPER(#{CONDITIONVALUE}) || '%' )
+    </if>    
+    </select>    
+
+    <!-- UOM Map Definition 조회-->
+    <select id="selectUomList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00300Dao.selectUomList */
+   	      SELECT  UD.UOMDEFID
+		          ,  UD.UOMDEFNAME
+		          ,  UD.UOMTYPE      AS UOMCLASSID
+		          ,  UD.DESCRIPTION
+		          ,  UD.ENTERPRISEID
+		          ,  UD.PLANTID
+		          ,  U1.USER_NM      AS CREATOR
+		          , TO_CHAR(UD.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+		          ,  U2.USER_NM      AS MODIFIER
+		          , TO_CHAR(UD.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+		          ,  UD.VALIDSTATE
+		          ,  D2.DICTIONARYNAME AS VALIDSTATE_NM
+		          ,  NULL     AS ISADD
+        FROM  BAS_UOMDEFINITION   UD
+		LEFT JOIN CMD_LOOKUP_VALUES D1 ON UD.VALIDSTATE = D1.LOOKUP_CODE AND D1.LOOKUP_TYPE = 'ValidState'   
+				LEFT JOIN CMD_DICTIONARY    D2 ON D1.DICTIONARYID = D2.DICTIONARYID AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN CMD_USERS       U1 ON UD.CREATOR = U1.USER_ID
+        LEFT JOIN CMD_USERS       U2 ON UD.MODIFIER = U2.USER_ID
+        WHERE  1 = 1          
+	 		]]>
+	    <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+	        AND UD.VALIDSTATE = #{VALIDSTATE}
+	    </if>
+	    <if test="UOMCLASSID != null and UOMCLASSID !='' "> 
+	        AND UD.UOMTYPE = #{UOMCLASSID}
+	    </if>
+	    <if test="UOMCATEGORY != null and UOMCATEGORY !='' "> 
+	        AND    NOT EXISTS (SELECT 1
+								        FROM   BAS_UOMDEFMAP BU
+								        WHERE  BU.UOMCATEGORY = #{UOMCATEGORY}
+								        AND    BU.UOMDEFID = UD.UOMDEFID
+								        AND    BU.ENTERPRISEID = UD.ENTERPRISEID)
+	    </if>	    
+	    ORDER BY UD.UOMDEFID
+    </select>    
+    
+    <!-- UOM Map Definition 조회-->
+    <select id="selectUomMapDataList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00300Dao.selectUomMapList */
+	   	 		 SELECT	UM.UOMDEFID
+						,	UD.UOMDEFNAME
+						,	UD.UOMTYPE			AS UOMCLASSID
+						,	UD.DESCRIPTION
+						,	UD.VALIDSTATE
+						,   D2.DICTIONARYNAME AS VALIDSTATE_NM
+						,	UM.UOMCATEGORY
+						,	NULL 		AS ISADD
+				FROM	BAS_UOMDEFINITION 	UD
+				LEFT JOIN BAS_UOMDEFMAP		UM	ON	UM.UOMDEFID = UD.UOMDEFID
+				LEFT JOIN CMD_LOOKUP_VALUES D1 ON UD.VALIDSTATE = D1.LOOKUP_CODE AND D1.LOOKUP_TYPE = 'ValidState'   
+				LEFT JOIN CMD_DICTIONARY    D2 ON D1.DICTIONARYID = D2.DICTIONARYID AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			WHERE	1 = 1
+	           AND 	UM.UOMCATEGORY = #{UOMCATEGORY}
+	    	]]>
+    </select>    
+
+    <!-- UOM Map 조회-->
+    <select id="selectUomMapList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00300Dao.selectUomMapList */
+	   	 		    SELECT   DISTINCT UM.UOMCATEGORY
+					 FROM   BAS_UOMDEFMAP UM
+					WHERE  1 = 1
+					ORDER  BY UM.UOMCATEGORY
+	 		]]>	    
+    </select>
+    
+  <insert id="insertUom" parameterType="map">
+    INSERT /* smh.bas.dao.BAS00300Dao.insertUom */	INTO BAS_UOMDEFMAP( 
+        UOMCATEGORY
+		,UOMDEFID
+		,ENTERPRISEID
+		,PLANTID
+		,DESCRIPTION
+		,CREATOR
+		,CREATEDTIME
+		,MODIFIER
+		,MODIFIEDTIME
+		,LASTTXNHISTKEY
+		,LASTTXNID
+		,LASTTXNUSER
+		,LASTTXNTIME
+		,LASTTXNCOMMENT
+		,VALIDSTATE
+	) 
+    VALUES(
+	    #{UOMCATEGORY}
+		,#{UOMDEFID}
+		,#{SESSION_ENTERPRISEID}
+		,#{SESSION_SITETYPE}
+		,#{DESCRIPTION}
+		,#{CREATOR}
+		,SYSDATE
+		,#{MODIFIER}
+		,SYSDATE
+		,#{LASTTXNHISTKEY}
+		,#{LASTTXNID}
+		,#{MODIFIER}
+		,SYSDATE
+		,#{LASTTXNCOMMENT}
+		,#{VALIDSTATE})
+    </insert>
+       
+    <update id="deleteUom" parameterType="map" > 
+    DELETE /* smh.bas.dao.BAS00300Dao.deleteUom */ FROM BAS_UOMDEFMAP 
+    WHERE ENTERPRISEID = #{SESSION_ENTERPRISEID}
+    	AND UOMCATEGORY = #{UOMCATEGORY}
+        AND UOMDEFID = #{UOMDEFID}
+    </update>
+</mapper>

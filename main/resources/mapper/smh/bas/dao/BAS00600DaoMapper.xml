@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS00600Dao">	
+    <select id="selectStayingTimelist" parameterType="map" resultType="hashmap">    
+    	/* smh.bas.dao.BAS00600Dao.selectStayingTimelist */
+				  SELECT     PS.PROCESSSEGMENTID
+					          ,  PS.PROCESSSEGMENTVERSION
+					          ,  COALESCE(PSN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)  AS PROCESSSEGMENTNAME
+					          ,  PS.PLANTID
+					          ,  ST.RECEIVESTAYINGTIME / 3600  AS RECEIVESTAYINGTIME
+					          ,  ST.TRACKINSTAYINGTIME / 3600  AS TRACKINSTAYINGTIME
+					          ,  ST.TRACKOUTSTAYINGTIME / 3600  AS TRACKOUTSTAYINGTIME
+					          ,  ST.SENDSTAYINGTIME / 3600    AS SENDSTAYINGTIME
+					          ,  ST.DESCRIPTION
+					          ,  ST.VALIDSTATE
+					          ,  NVL(CU.USER_NM, ST.CREATOR)  AS CREATOR
+					          , TO_CHAR(ST.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					          ,  NVL(MU.USER_NM, ST.MODIFIER)  AS MODIFIER
+					          , TO_CHAR(ST.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+					          , NULL AS CHK
+					          ,  ST.OPERATIONTOTALTIME / 3600    AS OPERATIONTOTALTIME
+			        FROM  BAS_PROCESSSEGMENT        PS
+			        		INNER JOIN BAS_PROCESSSEGMENTCLASS    MPS  ON  PS.PROCESSSEGMENTCLASSID = MPS.PROCESSSEGMENTCLASSID	        		
+			    	<if test="PARENTPROCESSSEGMENTCLASSID != null and PARENTPROCESSSEGMENTCLASSID !='' "> 
+				        AND MPS.PARENTPROCESSSEGMENTCLASSID = #{PARENTPROCESSSEGMENTCLASSID}
+				    </if>
+					 LEFT OUTER JOIN PCM_SEGMENTSTAYINGTIME  	ST  ON  PS.PROCESSSEGMENTID = ST.PROCESSSEGMENTID
+			                              												AND  PS.PROCESSSEGMENTVERSION = ST.PROCESSSEGMENTVERSION
+			        LEFT OUTER JOIN CMD_DICTIONARY      				PSN  ON  PS.PROCESSSEGMENTNAME = PSN.DICTIONARYID
+			                              												AND  PSN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			        LEFT OUTER JOIN CMD_USERS          					CU  ON  ST.CREATOR = CU.USER_ID
+			        LEFT OUTER JOIN CMD_USERS          					MU  ON  ST.MODIFIER = MU.USER_ID
+			        WHERE  1 = 1 		
+			    <if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' "> 
+			        AND PS.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID}
+			    </if>
+			    <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+			        AND PS.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+			    </if>          
+			    ORDER BY PS.PROCESSSEGMENTID
+    </select>    
+  <update id="updateStayingTime" parameterType="map">
+ 	 /* smh.bas.dao.BAS00600Dao.updateStayingTime */
+    	MERGE INTO PCM_SEGMENTSTAYINGTIME
+    	USING DUAL
+    	        ON (    PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+				    AND PROCESSSEGMENTVERSION = '*'				    
+                    )
+              WHEN  MATCHED THEN  
+	              UPDATE SET PLANTID = #{PLANTID}     
+					        ,RECEIVESTAYINGTIME = TO_NUMBER(#{RECEIVESTAYINGTIME}) * 3600     
+					        ,TRACKINSTAYINGTIME = TO_NUMBER(#{TRACKINSTAYINGTIME}) * 3600     
+					        ,TRACKOUTSTAYINGTIME = TO_NUMBER(#{TRACKOUTSTAYINGTIME}) * 3600       
+					        ,SENDSTAYINGTIME = TO_NUMBER(#{SENDSTAYINGTIME}) * 3600
+							,OPERATIONTOTALTIME = TO_NUMBER(#{OPERATIONTOTALTIME}) * 3600
+					        ,DESCRIPTION = #{DESCRIPTION}       
+					        ,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = #{LASTTXNID}     
+					        ,LASTTXNUSER = #{MODIFIER}     
+					        ,LASTTXNTIME = SYSDATE   
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}  
+							,VALIDSTATE = #{VALIDSTATE}					    
+			WHEN NOT MATCHED THEN
+				INSERT ( PROCESSSEGMENTID
+							,PROCESSSEGMENTVERSION
+							,ENTERPRISEID
+							,PLANTID
+							,RECEIVESTAYINGTIME
+							,TRACKINSTAYINGTIME
+							,TRACKOUTSTAYINGTIME
+							,SENDSTAYINGTIME
+							,DESCRIPTION
+							,CREATOR
+							,CREATEDTIME
+							,MODIFIER
+							,MODIFIEDTIME
+							,LASTTXNHISTKEY
+							,LASTTXNID
+							,LASTTXNUSER
+							,LASTTXNTIME
+							,LASTTXNCOMMENT
+							,VALIDSTATE
+							,OPERATIONTOTALTIME) 
+				    VALUES( 
+						#{PROCESSSEGMENTID}
+						,'*'
+						,#{ENTERPRISEID}
+						,#{PLANTID}
+						,TO_NUMBER(#{RECEIVESTAYINGTIME}) * 3600 
+						,TO_NUMBER(#{TRACKINSTAYINGTIME}) * 3600
+						,TO_NUMBER(#{TRACKOUTSTAYINGTIME}) * 3600
+						,TO_NUMBER(#{SENDSTAYINGTIME}) * 3600
+						,#{DESCRIPTION}
+						,#{CREATOR}  
+				        ,SYSDATE  
+				        ,#{MODIFIER}  
+				        ,SYSDATE  
+				        ,#{LASTTXNHISTKEY}  
+				        ,#{LASTTXNID}
+				        ,#{CREATOR} 
+				        ,SYSDATE
+				        ,#{LASTTXNCOMMENT}  
+						,#{VALIDSTATE}
+						,TO_NUMBER(#{OPERATIONTOTALTIME}) * 3600
+						)
+    </update>
+    
+    <delete id="deleteStayingTime" parameterType="map" >
+     /* smh.bas.dao.BAS00600Dao.deleteStayingTime */  
+    	DELETE  FROM PCM_SEGMENTSTAYINGTIME		
+		WHERE PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		   AND PROCESSSEGMENTVERSION = '*'
+    </delete>
+</mapper>

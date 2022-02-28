@@ -1,0 +1,455 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS03200Dao">
+
+	<!-- Product Oper Resource 조회-->
+    <select id="selectProcessPathList" parameterType="map" resultType="hashmap">
+    		/* selectProcessPathList */ 
+    		SELECT 
+				        TO_NUMBER(PP.USERSEQUENCE)        AS USERSEQUENCE
+				    ,   PP.PROCESSSEGMENTID
+				    ,   PP.PROCESSSEGMENTVERSION
+				    ,   NVL(D.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)   AS PROCESSSEGMENTNAME
+				    ,   PP.PROCESSPATHID
+				    ,   PP.ENTERPRISEID
+				    ,   PP.PLANTID
+				    ,   PP.PROCESSDEFID
+				    ,   PP.PROCESSDEFVERSION
+				    ,   PP.PATHSEQUENCE
+				    ,   PP.PATHTYPE
+				    ,	PS.STEPCLASS
+				FROM    BAS_PRODUCTDEFINITION            PD
+				INNER JOIN BAS_PROCESSDEFINITION         PCD  ON  PD.PROCESSDEFID = PCD.PROCESSDEFID
+				                                             AND PD.PROCESSDEFVERSION = PCD.PROCESSDEFVERSION
+				INNER JOIN BAS_PROCESSPATH               PP   ON  PCD.PROCESSDEFID = PP.PROCESSDEFID
+				                                             AND PCD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				LEFT JOIN BAS_PROCESSSEGMENT             PS   ON  PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                             AND PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT JOIN CMD_DICTIONARY                 D    ON  PS.PROCESSSEGMENTNAME = D.DICTIONARYID
+				                                             AND D.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE   PP.ENTERPRISEID   = #{ENTERPRISEID}
+				AND     PD.PRODUCTDEFID = #{PRODUCTDEFID}
+				AND     PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				AND 	PP.VALIDSTATE = 'Valid'
+				ORDER BY PP.PATHSEQUENCE 
+    </select>
+    
+    
+	<!-- Product 상세 조회-->
+    <select id="selectProductDEFInfo" parameterType="map" resultType="hashmap">
+    	/* selectProductDEFInfo */
+				SELECT  MS.CUSTOMERNAME           								-- 고객사
+				       ,MA.ITEMID               	  	as PRODUCTDEFID			-- 품목코드
+				       ,MA.ITEMVERSION            		as PRODUCTDEFVERSION	-- 품목버전
+				       ,MA.MASTERDATACLASSID			as PRODUCTDEFCLASSID	-- 품목구분
+				       ,RT.COMPLETIONWAREHOUSEID  								-- 완료창고
+				       ,WH.WAREHOUSENAME										-- 완료창고명
+				       ,MA.ITEMNAME               		as PRODUCTDEFNAME		-- 품목명
+				       ,MA.UOMDEFID												-- UOM
+				       ,MS.JOBTYPE                								-- 작업구분
+				       ,JT.JOBTYPENAME											-- 작업구분명
+				       ,MA.PRODUCTIONTYPE										-- 생산구분
+				       ,B.PRODUCTIONTYPENAME       								-- 생산구분명
+				       ,MS.RTRSHT
+				       ,MS.PNLSIZEXAXIS
+				       ,MS.PNLSIZEYAXIS
+				       ,MS.PCSPNL												--배열수
+				       ,MS.PCSMM												--산출수
+				       ,MS.USELAYER												--사용층
+				       ,PISC.CHANGENOTE1				as REMARK				--비고
+				FROM BAS_ITEMMASTER MA
+				INNER JOIN BAS_PRODUCTITEMSPEC MS 				ON 	MS.ENTERPRISEID 		= MA.ENTERPRISEID
+				                                 				AND MS.ITEMID 				= MA.ITEMID
+				                                 				AND MS.ITEMVERSION 			= MA.ITEMVERSION
+				LEFT OUTER JOIN BAS_ROUTING    RT 				ON 	RT.ENTERPRISEID 		= MA.ENTERPRISEID
+				                                 				AND RT.ASSEMBLYITEMID 		= MA.ITEMID
+				                                 				AND RT.ASSEMBLYITEMVERSION	= MA.ITEMVERSION
+				LEFT OUTER JOIN BAS_WAREHOUSE  WH				ON 	WH.ENTERPRISEID 		= MA.ENTERPRISEID
+																AND WH.PLANTID				= #{PLANTID}
+				                                 				AND WH.WAREHOUSEID 			= RT.COMPLETIONWAREHOUSEID         
+				LEFT OUTER JOIN BAS_PRODUCTITEMSPECCOMMENT  PISC	ON 	PISC.ITEMID 			= MA.ITEMID
+																AND PISC.ITEMVERSION			= MA.ITEMVERSION                                 	                        	
+				LEFT JOIN 	(	
+								SELECT	C.LOOKUP_CODE CODEID
+						              , D.DICTIONARYNAME	AS PRODUCTIONTYPENAME
+								FROM CMD_LOOKUP_VALUES	C
+								LEFT OUTER JOIN	CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID
+								WHERE	1=1
+									AND		C.LOOKUP_TYPE = 'ProductionType'
+									AND		C.ENABLED_FLAG = 'Y'
+									AND		D.LANGUAGETYPE = #{LANGUAGETYPE} 
+								) B										ON MA.PRODUCTIONTYPE = B.CODEID
+				LEFT JOIN 	(	
+								SELECT	C.LOOKUP_CODE CODEID
+						              , F.DICTIONARYNAME	AS JOBTYPENAME
+								FROM CMD_LOOKUP_VALUES	C
+								LEFT OUTER JOIN	CMD_DICTIONARY	F	ON	C.DICTIONARYID = F.DICTIONARYID
+								WHERE	1=1
+									AND		C.LOOKUP_TYPE = 'JobType'
+									AND		C.ENABLED_FLAG = 'Y'
+									AND		F.LANGUAGETYPE =#{LANGUAGETYPE} 
+							) JT									ON 	MS.JOBTYPE =JT.CODEID   				
+				WHERE 1=1
+					AND MA.ENTERPRISEID 	= #{ENTERPRISEID}
+					AND MA.ITEMID 			= #{PRODUCTDEFID}
+					AND MA.ITEMVERSION 		= #{PRODUCTDEFVERSION}
+					AND MA.VALIDSTATE = 'Valid' 
+	</select>
+	
+	<!-- 상단 그리드 조회-->
+	<select id="selectWindowTimeList" parameterType="map" resultType="hashmap">
+			/* selectWindowTimeList */
+				SELECT 
+					 	WT.WTIMEDEFID 
+					,	WT.WTIMEDEFNAME 
+					,	WT.DESCRIPTION 
+					,	WT.ENTERPRISEID 
+					,	WT.PLANTID 
+					,	WT.AREAID  
+					,	WT.PRODUCTDEFID 
+					,	WT.PRODUCTDEFVERSION 
+					,	IM.ITEMNAME				AS PRODUCTDEFNAME
+					,	WT.PROCESSDEFID 
+					,	WT.PROCESSDEFVERSION 
+					,	WT.PROCESSPATHID
+					,   WT.USERSEQUENCE
+					,	PTF.USERSEQUENCE 		AS FR_USERSEQUENCE 
+					,	WT.PROCESSSEGMENTID
+					,	WT.PROCESSSEGMENTID		AS HIDDEN_PROCESSSEGMENTID 
+					,   DPG.DICTIONARYNAME 		AS PROCESSSEGMENTNAME
+					,	WT.PROCESSSEGMENTVERSION 
+					,   WT.PROCESSSTATE
+					,	PTT.USERSEQUENCE 		AS TO_USERSEQUENCE
+					,	WT.TOPROCESSDEFID 
+					,	WT.TOPROCESSDEFVERSION
+					,	WT.TOPROCESSPATHID
+					,	WT.TOPROCESSSEGMENTID 
+					,   DTG.DICTIONARYNAME 		AS TOPROCESSSEGMENTNAME
+					,	WT.TOPROCESSSEGMENTVERSION
+					,   WT.TOPROCESSSTATE
+					,	WT.WTIMETYPE 
+					,	WT.WTIMELIMIT 
+					,	WT.VALIDSTATE
+                    ,   CU.USER_NM   			AS CREATOR
+                    ,   TO_CHAR(WT.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+                    ,   MU.USER_NM   			AS MODIFIER
+                    ,   TO_CHAR(WT.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+			   FROM 	BAS_WTIMEDEFINITION		WT
+			   LEFT JOIN BAS_ITEMMASTER			IM	ON	WT.PRODUCTDEFID		= IM.ITEMID
+			   										AND WT.PRODUCTDEFVERSION = IM.ITEMVERSION
+			   LEFT JOIN BAS_PROCESSSEGMENTEXT  PG 	ON  WT.ENTERPRISEID     = PG.ENTERPRISEID
+			                                       	AND WT.PROCESSSEGMENTID	= PG.PROCESSSEGMENTID
+			   LEFT JOIN CMD_DICTIONARY DPG	        ON  DPG.DICTIONARYID 	= PG.PROCESSSEGMENTNAME 
+				                                    AND DPG.LANGUAGETYPE 	= #{LANGUAGETYPE}		                                         
+ 			   LEFT JOIN BAS_PROCESSSEGMENTEXT	TG 	ON  WT.ENTERPRISEID     = TG.ENTERPRISEID
+ 												    AND WT.TOPROCESSSEGMENTID = TG.PROCESSSEGMENTID
+			   LEFT JOIN CMD_DICTIONARY DTG	        ON  DTG.DICTIONARYID 	= TG.PROCESSSEGMENTNAME 
+				                                   	AND DTG.LANGUAGETYPE 	= #{LANGUAGETYPE}
+
+			   LEFT JOIN BAS_PROCESSPATH		PTF	ON	PTF.PROCESSPATHID 	= WT.PROCESSPATHID		                                         				                                     			
+			   LEFT JOIN BAS_PROCESSPATH        PTT ON  PTT.PROCESSPATHID 	= WT.TOPROCESSPATHID   
+			   
+			   LEFT JOIN CMD_USERS                CU	ON CU.USER_ID = WT.CREATOR
+			   LEFT JOIN CMD_USERS                MU	ON MU.USER_ID = WT.MODIFIER
+				                                     
+			   WHERE	1 = 1
+			   <if test="ENTERPRISEID != null and ENTERPRISEID !=''"> 
+			   		AND WT.ENTERPRISEID = #{ENTERPRISEID}
+			   </if>
+			   <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			   		AND	WT.PRODUCTDEFID = #{PRODUCTDEFID}
+			   </if>
+			   <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+			   		AND WT.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			   </if>
+			   <if test="PROCESSDEFID != null and PROCESSDEFID !=''"> 
+			   		AND	WT.PROCESSDEFID = #{PROCESSDEFID}
+			   </if>
+			   <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !=''"> 
+			   		AND WT.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+			   </if>
+			   <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+			   		AND WT.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+			   </if>
+			   <if test="PROCESSPATHID != null and PROCESSPATHID !=''"> 
+			   		AND WT.PROCESSPATHID = #{PROCESSPATHID}
+			   </if>
+			   -- 재작업 W-Time 구분하기 위해 추가
+			   AND WT.PRODUCTDEFID = WT.TOPROCESSDEFID
+			   -- AND WT.VALIDSTATE = 'Valid'
+	</select>
+	
+	<!-- 하단 그리드 조회-->
+	<select id="selectWindowActionList" parameterType="map" resultType="hashmap">
+			/* selectWindowActionList */
+				SELECT 
+			   	   		WT.PLANTID
+			       ,	WT.ENTERPRISEID
+			       ,	WT.WTIMEDEFID
+			       ,	WT.WTIMEACTIONID
+			       ,    AC.ACTIONNAME     WTIMEACTIONNAME
+			       ,	WT.ACTIONSEQUENCE
+			       ,    WT.VALIDSTATE
+			       ,   CU.USER_NM   			AS CREATOR
+                   ,   TO_CHAR(WT.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+                   ,   MU.USER_NM   			AS MODIFIER
+                   ,   TO_CHAR(WT.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+			    FROM    BAS_WTIMEACTION   WT 
+			    LEFT JOIN BAS_ACTION       AC    ON WT.ENTERPRISEID  = AC.ENTERPRISEID
+			                                   AND WT.WTIMEACTIONID = AC.ACTIONID 
+				LEFT JOIN CMD_USERS                CU	ON CU.USER_ID = WT.CREATOR
+			    LEFT JOIN CMD_USERS                MU	ON MU.USER_ID = WT.MODIFIER
+			   	WHERE 1=1
+			   	AND		WT.WTIMEDEFID 		= #{WTIMEDEFID}
+			   	ORDER BY WT.ACTIONSEQUENCE ASC
+	
+	</select>
+	
+	<!-- Action 콤보 데이타 조회-->
+	<select id="selectActionList" parameterType="map" resultType="hashmap">
+			SELECT   ACT.ACTIONID ,    ACT.ACTIONNAME
+            FROM     BAS_ACTION       ACT
+            WHERE ACT.ACTIONID IN ('QCAction002' , 'QCAction004') 
+	</select>
+	
+	<!-- 공정 조회-->
+	<select id="selectRoutingQTimeProcPopup" parameterType="map" resultType="hashmap">
+			/* selectRoutingQTimeProcPopup - GetRoutingQueueTimeProcesssegmentPopup   10002 */
+			  SELECT 
+			    		PSH.PLANTID
+			    	,	PSH.USERSEQUENCE
+			    	,   PSH.PROCESSPATHID
+			    	,   PSH.PROCESSSEGMENTID
+			    	,   DIC.DICTIONARYNAME 		  PROCESSSEGMENTNAME
+					,   PSH.PROCESSDEFID
+			    	,   PSH.PROCESSDEFVERSION
+			    	,	PSH.ENTERPRISEID
+			    FROM BAS_PROCESSPATH               PSH
+				LEFT JOIN BAS_PROCESSSEGMENTEXT    PSS 	ON  PSH.ENTERPRISEID= PSS.ENTERPRISEID  
+				                                        AND PSH.PROCESSSEGMENTID = PSS.PROCESSSEGMENTID
+				LEFT JOIN CMD_DICTIONARY DIC 	        ON  DIC.DICTIONARYID = PSS.PROCESSSEGMENTNAME 
+				                                        AND DIC.LANGUAGETYPE = #{LANGUAGETYPE}
+		        WHERE 1 = 1
+		        AND 	PSH.VALIDSTATE = 'Valid'
+		        AND PSH.ENTERPRISEID = #{ENTERPRISEID}
+	        <if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())"> 
+		        AND PSH.PLANTID = #{PLANTID}
+	        </if>
+	        <if test="PROCESSDEFID != null and PROCESSDEFID !='' and !(PROCESSDEFID eq '*'.toString())"> 
+	        	AND PSH.PROCESSDEFID = #{PROCESSDEFID}
+        	</if>
+        	<if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' and !(PROCESSDEFVERSION eq '*'.toString())"> 
+	          	AND PSH.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+	        </if>
+   			<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' and !(PROCESSSEGMENTID eq '*'.toString())"> 
+		        	AND UPPER(PSH.PROCESSSEGMENTID) LIKE UPPER(<![CDATA['%' ||]]> #{PROCESSSEGMENTID} <![CDATA[|| '%']]> )
+	        </if>
+	        <if test="PROCESSSEGMENTNAME != null and PROCESSSEGMENTNAME !='' and !(PROCESSSEGMENTNAME eq '*'.toString())"> 
+		        	AND UPPER(DIC.DICTIONARYNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PROCESSSEGMENTNAME} <![CDATA[|| '%']]> )
+		    </if>
+		        /* 현재 PROCESSSEGMENTID */
+		    <if test="CURRPROCESSSEGMENTID != null and CURRPROCESSSEGMENTID !='' and !(CURRPROCESSSEGMENTID eq '*'.toString())"> 
+		        	AND UPPER(PSH.PROCESSSEGMENTID) LIKE UPPER(<![CDATA['%' ||]]> #{CURRPROCESSSEGMENTID} <![CDATA[|| '%']]> )
+		    </if>
+		        /* 공정수순 */
+		    <choose>
+		    	<when test="USERSEQUENCE != null and USERSEQUENCE !=''">
+		    		AND TO_NUMBER(PSH.USERSEQUENCE) <![CDATA[>=]]> #{USERSEQUENCE}  
+		    	</when>
+		    	<otherwise>
+		    		AND TO_NUMBER(PSH.USERSEQUENCE) <![CDATA[>]]> 0 
+		    	</otherwise>
+		    </choose>
+				ORDER BY TO_NUMBER(PSH.USERSEQUENCE)
+	</select>
+	
+	<!-- 공정진행상태 조회-->
+	<select id="select4step" parameterType="map" resultType="hashmap">
+			SELECT * FROM CMD_LOOKUP_VALUES A WHERE LOOKUP_TYPE ='4Step'
+	</select>
+	
+	<!-- 공정 스텝 모두 조회-->
+	<select id="selectStepAll" parameterType="map" resultType="hashmap">
+			SELECT DISTINCT SG.STEPCLASS, LV.LOOKUP_CODE , LV.MEANING, LV.DISPLAYSEQUENCE FROM BAS_PROCESSSEGMENT SG
+			LEFT JOIN CMD_LOOKUP_VALUES LV ON LV.LOOKUP_TYPE = SG.STEPCLASS
+			WHERE LV.ENABLED_FLAG = 'Y'
+			ORDER BY STEPCLASS, DISPLAYSEQUENCE
+	</select>
+	
+	<!-- Routing W-Time 등록 -->
+    <update id="saveBasWtimedefinition" parameterType="map">
+    	MERGE INTO BAS_WTIMEDEFINITION
+    	USING DUAL
+    	        ON (    WTIMEDEFID = #{WTIMEDEFID} )
+              WHEN  MATCHED THEN  
+              	UPDATE  SET  WTIMEDEFNAME = #{WTIMEDEFNAME}     
+					        ,ENTERPRISEID = #{ENTERPRISEID}     
+					        ,PLANTID = #{PLANTID}     
+					        ,AREAID = #{AREAID}     
+					        ,PRODUCTDEFID = #{PRODUCTDEFID}     
+					        ,PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}     
+					        ,PROCESSDEFID = #{PROCESSDEFID}     
+					        ,PROCESSDEFVERSION = #{PROCESSDEFVERSION}     
+					        ,PROCESSPATHID = #{PROCESSPATHID}     
+					        ,USERSEQUENCE = #{USERSEQUENCE}     
+					        ,PROCESSSEGMENTID = #{PROCESSSEGMENTID}     
+					        ,PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}     
+					        ,PROCESSSTATE = #{PROCESSSTATE}     
+					        ,TOPROCESSDEFID = #{TOPROCESSDEFID}     
+					        ,TOPROCESSDEFVERSION = #{TOPROCESSDEFVERSION}     
+					        ,TOPROCESSPATHID = #{TOPROCESSPATHID}     
+					        ,TOPROCESSSEGMENTID = #{TOPROCESSSEGMENTID}     
+					        ,TOPROCESSSEGMENTVERSION = #{TOPROCESSSEGMENTVERSION}     
+					        ,TOPROCESSSTATE = #{TOPROCESSSTATE}     
+					        ,WTIMETYPE = #{WTIMETYPE}     
+					        ,WTIMELIMIT = #{WTIMELIMIT}     
+					        ,DESCRIPTION = #{DESCRIPTION}                     
+					        ,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = 'modify'    
+					        ,LASTTXNUSER = #{MODIFIER}   
+					        ,LASTTXNTIME = SYSDATE    
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+					        ,VALIDSTATE = #{VALIDSTATE}
+			WHEN NOT MATCHED THEN
+                      INSERT ( WTIMEDEFID  
+						        ,WTIMEDEFNAME  
+						        ,ENTERPRISEID  
+						        ,PLANTID  
+						        ,AREAID  
+						        ,PRODUCTDEFID  
+						        ,PRODUCTDEFVERSION  
+						        ,PROCESSDEFID  
+						        ,PROCESSDEFVERSION  
+						        ,PROCESSPATHID  
+						        ,USERSEQUENCE  
+						        ,PROCESSSEGMENTID  
+						        ,PROCESSSEGMENTVERSION  
+						        ,PROCESSSTATE  
+						        ,TOPROCESSDEFID  
+						        ,TOPROCESSDEFVERSION  
+						        ,TOPROCESSPATHID  
+						        ,TOPROCESSSEGMENTID  
+						        ,TOPROCESSSEGMENTVERSION  
+						        ,TOPROCESSSTATE  
+						        ,WTIMETYPE  
+						        ,WTIMELIMIT  
+						        ,DESCRIPTION  
+						        ,CREATOR  
+						        ,CREATEDTIME  
+						        ,LASTTXNHISTKEY  
+						        ,LASTTXNID  
+						        ,LASTTXNUSER  
+						        ,LASTTXNTIME  
+						        ,LASTTXNCOMMENT  
+						        ,VALIDSTATE        ) 
+						    VALUES( 
+						        #{WTIMEDEFID}  
+						        ,#{WTIMEDEFNAME}  
+						        ,#{ENTERPRISEID}  
+						        ,#{PLANTID}  
+						        ,#{AREAID}  
+						        ,#{PRODUCTDEFID}  
+						        ,#{PRODUCTDEFVERSION}  
+						        ,#{PROCESSDEFID}  
+						        ,#{PROCESSDEFVERSION}  
+						        ,#{PROCESSPATHID}  
+						        ,#{USERSEQUENCE}  
+						        ,#{PROCESSSEGMENTID}  
+						        ,#{PROCESSSEGMENTVERSION}  
+						        ,#{PROCESSSTATE}  
+						        ,#{TOPROCESSDEFID}  
+						        ,#{TOPROCESSDEFVERSION}  
+						        ,#{TOPROCESSPATHID}  
+						        ,#{TOPROCESSSEGMENTID}  
+						        ,#{TOPROCESSSEGMENTVERSION}  
+						        ,#{TOPROCESSSTATE}  
+						        ,#{WTIMETYPE}  
+						        ,#{WTIMELIMIT}  
+						        ,#{DESCRIPTION}  
+						        ,#{CREATOR}  
+						        ,SYSDATE  
+						        ,#{LASTTXNHISTKEY}  
+						        ,'create'
+						        ,#{CREATOR} 
+						        ,SYSDATE 
+						        ,#{LASTTXNCOMMENT}  
+						        ,#{VALIDSTATE}    )
+	</update>
+	
+	<!-- WindowTime 정의 삭제 -->
+    <delete id="deleteBasWtimedefinition" parameterType="map" > 
+    DELETE FROM BAS_WTIMEDEFINITION 
+    WHERE WTIMEDEFID = #{WTIMEDEFID}
+    </delete>
+    
+    <!-- Window Time Action 등록 -->
+    <update id="saveBasWtimeaction" parameterType="map">
+    	MERGE INTO BAS_WTIMEACTION
+    	USING DUAL
+    	        ON (     WTIMEACTIONID = #{WTIMEACTIONID}
+    				 AND WTIMEDEFID = #{WTIMEDEFID}
+                    )
+              WHEN  MATCHED THEN  
+              	UPDATE  SET  ACTIONSEQUENCE = #{ACTIONSEQUENCE}     
+					        ,ENTERPRISEID = #{ENTERPRISEID}     
+					        ,PLANTID = #{PLANTID}     
+					        ,DESCRIPTION = #{DESCRIPTION}                     
+					        ,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = 'modify'     
+					        ,LASTTXNUSER = #{MODIFIER}  
+					        ,LASTTXNTIME = SYSDATE    
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+					        ,VALIDSTATE = #{VALIDSTATE}
+			WHEN NOT MATCHED THEN
+                      INSERT ( WTIMEDEFID  
+						        ,WTIMEACTIONID  
+						        ,ACTIONSEQUENCE  
+						        ,ENTERPRISEID  
+						        ,PLANTID  
+						        ,DESCRIPTION  
+						        ,CREATOR  
+						        ,CREATEDTIME  
+						        ,LASTTXNHISTKEY  
+						        ,LASTTXNID  
+						        ,LASTTXNUSER  
+						        ,LASTTXNTIME  
+						        ,LASTTXNCOMMENT  
+						        ,VALIDSTATE        ) 
+						    VALUES( 
+						        #{WTIMEDEFID}  
+						        ,#{WTIMEACTIONID}  
+						        ,#{ACTIONSEQUENCE}  
+						        ,#{ENTERPRISEID}  
+						        ,#{PLANTID}  
+						        ,#{DESCRIPTION}  
+						        ,#{CREATOR}  
+						        ,SYSDATE  
+						        ,#{LASTTXNHISTKEY}   
+						        ,'create' 
+						        ,#{CREATOR}  
+						        ,SYSDATE
+						        ,#{LASTTXNCOMMENT}  
+						        ,#{VALIDSTATE}    )
+	</update>
+	
+    <!-- Window Time Action 정의 삭제 -->
+    <delete id="deleteBasWtimeaction" parameterType="map" > 
+    DELETE FROM BAS_WTIMEACTION 
+    WHERE WTIMEACTIONID = #{WTIMEACTIONID}
+    AND WTIMEDEFID = #{WTIMEDEFID}
+    </delete>
+    
+    <!-- Window Time Action 정의 삭제 All -->
+    <delete id="deleteBasWtimeactionAll" parameterType="map" > 
+    DELETE FROM BAS_WTIMEACTION 
+    WHERE WTIMEDEFID = #{WTIMEDEFID}
+    </delete>
+    
+    
+</mapper>

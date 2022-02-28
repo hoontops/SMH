@@ -1,0 +1,489 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.tom.dao.TOM01100Dao">
+<!-- 치공구 현황 조회 -->    
+
+    <!-- 치공구 현황 조회 -->
+    <select id="selectTomToolStatusListForReportByEap" parameterType="map" resultType="hashmap">
+    	--
+		-- GetToolStatusListForReportByEqp
+		-- Version:10001    		
+    	SELECT /* smh.tom.dao.TOM01100Dao.selectTomToolStatusListForReportByEap */    				
+				DBL.DURABLELOTID			AS TOOLNO									--TOOL 코드
+			,	DBL.DURABLEDEFID			AS TOOLCODE								--치공구Id
+			,	SPLIT_PART(DBL.DURABLELOTID,'-',2) AS TOOLNOSEQ
+			,	DBL.DURABLEDEFVERSION		AS TOOLVERSION						--치공구Ver
+			,	DIC.DICTIONARYNAME			AS TOOLNAME
+			,	PDF.PRODUCTDEFID			AS PRODUCTDEFID
+			,	PDF.PRODUCTDEFNAME			AS PRODUCTDEFNAME
+			,	AR1.AREAID					AS AREAID
+			,	DC1.DICTIONARYNAME			AS AREANAME
+			,	ST1.STATEID					AS DURABLESTATEID
+			,	DCD.DICTIONARYNAME			AS DURABLESTATE
+			,	DBL.ISHOLD					AS ISHOLD
+			,	ST2.STATEID					AS DURABLECLEANSTATEID
+			,	NVL(ST2.STATENAME,0)		AS DURABLECLEANSTATE				--연마상태
+			
+			,	NVL(DBL.USEDCOUNT,0)		AS USEDCOUNT							--사용타수			
+			,	NVL(DBL.TOTALUSEDCOUNT,0)	AS TOTALUSEDCOUNT				--누적타수
+			
+			,	NVL(DBL.USEDLIMIT,0)		AS USEDLIMIT								--보증타수
+			,	NVL(DBL.CLEANLIMIT,0)		AS CLEANLIMIT							--연마기준타수
+			
+			,	NVL(DBL.TOTALCLEANCOUNT,0)	AS TOTALCLEANCOUNT			--연마횟수
+			,	NVL(DBL.TOTALREPAIRCOUNT,0)	AS TOTALREPAIRCOUNT			--수리횟수
+			,	NVL(DBL.WEIGHT,0)			AS WEIGHT									--무게
+			,	NVL(DBL.HORIZONTAL,0)		AS HORIZONTAL						--가로
+			,	NVL(DBL.VERTICAL,0)			AS VERTICAL								--세로
+			,	NVL(DBL.HEIGHT,0)			AS THEIGHT									--높이
+			,	NVL(DBF.USEDFACTOR,0)		AS USEDFACTOR						--연배
+			,	NVL(DBL.POLISHTHICKNESS,0)	AS POLISHTHICKNESS					--연마두께
+			,	NVL(DBL.TOTALPOLISHTHICKNESS,0)	AS TOTALPOLISHTHICKNESS	--누적연마두께
+			,	NVL(DBL.CREATEDTHICKNESS,0)	AS CREATEDTHICKNESS			--최초두께
+			,	NVL(DBF.THICKNESSLIMIT,0)	AS TOOLTHICKNESSLIMIT				--연마누계기준
+			
+			,	DBF.DURABLECLASSID			AS TOOLTYPEID
+			,	FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DBF.DURABLECLASSID) AS TOOLTYPE									--Tool구분
+			,	DBF.FORM					AS TOOLFORMCODE
+			,	FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DBF.DURABLECLASSID, DBF.FORM) AS TOOLFORM					--Tool형식
+			,   DBF.TOOLKIND				AS TOOLKINDID
+			,	FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DBF.DURABLECLASSID, DBF.FORM, DBF.TOOLKIND) AS TOOLKIND --TOOL종류
+			
+			,   PDF.PRODUCTDEFVERSION		AS PRODUCTDEFVERSION		--품목 Rev.
+		FROM TOM_DURABLELOT							DBL
+			 INNER JOIN TOM_DURABLEDEFINITION 	DBF  	ON	DBL.DURABLEDEFID			= DBF.DURABLEDEFID
+																		AND	DBL.DURABLEDEFVERSION		= DBF.DURABLEDEFVERSION					
+		     INNER JOIN CMD_DICTIONARY 				DIC    ON	DBF.DURABLEDEFNAME			= DIC.DICTIONARYID
+																		AND	DIC.LANGUAGETYPE			= #{LANGUAGETYPE}
+																		AND  DIC.USE_YN                = 'Y'
+		     INNER JOIN BAS_PRODUCTDEFINITION	PDF    ON	DBF.PRODUCTDEFID			= PDF.PRODUCTDEFID
+																		AND	DBF.PRODUCTDEFVERSION		= PDF.PRODUCTDEFVERSION
+		     INNER JOIN BAS_AREA						AR1	ON	DBL.AREAID					= AR1.AREAID
+		     INNER JOIN CMD_DICTIONARY				DC1   ON		AR1.AREANAME				= DC1.DICTIONARYID
+																		AND	DC1.LANGUAGETYPE			= #{LANGUAGETYPE}
+																		AND  DC1.USE_YN                = 'Y'
+		     LEFT OUTER JOIN BAS_STATE				ST1	ON	DBL.DURABLESTATE			= ST1.STATEID
+																		AND	ST1.STATEMODELID			= 'DurableState'
+		     LEFT OUTER JOIN BAS_STATE				ST2     ON	DBL.DURABLECLEANSTATE		= ST2.STATEID
+																		AND	ST2.STATEMODELID			= 'CleanState'
+		     LEFT OUTER JOIN CMD_LOOKUP_VALUES	CDD	ON	DBL.DURABLESTATE			= CDD.LOOKUP_CODE
+																		AND	CDD.LOOKUP_TYPE				= 'ToolDurableStatus'
+		     LEFT OUTER JOIN CMD_DICTIONARY		DCD	ON	CDD.DICTIONARYID			= DCD.DICTIONARYID
+																		AND	DCD.LANGUAGETYPE			= #{LANGUAGETYPE}		
+																		AND  DCD.USE_YN                = 'Y'																																														
+		WHERE 1=1 
+		--DRC.DURABLECLASSTYPE = 'Tool'
+		AND	DBF.VALIDSTATE = 'Valid'
+		
+		<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+			AND DBL.ENTERPRISEID = #{ENTERPRISEID}
+		</if>
+		<if test="P_PLANTID != null and P_PLANTID !='' ">
+			AND	DBL.PLANTID = #{P_PLANTID}
+		</if>
+		<if test="AREAID != null and AREAID !='' ">
+			AND	DBL.AREAID = #{AREAID}
+		</if>
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+			AND	PDF.PRODUCTDEFID = #{PRODUCTDEFID}
+		</if>
+		<if test="DURABLESTATE != null and DURABLESTATE !='' ">
+			AND	DBL.DURABLESTATE = #{DURABLESTATE}
+		</if>
+		<if test="ISHOLD != null and ISHOLD !='' ">
+			AND	DBL.ISHOLD = UPPER(#{ISHOLD})
+		</if>
+		<if test="DURABLELOTID != null and DURABLELOTID !='' ">
+			AND	UPPER(DBL.DURABLELOTID) LIKE '%' || UPPER(#{DURABLELOTID}) || '%'
+		</if>
+		<if test="P_TOOLNO != null and P_TOOLNO !='' ">
+			AND	UPPER(DBL.DURABLELOTID) LIKE '%' || UPPER(#{P_TOOLNO}) || '%'
+		</if>
+		<if test="CURRENTLOGINID != null and CURRENTLOGINID !='' ">			
+			AND EXISTS	(
+						SELECT 
+								1
+						FROM	FN_AREA(#{CURRENTLOGINID}) SAR
+						WHERE	1=1
+						OR (
+						       SAR.ENTERPRISEID	= DBL.ENTERPRISEID
+						   	AND SAR.PLANTID = DBL.PLANTID
+						   	AND SAR.AREAID = DBL.AREAID
+						   	)
+						)
+		</if>
+		ORDER BY DBL.DURABLELOTID
+    </select> 
+    
+    <!-- 이력 조회 -->
+    <select id="selectTomToolHistoryListForReportByEqp" parameterType="map" resultType="hashmap">
+    	--
+		-- GetToolHistoryListForReportByEqp
+		-- Version:10001    	
+		SELECT /* smh.tom.dao.TOM01100Dao.selectTomToolHistoryListForReportByEqp */
+       			DLH.DURABLELOTID							AS TOOLNO
+      		, 	DLH.DURABLEDEFID            				AS TOOLCODE
+      		,   SPLIT_PART(DLH.DURABLELOTID,'-',2)  	AS TOOLNOSEQ
+      		, 	DLH.DURABLEDEFVERSION              	AS TOOLVERSION
+      		, 	CASE 	WHEN DLH.TXNID2 = 'Create'             								THEN		--> 최초생성
+             					TO_CHAR(DLH.TXNTIME,'YYYY-MM-DD HH24:MI:SS')
+        				WHEN DLH.TXNID2 = 'ToolMakeReceipt'         						THEN		--> 제작입고
+             					TO_CHAR(DLH.TXNTIME,'YYYY-MM-DD HH24:MI:SS')
+              			WHEN DLH.TXNID2 = 'ToolMove'                 						THEN		--> 이동입고
+                       			TO_CHAR(DLH.TXNTIME,'YYYY-MM-DD HH24:MI:SS')
+                 		WHEN DLH.TXNID2 = 'ToolMoveSend'									THEN		--> 이동출고
+                       			TO_CHAR(DLH.TXNTIME,'YYYY-MM-DD HH24:MI:SS')
+                 		WHEN DLH.TXNID2 = 'ToolMoveCancel'									THEN		--> 이동출고
+                       			TO_CHAR(DLH.TXNTIME,'YYYY-MM-DD HH24:MI:SS')                   
+                 		WHEN DLH.TXNID2 = 'ToolRepairSend'									THEN		--> 수리출고
+                       			TO_CHAR(DLH.TXNTIME,'YYYY-MM-DD HH24:MI:SS')
+                 		WHEN DLH.TXNID2 = 'ToolRepairReceipt'								THEN		--> 수리입고
+                      			TO_CHAR(DLH.TXNTIME,'YYYY-MM-DD HH24:MI:SS')
+                 		WHEN DLH.TXNID2 IN ('ToolInformation','Modify', 'CancelRepair') 	THEN  	--> '치공구관리'
+                      			TO_CHAR(DLH.TXNTIME,'YYYY-MM-DD HH24:MI:SS')
+          		END 											AS TRXDATE
+      		, 	DLH.TXNID2 									AS TXNID
+         	, 	DCR.DICTIONARYNAME 					AS TXNNAME
+         	, 	CASE 	WHEN DLH.TXNID2 = 'Create'                 							THEN		--> 최초생성
+                				DLH.TXNUSER 
+           				WHEN DLH.TXNID2 = 'ToolMakeReceipt'								THEN		--> 제작입고
+                       			TMR.RECEIPTUSER
+                 		WHEN DLH.TXNID2 = 'ToolMove'                 						THEN		--> 이동입고
+                       			MVR.RECEIPTUSER
+                 		WHEN DLH.TXNID2 = 'ToolMoveSend'									THEN		--> 이동입고
+                       			MVI.SENDUSER
+                 		WHEN DLH.TXNID2 = 'ToolMoveCancel'									THEN		--> 이동입고
+                       			DLH.TXNUSER
+                 		WHEN DLH.TXNID2 = 'ToolRepairSend'									THEN		--> 수리출고
+                       			TRS.SENDUSER
+                 		WHEN DLH.TXNID2 = 'ToolRepairReceipt'								THEN		--> 수리입고
+                       			TRR.RECEIPTUSER
+                 		WHEN DLH.TXNID2 IN ('ToolInformation','Modify', 'CancelRepair')  THEN  	--> '치공구관리'
+                       			DLH.TXNUSER
+          		END 											AS TXNUSER					--입고자/출고자
+         	, 	CASE 	WHEN DLH.TXNID2 = 'Create'             								THEN		--> 최초생성
+                       			SU1.USER_NM 
+           				WHEN DLH.TXNID2 = 'ToolMakeReceipt'								THEN		--> 제작입고
+                       			SU2.USER_NM
+                 		WHEN  DLH.TXNID2 = 'ToolMove'										THEN		--> 이동입고
+                       			COALESCE(SU4.USER_NM, '')
+                 		WHEN  DLH.TXNID2 = 'ToolMoveSend'									THEN		--> 이동입고
+                       			SU9.USER_NM
+                 		WHEN  DLH.TXNID2 = 'ToolMoveCancel'								THEN		--> 이동입고
+                       			SU1.USER_NM
+                 		WHEN  DLH.TXNID2 = 'ToolRepairSend'									THEN		--> 수리출고
+                       			SU5.USER_NM
+                 		WHEN  DLH.TXNID2 = 'ToolRepairReceipt'								THEN		--> 수리입고
+                       			SU7.USER_NM
+                 		WHEN  DLH.TXNID2 IN ('ToolInformation','Modify', 'CancelRepair')  THEN  	--> '치공구관리'
+                       			SU1.USER_NM
+             	END 											AS TXNUSERNAME   			--입고자/출고자
+         	, 	CASE 	WHEN DLH.TXNID2 = 'ToolMove'                							THEN		--> 이동입고
+                       			MVR.PLANTID
+              		 	WHEN DLH.TXNID2 = 'ToolMoveSend'             						THEN		--> 이동입고
+                       			MVI.PLANTID   
+                 	 	WHEN DLH.TXNID2 IN ('ToolInformation','Modify')  					THEN		--> '치공구관리'
+                       			DLH.PREVPLANTID
+             	END 											AS PREVPLANTID
+         	, 	CASE 	WHEN DLH.TXNID2 = 'ToolMove'              							THEN		--> 이동입고
+                       			PR2.PLANTNAME
+           			 	WHEN DLH.TXNID2 = 'ToolMoveSend'             						THEN		--> 이동입고
+                       			PR1.PLANTNAME                  
+                 		WHEN DLH.TXNID2 IN ('ToolInformation','Modify')  					THEN		--> '치공구관리'
+                       			PL1.PLANTNAME
+          		END 											AS PREVPLANTNAME
+         	, 	CASE 	WHEN DLH.TXNID2 = 'ToolMove'              							THEN		--> 이동입고
+                       			MVR.AREAID 
+           				WHEN DLH.TXNID2 = 'ToolMoveSend'             						THEN		--> 이동입고
+                       			MVI.AREAID                 
+                 		WHEN  DLH.TXNID2 IN ('ToolInformation','Modify') 					THEN		--> '치공구관리'
+                       			DLH.PREVAREAID
+             	END 											AS PREVAREAID      			--이전작업장ID
+         	, 	CASE 	WHEN  DLH.TXNID2 = 'ToolMove'              							THEN		--> 이동입고
+                       			DC5.DICTIONARYNAME 
+           				WHEN  DLH.TXNID2 = 'ToolMoveSend'             						THEN		--> 이동입고
+                       			DC4.DICTIONARYNAME
+                 		WHEN  DLH.TXNID2 IN ('ToolInformation','Modify') 					THEN		--> '치공구관리'
+                       			DC1.DICTIONARYNAME
+             	END 											AS PREVAREANAME    --이전작업장명            
+         	, 	DLH.PLANTID                         		AS PLANTID   			--Site
+         	, 	PLT.PLANTNAME                       		AS PLANT   				--Site명
+         	, 	DLH.AREAID                          		AS AREAID   			--작업장ID
+         	, 	DC3.DICTIONARYNAME                  	AS AREANAME       	--작업장명
+         	, 	DLH.DURABLELOTQTY                   	AS QTY    				--수량
+         	, 	CASE 	WHEN  DLH.TXNID2 = 'Create'           									THEN		--> 최초생성
+                      			DLH.VENDORID   
+           				WHEN  DLH.TXNID2 = 'ToolMakeReceipt'         						THEN		--> 제작입고
+                       			TRD.VENDORID
+                 		WHEN  DLH.TXNID2 IN ('ToolRepairSend', 'CancelRepair')     		THEN     --> 수리출고
+                       			RSL.VENDORID
+                 		WHEN  DLH.TXNID2 = 'ToolRepairReceipt'        						THEN		--> 수리입고
+                       			RRL.VENDORID
+             	END 											AS VENDORID        	--제작업체ID
+         	, 	CASE 	WHEN  DLH.TXNID2 = 'Create'           									THEN		--> 최초생성
+                       			VN4.VENDORNAME 
+           				WHEN  DLH.TXNID2 = 'ToolMakeReceipt'         						THEN		--> 제작입고
+                       			VN1.VENDORNAME
+                 		WHEN  DLH.TXNID2 IN ('ToolRepairSend', 'CancelRepair')    		THEN     --> 수리출고
+                       			VN2.VENDORNAME
+                 		WHEN  DLH.TXNID2 = 'ToolRepairReceipt'        						THEN		--> 수리입고
+                       			VN3.VENDORNAME
+             	END                   						AS VENDORNAME      --제작업체명
+         	, 	CASE 	WHEN  DLH.TXNID2 = 'Create'           									THEN   	--> 최초생성
+                       			TO_CHAR(DLH.CREATEDTIME,'YYYYMMDD') 
+           				WHEN  DLH.TXNID2 = 'ToolMakeReceipt'         						THEN   	--> 제작입고
+                       			TO_CHAR(TMR.REQUESTDATE,'YYYYMMDD')||'-'||TMR.REQUESTSEQUENCE
+                 		WHEN  DLH.TXNID2 IN ('ToolRepairSend', 'CancelRepair')    		THEN   	--> 수리출고
+                       			TO_CHAR(RSD.REQUESTDATE,'YYYYMMDD')||'-'||RSD.REQUESTSEQUENCE
+                 		WHEN  DLH.TXNID2 = 'ToolRepairReceipt'        						THEN   	--> 수리입고
+                       			TO_CHAR(TQ1.REQUESTDATE,'YYYYMMDD')||'-'||TQ1.REQUESTSEQUENCE
+             	END                   						AS REQUESTNO       	--의뢰번호
+         	, 	CASE 	WHEN  DLH.TXNID2 = 'Create'           									THEN    	--> 제작입고
+                       			SU1.USER_NM 
+           				WHEN  DLH.TXNID2 = 'ToolMakeReceipt'         						THEN    	--> 제작입고
+                       			SU3.USER_NM
+                 		WHEN  DLH.TXNID2 IN ('ToolRepairSend', 'CancelRepair')    		THEN     	--> 수리출고
+                       			SU6.USER_NM
+                 		WHEN  DLH.TXNID2 = 'ToolRepairReceipt'        						THEN    	--> 수리입고
+                       			SU8.USER_NM
+             	END                   						AS REQUESTUSER     	--의뢰자
+         	, 	CASE 	WHEN  DLH.TXNID2 = 'ToolMakeReceipt'         						THEN    	--> 제작입고
+                       			TRQ.TOOLMAKETYPE
+             	END                   						AS TOOLMAKETYPEID	--제작구분
+         	, 	CASE 	WHEN  DLH.TXNID2 = 'ToolMakeReceipt'         						THEN    	--> 제작입고
+                       			DC2.DICTIONARYNAME
+             	END                   						AS TOOLMAKETYPE		--제작구분명
+         	,  	DLH.TXNHISTKEY                		AS TXNHISTKEY
+         	, 	RSL.DESCRIPTION                		AS REPAIRDESCRIPTION               
+         	--, 	RSL.RESULTCOMMENT               	AS REPAIRRESULTCOMMENT
+     		--     , CASE WHEN DLH.TXNID2 = 'ToolMakeReceipt' THEN TMR.REQUESTSEQUENCE END AS REQUESTSEQUENCE
+     		--     , CASE WHEN DLH.TXNID2 = 'ToolMove'        THEN TMV.SENDDATE        END AS SENDDATE
+     		--     , CASE WHEN DLH.TXNID2 = 'ToolMove'        THEN TMV.RECEIPTDATE     END AS RECEIPTDATE
+     		
+     		,	ST2.STATEID					AS DURABLECLEANSTATEID				--연마상태코드
+			,	ST2.STATENAME				AS DURABLECLEANSTATE					--연마상태
+			,	DLT.USEDCOUNT				AS USEDCOUNT							--사용타수
+			,	DDF.CLEANLIMIT				AS CLEANLIMIT							--연마기준타수
+			,	DLT.TOTALUSEDCOUNT			AS TOTALUSEDCOUNT				--누적타수
+			,	DDF.USEDLIMIT				AS USEDLIMIT								--보증타수
+			,	DLT.TOTALCLEANCOUNT			AS TOTALCLEANCOUNT			--연마횟수
+			,	DLT.TOTALREPAIRCOUNT		AS TOTALREPAIRCOUNT				--수리횟수
+			,	DLT.WEIGHT					AS WEIGHT									--무게
+			,	DLT.HORIZONTAL				AS HORIZONTAL						--가로
+			,	DLT.VERTICAL				AS VERTICAL									--세로
+			,	DLT.HEIGHT					AS THEIGHT									--높이
+			,	DDF.USEDFACTOR				AS USEDFACTOR						--연배
+			,	DLT.POLISHTHICKNESS			AS POLISHTHICKNESS					--연마두께
+			,	DLT.TOTALPOLISHTHICKNESS	AS TOTALPOLISHTHICKNESS			--누적연마두께
+			,	DLT.CREATEDTHICKNESS		AS CREATEDTHICKNESS				--최초두께
+			,	DDF.THICKNESSLIMIT			AS TOOLTHICKNESSLIMIT				--연마누계기준
+     		,	TO_CHAR(TRQ.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE	--의뢰일자
+     		,	TRQ.REQUESTSEQUENCE AS REQUESTSEQUENCE						--의뢰순번
+     	FROM TOM_DURABLELOT             					DLT		
+     		INNER JOIN TOM_DURABLEDEFINITION			DDF		ON DDF.DURABLEDEFID     	= DLT.DURABLEDEFID
+            	   																	AND DDF.DURABLEDEFVERSION   = DLT.DURABLEDEFVERSION
+            	   																	AND DDF.DURABLETYPE      	= 'Tool'
+            INNER JOIN TOM_DURABLECLASS          			DCL		ON DCL.DURABLECLASSID       = DDF.DURABLECLASSID
+                   																	AND DCL.DURABLECLASSTYPE    = 'Tool'
+            INNER JOIN TOM_DURABLELOTHISTORY			DLH		ON DLT.DURABLELOTID     	= DLH.DURABLELOTID            
+            LEFT OUTER JOIN BAS_STATE							ST2     	ON	DLT.DURABLECLEANSTATE	= ST2.STATEID
+																		AND		ST2.STATEMODELID		= 'CleanState'            
+            LEFT OUTER JOIN CMD_USERS           				SU1	 	ON SU1.USER_ID       		= DLH.TXNUSER
+            LEFT OUTER JOIN BAS_PLANT           				PL1	 	ON PL1.PLANTID      		= DLH.PREVPLANTID
+            LEFT OUTER JOIN BAS_AREA           				AR1	 	ON AR1.AREAID       		= DLH.PREVAREAID
+     		LEFT OUTER JOIN CMD_DICTIONARY       			DC1  		ON DC1.DICTIONARYID     	= AR1.AREANAME
+     																				AND DC1.LANGUAGETYPE     	= #{LANGUAGETYPE}
+                        															AND  DC1.USE_YN                = 'Y' 
+     		LEFT OUTER JOIN TOM_TOOLMAKERECEIPT  		TMR	 	ON TMR.LOTHISTKEY       	= DLH.TXNHISTKEY
+            LEFT OUTER JOIN CMD_USERS           				SU2	 	ON SU2.USER_ID       		= TMR.RECEIPTUSER
+            LEFT OUTER JOIN TOM_TOOLREQUEST     			TRQ	 	ON TRQ.REQUESTDATE        	= TMR.REQUESTDATE
+                   																	AND TRQ.REQUESTSEQUENCE    	= TMR.REQUESTSEQUENCE
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES			CD1	 	ON CD1.LOOKUP_TYPE     		= 'ToolMakeType'
+                        															AND CD1.LOOKUP_CODE         = TRQ.TOOLMAKETYPE
+     		LEFT OUTER JOIN CMD_DICTIONARY				DC2	 	ON DC2.DICTIONARYID     	= CD1.DICTIONARYID
+                        															AND DC2.LANGUAGETYPE     	= #{LANGUAGETYPE}
+                        															AND  DC2.USE_YN                = 'Y'
+            LEFT OUTER JOIN TOM_TOOLREQUESTDETAIL		TRD	 	 ON TRD.DURABLEDEFID         = DLT.DURABLEDEFID
+                       																AND TRD.DURABLEDEFVERSION   = DLT.DURABLEDEFVERSION
+                        															AND TRD.REQUESTDATE         = TRQ.REQUESTDATE
+                        															AND TRD.REQUESTSEQUENCE     = TRQ.REQUESTSEQUENCE
+     		LEFT OUTER JOIN TOM_TOOLREQUESTDETAILLOT TRL 		ON TRL.DURABLELOTID         = DLT.DURABLELOTID
+                        															AND TRL.DURABLEDEFID        = DLT.DURABLEDEFID
+                        															AND TRL.DURABLEDEFVERSION   = DLT.DURABLEDEFVERSION
+                        															AND TRL.REQUESTDATE         = TRQ.REQUESTDATE
+                        															AND TRL.REQUESTSEQUENCE     = TRQ.REQUESTSEQUENCE
+     		LEFT OUTER JOIN BAS_VENDOR          			VN1	 	ON VN1.VENDORID          	= TRD.VENDORID
+                        															AND VN1.PLANTID           	= TRD.PLANTID
+     		LEFT OUTER JOIN CMD_USERS           				SU3	 	ON SU3.USER_ID          	= TRQ.REQUESTUSER
+            LEFT OUTER JOIN TOM_TOOLMOVE        			MVI	 	ON MVI.LOTHISTKEY      		= DLH.TXNHISTKEY    --이동출고
+     		LEFT OUTER JOIN TOM_TOOLMOVE        			MVR	 	ON MVR.TOLOTHISTKEY      	= DLH.TXNHISTKEY    --이동입고      
+     		LEFT OUTER JOIN CMD_USERS           				SU4	 	ON SU4.USER_ID       		= MVR.RECEIPTUSER
+     		LEFT OUTER JOIN CMD_USERS           				SU9	 	ON SU9.USER_ID       		= MVI.SENDUSER
+            LEFT OUTER JOIN BAS_PLANT           				PLT	 	ON PLT.PLANTID      		= DLH.PLANTID
+            LEFT OUTER JOIN BAS_AREA           				SAR	 	ON SAR.AREAID       		= DLH.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY       			DC3	 	ON DC3.DICTIONARYID     	= SAR.AREANAME
+                        															AND DC3.LANGUAGETYPE     	= #{LANGUAGETYPE}
+                        															AND  DC3.USE_YN                = 'Y'
+     		LEFT OUTER JOIN BAS_PLANT           				PR1	 	ON PR1.PLANTID      		= MVI.PLANTID
+     		LEFT OUTER JOIN BAS_PLANT           				PR2	 	ON PR2.PLANTID      		= MVR.PLANTID
+            LEFT OUTER JOIN BAS_AREA           				AR2	 	ON AR2.AREAID       		= MVI.AREAID
+     		LEFT OUTER JOIN CMD_DICTIONARY       			DC4	 	ON DC4.DICTIONARYID     	= AR2.AREANAME
+                        															AND DC4.LANGUAGETYPE     	= #{LANGUAGETYPE}
+                        															AND  DC4.USE_YN                = 'Y'
+     		LEFT OUTER JOIN BAS_AREA           				AR3  		ON AR3.AREAID       		= MVR.AREAID
+     		LEFT OUTER JOIN CMD_DICTIONARY       			DC5	 	ON DC5.DICTIONARYID     	= AR3.AREANAME
+                        															AND DC5.LANGUAGETYPE     	= #{LANGUAGETYPE}       
+                        															AND  DC5.USE_YN                = 'Y'      
+     		LEFT OUTER JOIN TOM_TOOLREPAIRSENDLOT 	RSL	 	ON RSL.LOTHISTKEY       	= DLH.TXNHISTKEY
+                        															AND RSL.DURABLELOTID     	= DLH.DURABLELOTID
+     		LEFT OUTER JOIN TOM_TOOLREPAIRSEND 		TRS	 	ON TRS.SENDDATE         	= RSL.SENDDATE
+                        															AND TRS.SENDSEQUENCE     	= RSL.SENDSEQUENCE
+            LEFT OUTER JOIN CMD_USERS           				SU5	 	ON SU5.USER_ID       		= TRS.SENDUSER
+     		LEFT OUTER JOIN TOM_TOOLREQUESTDETAILLOT RSD 		ON RSD.SENDDATE         	= RSL.SENDDATE
+                        															AND RSD.SENDSEQUENCE     	= RSL.SENDSEQUENCE
+                        															AND RSD.DURABLELOTID     	= RSL.DURABLELOTID
+     		LEFT OUTER JOIN TOM_TOOLREQUEST     			RQ	 		ON RQ.REQUESTDATE         	= RSD.REQUESTDATE
+                        															AND RQ.REQUESTSEQUENCE     	= RSD.REQUESTSEQUENCE
+     		LEFT OUTER JOIN CMD_USERS           				SU6 		ON SU6.USER_ID          	= RQ.REQUESTUSER
+            LEFT OUTER JOIN BAS_VENDOR           			VN2	 	ON VN2.VENDORID          	= RSL.VENDORID
+                        															AND VN2.PLANTID           	= RSL.PLANTID
+     		LEFT OUTER JOIN TOM_TOOLREPAIRRECEIPTLOT RRL 		ON RRL.LOTHISTKEY       	= DLH.TXNHISTKEY
+     		LEFT OUTER JOIN TOM_TOOLREPAIRRECEIPT 		TRR	 	ON TRR.RECEIPTDATE        	= RRL.RECEIPTDATE
+                        															AND TRR.RECEIPTSEQUENCE    	= RRL.RECEIPTSEQUENCE
+            LEFT OUTER JOIN TOM_TOOLREPAIRSENDLOT 	TR1		ON TR1.RECEIPTDATE        	= RRL.RECEIPTDATE
+                        															AND TR1.RECEIPTSEQUENCE    	= RRL.RECEIPTSEQUENCE
+                        															AND TR1.DURABLELOTID       	= RRL.DURABLELOTID
+     		LEFT OUTER JOIN TOM_TOOLREQUESTDETAILLOT TD1 		ON TD1.RECEIPTDATE        	= TR1.RECEIPTDATE
+                        															AND TD1.RECEIPTSEQUENCE    	= TR1.RECEIPTSEQUENCE
+                        															AND TD1.DURABLELOTID       	= TR1.DURABLELOTID
+     		LEFT OUTER JOIN TOM_TOOLREQUEST				TQ1	 	ON TQ1.REQUESTDATE        	= TD1.REQUESTDATE
+                        															AND TQ1.REQUESTSEQUENCE    	= TD1.REQUESTSEQUENCE     		
+            LEFT OUTER JOIN CMD_USERS           				SU7	 	ON SU7.USER_ID          	= TRR.RECEIPTUSER
+     		LEFT OUTER JOIN BAS_VENDOR           			VN3	 	ON VN3.VENDORID          	= RRL.VENDORID
+                        															AND VN3.PLANTID           	= RRL.PLANTID
+     		LEFT OUTER JOIN CMD_USERS           				SU8	 	ON SU8.USER_ID          	= TQ1.REQUESTUSER
+     		LEFT OUTER JOIN CMD_LOOKUP_VALUES  			TTR	 	ON DLH.TXNID2      			= TTR.LOOKUP_CODE
+                        															AND TTR.LOOKUP_TYPE     	= 'ToolTransactionStatus'
+     		LEFT OUTER JOIN CMD_DICTIONARY       			DCR	 	ON TTR.DICTIONARYID    		= DCR.DICTIONARYID      
+                        															AND DCR.LANGUAGETYPE    	= #{LANGUAGETYPE}     	
+                        															AND  DCR.USE_YN                = 'Y'	
+     		LEFT OUTER JOIN BAS_VENDOR          			VN4	 	ON VN4.VENDORID     		= DLH.VENDORID
+                        															AND VN4.PLANTID      		= DLH.PLANTID
+     	WHERE 1=1
+     	AND DLH.TXNID2 IN (
+     					 SELECT DATA AS COL_VALUE 
+                         FROM TABLE(CAST(FN_TO_ROWS(#{TRANSACTIONSTATUSCODES}) AS TP_SIMPLE_TABLE))
+                         )
+    	<if test="DURABLELOTID != null and DURABLELOTID !='' ">
+     		AND DLH.DURABLELOTID = #{DURABLELOTID}
+    	</if>
+     	ORDER BY 1,2,3,4,5
+ 	</select>
+ 
+ 	<!-- 사용 내역 -->
+ 	<select id="selectTomToolUseStatusListForReportByEqp" parameterType="map" resultType="hashmap">
+ 		--
+ 		-- GetToolUseStatusListForReportByEqp
+        -- Version:10001
+        SELECT   
+                 A.DURABLEDEFID
+               , A.DURABLEDEFVERSION
+               , A.TRACKINTIME
+               , A.TRACKOUTTIME
+               , A.LOTID
+               , A.PROCESSSEGMENTNAME
+               , A.AREAID
+               , A.AREANAME
+               , A.EQUIPMENTID
+               , A.EQUIPMENTNAME
+               , A.USEDFACTOR
+               , A.TOOLPCS
+               , A.TOOLPNL
+               , A.SUMMARY
+               , A.HITCOUNT
+               
+               , CASE 	WHEN NVL(A.HITCOUNT,0) > 0 THEN					--PNL타수기준이 0 보다 크면
+                                     ROUND(A.TOOLPNL * A.HITCOUNT, 0)
+                        ELSE
+                                     CASE 	WHEN NVL(A.SUMMARY,0) > 0 THEN	--합수가 존재하면
+                                             ROUND(A.TOOLPCS / A.SUMMARY, 0)
+                                     ELSE
+                                             0
+                                     END
+                 END AS TOOLHITCOUNT					--타수 (시점 데이터 이용)
+                    
+               , A.TXNUSERNAME
+        FROM (
+		        SELECT /* smh.tom.dao.TOM01100Dao.selectTomToolUseStatusListForReportByEqp */
+		           		DDF.DURABLEDEFID
+                  ,     DDF.DURABLEDEFVERSION 
+		          , 		TO_CHAR(LDB.WORKSTARTTIME, 'YYYY-MM-DD HH24:MI:SS')	AS TRACKINTIME            --사용시작
+		          , 		TO_CHAR(LDB.WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')		AS TRACKOUTTIME          --사용종료
+		          ,   	CML.LOTID                                                                                   			--LOTNO
+		          ,   	DCG.DICTIONARYNAME                                                AS PROCESSSEGMENTNAME
+		          ,   	CML.AREAID
+		          ,   	DCR.DICTIONARYNAME                                                AS AREANAME
+		          ,   	LDB.EQUIPMENTID
+		          ,   	DCQ.DICTIONARYNAME                                                AS EQUIPMENTNAME
+		          ,   	DDF.USEDFACTOR               																		--연배
+		          
+		          ,   	LWR.WORKSTARTPCSQTY                                                 	AS TOOLPCS 			--생산량(PCS), 시작수량으로 수정2021-07-30 BY PHW
+		          ,   	LWR.WORKSTARTPANELQTY                                              	AS TOOLPNL				--생산량(PNL), 시작수량으로 수정2021-07-30 BY PHW
+		          
+		          ,		DDF.SUMMARY  															AS SUMMARY  			--(급형)합수
+		          
+		          ,     LWR.WORKENDPANELQTY --사용안함.
+                  ,     LWR.WORKENDPCSQTY --사용안함.
+                  
+                  ,     TOM_TOOLHITCOUNT_FN(DDF.DURABLEDEFID, DDF.DURABLEDEFVERSION, LWR.MODIFIEDTIME) AS HITCOUNT 
+                  ,     LDB.WORKSTARTTIME
+                  
+		          ,		NVL(SU5.USER_NM, CML.TXNUSER)							AS TXNUSERNAME					--작업자명
+		         FROM MTM_CONSUMEMATERIALLOT					CML																	--LOT별 자재사용 이력
+					  	INNER JOIN PCM_LOTDURABLE              	LDB  		ON LDB.LOTID                   = CML.LOTID		--LOT 사용 치공구
+		                     																AND LDB.EQUIPMENTID             = CML.EQUIPMENTID
+		                     																AND LDB.PROCESSSEGMENTID        = CML.PROCESSSEGMENTID
+		                     																AND LDB.PROCESSSEGMENTVERSION   = CML.PROCESSSEGMENTVERSION
+		                     																AND COALESCE(LDB.WORKCOUNT, 0)  = COALESCE(CML.WORKCOUNT, 0)	
+		         	  	INNER JOIN PCM_LOTWORKRESULT                LWR                     ON LWR.LOTID                  	= LDB.LOTID
+		                     																AND LWR.PROCESSDEFID           	= CML.PROCESSDEFID
+		                     																AND LWR.PROCESSDEFVERSION       = CML.PROCESSDEFVERSION
+		                     																AND LWR.PROCESSSEGMENTID        = CML.PROCESSSEGMENTID
+		                     																AND LWR.PROCESSSEGMENTVERSION   = CML.PROCESSSEGMENTVERSION     
+		                                                                                    AND COALESCE(LWR.WORKCOUNT, 0)  = COALESCE(CML.WORKCOUNT, 0)
+		         	  	--INNER JOIN PCM_LOTHISTORY            		LHS  		ON LHS.LOTID                  	= LDB.LOTID
+		                --     																AND LHS.TXNGROUPHISTKEY         = LDB.TXNGROUPHISTKEY
+		                --     																AND LHS.TXNID                 	= 'SaveTrackOutLot'
+		                --     																AND LHS.PROCESSDEFID           	= CML.PROCESSDEFID
+		                --     																AND LHS.PROCESSDEFVERSION       = CML.PROCESSDEFVERSION
+		                --     																AND LHS.PROCESSSEGMENTID        = CML.PROCESSSEGMENTID
+		                --     																AND LHS.PROCESSSEGMENTVERSION   = CML.PROCESSSEGMENTVERSION
+		                --    																AND COALESCE(LHS.WORKCOUNT, 0)  = COALESCE(CML.WORKCOUNT, 0)	
+		         		INNER JOIN TOM_DURABLELOT          		DLT  		ON DLT.DURABLELOTID           	= CML.MATERIALLOTID
+		         		INNER JOIN TOM_DURABLEDEFINITION    	DDF  		ON DDF.DURABLEDEFID            = DLT.DURABLEDEFID
+		                      								  								AND DDF.DURABLEDEFVERSION       = DLT.DURABLEDEFVERSION
+		         		LEFT OUTER JOIN BAS_PROCESSSEGMENT    	SEG  		ON SEG.PROCESSSEGMENTID        = CML.PROCESSSEGMENTID
+		                     								  								AND SEG.PROCESSSEGMENTVERSION   = CML.PROCESSSEGMENTVERSION
+		         		LEFT OUTER JOIN CMD_DICTIONARY      		DCG  		ON DCG.DICTIONARYID            = SEG.PROCESSSEGMENTNAME
+		                                                      								AND DCG.LANGUAGETYPE            = #{LANGUAGETYPE}
+		                                                      								AND  DCG.USE_YN                = 'Y'
+		         		LEFT OUTER JOIN BAS_AREA            			SAR  		ON SAR.AREAID                  = CML.AREAID
+		         		LEFT OUTER JOIN CMD_DICTIONARY       		DCR  		ON DCR.DICTIONARYID            = SAR.AREANAME
+		                                                   	  								AND DCR.LANGUAGETYPE            = #{LANGUAGETYPE}
+		                                                   	  								AND  DCR.USE_YN                = 'Y'
+		         		LEFT OUTER JOIN BAS_EQUIPMENT         		EQP  		ON EQP.EQUIPMENTID             = CML.EQUIPMENTID
+		         		LEFT OUTER JOIN CMD_DICTIONARY       		DCQ  		ON DCQ.DICTIONARYID            = EQP.EQUIPMENTNAME
+		                                                   	  								AND DCQ.LANGUAGETYPE            = #{LANGUAGETYPE}
+		                                                   	  								AND  DCQ.USE_YN                = 'Y'
+		         		LEFT OUTER JOIN BAS_PRODUCTDEFINITION  PDF  		ON DDF.PRODUCTDEFID            = PDF.PRODUCTDEFID
+		                                                	  								AND DDF.PRODUCTDEFVERSION       = PDF.PRODUCTDEFVERSION				                
+		                LEFT OUTER JOIN CMD_USERS           			SU5  		ON SU5.USER_ID         		= CML.TXNUSER
+		         WHERE CML.MATERIALLOTID = #{DURABLELOTID} 		         
+		         ORDER BY LDB.WORKSTARTTIME DESC
+		       ) A
+        ORDER BY A.WORKSTARTTIME DESC
+  </select>
+
+</mapper>

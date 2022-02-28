@@ -1,0 +1,1249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : LEAD TIME
+    설명          : 
+    작성자       : 김애리
+    최초작성일 : 2021.06.03
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.06.03      김애리     최초  생성
+-->
+
+<mapper namespace="smh.pcm.dao.PCM06000Dao">
+
+	<!-- 품목 탭 조회 -->
+	<select id="selectRollLossByProduct" parameterType="map" resultType="hashmap">
+		/* SelectRollLossStateByProduct 10001 */
+				WITH FINISHROLLCUT AS 
+				(
+				    SELECT  LW.LOTID
+				        ,   LW.PRODUCTDEFID
+				        ,   LW.PRODUCTDEFVERSION
+				        ,   LW.PROCESSSEGMENTID
+				        ,   LW.USERSEQUENCE
+				        ,   LW.PROCESSPATHID
+				        ,   PP.PATHSEQUENCE
+				        ,   LW.RECEIVEPANELQTY
+				        ,   PD.PCSPNL
+				        ,   PD.PNLSIZEYAXIS
+				        ,   PSD.PROCESSDEFID
+				        ,   PSD.PROCESSDEFVERSION
+				        ,   LW.WORKENDTIME
+				    FROM    BAS_PRODUCTDEFINITION    PD
+				    INNER JOIN BAS_PROCESSDEFINITION_V 	PSD ON  PSD.PRODUCTDEFID = PD.PRODUCTDEFID 
+				    										AND PSD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+				    INNER JOIN BAS_PROCESSPATH       	PP  ON  PSD.PROCESSDEFID = PP.PROCESSDEFID
+				                                        	AND PSD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				    INNER JOIN BAS_PROCESSSEGMENT    	PS  ON  PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                        	AND PS.PROCESSSEGMENTCLASSID = '1020'
+				    INNER JOIN PCM_LOTWORKRESULT     LW  ON  PD.PRODUCTDEFID = LW.PRODUCTDEFID
+				                                        AND PD.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+				                                        AND PP.PROCESSDEFID = LW.PROCESSDEFID
+				                                        AND PP.PROCESSDEFVERSION = LW.PROCESSDEFVERSION
+				                                        AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+				                                        AND PP.PROCESSSEGMENTVERSION = LW.PROCESSSEGMENTVERSION
+				    WHERE   1 = 1
+				    AND     PD.RTRSHT = 'RTR'
+				    AND     NVL(LW.RESULTTYPE, 'NORMAL') = 'NORMAL'
+				    AND     LW.WORKENDTIME IS NOT NULL
+			       	AND   LW.WORKENDTIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+				<if test="PLANTID != null and PLANTID !=''"> 
+                	AND 	PD.PLANTID = #{PLANTID}
+                </if>
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			    	AND 
+			     <foreach collection="PRODUCTDEFID" item="PRODUCTDEFID"  open="(" close=")" separator="OR">
+   	                PD.PRODUCTDEFID LIKE <![CDATA['%' ||]]> #{PRODUCTDEFID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+					  AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				 	  AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+				</if>
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">  
+                	  AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}   --생산구분
+                </if>
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+				  AND     PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}  --제품구분 - 제품,반제품
+				</if>
+				<if test="LOTID != null and LOTID !=''">
+					AND LW.LOTID LIKE <![CDATA['%' ||]]> #{LOTID} <![CDATA[|| '%']]>
+				</if>
+				), BASETABLE AS
+				(
+				    SELECT  LW.LOTID
+				        ,   RC.PRODUCTDEFID
+				        ,   RC.PRODUCTDEFVERSION
+				        ,   LW.PROCESSSEGMENTID
+				        ,   LW.USERSEQUENCE
+				        ,   LW.PROCESSPATHID
+				        ,	DECODE(LD.DEFECTCODE, '370',LD.DEFECTQTY ,0) AS ROLLDEFECT
+				        ,	DECODE(LD.DEFECTCODE, '370',0,LD.DEFECTQTY ) AS ETCDEFECT
+				        ,   PP.PATHSEQUENCE
+				        ,   LW.RECEIVEPANELQTY
+				        ,   RC.PCSPNL
+				        ,   RC.PNLSIZEYAXIS
+				        ,   RC.PROCESSDEFID
+				        ,   RC.PROCESSDEFVERSION
+				    FROM    FINISHROLLCUT       RC
+				    INNER JOIN BAS_PROCESSPATH   PP  ON  RC.PROCESSDEFID = PP.PROCESSDEFID
+				                                    AND RC.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				    INNER JOIN PCM_LOTWORKRESULT LW  ON  RC.LOTID = LW.LOTID
+				                                    AND RC.PRODUCTDEFID = LW.PRODUCTDEFID
+				                                    AND RC.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+				                                    AND RC.PROCESSDEFID = LW.PROCESSDEFID
+				                                    AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+				                                    AND PP.PROCESSSEGMENTVERSION = LW.PROCESSSEGMENTVERSION
+				                                    AND RC.PATHSEQUENCE >= PP.PATHSEQUENCE
+				    LEFT JOIN PCM_LOT            L   ON  LW.LOTID = L.PARENTLOTID
+				                                    AND LW.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+				                                    AND L.ISDEFECTED = 'Y'
+				    LEFT JOIN PCM_LOTDEFECT      LD  ON  L.LOTID = LD.LOTID
+				    INNER JOIN PCM_LOT           OL  ON  LW.LOTID = OL.LOTID
+				                                    AND LW.LOTID = OL.PARENTLOTID
+				    WHERE   1 = 1
+				    AND     NVL(LW.RESULTTYPE, 'NORMAL') = 'NORMAL'
+				    AND     LW.WORKENDTIME IS NOT NULL
+				    AND     NVL(OL.ISREPRESENTROLLLOT,'N') != 'Y'
+				)
+				, INPUTPNLINFO AS
+                (
+                    SELECT  XX.PRODUCTDEFID
+                        ,   XX.PRODUCTDEFVERSION
+                        ,   SUM(XX.RECEIVEPANELQTY) AS RECEIVEPANELQTY
+                        ,   XX.LOSSPNL
+                        ,   XX.LOSSM
+                        ,   COUNT(XX.LOTID)         AS LOTCNT
+                    FROM 
+                    (
+                        SELECT  Z.PRODUCTDEFID
+                            ,   Z.PRODUCTDEFVERSION
+                            ,   Z.RECEIVEPANELQTY
+                            ,   Z.LOTID
+                            ,   SUM(RO.LOSSPNL)         AS LOSSPNL
+                            ,   SUM(RO.LOSSM)           AS LOSSM
+                        FROM 
+                        (
+                            SELECT  Q.LOTID
+                                ,   Q.PRODUCTDEFID
+                                ,   Q.PRODUCTDEFVERSION
+                                ,   SUM(Q.RECEIVEPANELQTY)  AS RECEIVEPANELQTY
+                            FROM
+                            (
+                                SELECT  BT.LOTID
+                                    ,   BT.PRODUCTDEFID
+                                    ,   BT.PRODUCTDEFVERSION
+                                    ,   CASE WHEN PP.PATHTYPE LIKE 'Start%' THEN  MAX(BT.RECEIVEPANELQTY) 
+                                        ELSE NULL 
+                                        END                     AS RECEIVEPANELQTY
+                                FROM    BAS_PRODUCTDEFINITION    PD
+                                INNER JOIN BASETABLE            BT  ON  PD.PRODUCTDEFID = BT.PRODUCTDEFID
+                                                                    AND PD.PRODUCTDEFVERSION = BT.PRODUCTDEFVERSION
+                                LEFT JOIN BAS_PROCESSPATH        PP  ON  BT.PROCESSPATHID = PP.PROCESSPATHID
+                                                                    AND PP.PATHTYPE LIKE 'Start%'
+                                WHERE   1 = 1
+                                AND     PD.RTRSHT = 'RTR'
+                                -- 품목코드
+                                -- 제품구분
+                                AND PD.PRODUCTDEFTYPE = 'Product'
+                                --양산구분
+                                                                GROUP BY BT.LOTID
+                                    ,    BT.PRODUCTDEFID
+                                    ,    BT.PRODUCTDEFVERSION
+                                    ,    PP.PATHTYPE
+                            )Q
+                            GROUP BY Q.LOTID, Q.PRODUCTDEFID, Q.PRODUCTDEFVERSION
+                        )Z
+                        LEFT JOIN BAS_ROLLLOSS           RL  ON  Z.PRODUCTDEFID = RL.PRODUCTDEFID
+                                                            AND Z.PRODUCTDEFVERSION = RL.PRODUCTDEFVERSION
+                        LEFT JOIN BAS_ROLLLOSSOPERATION  RO  ON  RL.PLANTID = RO.PLANTID
+                                                            AND RL.PRODUCTDEFID = RO.PRODUCTDEFID
+                                                            AND RL.PRODUCTDEFVERSION = RO.PRODUCTDEFVERSION
+                        GROUP BY Z.PRODUCTDEFID
+                            ,    Z.PRODUCTDEFVERSION
+                            ,    Z.RECEIVEPANELQTY
+                            ,    Z.LOTID
+                    )XX
+                    GROUP BY XX.PRODUCTDEFID
+                        ,   XX.PRODUCTDEFVERSION
+                        ,   XX.RECEIVEPANELQTY
+                        ,   XX.LOSSPNL
+                        ,   XX.LOSSM                  
+                ), MIDDLERESULT AS
+                (
+                    SELECT  Y.LOTID
+                        ,   Y.PRODUCTDEFID
+                        ,   Y.PRODUCTDEFVERSION
+                        ,   Y.PROCESSSEGMENTID
+                        ,   Y.USERSEQUENCE
+                        ,   Y.PROCESSPATHID
+                        ,   Y.PCSPNL
+                        ,   Y.PNLSIZEYAXIS / 1000                       AS PNLSIZEYAXIS
+                        --투입
+                        ,   Y.LOTCNT                                    AS INPUTROLL
+                        ,   Y.RECEIVEPANELQTY                           AS INPUTPNL             --투입 PNL
+                        ,   Y.RECEIVEPANELQTY * Y.PNLSIZEYAXIS / 1000   AS INPUTM
+                        --기준 LOSS/ROLL
+                        ,   Y.LOSSPNL
+                        ,   Y.LOSSM
+                        --인정 LOSS 계산용
+                        ,   RO.LOSSPNL                                  AS EACH_LOSSPNL
+                        ,   RO.LOSSM                                    AS EACH_LOSSM
+                        --ROLL LOSS
+                        ,   Y.ROLLDEFECT                                                --ROLL LOSS PCS
+                        ,   CASE WHEN L.PANELPERQTY = 0 THEN NULL
+                            ELSE CEIL(Y.ROLLDEFECT / L.PANELPERQTY)
+                            END                                                             AS ROLLDEFECTPNL    --ROLL LOSS PNL
+                        ,   CEIL(Y.ROLLDEFECT * PO.SALESPRICE)	 	                        AS ROLLLOSSPRICE
+                        --기타 LOSS
+                        ,   Y.ETCDEFECT                                                 --기타 LOSS PCS
+                        ,   CASE WHEN L.PANELPERQTY = 0 THEN NULL
+                            ELSE CEIL(Y.ETCDEFECT / L.PANELPERQTY)
+                            END                                                             AS ETCDEFECTPNL
+                        ,   CEIL(Y.ETCDEFECT * PO.SALESPRICE)	 	                        AS ETCLOSSPRICE
+                    FROM
+                    (
+                        SELECT  B.LOTID
+                            ,   B.PROCESSPATHID
+                            ,   B.PRODUCTDEFID
+                            ,   B.PRODUCTDEFVERSION
+                            ,   B.PROCESSSEGMENTID
+                            ,   B.USERSEQUENCE
+                            ,   B.PROCESSDEFID
+                            ,   B.PROCESSDEFVERSION
+                            ,   B.PCSPNL
+                            ,   B.PNLSIZEYAXIS
+                            ,   I.LOSSPNL
+                            ,   I.LOSSM
+                            ,   SUM(B.ROLLDEFECT)               AS ROLLDEFECT   --ROLL 불량
+                            ,   SUM(B.ETCDEFECT)                AS ETCDEFECT    --ETC 불량
+                            ,   I.RECEIVEPANELQTY               AS RECEIVEPANELQTY --투입 PNL
+                            ,   I.LOTCNT                                        -- 투입ROLL
+                        FROM    BASETABLE                   B
+                        LEFT JOIN INPUTPNLINFO              I   ON  B.PRODUCTDEFID = I.PRODUCTDEFID
+                                                                AND B.PRODUCTDEFVERSION = I.PRODUCTDEFVERSION
+                        WHERE   1 = 1
+                        GROUP BY B.LOTID
+                            ,    B.PROCESSPATHID
+                            ,    B.PRODUCTDEFID
+                            ,    B.PRODUCTDEFVERSION
+                            ,    B.PROCESSSEGMENTID
+                            ,    B.USERSEQUENCE
+                            ,    B.PROCESSDEFID
+                            ,    B.PROCESSDEFVERSION
+                            ,    B.PCSPNL
+                            ,    B.PNLSIZEYAXIS
+                            ,    I.RECEIVEPANELQTY
+                            ,    I.LOTCNT
+                            ,    I.LOSSPNL
+                            ,    I.LOSSM
+                    )Y
+                    INNER JOIN PCM_LOT                       L   ON  Y.LOTID = L.LOTID
+                    LEFT  JOIN MFM_PRODUCTIONORDER           PO  ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+                                                                AND L.LINENO = PO.LINENO
+                    LEFT JOIN BAS_ROLLLOSS                   RL  ON  Y.PRODUCTDEFID = RL.PRODUCTDEFID
+                                                                AND Y.PRODUCTDEFVERSION = RL.PRODUCTDEFVERSION
+                    LEFT JOIN BAS_ROLLLOSSOPERATION          RO  ON  RL.PLANTID = RO.PLANTID
+                                                                AND RL.PRODUCTDEFID = RO.PRODUCTDEFID
+                                                                AND RL.PRODUCTDEFVERSION = RO.PRODUCTDEFVERSION
+                                                                AND Y.PROCESSPATHID = RO.OPERATIONID
+                )
+                SELECT  B.LOTCNT
+                    ,   SUM(B.EACH_LOSSPNL)     AS EACH_LOSSPNL
+                    ,   SUM(B.EACH_LOSSM)       AS EACH_LOSSM
+                    ,   B.PRODUCTDEFID  
+                    ,   B.PRODUCTDEFVERSION
+                    ,   PD.PRODUCTDEFNAME
+                    ,   B.PNLSIZEYAXIS
+                    --투입
+                    ,   NVL(B.INPUTROLL, 0)                                AS INPUTROLL
+                    ,   NVL(B.INPUTPNL, 0)                                 AS INPUTPNL
+                    ,   NVL(B.INPUTM, 0)                                   AS INPUTM
+                    --기준 LOSS
+                    ,   B.LOSSPNL
+                    ,   B.LOSSM
+                    --인정LOSS
+                    ,   NVL(SUM(B.EACH_LOSSPNL) * B.LOTCNT, 0)             AS RECOLOSSPNL
+                    ,   NVL(SUM(B.EACH_LOSSM) * B.LOTCNT, 0)               AS RECOLOSSM
+                    ,   CASE WHEN NVL(B.INPUTPNL, 0) = 0 THEN 0
+                        ELSE NVL(SUM(B.EACH_LOSSPNL) * B.LOTCNT, 0) / B.INPUTPNL * 100
+                        END                                                     AS RECOLOSSRATE
+                    --ROLL LOSS
+                    ,   NVL(SUM(B.ROLLDEFECTPNL), 0)                       AS ROLLDEFECTPNL
+                    ,   NVL(SUM(B.ROLLDEFECTPCS), 0)                       AS ROLLDEFECTPCS
+                    ,   NVL(SUM(B.ROLLOSSDEFECTM), 0)                      AS ROLLOSSDEFECTM
+                    ,   NVL(SUM(B.ROLLLOSSDEFECTPRICE), 0)                 AS ROLLLOSSDEFECTPRICE
+                    ,   CASE WHEN NVL(B.INPUTPNL, 0) = 0 THEN 0
+                        ELSE NVL(SUM(B.ROLLDEFECTPNL), 0) / B.INPUTPNL * 100  
+                        END                                                     AS ROLLLOSSDEFECTRATE
+                    --초과 LOSS
+                    ,   NVL(SUM(B.ROLLDEFECTPNL) - (SUM(B.EACH_LOSSPNL) * B.LOTCNT), 0) AS DIFLOSS
+                    --기타 LOSS
+                    ,   NVL(SUM(B.ETCDEFECTPCS), 0)                        AS ETCDEFECTPCS
+                    ,   NVL(SUM(B.ETCDEFECTPNL), 0)                        AS ETCDEFECTPNL
+                    ,   NVL(SUM(B.ETCM), 0)                                AS ETCM
+                    ,   NVL(SUM(B.ETCLOSSPRICE), 0)                        AS ETCLOSSPRICE
+                    ,	DECODE(NVL(B.INPUTPNL, 0),0,0,NVL(SUM(B.ETCDEFECTPNL), 0) / B.INPUTPNL * 100) AS ETCLOSSRATE
+                    --ROLL 불량(TOTAL)
+                    ,   NVL(SUM(B.ROLLDEFECTPCS), 0) + NVL(SUM(B.ETCDEFECTPCS), 0)                         AS TOTALDEFECTPCS
+                    ,   NVL(SUM(B.ROLLDEFECTPNL), 0) + NVL(SUM(B.ETCDEFECTPNL), 0)                         AS TOTALDEFECTPNL
+                    ,   (NVL(SUM(B.ROLLDEFECTPNL), 0) + NVL(SUM(B.ETCDEFECTPNL), 0)) * B.PNLSIZEYAXIS      AS TOTALDEFECTM
+                    ,   NVL(SUM(B.ROLLLOSSDEFECTPRICE), 0) + NVL(SUM(B.ETCLOSSPRICE), 0)                   AS TOTALDEFECTPRICE
+                    ,	DECODE(NVL(B.INPUTPNL, 0),0,0, (NVL(SUM(B.ROLLDEFECTPNL), 0) + NVL(SUM(B.ETCDEFECTPNL), 0)) / B.INPUTPNL * 100 ) AS TOTALLOSSRATE
+                FROM (
+				 	SELECT  A.LOTCNT
+                        ,   A.EACH_LOSSPNL
+                        ,   A.EACH_LOSSM
+                        ,   A.PRODUCTDEFID  
+                        ,   A.PRODUCTDEFVERSION       
+                        ,   A.PROCESSSEGMENTID
+                        ,   A.PNLSIZEYAXIS
+                        --투입
+                        ,   SUM(A.INPUTROLL)                                    AS INPUTROLL
+                        ,   SUM(A.INPUTPNL)                                     AS INPUTPNL
+                        ,   SUM(A.INPUTM)                                       AS INPUTM
+                        --기준 LOSS
+                        ,   A.LOSSPNL
+                        ,   A.LOSSM
+                        --ROLL LOSS
+                        ,   A.ROLLDEFECT                                        AS ROLLDEFECTPCS
+                        ,   A.ROLLDEFECTPNL                                     AS ROLLDEFECTPNL
+                        ,   A.ROLLDEFECTPNL * A.PNLSIZEYAXIS                    AS ROLLOSSDEFECTM   
+                        ,   A.ROLLLOSSPRICE                                     AS ROLLLOSSDEFECTPRICE
+                        --기타 LOSS
+                        ,   A.ETCDEFECT                                         AS ETCDEFECTPCS
+                        ,   A.ETCDEFECTPNL                                      AS ETCDEFECTPNL
+                        ,   A.ETCDEFECTPNL * A.PNLSIZEYAXIS                     AS ETCM
+                        ,   A.ETCLOSSPRICE                                      AS ETCLOSSPRICE
+                    FROM
+                    (
+                        SELECT  COUNT(LOTID)            AS LOTCNT
+                            ,   PRODUCTDEFID
+                            ,   PRODUCTDEFVERSION
+                            ,   PROCESSSEGMENTID
+                            ,   USERSEQUENCE
+                            ,   PNLSIZEYAXIS
+                            --투입
+                            ,   INPUTROLL
+                            ,   INPUTPNL
+                            ,   INPUTM
+                            --기준 LOSS
+                            ,   LOSSPNL
+                            ,   LOSSM
+                            --인정 LOSS 계산용
+                            ,   EACH_LOSSPNL
+                            ,   EACH_LOSSM
+                            --ROLL LOSS
+                            ,   SUM(ROLLDEFECT)         AS ROLLDEFECT
+                            ,   SUM(ROLLDEFECTPNL)      AS ROLLDEFECTPNL
+                            ,   SUM(ROLLLOSSPRICE)      AS ROLLLOSSPRICE
+                            --기타 LOSS
+                            ,   SUM(ETCDEFECT)          AS ETCDEFECT
+                            ,   SUM(ETCDEFECTPNL)       AS ETCDEFECTPNL
+                            ,   SUM(ETCLOSSPRICE)       AS ETCLOSSPRICE
+                        FROM    MIDDLERESULT
+                        GROUP BY PRODUCTDEFID
+                            ,    PRODUCTDEFVERSION
+                            ,    PROCESSSEGMENTID
+                            ,    USERSEQUENCE
+                            ,    PNLSIZEYAXIS
+                            ,    INPUTROLL
+                            ,    INPUTPNL
+                            ,    INPUTM
+                            ,    LOSSPNL
+                            ,    LOSSM
+                            ,    EACH_LOSSPNL
+                            ,    EACH_LOSSM
+                    )A
+                    GROUP BY A.PRODUCTDEFID
+                        ,    A.PRODUCTDEFVERSION
+                        ,    A.PROCESSSEGMENTID
+                        ,    A.USERSEQUENCE
+                        ,    A.PNLSIZEYAXIS
+                        ,    A.LOSSPNL
+                        ,    A.LOSSM
+                        ,    A.LOTCNT
+                        ,    A.ROLLDEFECT
+                        ,    A.ROLLDEFECTPNL
+                        ,    A.ROLLLOSSPRICE
+                        ,    A.ETCDEFECT
+                        ,    A.ETCDEFECTPNL
+                        ,    A.ETCLOSSPRICE
+                        ,    A.EACH_LOSSPNL
+                        ,    A.EACH_LOSSM
+                )B 
+                INNER JOIN BAS_PRODUCTDEFINITION PD  ON  B.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                    AND B.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                GROUP BY B.LOTCNT
+                    ,    B.PRODUCTDEFID  
+                    ,    B.PRODUCTDEFVERSION      
+                    ,    PD.PRODUCTDEFNAME
+                    ,    B.PNLSIZEYAXIS
+                    --투입
+                    ,    B.INPUTROLL
+                    ,    B.INPUTPNL
+                    ,    B.INPUTM
+                    --기준 LOSS
+                    ,    B.LOSSPNL
+                    ,    B.LOSSM
+               ORDER BY B.PRODUCTDEFID, B.PRODUCTDEFVERSION
+	</select>
+
+	<!-- 공정 탭 투입 조회  -->
+	<select id="selectRollLossBySegment_Input" parameterType="map" resultType="hashmap">
+		 /* SelectRollLossStateBySegment 10001 */
+		WITH BASETABLE AS 
+				(
+				    SELECT  LW.LOTID
+					    ,   LW.PRODUCTDEFID
+					    ,   LW.PRODUCTDEFVERSION
+					    ,   LW.PROCESSSEGMENTID
+					    ,   LW.USERSEQUENCE
+					    ,   LW.PROCESSPATHID
+					    ,	DECODE(LD.DEFECTCODE,'370',LD.DEFECTQTY ,0) AS ROLLDEFECT
+					    ,	DECODE(LD.DEFECTCODE,'370', 0, LD.DEFECTQTY) AS ETCDEFECT
+					    ,   PP.PATHSEQUENCE
+					    ,   LW.RECEIVEPANELQTY
+					    ,   PD.PCSPNL
+					    ,   PD.PNLSIZEYAXIS
+					    ,   PSD.PROCESSDEFID
+					    ,   PSD.PROCESSDEFVERSION
+					FROM 	BAS_PRODUCTDEFINITION    PD
+					INNER JOIN BAS_PROCESSDEFINITION_V 	PSD ON  PSD.PRODUCTDEFID = PD.PRODUCTDEFID 
+				    										AND PSD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+				    INNER JOIN BAS_PROCESSPATH       	PP  ON  PSD.PROCESSDEFID = PP.PROCESSDEFID
+				                                        	AND PSD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+					INNER JOIN PCM_LOTWORKRESULT     	LW  ON  PD.PRODUCTDEFID = LW.PRODUCTDEFID
+					                                    	AND PD.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+					                                    	AND PP.PROCESSDEFID = LW.PROCESSDEFID
+					                                    	AND PP.PROCESSDEFVERSION = LW.PROCESSDEFVERSION
+					                                    	AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+					LEFT JOIN PCM_LOT                	L   ON  LW.LOTID = L.PARENTLOTID
+					                                    	AND LW.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+					                                    	AND L.ISDEFECTED = 'Y'
+					LEFT JOIN PCM_LOTDEFECT          	LD  ON  L.LOTID = LD.LOTID
+					INNER JOIN BAS_PROCESSPATH       	PP1 ON  PSD.PROCESSDEFID = PP1.PROCESSDEFID
+					                                 	    AND PSD.PROCESSDEFVERSION = PP1.PROCESSDEFVERSION
+					INNER JOIN BAS_PROCESSSEGMENT    	PS  ON  PP1.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+					                                 	    AND PS.PROCESSSEGMENTCLASSID = '1020'
+					INNER JOIN PCM_LOT               	OL  ON  LW.LOTID = OL.LOTID
+					                                 	    AND LW.LOTID = OL.PARENTLOTID
+					INNER JOIN BAS_PROCESSPATH       	PP2 ON  OL.PROCESSDEFID = PP2.PROCESSDEFID
+					                                    	AND OL.PROCESSDEFVERSION = PP2.PROCESSDEFVERSION
+					                                    	AND OL.PROCESSSEGMENTID = PP2.PROCESSSEGMENTID
+					WHERE   1 = 1
+				    AND 	PD.RTRSHT = 'RTR'
+				    AND 	PP1.PATHSEQUENCE >= PP.PATHSEQUENCE
+				    AND 	NVL(LW.RESULTTYPE, 'NORMAL') = 'NORMAL'
+				    AND 	NVL(OL.ISREPRESENTROLLLOT,'N') != 'Y'
+			       	AND   LW.WORKENDTIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+	            <if test="PLANTID != null and PLANTID !=''"> 
+                	AND 	PD.PLANTID = #{PLANTID}
+                </if>
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			    	AND 
+			     <foreach collection="PRODUCTDEFID" item="PRODUCTDEFID"  open="(" close=")" separator="OR">
+   	                	PD.PRODUCTDEFID LIKE <![CDATA['%' ||]]> #{PRODUCTDEFID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+					  AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				 	  AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+				</if>
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">  
+                	  AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}   --생산구분
+                </if>
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+				  	  AND PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}  --제품구분 - 제품,반제품
+				</if>
+				<if test="LOTID != null and LOTID !=''">
+					AND LW.LOTID LIKE <![CDATA['%' ||]]> #{LOTID} <![CDATA[|| '%']]>
+				</if>
+				), MIDDLERESULT AS
+				(
+				    SELECT  Y.LOTID
+				        ,   Y.PRODUCTDEFID
+				        ,   Y.PRODUCTDEFVERSION
+				        ,   Y.PROCESSSEGMENTID
+				        ,   Y.USERSEQUENCE
+				        ,   Y.PROCESSPATHID
+				        ,   Y.PCSPNL
+				        ,   Y.PNLSIZEYAXIS / 1000                       AS PNLSIZEYAXIS
+				        --투입
+				        ,   Y.RECEIVEPANELQTY                           AS INPUTPNL             --투입 PNL
+				        ,   Y.RECEIVEPANELQTY * Y.PNLSIZEYAXIS / 1000   AS INPUTM
+				        --기준 LOSS/ROLL
+				        ,   RO.LOSSPNL
+				        ,   RO.LOSSM
+				        --ROLL LOSS
+				        ,   Y.ROLLDEFECT                                                --ROLL LOSS PCS
+				        ,	DECODE(L.PANELPERQTY , 0, 0, CEIL(Y.ROLLDEFECT / L.PANELPERQTY))  AS ROLLDEFECTPNL  --ROLL LOSS PNL
+				        ,   CEIL(Y.ROLLDEFECT * PO.SALESPRICE)	      	AS ROLLLOSSPRICE
+				        --기타 LOSS
+				        ,   Y.ETCDEFECT                                                 --기타 LOSS PCS
+				        ,	DECODE(L.PANELPERQTY, 0, 0, CEIL(Y.ETCDEFECT / L.PANELPERQTY)) AS ETCDEFECTPNL
+				        ,   CEIL(Y.ETCDEFECT * PO.SALESPRICE)       	AS ETCLOSSPRICE
+				    FROM
+				    (
+				        SELECT  B.LOTID
+				            ,   B.PROCESSPATHID
+				            ,   B.PRODUCTDEFID
+				            ,   B.PRODUCTDEFVERSION
+				            ,   B.PROCESSSEGMENTID
+				            ,   B.USERSEQUENCE
+				            ,   B.PROCESSDEFID
+				            ,   B.PROCESSDEFVERSION
+				            ,   B.PCSPNL
+				            ,   B.PNLSIZEYAXIS
+				            ,   B.RECEIVEPANELQTY           AS RECEIVEPANELQTY --투입 PNL
+				            ,   SUM(B.ROLLDEFECT)           AS ROLLDEFECT   --ROLL 불량
+				            ,   SUM(B.ETCDEFECT)            AS ETCDEFECT    --ETC 불량
+				        FROM    BASETABLE                   B
+				        WHERE   1 = 1
+				        GROUP BY B.LOTID
+				            ,    B.PROCESSPATHID
+				            ,    B.PRODUCTDEFID
+				            ,    B.PRODUCTDEFVERSION
+				            ,    B.PROCESSSEGMENTID
+				            ,    B.USERSEQUENCE
+				            ,    B.PROCESSDEFID
+				            ,    B.PROCESSDEFVERSION
+				            ,    B.PCSPNL
+				            ,    B.PNLSIZEYAXIS
+				            ,    B.RECEIVEPANELQTY
+				    )Y
+				    INNER JOIN PCM_LOT                       L   ON  Y.LOTID = L.LOTID
+				    LEFT  JOIN MFM_PRODUCTIONORDER           PO  ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+				                                                AND L.LINENO = PO.LINENO
+				    LEFT JOIN BAS_ROLLLOSS                   RL  ON  Y.PRODUCTDEFID = RL.PRODUCTDEFID
+				                                                AND Y.PRODUCTDEFVERSION = RL.PRODUCTDEFVERSION
+				    LEFT JOIN BAS_ROLLLOSSOPERATION          RO  ON  RL.PLANTID = RO.PLANTID
+				                                                AND RL.PRODUCTDEFID = RO.PRODUCTDEFID
+				                                                AND RL.PRODUCTDEFVERSION = RO.PRODUCTDEFVERSION
+				                                                AND Y.PROCESSPATHID = RO.OPERATIONID 
+				)
+				SELECT  A.PRODUCTDEFID
+				    ,   A.PRODUCTDEFVERSION
+				    ,   PD.PRODUCTDEFNAME
+				    ,   A.PROCESSSEGMENTID
+				    ,   NVL(DC.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)                      AS PROCESSSEGMENTNAME
+				    ,   A.USERSEQUENCE
+				    ,   A.PNLSIZEYAXIS
+				    --투입
+				    ,   SUM(A.LOTID)                                                            AS INPUTROLL
+				    ,   NVL(SUM(A.INPUTPNL), 0)                                            AS INPUTPNL
+				    ,   NVL(SUM(A.INPUTM), 0)                                              AS INPUTM
+				    --기준 LOSS
+				    ,   NVL(A.LOSSPNL, 0)                                                  AS LOSSPNL
+				    ,   NVL(A.LOSSM, 0)                                                    AS LOSSM
+				    --인정LOSS
+				    ,   NVL(A.LOSSPNL * SUM(A.LOTID), 0)                                   AS RECOLOSSPNL
+				    ,   NVL(A.LOSSM * SUM(A.LOTID), 0)                                     AS RECOLOSSM
+				    ,	DECODE(NVL(SUM(A.INPUTPNL), 0),0,0,NVL(A.LOSSPNL * SUM(A.LOTID), 0) / NVL(SUM(A.INPUTPNL), 0) * 100) AS RECOLOSSRATE
+				    --ROLL LOSS
+				    ,   NVL(SUM(A.ROLLDEFECT), 0)                                          AS ROLLDEFECTPCS
+				    ,   NVL(SUM(A.ROLLDEFECTPNL), 0)                                       AS ROLLDEFECTPNL
+				    ,   NVL(SUM(A.ROLLDEFECTPNL), 0) * A.PNLSIZEYAXIS                      AS ROLLOSSDEFECTM   
+				    ,   NVL(SUM(A.ROLLLOSSPRICE), 0)                                       AS ROLLLOSSDEFECTPRICE
+				    ,	DECODE(NVL(SUM(A.INPUTPNL), 0),0,0, NVL(SUM(A.ROLLDEFECTPNL), 0) / NVL(SUM(A.INPUTPNL), 0) * 100  ) AS ROLLLOSSDEFECTRATE
+				    --초과 LOSS
+				    ,  NVL(SUM(A.ROLLDEFECTPNL), 0) - NVL(A.LOSSPNL * SUM(A.LOTID), 0) AS DIFLOSS
+				    --기타 LOSS
+				    ,   NVL(SUM(A.ETCDEFECT), 0)                                           AS ETCDEFECTPCS
+				    ,   NVL(SUM(A.ETCDEFECTPNL), 0)                                        AS ETCDEFECTPNL
+				    ,   NVL(SUM(A.ETCDEFECTPNL), 0) * A.PNLSIZEYAXIS                       AS ETCM
+				    ,   NVL(SUM(A.ETCLOSSPRICE), 0)                                        AS ETCLOSSPRICE
+				    ,	DECODE(NVL(SUM(A.INPUTPNL), 0),0,0, NVL(SUM(A.ETCDEFECTPNL), 0) / NVL(SUM(A.INPUTPNL), 0) * 100) AS ETCLOSSRATE
+				    --ROLL 불량(TOTAL)
+                    ,   NVL(SUM(A.ROLLDEFECT), 0) + NVL(SUM(A.ETCDEFECT), 0)                              AS TOTALDEFECTPCS
+                    ,   NVL(SUM(A.ROLLDEFECTPNL), 0) + NVL(SUM(A.ETCDEFECTPNL), 0)                        AS TOTALDEFECTPNL
+                    ,   (NVL(SUM(A.ROLLDEFECTPNL), 0) + NVL(SUM(A.ETCDEFECTPNL), 0)) * A.PNLSIZEYAXIS     AS TOTALDEFECTM
+                    ,   NVL(SUM(A.ROLLLOSSPRICE), 0) + NVL(SUM(A.ETCLOSSPRICE), 0)                        AS TOTALDEFECTPRICE
+                    ,	DECODE(NVL(SUM(A.INPUTPNL), 0),0,0
+                    		,(NVL(SUM(A.ROLLDEFECTPNL), 0) + NVL(SUM(A.ETCDEFECTPNL), 0)) / SUM(A.INPUTPNL) * 100)  AS TOTALLOSSRATE
+				FROM
+				(
+				    SELECT  COUNT(LOTID)            AS LOTID
+				        ,   PRODUCTDEFID
+				        ,   PRODUCTDEFVERSION
+				        ,   PROCESSSEGMENTID
+				        ,   USERSEQUENCE
+				        ,   PNLSIZEYAXIS
+				        --투입
+				        ,   SUM(INPUTPNL)           AS INPUTPNL
+				        ,   SUM(INPUTM)             AS INPUTM
+				        --기준 LOSS
+				        ,   LOSSPNL
+				        ,   LOSSM
+				        --ROLL LOSS
+				        ,   SUM(ROLLDEFECT)         AS ROLLDEFECT
+				        ,   SUM(ROLLDEFECTPNL)      AS ROLLDEFECTPNL
+				        ,   SUM(ROLLLOSSPRICE)      AS ROLLLOSSPRICE
+				        --기타 LOSS
+				        ,   SUM(ETCDEFECT)          AS ETCDEFECT
+				        ,   SUM(ETCDEFECTPNL)       AS ETCDEFECTPNL
+				        ,   SUM(ETCLOSSPRICE)       AS ETCLOSSPRICE
+				    FROM    MIDDLERESULT
+				    GROUP BY PRODUCTDEFID
+				        ,    PRODUCTDEFVERSION
+				        ,    PROCESSSEGMENTID
+				        ,    USERSEQUENCE
+				        ,    PNLSIZEYAXIS
+				        ,    LOSSPNL
+				        ,    LOSSM
+				)A
+				LEFT JOIN BAS_PRODUCTDEFINITION  PD  ON  A.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                    AND A.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT JOIN BAS_PROCESSSEGMENT     PS  ON  A.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                    AND PS.PROCESSSEGMENTVERSION = '*'
+				LEFT JOIN CMD_DICTIONARY         DC  ON  PS.PROCESSSEGMENTNAME = DC.DICTIONARYID
+				                                    AND DC.LANGUAGETYPE = 'ko-KR'
+				WHERE   1 = 1
+				GROUP BY A.PRODUCTDEFID
+				    ,    A.PRODUCTDEFVERSION
+				    ,    PD.PRODUCTDEFNAME
+				    ,    A.PROCESSSEGMENTID
+				    ,    NVL(DC.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)
+				    ,    A.USERSEQUENCE
+				    ,    A.PNLSIZEYAXIS
+				    ,    A.LOSSPNL
+				    ,    A.LOSSM
+				ORDER BY A.PRODUCTDEFID, A.PRODUCTDEFVERSION, TO_NUMBER(A.USERSEQUENCE) ASC
+	</select>
+	
+	<!-- 공정 탭 완료 조회  -->
+	<select id="selectRollLossBySegment_Complete" parameterType="map" resultType="hashmap">
+		/* SelectRollLossStateBySegment 10002 */
+		WITH FINISHROLLCUT AS 
+				(
+				    SELECT  LW.LOTID
+				        ,   LW.PRODUCTDEFID
+				        ,   LW.PRODUCTDEFVERSION
+				        ,   LW.PROCESSSEGMENTID
+				        ,   LW.USERSEQUENCE
+				        ,   LW.PROCESSPATHID
+				        ,   PP.PATHSEQUENCE
+				        ,   LW.RECEIVEPANELQTY
+				        ,   PD.PCSPNL
+				        ,   PD.PNLSIZEYAXIS
+				        ,   PSD.PROCESSDEFID
+				        ,   PSD.PROCESSDEFVERSION
+				        ,   LW.WORKENDTIME
+				    FROM    BAS_PRODUCTDEFINITION    PD
+				    INNER JOIN BAS_PROCESSDEFINITION_V 	PSD ON  PSD.PRODUCTDEFID = PD.PRODUCTDEFID 
+				    										AND PSD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+				    INNER JOIN BAS_PROCESSPATH       	PP  ON  PSD.PROCESSDEFID = PP.PROCESSDEFID
+				                                        	AND PSD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				    INNER JOIN BAS_PROCESSSEGMENT    	PS  ON  PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                     	   AND PS.PROCESSSEGMENTCLASSID = '1020'
+				    INNER JOIN PCM_LOTWORKRESULT     	LW  ON  PD.PRODUCTDEFID = LW.PRODUCTDEFID
+				                                        	AND PD.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+				                                        	AND PP.PROCESSDEFID = LW.PROCESSDEFID
+				                                        	AND PP.PROCESSDEFVERSION = LW.PROCESSDEFVERSION
+				                                        	AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+				                                        	AND PP.PROCESSSEGMENTVERSION = LW.PROCESSSEGMENTVERSION
+				    WHERE   1 = 1
+				    AND     PD.RTRSHT = 'RTR'
+				    AND     NVL(LW.RESULTTYPE, 'NORMAL') = 'NORMAL'
+				    AND     LW.WORKENDTIME IS NOT NULL
+				    AND   LW.WORKENDTIME  BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+				<if test="PLANTID != null and PLANTID !=''"> 
+                	AND 	PD.PLANTID = #{PLANTID}
+                </if>
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			    	AND 
+			     <foreach collection="PRODUCTDEFID" item="PRODUCTDEFID"  open="(" close=")" separator="OR">
+   	                	PD.PRODUCTDEFID LIKE <![CDATA['%' ||]]> #{PRODUCTDEFID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+					  AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				 	  AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+				</if>
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">  
+                	  AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}   --생산구분
+                </if>
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+				  	  AND PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}  --제품구분 - 제품,반제품
+				</if>
+				<if test="LOTID != null and LOTID !=''">
+					AND LW.LOTID LIKE <![CDATA['%' ||]]> #{LOTID} <![CDATA[|| '%']]>
+				</if>
+				), BASETABLE AS
+				(
+				    SELECT  LW.LOTID
+				        ,   RC.PRODUCTDEFID
+				        ,   RC.PRODUCTDEFVERSION
+				        ,   LW.PROCESSSEGMENTID
+				        ,   LW.USERSEQUENCE
+				        ,   LW.PROCESSPATHID
+				        ,	DECODE(LD.DEFECTCODE,'370',LD.DEFECTQTY ,0) AS ROLLDEFECT
+					    ,	DECODE(LD.DEFECTCODE,'370', 0, LD.DEFECTQTY) AS ETCDEFECT
+				        ,   PP.PATHSEQUENCE
+				        ,   LW.RECEIVEPANELQTY
+				        ,   RC.PCSPNL
+				        ,   RC.PNLSIZEYAXIS
+				        ,   RC.PROCESSDEFID
+				        ,   RC.PROCESSDEFVERSION
+				    FROM    FINISHROLLCUT       RC
+				    INNER JOIN BAS_PROCESSPATH   PP  ON  RC.PROCESSDEFID = PP.PROCESSDEFID
+				                                    AND RC.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				    INNER JOIN PCM_LOTWORKRESULT LW  ON  RC.LOTID = LW.LOTID
+				                                    AND RC.PRODUCTDEFID = LW.PRODUCTDEFID
+				                                    AND RC.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+				                                    AND RC.PROCESSDEFID = LW.PROCESSDEFID
+				                                    AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+				                                    AND PP.PROCESSSEGMENTVERSION = LW.PROCESSSEGMENTVERSION
+				                                    AND RC.PATHSEQUENCE >= PP.PATHSEQUENCE 
+				    LEFT JOIN PCM_LOT            L   ON  LW.LOTID = L.PARENTLOTID
+				                                    AND LW.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+				                                    AND L.ISDEFECTED = 'Y'
+				    LEFT JOIN PCM_LOTDEFECT      LD  ON  L.LOTID = LD.LOTID
+				    INNER JOIN PCM_LOT           OL  ON  LW.LOTID = OL.LOTID
+				                                    AND LW.LOTID = OL.PARENTLOTID
+				    WHERE   1 = 1
+				    AND     NVL(LW.RESULTTYPE, 'NORMAL') = 'NORMAL'
+				    AND     LW.WORKENDTIME IS NOT NULL
+				    AND     NVL(OL.ISREPRESENTROLLLOT,'N') != 'Y'
+				), MIDDLERESULT AS
+				(
+				    SELECT  Y.LOTID
+				        ,   Y.PRODUCTDEFID
+				        ,   Y.PRODUCTDEFVERSION
+				        ,   Y.PROCESSSEGMENTID
+				        ,   Y.USERSEQUENCE
+				        ,   Y.PROCESSPATHID
+				        ,   Y.PCSPNL
+				        ,   Y.PNLSIZEYAXIS / 1000                       AS PNLSIZEYAXIS
+				        --투입
+				        ,   Y.RECEIVEPANELQTY                           AS INPUTPNL             --투입 PNL
+				        ,   Y.RECEIVEPANELQTY * Y.PNLSIZEYAXIS / 1000   AS INPUTM
+				        --기준 LOSS/ROLL
+				        ,   RO.LOSSPNL
+				        ,   RO.LOSSM
+				        --ROLL LOSS
+				        ,   Y.ROLLDEFECT                                                --ROLL LOSS PCS
+				        ,	DECODE(L.PANELPERQTY , 0, 0, CEIL(Y.ROLLDEFECT / L.PANELPERQTY))  AS ROLLDEFECTPNL  --ROLL LOSS PNL
+				        ,   CEIL(Y.ROLLDEFECT * PO.SALESPRICE)	      	AS ROLLLOSSPRICE
+				        --기타 LOSS
+				        ,   Y.ETCDEFECT   
+				        ,	DECODE(L.PANELPERQTY, 0, 0, CEIL(Y.ETCDEFECT / L.PANELPERQTY)) AS ETCDEFECTPNL
+				        ,   CEIL(Y.ETCDEFECT * PO.SALESPRICE)       	AS ETCLOSSPRICE
+				    FROM
+				    (
+				        SELECT  B.LOTID
+				            ,   B.PROCESSPATHID
+				            ,   B.PRODUCTDEFID
+				            ,   B.PRODUCTDEFVERSION
+				            ,   B.PROCESSSEGMENTID
+				            ,   B.USERSEQUENCE
+				            ,   B.PROCESSDEFID
+				            ,   B.PROCESSDEFVERSION
+				            ,   B.PCSPNL
+				            ,   B.PNLSIZEYAXIS
+				            ,   B.RECEIVEPANELQTY           AS RECEIVEPANELQTY --투입 PNL
+				            ,   SUM(B.ROLLDEFECT)           AS ROLLDEFECT   --ROLL 불량
+				            ,   SUM(B.ETCDEFECT)            AS ETCDEFECT    --ETC 불량
+				        FROM    BASETABLE                   B
+				        WHERE   1 = 1
+				        GROUP BY B.LOTID
+				            ,    B.PROCESSPATHID
+				            ,    B.PRODUCTDEFID
+				            ,    B.PRODUCTDEFVERSION
+				            ,    B.PROCESSSEGMENTID
+				            ,    B.USERSEQUENCE
+				            ,    B.PROCESSDEFID
+				            ,    B.PROCESSDEFVERSION
+				            ,    B.PCSPNL
+				            ,    B.PNLSIZEYAXIS
+				            ,    B.RECEIVEPANELQTY
+				    )Y
+				    INNER JOIN PCM_LOT                       L   ON  Y.LOTID = L.LOTID
+				    LEFT  JOIN MFM_PRODUCTIONORDER           PO  ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+				                                                AND L.LINENO = PO.LINENO
+				    LEFT JOIN BAS_ROLLLOSS                   RL  ON  Y.PRODUCTDEFID = RL.PRODUCTDEFID
+				                                                AND Y.PRODUCTDEFVERSION = RL.PRODUCTDEFVERSION
+				    LEFT JOIN BAS_ROLLLOSSOPERATION          RO  ON  RL.PLANTID = RO.PLANTID
+				                                                AND RL.PRODUCTDEFID = RO.PRODUCTDEFID
+				                                                AND RL.PRODUCTDEFVERSION = RO.PRODUCTDEFVERSION
+				                                                AND Y.PROCESSPATHID = RO.OPERATIONID 
+				)
+				SELECT  A.PRODUCTDEFID
+				    ,   A.PRODUCTDEFVERSION
+				    ,   PD.PRODUCTDEFNAME
+				    ,   A.PROCESSSEGMENTID
+				    ,   NVL(DC.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)                      AS PROCESSSEGMENTNAME
+				    ,   A.USERSEQUENCE
+				    ,   A.PNLSIZEYAXIS
+				    --투입
+				    ,   SUM(A.LOTID)                                                            AS INPUTROLL
+				    ,   NVL(SUM(A.INPUTPNL), 0)                                            AS INPUTPNL
+				    ,   NVL(SUM(A.INPUTM), 0)                                              AS INPUTM
+				    --기준 LOSS
+				    ,   NVL(A.LOSSPNL, 0)                                                  AS LOSSPNL
+				    ,   NVL(A.LOSSM, 0)                                                    AS LOSSM
+				    --인정LOSS
+				    ,   NVL(A.LOSSPNL * SUM(A.LOTID), 0)                                   AS RECOLOSSPNL
+				    ,   NVL(A.LOSSM * SUM(A.LOTID), 0)                                     AS RECOLOSSM
+				    ,	DECODE(NVL(SUM(A.INPUTPNL), 0),0,0, NVL(A.LOSSPNL * SUM(A.LOTID), 0) / NVL(SUM(A.INPUTPNL), 0) * 100) AS RECOLOSSRATE
+				    --ROLL LOSS
+				    ,   NVL(SUM(A.ROLLDEFECT), 0)                                          AS ROLLDEFECTPCS
+				    ,   NVL(SUM(A.ROLLDEFECTPNL), 0)                                       AS ROLLDEFECTPNL
+				    ,   NVL(SUM(A.ROLLDEFECTPNL), 0) * A.PNLSIZEYAXIS                      AS ROLLOSSDEFECTM   
+				    ,   NVL(SUM(A.ROLLLOSSPRICE), 0)                                       AS ROLLLOSSDEFECTPRICE
+				    ,	DECODE(NVL(SUM(A.INPUTPNL), 0),0,0, NVL(SUM(A.ROLLDEFECTPNL), 0) / NVL(SUM(A.INPUTPNL), 0) * 100 ) AS ROLLLOSSDEFECTRATE
+				    --초과 LOSS
+				    ,  NVL(SUM(A.ROLLDEFECTPNL), 0) - NVL(A.LOSSPNL * SUM(A.LOTID), 0) AS DIFLOSS
+				    --기타 LOSS
+				    ,   NVL(SUM(A.ETCDEFECT), 0)                                           AS ETCDEFECTPCS
+				    ,   NVL(SUM(A.ETCDEFECTPNL), 0)                                        AS ETCDEFECTPNL
+				    ,   NVL(SUM(A.ETCDEFECTPNL), 0) * A.PNLSIZEYAXIS                       AS ETCM
+				    ,   NVL(SUM(A.ETCLOSSPRICE), 0)                                        AS ETCLOSSPRICE
+				    ,	DECODE(NVL(SUM(A.INPUTPNL), 0),0,0, NVL(SUM(A.ETCDEFECTPNL), 0) / NVL(SUM(A.INPUTPNL), 0) * 100) AS ETCLOSSRATE
+				    --ROLL 불량(TOTAL)
+                    ,   NVL(SUM(A.ROLLDEFECT), 0) + NVL(SUM(A.ETCDEFECT), 0)                              AS TOTALDEFECTPCS
+                    ,   NVL(SUM(A.ROLLDEFECTPNL), 0) + NVL(SUM(A.ETCDEFECTPNL), 0)                        AS TOTALDEFECTPNL
+                    ,   (NVL(SUM(A.ROLLDEFECTPNL), 0) + NVL(SUM(A.ETCDEFECTPNL), 0)) * A.PNLSIZEYAXIS     AS TOTALDEFECTM
+                    ,   NVL(SUM(A.ROLLLOSSPRICE), 0) + NVL(SUM(A.ETCLOSSPRICE), 0)                        AS TOTALDEFECTPRICE
+                    ,	DECODE(NVL(SUM(A.INPUTPNL), 0),0,0
+                    		,(NVL(SUM(A.ROLLDEFECTPNL), 0) + NVL(SUM(A.ETCDEFECTPNL), 0)) / SUM(A.INPUTPNL) * 100)  AS TOTALLOSSRATE
+				FROM
+				(
+				    SELECT  COUNT(LOTID)            AS LOTID
+				        ,   PRODUCTDEFID
+				        ,   PRODUCTDEFVERSION
+				        ,   PROCESSSEGMENTID
+				        ,   USERSEQUENCE
+				        ,   PNLSIZEYAXIS
+				        --투입
+				        ,   SUM(INPUTPNL)           AS INPUTPNL
+				        ,   SUM(INPUTM)             AS INPUTM
+				        --기준 LOSS
+				        ,   LOSSPNL
+				        ,   LOSSM
+				        --ROLL LOSS
+				        ,   SUM(ROLLDEFECT)         AS ROLLDEFECT
+				        ,   SUM(ROLLDEFECTPNL)      AS ROLLDEFECTPNL
+				        ,   SUM(ROLLLOSSPRICE)      AS ROLLLOSSPRICE
+				        --기타 LOSS
+				        ,   SUM(ETCDEFECT)          AS ETCDEFECT
+				        ,   SUM(ETCDEFECTPNL)       AS ETCDEFECTPNL
+				        ,   SUM(ETCLOSSPRICE)       AS ETCLOSSPRICE
+				    FROM    MIDDLERESULT
+				    GROUP BY PRODUCTDEFID
+				        ,    PRODUCTDEFVERSION
+				        ,    PROCESSSEGMENTID
+				        ,    USERSEQUENCE
+				        ,    PNLSIZEYAXIS
+				        ,    LOSSPNL
+				        ,    LOSSM
+				)A
+				LEFT JOIN BAS_PRODUCTDEFINITION  PD  ON  A.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                    AND A.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT JOIN BAS_PROCESSSEGMENT     PS  ON  A.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                    AND PS.PROCESSSEGMENTVERSION = '*'
+				LEFT JOIN CMD_DICTIONARY         DC  ON  PS.PROCESSSEGMENTNAME = DC.DICTIONARYID
+				                                    AND DC.LANGUAGETYPE = 'ko-KR'
+				WHERE   1 = 1
+				GROUP BY A.PRODUCTDEFID
+				    ,    A.PRODUCTDEFVERSION
+				    ,    PD.PRODUCTDEFNAME
+				    ,    A.PROCESSSEGMENTID
+				    ,    NVL(DC.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)
+				    ,    A.USERSEQUENCE
+				    ,    A.PNLSIZEYAXIS
+				    ,    A.LOSSPNL
+				    ,    A.LOSSM
+				ORDER BY A.PRODUCTDEFID, A.PRODUCTDEFVERSION, TO_NUMBER(A.USERSEQUENCE) ASC
+	</select>
+
+	<!-- LOT 탭 투입 조회 -->
+	<select id="selectRollLossByLot_Input" parameterType="map" resultType="hashmap">
+		
+		WITH BASETABLE AS 
+				(
+				    SELECT  LW.LOTID
+				    	,	LW.SENDTIME 
+					    ,   LW.PRODUCTDEFID
+					    ,   LW.PRODUCTDEFVERSION
+					    ,	PD.PRODUCTDEFNAME
+					    ,   LW.PROCESSSEGMENTID
+					    ,   LW.USERSEQUENCE
+					    ,   LW.PROCESSPATHID
+					    ,	SUM(DECODE(LD.DEFECTCODE,'370',LD.DEFECTQTY ,0)) AS ROLLDEFECT
+					    ,	SUM(DECODE(LD.DEFECTCODE,'370', 0, LD.DEFECTQTY)) AS ETCDEFECT
+					    ,   SUM(LD.DEFECTQTY) AS DEFECTQTY
+					    ,   PP.PATHSEQUENCE
+					    ,   LW.RECEIVEPANELQTY
+					    ,   PD.PCSPNL
+					    ,   PD.PNLSIZEYAXIS
+					    ,   PSD.PROCESSDEFID
+					    ,   PSD.PROCESSDEFVERSION
+					FROM 	BAS_PRODUCTDEFINITION    PD
+					INNER JOIN BAS_PROCESSDEFINITION_V 	PSD ON  PSD.PRODUCTDEFID = PD.PRODUCTDEFID 
+				    										AND PSD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+				    INNER JOIN BAS_PROCESSPATH       	PP  ON  PSD.PROCESSDEFID = PP.PROCESSDEFID
+				                                        	AND PSD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+					INNER JOIN PCM_LOTWORKRESULT     	LW  ON  PD.PRODUCTDEFID = LW.PRODUCTDEFID
+					                                 	    AND PD.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+					                                   		AND PP.PROCESSDEFID = LW.PROCESSDEFID
+					                                    	AND PP.PROCESSDEFVERSION = LW.PROCESSDEFVERSION
+					                                    	AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+					LEFT JOIN PCM_LOT                	L   ON  LW.LOTID = L.PARENTLOTID
+					                                 	    AND LW.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+					                                 	    AND L.ISDEFECTED = 'Y'
+					LEFT JOIN PCM_LOTDEFECT          	LD  ON  L.LOTID = LD.LOTID
+					INNER JOIN BAS_PROCESSPATH       	PP1 ON  PSD.PROCESSDEFID = PP1.PROCESSDEFID
+					                                 	    AND PSD.PROCESSDEFVERSION = PP1.PROCESSDEFVERSION
+					INNER JOIN BAS_PROCESSSEGMENT    	PS  ON  PP1.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+					                                 	    AND PS.PROCESSSEGMENTCLASSID = '1020'
+					INNER JOIN PCM_LOT               	OL  ON  LW.LOTID = OL.LOTID
+					                                 	    AND LW.LOTID = OL.PARENTLOTID
+					INNER JOIN BAS_PROCESSPATH       	PP2 ON  OL.PROCESSDEFID = PP2.PROCESSDEFID
+					                                 	    AND OL.PROCESSDEFVERSION = PP2.PROCESSDEFVERSION
+					                                 	    AND OL.PROCESSSEGMENTID = PP2.PROCESSSEGMENTID
+					WHERE   1 = 1
+				    AND 	PD.RTRSHT = 'RTR'
+				    AND 	PP1.PATHSEQUENCE >= PP.PATHSEQUENCE
+				    AND 	NVL(LW.RESULTTYPE, 'NORMAL') = 'NORMAL'
+				    AND 	NVL(OL.ISREPRESENTROLLLOT,'N') != 'Y'
+				    AND 	LW.SENDTIME IS NOT NULL 
+			       	AND   LW.WORKENDTIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+	            <if test="PLANTID != null and PLANTID !=''"> 
+                	AND 	PD.PLANTID = #{PLANTID}
+                </if>
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			    	AND 
+			     <foreach collection="PRODUCTDEFID" item="PRODUCTDEFID"  open="(" close=")" separator="OR">
+   	                	PD.PRODUCTDEFID LIKE <![CDATA['%' ||]]> #{PRODUCTDEFID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+					  AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				 	  AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+				</if>
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">  
+                	  AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}   --생산구분
+                </if>
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+				  	  AND PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}  --제품구분 - 제품,반제품
+				</if>
+				<if test="LOTID != null and LOTID !=''">
+					AND LW.LOTID LIKE <![CDATA['%' ||]]> #{LOTID} <![CDATA[|| '%']]>
+				</if>
+				    GROUP BY LW.LOTID
+				    	,	LW.SENDTIME 
+					    ,   LW.PRODUCTDEFID
+					    ,   LW.PRODUCTDEFVERSION
+					    ,	PD.PRODUCTDEFNAME
+					    ,   LW.PROCESSSEGMENTID
+					    ,   LW.USERSEQUENCE
+					    ,   LW.PROCESSPATHID
+					    ,   PP.PATHSEQUENCE
+					    ,   LW.RECEIVEPANELQTY
+					    ,   PD.PCSPNL
+					    ,   PD.PNLSIZEYAXIS
+					    ,   PSD.PROCESSDEFID
+					    ,   PSD.PROCESSDEFVERSION 
+				)
+				SELECT TO_CHAR(SENDTIME,'YYYY-MM-DD') AS SENDDATE
+					, TO_CHAR(SENDTIME,'YYYY-MM-DD HH24:MI:SS') AS SENDTIME
+					, PRODUCTDEFID
+					, PRODUCTDEFVERSION
+					, PRODUCTDEFNAME
+					, LOTID
+					, USERSEQUENCE
+					, PROCESSSEGMENTID
+					, PROCESSSEGMENTNAME
+					, PROCESSPATHID
+					, PCSPNL
+					, PNLSIZEYAXIS
+					--투입
+					, INPUTPNL				-- 투입 PNL, 인수
+					, INPUTM
+					, INPUTPNL - DEFECTQTYPNL AS SENDPANELQTY  --인계
+					--기준 LOSS/ROLL
+					, LOSSPNL
+					, LOSSM
+					--ROLL LOSS
+					, ROLLDEFECTPNL
+					, ROLLDEFECTPCS
+					, ROLLDEFECTPNL * PNLSIZEYAXIS 											AS ROLLOSSDEFECTM
+					, CEIL(ROLLDEFECTPCS * SALESPRICE) 										AS ROLLLOSSPRICE
+					, DECODE(NVL(INPUTPNL,0),0,0, NVL(ROLLDEFECTPNL,0) / INPUTPNL * 100 ) 	AS ROLLLOSSDEFECTRATE
+					, NVL(A.ROLLDEFECTPNL, 0) -  NVL(A.LOSSPNL, 0) 							AS DIFLOSS  -- 인정 LOSS 가 없어서 모호함. 
+					--기타 LOSS
+					, ETCDEFECTPNL
+					, ETCDEFECTPCS
+					, ETCDEFECTPNL  * PNLSIZEYAXIS 											AS ETCDEFECTM
+					, CEIL(ETCDEFECTPCS * SALESPRICE) 										AS ETCDEFECTPRICE
+					, DECODE(NVL(INPUTPNL,0),0,0, NVL(ETCDEFECTPNL,0) / INPUTPNL * 100 ) 	AS ETCDEFECTRATE
+					-- ROLL LOSS + 기타 불량 합계
+					, DEFECTQTYPNL
+					, DEFECTQTYPCS
+					, DEFECTQTYPNL  * PNLSIZEYAXIS 											AS DEFECTQTYM
+					, CEIL(DEFECTQTYPCS * SALESPRICE) 										AS DEFECTQTYPRICE
+					, DECODE(NVL(INPUTPNL,0),0,0, NVL(DEFECTQTYPNL,0) / INPUTPNL * 100 ) 	AS DEFECTQTYRATE
+			FROM (
+			 		SELECT  B.SENDTIME
+				        ,   B.PRODUCTDEFID
+				        ,   B.PRODUCTDEFVERSION
+				        ,	B.PRODUCTDEFNAME
+			 			, 	B.LOTID
+			 			,   B.USERSEQUENCE
+				        ,   B.PROCESSSEGMENTID
+				        ,	CD.DICTIONARYNAME   						AS PROCESSSEGMENTNAME
+				        ,   B.PROCESSPATHID
+				        ,   B.PCSPNL
+				        ,   B.PNLSIZEYAXIS / 1000                       AS PNLSIZEYAXIS
+				        ,   L.PANELPERQTY
+				        ,	PO.SALESPRICE
+				        --투입
+				        ,   B.RECEIVEPANELQTY                           AS INPUTPNL             --투입 PNL
+				        ,   B.RECEIVEPANELQTY * B.PNLSIZEYAXIS / 1000   AS INPUTM
+				        --기준 LOSS/ROLL
+				        ,   NVL(RO.LOSSPNL, 0) 							AS LOSSPNL
+				        ,   NVL(RO.LOSSM, 0)							AS LOSSM
+				        --ROLL LOSS
+				        ,   NVL(B.ROLLDEFECT,0)  						AS  ROLLDEFECTPCS      --ROLL LOSS PCS
+				        ,	DECODE(L.PANELPERQTY , 0, 0, CEIL(B.ROLLDEFECT / L.PANELPERQTY))  					AS ROLLDEFECTPNL  --ROLL LOSS PNL
+				        --기타 LOSS
+				        ,   NVL(B.ETCDEFECT,0)  AS  ETCDEFECTPCS
+				        ,	NVL(DECODE(L.PANELPERQTY, 0, 0, CEIL(B.ETCDEFECT / L.PANELPERQTY)),0) 	AS ETCDEFECTPNL
+				        -- ROLL LOSS + 기타 불량 합계
+				        , 	NVL(B.DEFECTQTY,0) AS DEFECTQTYPCS
+				        ,	NVL(DECODE(L.PANELPERQTY, 0, 0, CEIL(B.DEFECTQTY / L.PANELPERQTY)),0) 	AS DEFECTQTYPNL
+				FROM  BASETABLE	B		        
+				INNER JOIN PCM_LOT                       L   ON  B.LOTID = L.LOTID
+			    LEFT  JOIN MFM_PRODUCTIONORDER           PO  ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+			                                                AND L.LINENO = PO.LINENO
+			    LEFT  JOIN BAS_ROLLLOSS                  RL  ON  B.PRODUCTDEFID = RL.PRODUCTDEFID
+			                                                AND B.PRODUCTDEFVERSION = RL.PRODUCTDEFVERSION
+			    LEFT  JOIN BAS_ROLLLOSSOPERATION         RO  ON  RL.PLANTID = RO.PLANTID
+			                                                AND RL.PRODUCTDEFID = RO.PRODUCTDEFID
+			                                                AND RL.PRODUCTDEFVERSION = RO.PRODUCTDEFVERSION
+			                                                AND B.PROCESSPATHID = RO.OPERATIONID 
+			    LEFT JOIN BAS_PROCESSSEGMENT    		PS  ON  B.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				LEFT OUTER JOIN CMD_DICTIONARY           CD  ON CD.DICTIONARYID        = PS.PROCESSSEGMENTNAME
+			                                                AND CD.LANGUAGETYPE        = 'ko-KR' 
+			)A
+			ORDER BY A.PRODUCTDEFID, A.PRODUCTDEFVERSION, TO_NUMBER(A.USERSEQUENCE) ASC
+	</select>
+
+	<!-- LOT 탭 완료 조회 -->
+	<select id="selectRollLossByLot_Complete" parameterType="map" resultType="hashmap">
+	
+			WITH FINISHROLLCUT AS 
+				(
+				    SELECT  LW.LOTID
+				    	,	LW.SENDTIME 
+				        ,   LW.PRODUCTDEFID
+				        ,   LW.PRODUCTDEFVERSION
+				        ,	PD.PRODUCTDEFNAME
+				        ,   LW.PROCESSSEGMENTID
+				        ,   LW.USERSEQUENCE
+				        ,   LW.PROCESSPATHID
+				        ,   PP.PATHSEQUENCE
+				        ,   LW.RECEIVEPANELQTY
+				        ,   PD.PCSPNL
+				        ,   PD.PNLSIZEYAXIS
+				        ,   PSD.PROCESSDEFID
+				        ,   PSD.PROCESSDEFVERSION
+				        ,   LW.WORKENDTIME
+				    FROM    BAS_PRODUCTDEFINITION    PD
+				    INNER JOIN BAS_PROCESSDEFINITION_V 	PSD ON  PSD.PRODUCTDEFID = PD.PRODUCTDEFID 
+				    										AND PSD.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+				    INNER JOIN BAS_PROCESSPATH       	PP  ON  PSD.PROCESSDEFID = PP.PROCESSDEFID
+				                                        	AND PSD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				    INNER JOIN BAS_PROCESSSEGMENT    	PS  ON  PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                     	    AND PS.PROCESSSEGMENTCLASSID = '1020'
+				    INNER JOIN PCM_LOTWORKRESULT     	LW  ON  PD.PRODUCTDEFID = LW.PRODUCTDEFID
+				                                     	    AND PD.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+				                                     	    AND PP.PROCESSDEFID = LW.PROCESSDEFID
+				                                     	    AND PP.PROCESSDEFVERSION = LW.PROCESSDEFVERSION
+				                                     	    AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+				                                     	    AND PP.PROCESSSEGMENTVERSION = LW.PROCESSSEGMENTVERSION
+				    WHERE   1 = 1
+				    AND     PD.RTRSHT = 'RTR'
+				    AND     NVL(LW.RESULTTYPE, 'NORMAL') = 'NORMAL'
+				    AND     LW.WORKENDTIME IS NOT NULL
+				    AND   LW.WORKENDTIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+	            <if test="PLANTID != null and PLANTID !=''"> 
+                	AND 	PD.PLANTID = #{PLANTID}
+                </if>
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			    	AND 
+			     <foreach collection="PRODUCTDEFID" item="PRODUCTDEFID"  open="(" close=")" separator="OR">
+   	                	PD.PRODUCTDEFID LIKE <![CDATA['%' ||]]> #{PRODUCTDEFID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+					  AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				 	  AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+				</if>
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">  
+                	  AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}   --생산구분
+                </if>
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+				  	  AND PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}  --제품구분 - 제품,반제품
+				</if>
+				<if test="LOTID != null and LOTID !=''">
+					AND LW.LOTID LIKE <![CDATA['%' ||]]> #{LOTID} <![CDATA[|| '%']]>
+				</if>
+				), BASETABLE AS
+				(
+				    SELECT  LW.LOTID
+				    	,	LW.SENDTIME 
+				        ,   RC.PRODUCTDEFID
+				        ,   RC.PRODUCTDEFVERSION
+				        ,	RC.PRODUCTDEFNAME
+				        ,   LW.PROCESSSEGMENTID
+				        ,   LW.USERSEQUENCE
+				        ,   LW.PROCESSPATHID
+				        ,	SUM(DECODE(LD.DEFECTCODE,'370',LD.DEFECTQTY ,0)) AS ROLLDEFECT
+					    ,	SUM(DECODE(LD.DEFECTCODE,'370', 0, LD.DEFECTQTY)) AS ETCDEFECT
+					    ,   SUM(LD.DEFECTQTY) AS DEFECTQTY
+				        ,   PP.PATHSEQUENCE
+				        ,   LW.RECEIVEPANELQTY
+				        ,   RC.PCSPNL
+				        ,   RC.PNLSIZEYAXIS
+				        ,   RC.PROCESSDEFID
+				        ,   RC.PROCESSDEFVERSION
+				    FROM    FINISHROLLCUT       RC
+				    INNER JOIN BAS_PROCESSPATH   PP  ON  RC.PROCESSDEFID = PP.PROCESSDEFID
+				                                    AND RC.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				    INNER JOIN PCM_LOTWORKRESULT LW  ON  RC.LOTID = LW.LOTID
+				                                    AND RC.PRODUCTDEFID = LW.PRODUCTDEFID
+				                                    AND RC.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+				                                    AND RC.PROCESSDEFID = LW.PROCESSDEFID
+				                                    AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+				                                    AND PP.PROCESSSEGMENTVERSION = LW.PROCESSSEGMENTVERSION
+				                                    AND RC.PATHSEQUENCE >= PP.PATHSEQUENCE 
+				    LEFT JOIN PCM_LOT            L   ON  LW.LOTID = L.PARENTLOTID
+				                                    AND LW.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+				                                    AND L.ISDEFECTED = 'Y'
+				    LEFT JOIN PCM_LOTDEFECT      LD  ON  L.LOTID = LD.LOTID
+				    INNER JOIN PCM_LOT           OL  ON  LW.LOTID = OL.LOTID
+				                                    AND LW.LOTID = OL.PARENTLOTID
+				    WHERE   1 = 1
+				    AND     NVL(LW.RESULTTYPE, 'NORMAL') = 'NORMAL'
+				    AND     LW.WORKENDTIME IS NOT NULL
+				    AND     NVL(OL.ISREPRESENTROLLLOT,'N') != 'Y'
+				    GROUP BY LW.LOTID
+				    	,	LW.SENDTIME 
+				        ,   RC.PRODUCTDEFID
+				        ,   RC.PRODUCTDEFVERSION
+				        ,	RC.PRODUCTDEFNAME
+				        ,   LW.PROCESSSEGMENTID
+				        ,   LW.USERSEQUENCE
+				        ,   LW.PROCESSPATHID
+				        ,   PP.PATHSEQUENCE
+				        ,   LW.RECEIVEPANELQTY
+				        ,   RC.PCSPNL
+				        ,   RC.PNLSIZEYAXIS
+				        ,   RC.PROCESSDEFID
+				        ,   RC.PROCESSDEFVERSION
+				)
+				SELECT TO_CHAR(SENDTIME,'YYYY-MM-DD') AS SENDDATE
+				, TO_CHAR(SENDTIME,'YYYY-MM-DD HH24:MI:SS') AS SENDTIME
+				, PRODUCTDEFID
+				, PRODUCTDEFVERSION
+				, PRODUCTDEFNAME
+				, LOTID
+				, USERSEQUENCE
+				, PROCESSSEGMENTID
+				, PROCESSSEGMENTNAME
+				, PROCESSPATHID
+				, PCSPNL
+				, PNLSIZEYAXIS
+				--투입
+				, INPUTPNL				-- 투입 PNL, 인수
+				, INPUTM
+				, INPUTPNL - DEFECTQTYPNL AS SENDPANELQTY  --인계
+				--기준 LOSS/ROLL
+				, LOSSPNL
+				, LOSSM
+				--ROLL LOSS
+				, ROLLDEFECTPNL
+				, ROLLDEFECTPCS
+				, ROLLDEFECTPNL * PNLSIZEYAXIS 											AS ROLLOSSDEFECTM
+				, CEIL(ROLLDEFECTPCS * SALESPRICE) 										AS ROLLLOSSPRICE
+				, DECODE(NVL(INPUTPNL,0),0,0, NVL(ROLLDEFECTPNL,0) / INPUTPNL * 100 ) 	AS ROLLLOSSDEFECTRATE
+				, NVL(A.ROLLDEFECTPNL, 0) -  NVL(A.LOSSPNL, 0) 							AS DIFLOSS  -- 인정 LOSS 가 없어서 모호함. 
+				--기타 LOSS
+				, ETCDEFECTPNL
+				, ETCDEFECTPCS
+				, ETCDEFECTPNL  * PNLSIZEYAXIS 											AS ETCDEFECTM
+				, CEIL(ETCDEFECTPCS * SALESPRICE) 										AS ETCDEFECTPRICE
+				, DECODE(NVL(INPUTPNL,0),0,0, NVL(ETCDEFECTPNL,0) / INPUTPNL * 100 ) 	AS ETCDEFECTRATE
+				-- ROLL LOSS + 기타 불량 합계
+				, DEFECTQTYPNL
+				, DEFECTQTYPCS
+				, DEFECTQTYPNL  * PNLSIZEYAXIS 											AS DEFECTQTYM
+				, CEIL(DEFECTQTYPCS * SALESPRICE) 										AS DEFECTQTYPRICE
+				, DECODE(NVL(INPUTPNL,0),0,0, NVL(DEFECTQTYPNL,0) / INPUTPNL * 100 ) 	AS DEFECTQTYRATE
+			FROM (
+			 		SELECT  B.SENDTIME
+				        ,   B.PRODUCTDEFID
+				        ,   B.PRODUCTDEFVERSION
+				        ,	B.PRODUCTDEFNAME
+			 			, 	B.LOTID
+			 			,   B.USERSEQUENCE
+				        ,   B.PROCESSSEGMENTID
+				        ,	CD.DICTIONARYNAME   AS PROCESSSEGMENTNAME
+				        ,   B.PROCESSPATHID
+				        ,   B.PCSPNL
+				        ,   B.PNLSIZEYAXIS / 1000                       AS PNLSIZEYAXIS
+				        ,   L.PANELPERQTY
+				        ,	PO.SALESPRICE
+				        --투입
+				        ,   B.RECEIVEPANELQTY                           AS INPUTPNL             --투입 PNL
+				        ,   B.RECEIVEPANELQTY * B.PNLSIZEYAXIS / 1000   AS INPUTM
+				        --기준 LOSS/ROLL
+				        ,   NVL(RO.LOSSPNL, 0) 							AS LOSSPNL
+				        ,   NVL(RO.LOSSM, 0)							AS LOSSM
+				        --ROLL LOSS
+				        ,   NVL(B.ROLLDEFECT,0)  						AS  ROLLDEFECTPCS      --ROLL LOSS PCS
+				        ,	DECODE(L.PANELPERQTY , 0, 0, CEIL(B.ROLLDEFECT / L.PANELPERQTY))  					AS ROLLDEFECTPNL  --ROLL LOSS PNL
+				        --기타 LOSS
+				        ,   NVL(B.ETCDEFECT,0)  AS  ETCDEFECTPCS
+				        ,	NVL(DECODE(L.PANELPERQTY, 0, 0, CEIL(B.ETCDEFECT / L.PANELPERQTY)),0) 	AS ETCDEFECTPNL
+				        -- ROLL LOSS + 기타 불량 합계
+				        , 	NVL(B.DEFECTQTY,0) AS DEFECTQTYPCS
+				        ,	NVL(DECODE(L.PANELPERQTY, 0, 0, CEIL(B.DEFECTQTY / L.PANELPERQTY)),0) 	AS DEFECTQTYPNL
+				FROM  BASETABLE	B		        
+				INNER JOIN PCM_LOT                       L   ON  B.LOTID = L.LOTID
+			    LEFT  JOIN MFM_PRODUCTIONORDER           PO  ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+			                                                AND L.LINENO = PO.LINENO
+			    LEFT  JOIN BAS_ROLLLOSS                  RL  ON  B.PRODUCTDEFID = RL.PRODUCTDEFID
+			                                                AND B.PRODUCTDEFVERSION = RL.PRODUCTDEFVERSION
+			    LEFT  JOIN BAS_ROLLLOSSOPERATION         RO  ON  RL.PLANTID = RO.PLANTID
+			                                                AND RL.PRODUCTDEFID = RO.PRODUCTDEFID
+			                                                AND RL.PRODUCTDEFVERSION = RO.PRODUCTDEFVERSION
+			                                                AND B.PROCESSPATHID = RO.OPERATIONID 
+			    LEFT JOIN BAS_PROCESSSEGMENT    		PS  ON  B.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				LEFT OUTER JOIN CMD_DICTIONARY           CD  ON CD.DICTIONARYID        = PS.PROCESSSEGMENTNAME
+			                                                AND CD.LANGUAGETYPE        = 'ko-KR' 
+			)A
+			ORDER BY A.PRODUCTDEFID, A.PRODUCTDEFVERSION, TO_NUMBER(A.USERSEQUENCE) ASC
+	</select>
+</mapper>

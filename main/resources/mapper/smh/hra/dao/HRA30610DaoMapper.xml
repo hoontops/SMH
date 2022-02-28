@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.hra.dao.HRA30610Dao">
+	
+	<!-- F.A.Q 현황 조회 -->
+	<select id="selectFaqList" parameterType="map" resultType="hashmap">
+		/* smh.hra.dao.HRA30610Dao.selectFaqList */
+		SELECT 0				AS CHECK_YN		/* CheckBox */
+			 , BEF.HJSHR_BOARD_ITEM_SEQ         /* PK  */
+		     , BEF.ITEM_GROUP_ID                /* 게시분류 ID */
+		     , BEF.MEANING                      /* 게시분류명 */
+		     , BEF.TITLE                        /* 제목 */
+		     , BEF.USER_ID                      /* 등록자 Person ID */
+		     , BEF.USER_NAME                    /* 등록자명 */
+		     , BEF.CREATION_DATE                /* 등록일자 */
+		     , BEF.VIEW_COUNT                   /* 조회건수 */
+		  FROM (
+		        SELECT HBI.HJSHR_BOARD_ITEM_SEQ                AS HJSHR_BOARD_ITEM_SEQ      
+		              ,HBI.ITEM_GROUP_ID                       AS ITEM_GROUP_ID
+		              ,CLV.MEANING                             AS MEANING
+		              ,HBI.TITLE                               AS TITLE     
+		              ,HBI.USER_ID                             AS USER_ID
+		              ,PPF.LAST_NAME || PPF.FIRST_NAME         AS USER_NAME
+		              ,TO_CHAR(HBI.CREATION_DATE,'YYYY-MM-DD') AS CREATION_DATE
+		              ,HBI.VIEW_COUNT                          AS VIEW_COUNT 
+		          FROM HJSHR_BOARD_ITEMS HBI
+		              ,PER_ALL_PEOPLE_F  PPF
+		              ,CMD_LOOKUP_VALUES CLV
+		         WHERE 1=1
+		           AND HBI.BOARD_ID      = '1'                        -- 업무구분 (0:게시판, 1:FAQ, 2:인사자료 구분)
+		           AND CLV.LOOKUP_TYPE   = 'SM_BOARD_ITEM_GROUP'      -- 게시분류 
+		           AND HBI.ITEM_GROUP_ID = CLV.LOOKUP_CODE
+		           AND HBI.ITEM_GROUP_ID = NVL(#{ITEM_GROUP_ID}, HBI.ITEM_GROUP_ID) -- Param1: 분류
+		           AND HBI.TITLE         LIKE '%'||#{TITLE}||'%'                    -- Param2: 제목
+		           AND HBI.USER_ID       = PPF.PERSON_ID
+		           AND TRUNC(HBI.CREATION_DATE) BETWEEN PPF.EFFECTIVE_START_DATE AND PPF.EFFECTIVE_END_DATE
+		       ) BEF
+		  WHERE 1=1 
+		   ORDER BY BEF.MEANING, BEF.CREATION_DATE DESC
+	</select>
+	
+	<!-- F.A.Q 현황 상세조회 -->	
+	<select id="selectFaqDetail" parameterType="map" resultType="hashmap">
+		/* smh.hra.dao.HRA30610Dao.selectFaqDetail */
+		SELECT BEF.HJSHR_BOARD_ITEM_SEQ         /* PK  */
+		     , BEF.ITEM_GROUP_ID                /* 게시분류 ID */
+		     , BEF.MEANING                      /* 게시분류명  */
+		     , BEF.USER_ID                      /* 등록자 Person ID */
+		     , BEF.USER_NAME                    /* 등록자명 */
+		     , BEF.CREATION_DATE                /* 등록일자 */     
+		     , BEF.TITLE                        /* 제목 */
+		     , BEF.ATTACH_FILE                  /* 파일첨부 */ 
+		     , BEF.ANNOUNCE_TYPE                /* 공지 게시물여부 Y/N */
+		     , BEF.CONTENT                      /* 내용 */
+		  FROM (
+		        SELECT HBI.HJSHR_BOARD_ITEM_SEQ                AS HJSHR_BOARD_ITEM_SEQ      
+		              ,HBI.ITEM_GROUP_ID                       AS ITEM_GROUP_ID
+		              ,CLV.MEANING                             AS MEANING 
+		              ,HBI.TITLE                               AS TITLE     
+		              ,HBI.USER_ID                             AS USER_ID
+		              ,PPF.LAST_NAME || PPF.FIRST_NAME         AS USER_NAME
+		              ,TO_CHAR(HBI.CREATION_DATE,'YYYY-MM-DD') AS CREATION_DATE
+		              ,HBI.ATTACH_FILE                         AS ATTACH_FILE
+		              ,NVL(HBI.ANNOUNCE_TYPE, 'N')             AS ANNOUNCE_TYPE
+		              ,TO_CHAR(SUBSTR(HBI.CONTENT, 1, 4000))   AS CONTENT
+		          FROM HJSHR_BOARD_ITEMS HBI
+		              ,CMD_LOOKUP_VALUES CLV
+		              ,PER_ALL_PEOPLE_F  PPF
+		         WHERE 1=1           
+		           AND HBI.HJSHR_BOARD_ITEM_SEQ = #{HJSHR_BOARD_ITEM_SEQ}           /* F.A.Q KEY PK */
+		           AND CLV.LOOKUP_TYPE          = 'SM_BOARD_ITEM_GROUP'      -- 게시분류 
+		           AND HBI.ITEM_GROUP_ID        = CLV.LOOKUP_CODE 
+		           AND HBI.USER_ID              = PPF.PERSON_ID
+		           AND TRUNC(HBI.CREATION_DATE) BETWEEN PPF.EFFECTIVE_START_DATE AND PPF.EFFECTIVE_END_DATE
+		       ) BEF
+		  WHERE 1=1
+	</select>
+	
+	<!-- 게시판 등록 -->
+    <insert id="insertFaq" parameterType="map" >
+    	/* smh.hra.dao.HRA30610MDao.insertFaq */
+    	INSERT INTO HJSHR_BOARD_ITEMS( 
+           HJSHR_BOARD_ITEM_SEQ  
+          ,BOARD_ID  
+          ,USER_ID  
+          ,ITEM_GROUP_ID  
+          ,TITLE  
+          ,CONTENT  
+          ,ATTACH_FILE  
+          ,VIEW_COUNT  
+          ,LAST_READ_BY  
+          ,AUTHOR_TYPE  
+          ,PRIVATE_TYPE
+          ,ANNOUNCE_TYPE
+          ,CREATED_BY
+          ,CREATION_DATE  
+          ,LAST_UPDATED_BY  
+          ,LAST_UPDATE_DATE  
+          ,LAST_UPDATE_LOGIN
+          ,OBJECT_VERSION_NUMBER) 
+      	VALUES( 
+           HJSHR_BOARD_ITEMS_SEQ.nextval  
+          ,1  
+          ,#{PERSONID}  
+          ,#{ITEM_GROUP_ID}  
+          ,#{TITLE}  
+          ,#{CONTENT}  
+          ,#{ATTACH_FILE}  
+          ,0 
+          ,#{PERSONID}  
+          ,1 
+          ,'N'
+          ,#{ANNOUNCE_TYPE}
+          ,#{PERSONID}
+          ,SYSDATE
+          ,#{PERSONID} 
+          ,SYSDATE             
+          ,#{PERSONID}            
+          ,#{OBJECT_VERSION_NUMBER})
+    </insert>
+    
+    <!-- 조회수 업데이트 -->
+	<update id="updateViewCount" parameterType="map">
+		UPDATE HJSHR_BOARD_ITEMS
+		   SET VIEW_COUNT = VIEW_COUNT + 1
+		 WHERE HJSHR_BOARD_ITEM_SEQ = #{HJSHR_BOARD_ITEM_SEQ}
+	</update>
+
+	<!-- FAQ 정보 수정 -->
+	<update id="updateFaq" parameterType="map">
+		/* smh.hra.dao.HRA30610MDao.updateFaq */
+		UPDATE HJSHR_BOARD_ITEMS 
+	       SET TITLE                         = #{TITLE}                      /*게시물제목 */
+	         , CONTENT                       = #{CONTENT}                    /*게시물내용 */
+	         , ATTACH_FILE                   = #{ATTACH_FILE}                /*첨부파일 */
+	         , LAST_READ_BY                  = #{PERSONID}                   /*최종 읽은 유저 아이디 */
+	         , ANNOUNCE_TYPE                 = #{ANNOUNCE_TYPE}              /*공지게시물여부(Y,N) */
+	         , LAST_UPDATED_BY               = #{PERSONID}                   /*최종수정자*/
+	         , LAST_UPDATE_DATE              = SYSDATE                       /*최종수정일*/
+	         , LAST_UPDATE_LOGIN             = #{PERSONID}                   /*로그인유저*/
+	         , OBJECT_VERSION_NUMBER         = OBJECT_VERSION_NUMBER+1       /**/
+	     WHERE HJSHR_BOARD_ITEM_SEQ          = #{HJSHR_BOARD_ITEM_SEQ}       /*PK 게시판 게시물*/
+	</update>
+	
+	<!-- FAQ 정보 수정 -->
+	<update id="updateFaq_woo" parameterType="map">
+		/* smh.hra.dao.HRA30610MDao.updateFaq */
+		UPDATE HJSHR_BOARD_ITEMS 
+	      SET 
+	           BOARD_ID = 1     
+	          ,USER_ID = #{PERSONID}     
+	          ,ITEM_GROUP_ID = #{ITEM_GROUP_ID}     
+	          ,TITLE = #{TITLE}   
+	          ,CONTENT = #{CONTENT}        
+	          ,ATTACH_FILE = #{ATTACH_FILE}         
+	          ,LAST_READ_BY = #{PERSONID}  
+	          ,AUTHOR_TYPE = 1  
+	          ,PRIVATE_TYPE = 'N' 
+	          ,ANNOUNCE_TYPE = #{ANNOUNCE_TYPE}  
+	          ,LAST_UPDATED_BY = #{PERSONID}     
+	          ,LAST_UPDATE_DATE = SYSDATE 
+	     WHERE HJSHR_BOARD_ITEM_SEQ = #{HJSHR_BOARD_ITEM_SEQ}
+	</update>
+	
+	<!-- 게시판 정보 삭제 -->
+    <delete id="deleteFaq" parameterType="map">
+        /* smh.hra.dao.HRA30610MDao.deleteFaq */
+        DELETE FROM HJSHR_BOARD_ITEMS 
+      	WHERE HJSHR_BOARD_ITEM_SEQ = #{HJSHR_BOARD_ITEM_SEQ}
+    </delete>
+	
+</mapper>

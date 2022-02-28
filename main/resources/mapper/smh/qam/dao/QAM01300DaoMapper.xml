@@ -1,0 +1,674 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM01300Dao">
+<!-- 출하검사 이력-->
+
+    <!-- 출하검사 이력 조회 AS-IS : SelectShipmentInspHistory ver. 10001-->
+    <select id="selectShipmentInspHistoryList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01300Dao.selectShipmentInspHistoryList  */
+        WITH FINALINFO AS
+            (
+                SELECT DISTINCT A.RESOURCEID
+                     , A.PROCESSRELNO
+                     , RANK() OVER (PARTITION BY A.RESOURCEID ORDER BY A.INSPECTIONDATE DESC, A."degree" DESC) AS RNK
+                     , A.AREAID
+                FROM QAM_INSPECTIONRESULT  A
+                INNER JOIN PCM_LOT                     L  ON  A.RESOURCEID = L.LOTID
+                INNER JOIN BAS_PRODUCTDEFINITION P        ON  L.PRODUCTDEFID = P.PRODUCTDEFID
+                                                          AND L.PRODUCTDEFVERSION = P.PRODUCTDEFVERSION
+                WHERE 1 = 1
+                AND   A.RESOURCETYPE = 'FinishInspection' <!--2021.07.15 TOBE Modify 'ShipmentInspection'-->
+                <if test="PLANTID != null and PLANTID !='' ">
+                AND   A.PLANTID = #{PLANTID}
+                </if>
+                <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+                AND   A.ENTERPRISEID = #{ENTERPRISEID}
+                </if>
+                <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' and  !'*'.equals(PRODUCTDEFTYPE) ">
+                AND  P.PRODUCTDEFTYPE = #{PRODUCTDEFTYPE}
+                </if>
+                <if test="LOTID != null and LOTID !='' ">
+                AND   A.RESOURCEID LIKE '%' || #{LOTID} || '%'
+                </if>
+                <if test="PRODUCTIONDIVISION != null and PRODUCTIONDIVISION !='' and  !'*'.equals(PRODUCTIONDIVISION) ">
+                AND   L.LOTTYPE = #{PRODUCTIONDIVISION}
+                </if>
+                <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and  !'*'.equals(PRODUCTDEFID) ">
+                AND   L.PRODUCTDEFID = #{PRODUCTDEFID}
+                </if>
+                GROUP BY A.RESOURCEID
+                       , A.PROCESSRELNO
+                       , A."degree"
+                       , A.INSPECTIONDATE
+                       , A.AREAID
+            )
+            <!-- , LOTMAIN AS
+            (
+                SELECT LW.LOTID, LW.PROCESSSEGMENTID, LW.PROCESSSEGMENTVERSION, LW.WORKCOUNT
+                FROM       PCM_LOTHISTORY sl
+                INNER JOIN BAS_PROCESSSEGMENT  PS  ON  PS.PROCESSSEGMENTID = SL.PROCESSSEGMENTID
+                                                   AND PS.PROCESSSEGMENTVERSION = SL.PROCESSSEGMENTVERSION
+                INNER JOIN PCM_LOTWORKRESULT   LW  ON  LW.LOTID = SL.LOTID
+                                                   AND LW.PROCESSSEGMENTID = SL.PROCESSSEGMENTID
+                                                   AND LW.processsegmentversion = SL.processsegmentversion
+                                                   AND LW.WORKCOUNT = SL.workcount
+                WHERE 1=1
+                AND   SL.TXNID IN ('SaveLotBatchTrackOut', 'SaveMultiLotWorkEnd')
+                AND   SL.PROCESSSTATE = 'WaitForSend'
+                AND   PS.PROCESSSEGMENTCLASSID  = '7030'
+                AND   (LW.WORKENDTIME BETWEEN TO_DATE(#{PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+                                          AND TO_DATE(#{PERIODTO}, 'YYYY-MM-DD HH24:MI:SS'))
+                AND NOT EXISTS
+                        (
+                            SELECT IR.RESOURCEID AS LOTID, IR.PROCESSSEGMENTID, IR.PROCESSSEGMENTVERSION, IR.WORKCOUNT
+                            FROM   QAM_INSPECTIONRESULT    IR
+                            WHERE  1=1
+                            AND    IR.INSPECTIONTYPE = 'ShipmentInspection'
+                            AND    (IR.INSPECTIONDATE BETWEEN TO_DATE(#{PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+                                                          AND TO_DATE(#{PERIODTO}, 'YYYY-MM-DD HH24:MI:SS'))
+                        )
+            )         -->
+            SELECT IR.RESOURCEID
+                 , IR.RESOURCEID                     AS LOTID
+                 , IR.RESOURCETYPE
+                 , IR.PROCESSRELNO
+                 , IR."degree" AS DEGREE
+                 , IR.TXNHISTKEY
+                 , IR.TXNGROUPHISTKEY
+                 , IR.SAMPLEQTY
+                 , IR.INSPECTIONQTY
+                 , IR.SPECOUTQTY
+                 , ROUND((TO_NUMBER(IR.SPECOUTQTY)/TO_NUMBER(IR.INSPECTIONQTY))*100,1)||'%'
+                                                     AS DEFECTRATE
+                 , CEIL(IR.SPECOUTQTY/L.PANELPERQTY) AS DEFECTQTYPNL
+                 , IR.INSPECTIONRESULT
+                 , IR.ENTERPRISEID
+                 , IR.PLANTID
+                 , IR.PRODUCTDEFID
+                 , IR.PRODUCTDEFVERSION
+                 , IR.AREAID                         AS TRANSITAREAID
+                 <!-- ,TAD.DICTIONARYNAME                AS TRANSITAREANAME -->
+                 <!--  2021.06.04 NG 일 경우 최종작업장 보이게 처리-->
+                 , CASE WHEN IR.INSPECTIONRESULT = 'NG' THEN FID.DICTIONARYNAME
+                   ELSE TAD.DICTIONARYNAME END       AS TRANSITAREANAME
+                 , LWR.AREAID                        AS AREAID
+                 , AD.DICTIONARYNAME                 AS AREANAME
+                 , P.PRODUCTDEFNAME
+                 , P.PRODUCTDEFTYPE
+                 , PCD.DICTIONARYNAME                AS PRODUCTDEFTYPENAME
+                 , P.PRODUCTIONTYPE
+                 , LTD.DICTIONARYNAME                AS PRODUCTIONTYPENAME
+                 , L.QTY                             AS ALLQTYPCS
+                 , TRUNC(L.QTY/L.PANELPERQTY)        AS ALLQTYPNL
+                 , PD.DICTIONARYNAME                 AS PROCESSSEGMENTNAME
+                 , IR.INSPECTIONDATE
+                 , C.CUSTOMERNAME
+                 , QI.INSPECTORNAME
+                 , ''                                AS GOODQTYPNL
+                 , ''                                AS GOODQTYPCS
+                 , L.AREAID                          AS LOTAREAID
+                 , FA.ISMODIFY
+                 , FID.DICTIONARYNAME                AS FINALAREANAME
+                 , FPD.DICTIONARYNAME                AS FINALPROCESSSEGMENTNAME
+                 , LWR.RECEIVEPCSQTY                 AS RECEIVEPCSQTYQCM         /*입고량(인수 PCS 수량)*/
+                 , 'Inspection'                      AS INSPECTIONTYPE
+            FROM     QAM_INSPECTIONRESULT               IR
+            INNER JOIN PCM_LOT                          L     ON   L.LOTID                   = IR.RESOURCEID
+            LEFT OUTER JOIN BAS_PRODUCTDEFINITION       P     ON   IR.PRODUCTDEFID           = P.PRODUCTDEFID
+                                                              AND  IR.PRODUCTDEFVERSION      = P.PRODUCTDEFVERSION
+            LEFT OUTER JOIN MFM_PRODUCTIONORDER         PO    ON   L.ENTERPRISEID            = PO.ENTERPRISEID
+                                                              AND  L.PLANTID                 = PO.PLANTID
+                                                              AND  L.PRODUCTIONORDERID       = PO.PRODUCTIONORDERID
+                                                              AND  L.LINENO                  = PO.LINENO
+            LEFT OUTER JOIN BAS_CUSTOMER                C     ON   PO.ENTERPRISEID           = C.ENTERPRISEID
+                                                              AND  PO.PLANTID                = C.PLANTID
+                                                              AND  PO.CUSTOMERID             = C.CUSTOMERID
+            LEFT OUTER JOIN QAM_QCINSPECTOR             QI    ON   IR.INSPECTIONUSER         = QI.INSPECTORID
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES           PDT   ON   P.PRODUCTDEFTYPE          = PDT.LOOKUP_CODE
+                                                              AND  PDT.LOOKUP_TYPE           = 'ProductDefType'
+            LEFT OUTER JOIN CMD_DICTIONARY              PCD   ON   PDT.DICTIONARYID          = PCD.DICTIONARYID
+                                                              AND  PCD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES           LTC   ON   P.PRODUCTIONTYPE          = LTC.LOOKUP_CODE
+                                                              AND  LTC.LOOKUP_TYPE           = 'ProductionType'
+            LEFT OUTER JOIN CMD_DICTIONARY              LTD   ON   LTC.DICTIONARYID          = LTD.DICTIONARYID
+                                                              AND  LTD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN BAS_AREA                    TA    ON   IR.AREAID                 = TA.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY              TAD   ON   TA.AREANAME               = TAD.DICTIONARYID
+                                                              AND  TAD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN BAS_PROCESSSEGMENT          PS    ON   IR.PROCESSSEGMENTID       = PS.PROCESSSEGMENTID
+                                                              AND  IR.PROCESSSEGMENTVERSION  = PS.PROCESSSEGMENTVERSION
+            LEFT OUTER JOIN CMD_DICTIONARY              PD    ON   PS.PROCESSSEGMENTNAME     = PD.DICTIONARYID
+                                                              AND  PD.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN PCM_LOTWORKRESULT           LWR   ON   IR.RESOURCEID             = LWR.LOTID
+                                                              AND  IR.PROCESSSEGMENTID       = LWR.PROCESSSEGMENTID
+                                                              AND  IR.PROCESSSEGMENTVERSION  = LWR.PROCESSSEGMENTVERSION
+                                                              AND  IR.PLANTID                = LWR.PLANTID
+                                                              AND  IR.WORKCOUNT              = LWR.WORKCOUNT
+            LEFT OUTER JOIN BAS_AREA                    A     ON   LWR.AREAID                = A.AREAID
+            LEFT OUTER JOIN FN_AREA(#{SESSION_USER_ID}) FA    ON   LWR.AREAID                = FA.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY              AD    ON   A.AREANAME                = AD.DICTIONARYID
+                                                              AND  AD.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN FINALINFO                   FI    ON   IR.RESOURCEID             = FI.RESOURCEID
+                                                              AND  FI.RNK                    = 1
+            LEFT OUTER JOIN BAS_AREA                    FIA   ON   FI.AREAID                 = FIA.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY              FID   ON   FIA.AREANAME              = FID.DICTIONARYID
+                                                              AND  FID.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN BAS_PROCESSSEGMENT          FPS   ON   FI.PROCESSRELNO           = FPS.PROCESSSEGMENTID
+                                                              AND  FPS.PROCESSSEGMENTVERSION = '*'
+            LEFT OUTER JOIN CMD_DICTIONARY              FPD   ON   FPS.PROCESSSEGMENTNAME    = FPD.DICTIONARYID
+                                                              AND  FPD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            WHERE 1 = 1
+            AND   IR.INSPECTIONTYPE = 'ShipmentInspection'
+            AND   (IR.INSPECTIONDATE BETWEEN TO_DATE(#{PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+                                         AND TO_DATE(#{PERIODTO}, 'YYYY-MM-DD HH24:MI:SS'))
+            <if test="PLANTID != null and PLANTID !='' ">
+            AND   IR.PLANTID = #{PLANTID}
+            </if>
+            <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+            AND   IR.ENTERPRISEID = #{ENTERPRISEID}
+            </if>
+            <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' and  !'*'.equals(PRODUCTDEFTYPE) ">
+            AND   P.PRODUCTDEFTYPE = #{PRODUCTDEFTYPE}
+            </if>
+            <if test="LOTID != null and LOTID !='' ">
+            AND   IR.RESOURCEID LIKE '%' || #{LOTID} || '%'
+            </if>
+            <if test="PRODUCTIONDIVISION != null and PRODUCTIONDIVISION !='' and  !'*'.equals(PRODUCTIONDIVISION) ">
+            AND   L.LOTTYPE = #{PRODUCTIONDIVISION}
+            </if>
+            <!--L.AREAID (현재)-> RM.AREAID (BOR상 AREAID)-->
+            <if test="AREAID != null and AREAID !='' and  !'*'.equals(AREAID) ">
+            AND   A.AREAID = #{AREAID}
+            </if>
+            <if test="CUSTOMERID != null and CUSTOMERID !='' and  !'*'.equals(CUSTOMERID) ">
+            AND   C.CUSTOMERID = #{CUSTOMERID}
+            </if>
+            <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and  !'*'.equals(PRODUCTDEFID) ">
+            AND   L.PRODUCTDEFID = #{PRODUCTDEFID}
+            </if>
+            <!-- UNION ALL
+            SELECT
+                LWR.LOTID                            AS RESOURCEID
+                ,LWR.LOTID                           AS LOTID
+                ,'ShipmentInspection'                AS RESOURCETYPE
+                ,NULL                                AS PROCESSRELNO
+                ,TO_CHAR(LWR.WORKCOUNT + 1)          AS DEGREE
+                ,LWR.TXNHISTKEY
+                ,NULL                                AS TXNGROUPHISTKEY
+                ,NULL                                AS SAMPLEQTY
+                ,NULL                                AS INSPECTIONQTY
+                ,NULL                                AS SPECOUTQTY
+                ,NULL                                AS DEFECTRATE
+                ,NULL                                AS DEFECTQTYPNL
+                ,NULL                                AS INSPECTIONRESULT
+                ,LWR.ENTERPRISEID
+                ,LWR.PLANTID
+                ,LWR.PRODUCTDEFID
+                ,LWR.PRODUCTDEFVERSION
+                ,LWR.AREAID                          AS TRANSITAREAID
+                ,NULL                                AS TRANSITAREANAME
+                ,LWR.AREAID
+                ,AD.DICTIONARYNAME                   AS AREANAME
+                ,P.PRODUCTDEFNAME
+                ,P.PRODUCTDEFTYPE
+                ,PCD.DICTIONARYNAME                  AS PRODUCTDEFTYPENAME
+                ,L.LOTTYPE
+                ,LTD.DICTIONARYNAME                  AS LOTTYPENAME
+                ,L.QTY                               AS ALLQTYPCS
+                ,TRUNC(L.QTY/L.PANELPERQTY)          AS ALLQTYPNL
+                ,PD.DICTIONARYNAME                   AS PROCESSSEGMENTNAME
+                ,LWR.WORKENDTIME                     AS INSPECTIONDATE
+                ,C.CUSTOMERNAME
+                ,USR.USER_NM                         AS INSPECTORNAME
+                ,NULL                                AS GOODQTYPNL
+                ,NULL                                AS GOODQTYPCS
+                ,L.AREAID                            AS LOTAREAID
+                ,FA.ISMODIFY
+                ,FID.DICTIONARYNAME                  AS FINALAREANAME
+                ,FPD.DICTIONARYNAME                  AS FINALPROCESSSEGMENTNAME
+                ,LWR.RECEIVEPCSQTY                   AS RECEIVEPCSQTYQCM
+                ,'NonInspection'                     AS INSPECTIONTYPE
+            FROM LOTMAIN LM
+            INNER JOIN PCM_LOTWORKRESULT                LWR   ON   LWR.LOTID                 = LM.LOTID
+                                                              AND  LWR.PROCESSSEGMENTID      = LM.PROCESSSEGMENTID
+                                                              AND  LWR.PROCESSSEGMENTVERSION = LM.PROCESSSEGMENTVERSION
+                                                              AND  LWR.WORKCOUNT             = LM.WORKCOUNT
+            INNER JOIN PCM_LOT                          L     ON   L.LOTID                   = LM.LOTID
+            LEFT OUTER JOIN BAS_PRODUCTDEFINITION       P     ON   P.PRODUCTDEFID            = L.PRODUCTDEFID
+                                                              AND  P.PRODUCTDEFVERSION       = L.PRODUCTDEFVERSION
+            LEFT OUTER JOIN MFM_PRODUCTIONORDER         PO    ON   PO.ENTERPRISEID           = L.ENTERPRISEID
+                                                              AND  PO.PLANTID                = L.PLANTID
+                                                              AND  PO.PRODUCTIONORDERID      = L.PRODUCTIONORDERID
+                                                              AND  PO.LINENO                 = L.LINENO
+            LEFT OUTER JOIN BAS_CUSTOMER                C     ON   C.ENTERPRISEID            = PO.ENTERPRISEID
+                                                              AND  C.PLANTID                 = PO.PLANTID
+                                                              AND  C.CUSTOMERID              = PO.CUSTOMERID
+            LEFT OUTER JOIN BAS_AREA                    A     ON   A.AREAID                  = LWR.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY              AD    ON   AD.DICTIONARYID           = A.AREANAME
+                                                              AND  AD.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES           PDT   ON   P.PRODUCTDEFTYPE          = PDT.LOOKUP_CODE
+                                                              AND  PDT.LOOKUP_TYPE           = 'ProductDefType'
+            LEFT OUTER JOIN CMD_DICTIONARY              PCD   ON   PDT.DICTIONARYID          = PCD.DICTIONARYID
+                                                              AND  PCD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES           LTC   ON   L.LOTTYPE                 = LTC.LOOKUP_CODE
+                                                              AND  LTC.LOOKUP_TYPE           = 'LotType'
+            LEFT OUTER JOIN CMD_DICTIONARY              LTD   ON   LTC.DICTIONARYID          = LTD.DICTIONARYID
+                                                              AND  LTD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN BAS_PROCESSSEGMENT          PS    ON   LWR.PROCESSSEGMENTID      = PS.PROCESSSEGMENTID
+                                                              AND  LWR.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+            LEFT OUTER JOIN CMD_DICTIONARY              PD    ON   PS.PROCESSSEGMENTNAME     = PD.DICTIONARYID
+                                                              AND  PD.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN FN_AREA(#{TXNINFO.USER})    FA    ON   LWR.AREAID                = FA.AREAID
+            2020-01-28 최종공정/작업장 추가
+            LEFT OUTER JOIN FINALINFO                   FI    ON   LWR.LOTID                 = FI.RESOURCEID
+                                                              AND  FI.RNK                    = 1
+            LEFT OUTER JOIN BAS_AREA                    FIA   ON   FI.AREAID                 = FIA.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY              FID   ON   FIA.AREANAME              = FID.DICTIONARYID
+                                                              AND  FID.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN BAS_PROCESSSEGMENT          FPS   ON   FI.PROCESSRELNO           = FPS.PROCESSSEGMENTID
+                                                              AND  FPS.PROCESSSEGMENTVERSION = '*'
+            LEFT OUTER JOIN CMD_DICTIONARY              FPD   ON   FPS.PROCESSSEGMENTNAME    = FPD.DICTIONARYID
+                                                              AND  FPD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN CMD_USERS                   USR   ON   USR.USER_ID               = LWR.WORKENDUSER
+            WHERE 1=1
+            <if test="PLANTID != null and PLANTID !='' ">
+            AND     LWR.PLANTID = #{PLANTID}
+            </if>
+            <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+            AND     LWR.ENTERPRISEID = #{ENTERPRISEID}
+            </if>
+            <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' and  !'*'.equals(PRODUCTDEFTYPE) ">
+            AND     P.PRODUCTDEFTYPE = #{PRODUCTDEFTYPE}
+            </if>
+            <if test="LOTID != null and LOTID !='' ">
+            AND LWR.RESOURCEID LIKE '%' || #{LOTID} || '%'
+            </if>
+            <if test="PRODUCTIONDIVISION != null and PRODUCTIONDIVISION !='' and  !'*'.equals(PRODUCTIONDIVISION) ">
+            AND     L.LOTTYPE = #{PRODUCTIONDIVISION}
+            </if>
+            /*L.AREAID (현재)-> RM.AREAID (BOR상 AREAID)*/
+            <if test="AREAID != null and AREAID !='' and  !'*'.equals(AREAID) ">
+            AND     A.AREAID = #{AREAID}
+            </if>
+            <if test="CUSTOMERID != null and CUSTOMERID !='' and  !'*'.equals(CUSTOMERID) ">
+            AND     C.CUSTOMERID = #{CUSTOMERID}
+            </if>
+            <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and  !'*'.equals(PRODUCTDEFID) ">
+            AND     L.PRODUCTDEFID = #{PRODUCTDEFID}
+            </if>         -->
+    </select>
+    
+     <!-- 출하검사 이력 > NCR 최종으로 발행  AS-IS : SelectDefectToNCRShipment ver. 10001-->
+    <select id="selectDefectToNCRShipmentList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01300Dao.selectDefectToNCRShipmentList  */
+        SELECT ID.RESOURCEID
+             , ID.RESOURCEID                                      AS LOTID
+             , IR."degree" AS DEGREE
+             , ID.DEFECTCODE
+             , ID.QCSEGMENTID
+             , DDC.DICTIONARYNAME                                 AS DEFECTCODENAME
+             , QDC.DICTIONARYNAME                                 AS QCSEGMENTNAME
+             , (DDC.DICTIONARYNAME || '-' || QDC.DICTIONARYNAME)  AS JOINNAME
+             , (ID.DEFECTCODE || ID.QCSEGMENTID)                  AS JOINCODE
+             , AD.DICTIONARYNAME                                  AS AREANAME
+             , PSD.DICTIONARYNAME                                 AS PROCESSSEGMENTNAME
+             , ID.INSPECTIONQTY
+             , ID.DEFECTQTY
+             , IR.ENTERPRISEID
+             , IR.PLANTID
+             , AO.REASONCONSUMABLEDEFID
+             , AO.REASONCONSUMABLEDEFVERSION
+             , AO.REASONCONSUMABLELOTID
+             , AO.REASONSEGMENTID
+             , AO.REASONAREAID
+             , AO.STATE
+             , AO.DESCRIPTION
+             , AO.AREAID
+             , AO.PROCESSSEGMENTID
+             , AO.PROCESSSEGMENTVERSION
+             , AO.ABNOCRNO
+             , AO.ABNOCRTYPE
+             , AO.ISNCRISSUE
+             , AO.NCRISSUEDATE
+             , AO.DESCRIPTION
+             , CASE WHEN RP.PRODUCTDEFNAME IS NULL THEN  RCC.CONSUMABLEDEFNAME
+               ELSE  RP.PRODUCTDEFNAME END                        AS REASONCONSUMABLEDEFNAME
+             , RPD.DICTIONARYNAME                                 AS REASONSEGMENTNAME
+             , RAD.DICTIONARYNAME                                 AS REASONAREANAME
+             , AO.REASONCONSUMABLEDEFID||'|'||AO.REASONCONSUMABLEDEFVERSION
+                                                                  AS REASONCONSUMABLEDEFIDVERSION
+             , AO.PROCESSSEGMENTID||AO.AREAID                     AS PROCESSSEGMENTAREA
+        FROM       QAM_INSPECTIONDEFECT             ID
+        INNER JOIN QAM_INSPECTIONRESULT             IR   ON   ID.TXNGROUPHISTKEY             = IR.TXNGROUPHISTKEY
+                                                         AND  ID.RESOURCEID                  = IR.RESOURCEID
+                                                         AND  ID.RESOURCETYPE                = IR.RESOURCETYPE
+                                                         AND  ID.PROCESSRELNO                = IR.PROCESSRELNO
+
+        LEFT OUTER JOIN BAS_DEFECTCODE              DC   ON   ID.DEFECTCODE                  = DC.DEFECTCODE
+        LEFT OUTER JOIN CMD_DICTIONARY              DDC  ON   DC.DICTIONARYID                = DDC.DICTIONARYID
+                                                         AND  DDC.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION     QD   ON   ID.QCSEGMENTID                 = QD.QCSEGMENTID
+        LEFT OUTER JOIN CMD_DICTIONARY              QDC  ON   QD.QCSEGMENTNAME               = QDC.DICTIONARYID
+                                                         AND  QDC.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN QAM_ABNORMALOCCURRENCE      AO   ON   ID.RESOURCEID                  = AO.LOTID
+                                                         AND  IR."degree"                    = AO.DEGREE
+                                                         AND  ID.DEFECTCODE                  = AO.DEFECTCODE
+                                                         AND  ID.QCSEGMENTID                 = AO.QCSEGMENTID
+                                                         AND  AO.ABNOCRTYPE                  = #{ABNOCRTYPE}
+                                                         AND  ID.RESOURCETYPE                = 'ShipmentInspection'
+        LEFT OUTER JOIN BAS_AREA                    A    ON   AO.AREAID                      = A.AREAID
+        LEFT OUTER JOIN CMD_DICTIONARY              AD   ON   A.AREANAME                     = AD.DICTIONARYID
+                                                         AND  AD.LANGUAGETYPE                = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT          PS   ON   PS.PROCESSSEGMENTID            = AO.PROCESSSEGMENTID
+                                                         AND  PS.PROCESSSEGMENTVERSION       = AO.PROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_DICTIONARY              PSD  ON   PS.PROCESSSEGMENTNAME          = PSD.DICTIONARYID
+                                                         AND  PSD.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION    RCC  ON   AO.REASONCONSUMABLEDEFID       = RCC.CONSUMABLEDEFID
+                                                         AND  AO.REASONCONSUMABLEDEFVERSION  = RCC.CONSUMABLEDEFVERSION
+        LEFT OUTER JOIN BAS_PRODUCTDEFINITION       RP   ON   AO.REASONCONSUMABLEDEFID       = RP.PRODUCTDEFID
+                                                         AND  AO.REASONCONSUMABLEDEFVERSION  = RP.PRODUCTDEFVERSION
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT          RPS  ON   AO.REASONSEGMENTID             = RPS.PROCESSSEGMENTID
+                                                         AND  RPS.PROCESSSEGMENTVERSION      = '*'
+        LEFT OUTER JOIN CMD_DICTIONARY              RPD  ON   RPS.PROCESSSEGMENTNAME         = RPD.DICTIONARYID
+                                                         AND  RPD.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_AREA                    RA   ON   RA.AREAID                      = AO.REASONAREAID
+        LEFT OUTER JOIN CMD_DICTIONARY              RAD  ON   RA.AREANAME                    = RAD.DICTIONARYID
+        WHERE 1 = 1
+        AND   ID.INSPECTIONRESULT IS NOT NULL
+        AND   IR.RESOURCEID       = #{RESOURCEID}
+        AND   IR."degree"         = #{DEGREE}
+        AND   IR.RESOURCETYPE     = 'ShipmentInspection'
+        AND   IR.PROCESSRELNO     = '*'
+        AND   ID.TXNGROUPHISTKEY  = #{TXNGROUPHISTKEY}
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   IR.PLANTID          = #{PLANTID}
+        </if>
+        <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+        AND   IR.ENTERPRISEID     = #{ENTERPRISEID}
+        </if>			
+    </select>
+    
+    <!-- 출하검사의 이전공정 (최종검사) 정보를 조회  AS-IS : GetPrevCauseData ver. 10001-->
+    <select id="selectPrevCauseData" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01300Dao.selectPrevCauseData  */
+        SELECT LR.LOTID
+             , LR.PROCESSSEGMENTID         AS PREVPROCESSSEGMENTID
+             , LR.PROCESSSEGMENTVERSION    AS PREVPROCESSSEGMENTVERSION
+             , LR.AREAID                   AS PREVAREAID
+             , LR.RESOURCEID
+             , LR.USERSEQUENCE
+             , PP.PROCESSPATHID
+             /*,MAX(LR.WORKCOUNT)            AS WORKCOUNT*/
+        FROM       PCM_LOTWORKRESULT        LR
+        INNER JOIN BAS_PROCESSSEGMENT       PS  ON   LR.PROCESSSEGMENTID      = PS.PROCESSSEGMENTID
+                                                AND  LR.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+        INNER JOIN BAS_PROCESSSEGMENTCLASS  PC  ON   PS.PROCESSSEGMENTCLASSID = PC.PROCESSSEGMENTCLASSID
+        INNER JOIN PCM_LOT                  L   ON   LR.LOTID                 = L.LOTID
+        INNER JOIN BAS_PROCESSPATH          PP  ON   LR.PROCESSDEFID          = PP.PROCESSDEFID
+                                                AND  LR.PROCESSDEFVERSION     = PP.PROCESSDEFVERSION
+                                                AND  LR.PROCESSSEGMENTID      = PP.PROCESSSEGMENTID
+                                                AND  LR.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+        WHERE 1=1
+        <if test='PROCESSSEGMENTCLASSTYPE == "FinishInspection"'>
+        AND   PC.PROCESSSEGMENTCLASSID IN ('7026','7534')
+        </if>
+        <if test='PROCESSSEGMENTCLASSTYPE == "ShipmentInspection"'>
+        AND   PC.PROCESSSEGMENTCLASSID IN ('7030','7536')
+        </if>
+        AND   LR.LOTID =#{LOTID}
+        AND   LR.ENTERPRISEID =#{ENTERPRISEID}
+        AND   LR.PLANTID =#{PLANTID}
+        /*AND   NOT NVL(LR.RESOURCEID,'') =''*/
+        GROUP BY LR.LOTID
+               , LR.PROCESSSEGMENTID
+               , LR.PROCESSSEGMENTVERSION
+               , LR.AREAID
+               , LR.RESOURCEID
+               , LR.USERSEQUENCE
+               , PP.PROCESSPATHID
+               , LR.CREATEDTIME
+        ORDER BY LR.CREATEDTIME DESC
+    </select>
+    
+    <!-- 품질관리 > 출하검사 > 출하검사 이력조회. 
+    	입력한 작업장, Lot No.와 일치하는 Lot 상세 정보를 조회 AS-IS : SelectLotInfoByProcessShipment ver. 10001-->
+    <select id="selectLotInfoByProcessShipment" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01300Dao.selectLotInfoByProcessShipment  */
+        WITH PROCESSSEGMENT AS
+        (
+            SELECT L.LOTID
+                 , L.ENTERPRISEID
+                 , L.PLANTID
+                 , PP.PROCESSPATHID
+                 , LAG(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)        AS PREVPROCESSSEGMENTID
+                 , LAG(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)   AS PREVPROCESSSEGMENTVERSION
+                 , PP.PROCESSSEGMENTID
+                 , PP.PROCESSSEGMENTVERSION
+                 , LEAD(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)       AS NEXTPROCESSSEGMENTID
+                 , LEAD(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)  AS NEXTPROCESSSEGMENTVERSION
+            FROM       PCM_LOT                L
+            LEFT OUTER JOIN BAS_PROCESSPATH   PP    ON   L.ENTERPRISEID = PP.ENTERPRISEID
+                                                    AND  L.PLANTID = PP.PLANTID
+                                                    AND  L.PROCESSDEFID = PP.PROCESSDEFID
+                                                    AND  L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+            WHERE 1 = 1
+            AND   L.LOTID = #{LOTID}
+            AND   NVL(L.ISREPRESENTROLLLOT, 'N') != 'Y'
+            <if test="PROCESSSTATE != null and PROCESSSTATE !='' ">
+            AND   L.PROCESSSTATE = #{PROCESSSTATE}
+            </if>
+            <if test="MIDDLESEGMENTCLASSID != null and MIDDLESEGMENTCLASSID !='' ">
+            AND   PP.PROCESSSEGMENTID IN (
+                                            SELECT PROCESSSEGMENTID
+                                            FROM   BAS_PROCESSSEGMENT
+                                            WHERE  PROCESSSEGMENTCLASSID IN (#{MIDDLESEGMENTCLASSID})
+                                          )
+            </if>
+        )
+        SELECT L.LOTID
+             , L.PROCESSSTATE
+             , PP.PROCESSPATHID
+             , NVL(PPN.DICTIONARYNAME, PSP.PROCESSSEGMENTNAME)  AS PREVPROCESSSEGMENTNAME
+             , PS.PROCESSSEGMENTID
+             , NVL(PN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)    AS PROCESSSEGMENTNAME
+             , PS.PROCESSSEGMENTVERSION
+             , PP.NEXTPROCESSSEGMENTID
+             , NVL(PNN.DICTIONARYNAME, PSN.PROCESSSEGMENTNAME)  AS NEXTPROCESSSEGMENTNAME
+             , PP.NEXTPROCESSSEGMENTVERSION
+             , L.PLANTID
+             , L.USERSEQUENCE
+             , L.PRODUCTDEFID
+             , L.PRODUCTDEFVERSION
+             , PD.PRODUCTDEFNAME
+             , 'Main'                                           AS PRODUCTTYPE
+             , TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD')             AS INPUTDATE
+             , L.PRODUCTIONORDERID
+             , TO_CHAR(L.DUEDATE, 'YYYY-MM-DD')                 AS DUEDATE
+             , DTD.DICTIONARYNAME                               AS PRODUCTDEFTYPE
+             , OTD.DICTIONARYNAME                               AS PRODUCTIONTYPE
+             , NVL(L.ISHOLD, 'N')                               AS ISHOLD
+             , NVL(L.ISLOCKING, 'N')                            AS ISLOCKING
+             , NVL(AN.DICTIONARYNAME, A.AREANAME)               AS AREANAME
+             , L.WEEK
+             , L.AREAID
+             , L.ISREWORK
+             , C.CUSTOMERNAME
+             , L.UNIT
+             , L.DEFECTUNIT
+             , L.PANELQTY                                       AS PNLQTY
+             , L.PANELPERQTY
+             , L.QTY                                            AS PCSQTY
+             , ROUND((L.QTY / PD.PCSMM), 2)                     AS MM
+             , PD.PCSPNL
+             , PS.PROCESSSEGMENTTYPE
+             , NVL(L.ISPRINTLOTCARD, 'N')                       AS ISPRINTLOTCARD
+             , NVL(L.ISPRINTRCLOTCARD, 'N')                     AS ISPRINTRCLOTCARD
+             , TRACKINUSER
+             , NVL(SU.USER_NM,L.TRACKINUSER)                    AS TRACKINUSER_NM
+             , PD.MATERIALCLASS
+             , CASE WHEN L.PRODUCTDEFVERSION != PO.PRODUCTDEFVERSION THEN 'Y'
+               ELSE 'N' END                                     AS ISRCLOT
+             , NVL(ST2.STEPTYPE, ST1.STEPTYPE)                  AS STEPTYPE
+        FROM    PROCESSSEGMENT                 PP
+        INNER JOIN PCM_LOT                     L    ON   PP.ENTERPRISEID               = L.ENTERPRISEID
+                                                    AND  PP.PLANTID                    = L.PLANTID
+                                                    AND  PP.LOTID                      = L.LOTID
+                                                    AND  PP.PROCESSSEGMENTID           = L.PROCESSSEGMENTID
+                                                    /*AND PP.PROCESSSEGMENTVERSION       = L.PROCESSSEGMENTVERSION*/
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT     PSP  ON   PP.PREVPROCESSSEGMENTID       = PSP.PROCESSSEGMENTID
+                                                    AND  PP.PREVPROCESSSEGMENTVERSION  = PSP.PROCESSSEGMENTVERSIO
+        LEFT OUTER JOIN CMD_DICTIONARY         PPN  ON   PSP.PROCESSSEGMENTNAME        = PPN.DICTIONARYID
+                                                    AND  PPN.LANGUAGETYPE              = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT     PS   ON   PP.PROCESSSEGMENTID           = PS.PROCESSSEGMENTID
+                                                    AND  PP.PROCESSSEGMENTVERSION      = PS.PROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_DICTIONARY         PN   ON   PS.PROCESSSEGMENTNAME         = PN.DICTIONARYID
+                                                    AND  PN.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT     PSN  ON   PP.NEXTPROCESSSEGMENTID       = PSN.PROCESSSEGMENTID
+                                                    AND  PP.NEXTPROCESSSEGMENTVERSION  = PSN.PROCESSSEGMENTVERSIO
+        LEFT OUTER JOIN CMD_DICTIONARY         PNN  ON   PSN.PROCESSSEGMENTNAME        = PNN.DICTIONARYID
+                                                    AND  PNN.LANGUAGETYPE              = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PRODUCTDEFINITION  PD   ON   L.ENTERPRISEID                = PD.ENTERPRISEID
+                                                    AND  L.PLANTID                     = PD.PLANTID
+                                                    AND  L.PRODUCTDEFID                = PD.PRODUCTDEFID
+                                                    AND  L.PRODUCTDEFVERSION           = PD.PRODUCTDEFVERSION
+        LEFT OUTER JOIN MFM_PRODUCTIONORDER    PO   ON   L.ENTERPRISEID                = PO.ENTERPRISEID
+                                                    AND  L.PLANTID                     = PO.PLANTID
+                                                    AND  L.PRODUCTIONORDERID           = PO.PRODUCTIONORDERID
+                                                    AND  L.LINENO                      = PO.LINENO
+        LEFT OUTER JOIN CMD_LOOKUP_VALUES      DT   ON   PD.PRODUCTDEFTYPE             = DT.LOOKUP_CODE
+                                                    AND  DT.LOOKUP_TYPE                = 'ProductDefType'
+        LEFT OUTER JOIN CMD_DICTIONARY         DTD  ON   DT.DICTIONARYID               = DTD.DICTIONARYID
+                                                    AND  DTD.LANGUAGETYPE              = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN CMD_LOOKUP_VALUES      OT   ON   L.LOTTYPE                     = OT.LOOKUP_CODE
+                                                    AND  OT.LOOKUP_TYPE                = 'ProductionType'
+        LEFT OUTER JOIN CMD_DICTIONARY         OTD  ON   OT.DICTIONARYID               = OTD.DICTIONARYID
+                                                    AND  OTD.LANGUAGETYPE              = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_AREA               A    ON   L.ENTERPRISEID                = A.ENTERPRISEID
+                                                    AND  L.PLANTID                     = A.PLANTID
+                                                    AND  L.AREAID                      = A.AREAID
+        LEFT OUTER JOIN CMD_DICTIONARY         AN   ON   A.AREANAME                    = AN.DICTIONARYID
+                                                    AND  AN.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_CUSTOMER           C    ON   PO.ENTERPRISEID               = C.ENTERPRISEID
+                                                    AND  PO.PLANTID                    = C.PLANTID
+                                                    AND  PO.CUSTOMERID                 = C.CUSTOMERID
+        LEFT OUTER JOIN CMD_USERS              SU   ON   L.TRACKINUSER                 = SU.USER_ID
+        LEFT OUTER JOIN FN_GETSTEPTYPE()       ST1  ON   PS.STEPCLASS                  = ST1.CODE
+        LEFT OUTER JOIN BAS_RESOURCE           RC   ON   L.ENTERPRISEID                = RC.ENTERPRISEID
+                                                    AND  L.PLANTID                     = RC.PLANTID
+                                                    AND  L.RESOURCEID                  = RC.RESOURCEID
+        LEFT OUTER JOIN FN_GETSTEPTYPE()       ST2  ON   RC.STEPCLASS                  = ST2.CODE	
+    </select>
+    
+    <!-- 출하검사 결과 이력 detail 그리드  조회   AS-IS : SelectShipmentInspHistoryDetailExterior ver. 10001-->
+    <select id="selectShipmentInspHistoryDetailExterior" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01300Dao.selectShipmentInspHistoryDetailExterior */
+        SELECT ID.RESOURCEID
+             , IR."degree"                        AS DEGREE
+             , ID.DEFECTCODE
+             , ID.QCSEGMENTID
+             , (ID.DEFECTCODE || ID.QCSEGMENTID)  AS JOINCODE
+             , DDC.DICTIONARYNAME                 AS DEFECTCODENAME
+             , QSD.DICTIONARYNAME                 AS QCSEGMENTNAME
+             , (DDC.DICTIONARYNAME || '-' || QSD.DICTIONARYNAME)
+                                                  AS JOINNAME
+             , IR.SAMPLEQTY
+             , IR.INSPECTIONQTY
+             , ID.DEFECTQTY
+             , CEIL(ID.DEFECTQTY/L.PANELPERQTY)   AS DEFECTQTYPNL
+             , ROUND((TO_NUMBER(ID.DEFECTQTY)/TO_NUMBER(IR.INSPECTIONQTY))*100,1)
+                                                  AS DEFECTRATE
+             , IR.PROCESSSEGMENTID
+             , PSD.DICTIONARYNAME                 AS PROCESSSEGMENTNAME
+             , RM.AREAID                          AS AREAID
+             , AD.DICTIONARYNAME                  AS AREANAME
+             , ID.REASONSEGMENTID
+             , ID.REASONCONSUMABLELOTID
+             , ID.REASONCONSUMABLEDEFID
+             , ID.REASONCONSUMABLEDEFVERSION
+             , ID.REASONAREAID
+             , IR.PLANTID
+        FROM       QAM_INSPECTIONDEFECT           ID
+        LEFT OUTER JOIN PCM_LOT                   L     ON   L.LOTID                   = ID.RESOURCEID
+        INNER JOIN QAM_INSPECTIONRESULT           IR    ON   ID.TXNGROUPHISTKEY        = IR.TXNGROUPHISTKEY
+                                                        AND  ID.RESOURCEID             = IR.RESOURCEID
+                                                        AND  ID.RESOURCETYPE           = IR.RESOURCETYPE
+                                                        AND  ID.PROCESSRELNO           = IR.PROCESSRELNO
+        LEFT OUTER JOIN BAS_DEFECTCODE            DC    ON   ID.DEFECTCODE             = DC.DEFECTCODE
+        LEFT OUTER JOIN CMD_DICTIONARY            DDC   ON   DC.DICTIONARYID           = DDC.DICTIONARYID
+                                                        AND  DDC.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION   QS    ON   ID.QCSEGMENTID            = QS.QCSEGMENTID
+        LEFT OUTER JOIN CMD_DICTIONARY            QSD   ON   QS.QCSEGMENTNAME          = QSD.DICTIONARYID
+                                                        AND  QSD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT        PS    ON   IR.PROCESSSEGMENTID       = PS.PROCESSSEGMENTID
+                                                        AND  IR.PROCESSSEGMENTVERSION  = PS.PROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_DICTIONARY            PSD   ON   PS.PROCESSSEGMENTNAME     = PSD.DICTIONARYID
+                                                        AND  PSD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_BILLOFRESOURCE        BOR   ON   IR.PRODUCTDEFID           = BOR.PRODUCTDEFID
+                                                        AND  IR.PRODUCTDEFVERSION      = BOR.PRODUCTDEFVERSION
+                                                        AND  IR.PROCESSDEFID           = BOR.PROCESSDEFID
+                                                        AND  IR.PROCESSDEFVERSION      = BOR.PROCESSDEFVERSION
+                                                        AND  IR.PROCESSSEGMENTID       = BOR.PROCESSSEGMENTID
+                                                        AND  IR.PROCESSSEGMENTVERSION  = BOR.PROCESSSEGMENTVERSION
+                                                        AND  BOR.RESOURCETYPE          = 'Resource'
+                                                        AND  BOR.ISPRIMARYRESOURCE     = 'Y'
+        LEFT OUTER JOIN BAS_RESOURCE              RM    ON   BOR.RESOURCEID            = RM.RESOURCEID
+        LEFT OUTER JOIN BAS_AREA                  A     ON   RM.AREAID                 = A.AREAID
+        LEFT OUTER JOIN CMD_DICTIONARY            AD    ON   A.AREANAME                = AD.DICTIONARYID
+                                                        AND  AD.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE}
+        WHERE 1 = 1
+        AND   IR.RESOURCEID       = #{RESOURCEID}
+        AND   IR."degree"         = #{DEGREE}
+        AND   IR.RESOURCETYPE     = 'ShipmentInspection'
+        AND   IR.PROCESSRELNO     = '*'
+        AND   ID.TXNGROUPHISTKEY  = #{TXNGROUPHISTKEY}
+        <if test="PLANTID != null and PLANTID !='' ">
+        AND   IR.PLANTID          = #{PLANTID}
+        </if>
+        <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+        AND   IR.ENTERPRISEID     = #{ENTERPRISEID}
+        </if>
+        <if test='INDEX == "0"'>
+        AND   ID.INSPECTIONRESULT IS NOT NULL
+        </if>
+        <if test='INDEX == "1"'>
+        AND   ID.INSPECTIONRESULT IS NULL
+        </if>    
+    </select>
+    
+    <!-- 출하검사 LotId 로 LotMessage 공정 조회 AS-IS : SelectLotMessageShipmentInsp ver. 10001-->
+    <select id="selectLotMessageShipmentInsp" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01300Dao.selectLotMessageShipmentInsp  */
+        SELECT LM.LOTID                     AS RESOURCEID
+             , LM.PRODUCTDEFID
+             , LM.PRODUCTDEFVERSION
+             , LM.SEQUENCE
+             , LM.USERSEQUENCE
+             , LM.PROCESSSEGMENTID
+             , LM.PROCESSSEGMENTVERSION
+             , PSD.DICTIONARYNAME           AS PROCESSSEGMENTNAME
+             , LM.TITLE
+             , LM.MESSAGE
+             , CU.USER_NM                   AS CREATORNAME
+             , LM.CREATOR
+            FROM            PCM_LOTMESSAGE       LM
+            LEFT OUTER JOIN BAS_PROCESSSEGMENT   PS   ON   LM.PROCESSSEGMENTID      = PS.PROCESSSEGMENTID
+                                                      AND  LM.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+            LEFT OUTER JOIN CMD_DICTIONARY       PSD  ON   PS.PROCESSSEGMENTNAME    = PSD.DICTIONARYID
+                                                      AND  PSD.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+            LEFT OUTER JOIN CMD_USERS            CU   ON   CU.USER_ID               = LM.CREATOR
+            WHERE 1 = 1
+            <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+            AND   LM.ENTERPRISEID      = #{ENTERPRISEID}
+            </if>
+            <if test="PLANTID != null and PLANTID !='' ">
+            AND   LM.PLANTID           = #{PLANTID}
+            </if>
+            AND   LM.PRODUCTDEFID      = #{PRODUCTDEFID}
+            AND   LM.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+            AND   LM.LOTID             = #{LOTID}
+            ORDER BY LM.USERSEQUENCE
+                   , LM.SEQUENCE
+    </select>
+</mapper>

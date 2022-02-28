@@ -1,0 +1,1718 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM02400Dao">
+
+    <!-- desc   : 품목별 불량현황 > 품목별수율 > 구간설정 판정 대상 변경(LOT생성 구간 -> 불량 판정사이트)
+         modify : 품목별 수율현황 수율 = 100 - 불량율(양품수도 변경됨)
+         asis => SelectYieldRateByProductItem_10001
+    -->
+    <select id="selectYieldRateByProductList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM02400Dao.selectYieldRateByProductList */
+        WITH FINALDATA AS
+        (
+            SELECT YS.*
+                 , PS.PROCESSSEGMENTVERSION
+                 , RANK() OVER (PARTITION BY ROOTLOTID, LOTID ORDER BY TO_NUMBER(USERSEQUENCE), TO_NUMBER(SUBUSERSEQUENCE), WORKCOUNT DESC)   AS RNK
+              FROM       PCM_YIELDSUMMARY     YS
+              INNER JOIN BAS_PROCESSSEGMENT   PS  ON YS.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+             WHERE YS.SUMMARYDATE >= TO_TIMESTAMP(#{P_PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYDATE <![CDATA[<]]> TO_TIMESTAMP(#{P_PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYTYPE = 'Normal'
+               AND YS.SENDTIME IS NOT NULL
+            <choose>
+            <when test="P_INSPTYPE eq 'SHIPMENT'.toString() ">
+               AND PS.PROCESSSEGMENTCLASSID IN ('7030','7536')
+            </when>
+            <when test="P_INSPTYPE eq 'FINISH'.toString() ">
+               AND PS.PROCESSSEGMENTCLASSID IN ('7026','7534')
+            </when>            
+            <otherwise>
+               AND PS.PROCESSSEGMENTCLASSID IN ('8012','8014')
+            </otherwise>
+            </choose>
+            <if test="P_INSPECTIONPROCESS != null and P_INSPECTIONPROCESS !='' and !(P_INSPECTIONPROCESS eq 'Final'.toString())">
+               AND YS.PROCESSSEGMENTID = #{P_INSPECTIONPROCESS} --검사공정지정
+            </if>
+            <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+               AND YS.PRODUCTDEFID||YS.PRODUCTDEFVERSION IN (SELECT regexp_substr(#{P_PRODUCTDEFID}, '[^,]+', 1, LEVEL)
+                                                               FROM dual
+                                                             CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_PRODUCTDEFID})-length(replace(#{P_PRODUCTDEFID},',',''))+1)
+            </if>
+            <if test="P_ROOTLOT != null and P_ROOTLOT !='' ">
+               AND YS.ROOTLOTID IN (SELECT regexp_substr(#{P_ROOTLOT}, '[^,]+', 1, LEVEL)
+                                      FROM dual
+                                    CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_ROOTLOT})-length(replace(#{P_ROOTLOT},',',''))+1)
+            </if>
+            <if test="P_LOTNO != null and P_LOTNO !='' ">
+               AND YS.LOTID IN (SELECT regexp_substr(#{P_LOTNO}, '[^,]+', 1, LEVEL)
+                                  FROM dual
+                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_LOTNO})-length(replace(#{P_LOTNO},',',''))+1)
+            </if>
+            UNION ALL
+            SELECT YS.*
+                 , PS.PROCESSSEGMENTVERSION
+                 , RANK() OVER (PARTITION BY ROOTLOTID, LOTID ORDER BY TO_NUMBER(USERSEQUENCE), TO_NUMBER(SUBUSERSEQUENCE), WORKCOUNT DESC)   AS RNK
+              FROM       PCM_YIELDSUMMARY        YS
+              INNER JOIN BAS_PROCESSSEGMENT   PS  ON YS.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+             WHERE YS.SUMMARYDATE >= TO_TIMESTAMP(#{P_PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYDATE <![CDATA[<]]> TO_TIMESTAMP(#{P_PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYTYPE = 'CompleteDefect'
+            <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+               AND YS.PRODUCTDEFID||YS.PRODUCTDEFVERSION IN (SELECT regexp_substr(#{P_PRODUCTDEFID}, '[^,]+', 1, LEVEL)
+                                                               FROM dual
+                                                             CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_PRODUCTDEFID})-length(replace(#{P_PRODUCTDEFID},',',''))+1)
+            </if>
+            <if test="P_ROOTLOT != null and P_ROOTLOT !='' ">
+               AND YS.ROOTLOTID IN (SELECT regexp_substr(#{P_ROOTLOT}, '[^,]+', 1, LEVEL)
+                                      FROM dual
+                                    CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_ROOTLOT})-length(replace(#{P_ROOTLOT},',',''))+1)
+            </if>
+            <if test="P_LOTNO != null and P_LOTNO !='' ">
+               AND YS.LOTID IN (SELECT regexp_substr(#{P_LOTNO}, '[^,]+', 1, LEVEL)
+                                  FROM dual
+                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_LOTNO})-length(replace(#{P_LOTNO},',',''))+1)
+            </if>
+        ),
+        BASETGT AS
+        (
+            SELECT DISTINCT LO.LOCALE
+                 , SM.SHIPSITE                                  AS SHIPMENTSITE
+                 , CASE WHEN LO.LOCALE = 'Local' THEN SM.SHIPSITE
+                <choose>
+                <when test="P_LINKPLANTID != null and P_LINKPLANTID !='' and !(P_LINKPLANTID eq '*'.toString())">
+                   ELSE RP.RELATEPLANTID END                    AS RELATEDSITE
+                </when>
+                <otherwise>
+                   ELSE ''               END                    AS RELATEDSITE
+                </otherwise>
+                </choose>
+                 , PIS.PRODUCTTYPE                              AS PRODUCTSHAPE
+                 , PIS.CUSTOMERID
+                 , PIS.CUSTOMERNAME                             AS COMPANYCLIENT
+                 , SPD.PRODUCTDEFNAME                           AS PRODUCTDEFNAME
+                 , RP.RELATEPLANTID
+                 , FD.ROOTLOTID
+                 , FD.LOTID
+                 , FD.PLANTID                                   AS LOTCREATEDPLANTID
+                 , FD.PRODUCTDEFID
+                 , FD.PRODUCTDEFVERSION
+                 , FD.PROCESSDEFID
+                 , FD.PROCESSDEFVERSION
+                 , FD.PROCESSSEGMENTID
+                 , FD.USERSEQUENCE
+                 , FD.SUBUSERSEQUENCE
+                 , FD.WORKCOUNT
+                 , DC1.DICTIONARYNAME                            AS INSPPROCESSSEGMENT
+                 , FD.SUMMARYTYPE
+                 , FD.SUMMARYDATE
+                 , FD.SENDTIME
+                 , FD.CREATEDTIME
+                <choose>
+                <when test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+                 , CASE WHEN RLC.LOTCOUNT = RLC.ENDLOTCOUNT THEN 'COMPLETE'
+                   ELSE ''
+                   END                                           AS ROOTCOMPLETE
+                </when>
+                <otherwise>
+                  , ''                                           AS ROOTCOMPLETE
+                </otherwise>
+                </choose>
+                 , PIS.PCSSIZEXAXIS*PIS.PCSSIZEYAXIS AS M2SIZE
+                 , PIS.PCSMM                                     AS AREADIV
+                 , SOA.UNITPRICE                                 AS UNITPRICE
+                 , SOA.CURRENCY
+                 , LTD.DICTIONARYNAME                            AS PRODUCTDEFTYPE   -- 양산구분
+              FROM       FINALDATA    FD
+              INNER JOIN PCM_LOT                                                      L    ON   FD.LOTID               = L.LOTID
+              /*--2016.06.16 TOBE Modify
+              LEFT JOIN  FN_GETYIELDLOCALE(FD.PRODUCTDEFID||FD.PRODUCTDEFVERSION)     LO   ON   LO.PRODUCTDEFID        = FD.PRODUCTDEFID
+                                                                                           --checkpoint 확인필요 - asis 오류같아서 수정
+                                                                                           --AND  LO.PRODUCTDEFVERSION   = FD.PROCESSDEFVERSION
+                                                                                           AND  LO.PRODUCTDEFVERSION   = FD.PRODUCTDEFVERSION*/
+              LEFT JOIN  QAM_YIELD_LOCALE_V                                           LO   ON   LO.PRODUCTDEFID        = FD.PRODUCTDEFID
+                                                                                           AND  LO.PRODUCTDEFVERSION   = FD.PRODUCTDEFVERSION
+              LEFT JOIN  FN_GETYIELDSHIPMENT(FD.LOTID, FD.PRODUCTDEFID, FD.PRODUCTDEFVERSION)
+                                                                                      SM   ON   SM.RETLOTID            = FD.LOTID
+              LEFT JOIN  FN_GETYIELDRELPLANT(FD.LOTID, FD.PROCESSDEFID, FD.PROCESSDEFVERSION)
+                                                                                      RP   ON   RP.RETLOTID            = FD.LOTID
+                                                                                           AND  RP.RETPROCESSDEFID     = FD.PROCESSDEFID
+                                                                                           AND  RP.LV                  > 0
+            <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+              LEFT JOIN  FN_GETYIELDROOTCOMPLETE(FD.ROOTLOTID,#{P_INSPTYPE})          RLC  ON   RLC.RETROOTLOTID       = FD.ROOTLOTID
+            </if>
+              LEFT JOIN BAS_PRODUCTDEFINITION                                         SPD  ON   SPD.PRODUCTDEFID       = FD.PRODUCTDEFID
+                                                                                           AND  SPD.PRODUCTDEFVERSION  = FD.PRODUCTDEFVERSION
+              LEFT JOIN BAS_PROCESSSEGMENT                                            SG   ON   SG.PROCESSSEGMENTID    = FD.PROCESSSEGMENTID
+              LEFT JOIN CMD_DICTIONARY                                                DC1  ON   SG.PROCESSSEGMENTNAME  = DC1.DICTIONARYID
+                                                                                           AND  DC1.LANGUAGETYPE       = #{LANGUAGETYPE}
+              LEFT JOIN BAS_PRODUCTITEMSPEC                                           PIS  ON   PIS.ITEMID             = FD.PRODUCTDEFID
+                                                                                           AND  PIS.ITEMVERSION        = FD.PRODUCTDEFVERSION
+              LEFT JOIN MFM_PRODUCTIONORDER                                           PO   ON   PO.PRODUCTIONORDERID   = L.PRODUCTIONORDERID
+                                                                                           AND  PO.LINENO              = L.LINENO
+                                                                                           AND  PO.ENTERPRISEID        = L.ENTERPRISEID
+              LEFT JOIN BAS_SALEORDERAPPROVAL                                         SOA  ON   SOA.SALESORDERID       = L.PRODUCTIONORDERID
+                                                                                           AND  SOA.LINENO             = L.LINENO
+                                                                                           AND  SOA.ENTERPRISEID       = L.ENTERPRISEID
+              LEFT JOIN CMD_LOOKUP_VALUES                                             LTC  ON   LTC.LOOKUP_CODE        = L.LOTTYPE
+                                                                                           AND  LTC.LOOKUP_TYPE        = 'ProductionType'
+              LEFT JOIN CMD_DICTIONARY                                                LTD  ON   LTD.DICTIONARYID       = LTC.DICTIONARYID
+                                                                                           AND  LTD.LANGUAGETYPE       = #{LANGUAGETYPE}
+             WHERE FD.RNK =1
+            <if test="P_PRODUCTIONDIVISION != null and P_PRODUCTIONDIVISION !='' and !(P_PRODUCTIONDIVISION eq '*'.toString()) ">
+               AND L.LOTTYPE = #{P_PRODUCTIONDIVISION}
+            </if>
+        ),
+        LOTDFDTL AS
+        (
+            SELECT DL.*
+              FROM      BASETGT    BT
+              LEFT JOIN FN_GETYIELDDEFECTLIST(BT.LOTID, #{LANGUAGETYPE})    DL    ON   DL.LOTID = BT.LOTID
+            <if test="P_INSPECTIONPROCESS != null and P_INSPECTIONPROCESS !='' and !(P_INSPECTIONPROCESS eq 'Final'.toString())">
+                                                                                  AND  (DL.USERSEQUENCE||'.'||DL.SUBUSERSEQUENCE) <![CDATA[<=]]> (BT.USERSEQUENCE||'.'||BT.SUBUSERSEQUENCE)
+                                                                                  AND  DL.WORKCOUNT <![CDATA[<=]]>  BT.WORKCOUNT
+            </if>
+             WHERE 1=1
+               AND DL.SUMMARYTYPE = 'Normal'
+            <if test="P_EXCEPTDEFECTCLASS != null and P_EXCEPTDEFECTCLASS !='' and !(P_EXCEPTDEFECTCLASS eq '*'.toString())">
+               AND DL.DEFECTCODECLASSID NOT IN (SELECT regexp_substr(#{P_EXCEPTDEFECTCLASS}, '[^,]+', 1, LEVEL)
+                                                  FROM dual
+                                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_EXCEPTDEFECTCLASS})-length(replace(#{P_EXCEPTDEFECTCLASS},',',''))+1)
+            </if>
+            UNION ALL
+            SELECT
+                    DL.*
+              FROM BASETGT    BT
+              LEFT JOIN     FN_GETYIELDDEFECTLIST(BT.LOTID, #{LANGUAGETYPE})    DL    ON DL.LOTID = BT.LOTID
+             WHERE 1=1
+               AND DL.SUMMARYTYPE = 'CompleteDefect'
+            <if test="P_EXCEPTDEFECTCLASS != null and P_EXCEPTDEFECTCLASS !='' and !(P_EXCEPTDEFECTCLASS eq '*'.toString())">
+               AND DL.DEFECTCODECLASSID NOT IN (SELECT regexp_substr(#{P_EXCEPTDEFECTCLASS}, '[^,]+', 1, LEVEL)
+                                                  FROM dual
+                                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_EXCEPTDEFECTCLASS})-length(replace(#{P_EXCEPTDEFECTCLASS},',',''))+1)
+            </if>
+        ),
+        DFSUM AS
+        (
+            SELECT DD.LOTID
+           <choose>
+           <when test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+                 , DD.DISCOVERYSITE           AS PLANTID
+           </when>
+           <otherwise>
+                 , ''    AS PLANTID
+           </otherwise>
+           </choose>
+                 , NVL(SUM(DD.DEFECTQTY), 0)  AS DEFECTQTY
+              FROM LOTDFDTL    DD
+             WHERE DD.DEFECTQTY <![CDATA[<>]]> 0
+           <if test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+               AND DD.DISCOVERYSITE = #{P_INTERPLANTID}
+           </if>
+            GROUP BY DD.LOTID
+           <if test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+                   , DD.DISCOVERYSITE
+           </if>
+        ),
+        DATBASE AS
+        (
+            SELECT BT.LOCALE
+                 , BT.SHIPMENTSITE
+                 , BT.RELATEDSITE
+                 , CASE WHEN DS.PLANTID IS NULL THEN ''
+                   ELSE
+                       CASE WHEN BT.LOCALE = 'Local' THEN BT.SHIPMENTSITE
+                       ELSE DS.PLANTID    
+                       END
+                   END                             AS INTERSECTSITE
+                 , BT.PRODUCTSHAPE
+                 , BT.CUSTOMERID
+                 , BT.COMPANYCLIENT
+                 , BT.PRODUCTDEFNAME
+                 , BT.RELATEPLANTID
+                 , DS.PLANTID
+                 , IQ.INPUTQTY                      AS PCSINPUTQTY
+                 , BT.ROOTLOTID
+                 , BT.LOTID
+                 , BT.LOTCREATEDPLANTID
+                 , BT.PRODUCTDEFID
+                 , BT.PRODUCTDEFVERSION
+                 , BT.PROCESSDEFID
+                 , BT.PROCESSDEFVERSION
+                 , BT.PROCESSSEGMENTID
+                 , BT.USERSEQUENCE
+                 , BT.SUBUSERSEQUENCE
+                 , BT.WORKCOUNT
+                 , BT.INSPPROCESSSEGMENT
+                 , BT.SUMMARYTYPE
+                 , BT.SUMMARYDATE
+                 , BT.SENDTIME
+                 , BT.CREATEDTIME
+                 , BT.ROOTCOMPLETE
+                 , BT.M2SIZE
+                 , BT.AREADIV
+                 , BT.UNITPRICE
+                 , BT.CURRENCY
+                 , BT.PRODUCTDEFTYPE
+                 , NVL(DS.DEFECTQTY, 0)             AS PCSDEFECTQTY
+              FROM      BASETGT                     BT
+              LEFT JOIN DFSUM                       DS   ON   DS.LOTID = BT.LOTID
+              LEFT JOIN FN_GETYIELDINPUTQTY2(BT.LOTID, NVL(DS.PLANTID, '*') )
+                                                    IQ   ON   BT.LOTID = IQ.LOTID
+                                                         AND  IQ.RNK   = 1     
+        ),
+        DAT AS
+        (
+            SELECT DB.LOCALE
+                 , DB.SHIPMENTSITE
+                 , DB.RELATEDSITE
+                 , DB.INTERSECTSITE
+                 , DB.PRODUCTSHAPE
+                 , DB.CUSTOMERID
+                 , DB.COMPANYCLIENT
+                 , DB.PRODUCTDEFNAME
+                 , DB.RELATEPLANTID
+                 , DB.PLANTID
+                 , CASE WHEN DB.PCSINPUTQTY IS NULL THEN IQ.INPUTQTY
+                   ELSE DB.PCSINPUTQTY
+                   END                                AS PCSINPUTQTY
+                 , DB.ROOTLOTID
+                 , DB.LOTID
+                 , DB.PRODUCTDEFID
+                 , DB.PRODUCTDEFVERSION
+                 , DB.PROCESSDEFID
+                 , DB.PROCESSDEFVERSION
+                 , DB.PROCESSSEGMENTID
+                 , DB.USERSEQUENCE
+                 , DB.SUBUSERSEQUENCE
+                 , DB.WORKCOUNT
+                 , DB.INSPPROCESSSEGMENT
+                 , DB.SUMMARYTYPE
+                 , DB.SUMMARYDATE
+                 , DB.SENDTIME
+                 , DB.CREATEDTIME
+                 , DB.ROOTCOMPLETE
+                 , DB.M2SIZE
+                 , DB.AREADIV                              
+                 , DB.UNITPRICE
+                 , DB.CURRENCY
+                 , DB.PRODUCTDEFTYPE
+                 , CASE WHEN DB.PCSINPUTQTY IS NULL THEN NVL(IQ.INPUTQTY, 0) - NVL(DB.PCSDEFECTQTY, 0)
+                   ELSE NVL(DB.PCSINPUTQTY, 0) - NVL(DB.PCSDEFECTQTY, 0)
+                   END                                AS PCSNORMALQTY
+                 , DB.PCSDEFECTQTY
+             FROM      DATBASE DB
+             LEFT JOIN FN_GETYIELDINPUTQTY2(DB.LOTID, DB.LOTCREATEDPLANTID)  IQ  ON  DB.LOTID = IQ.LOTID
+                                                                                 AND IQ.RNK   = 1
+            /*--checkpoint 확인필요 NULL이 존재하여 LOT별과 차이발생하는 원인
+            WHERE DB.INTERSECTSITE IS NOT NULL*/
+           /*--checkpoint 여기서 정렬할 필요가 없는 것 같아서 주석처리
+           ORDER BY DB.PRODUCTSHAPE
+                  , DB.CUSTOMERID
+                  , DB.COMPANYCLIENT
+                  , DB.PRODUCTDEFNAME
+                  , DB.PRODUCTDEFID
+                  , DB.LOCALE
+                  , DB.SHIPMENTSITE
+                  , DB.PRODUCTDEFVERSION*/
+        ),
+        <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+        ROOTINPUTQTY AS
+        (
+            SELECT D.ROOTLOTID
+            <if test="P_SHOWINTERSECT != null and P_SHOWINTERSECT !='' and !(P_SHOWINTERSECT eq '*'.toString())">
+                 , D.INTERSECTSITE
+            </if>
+                 , NVL(SUM(D.PCSINPUTQTY), 0)     AS INPUTQTY
+              FROM
+                   (
+                      SELECT DISTINCT ROOTLOTID
+                           , LOTID
+                           , INTERSECTSITE
+                           , PCSINPUTQTY
+                        FROM DAT
+                   ) D
+            GROUP BY D.ROOTLOTID
+            <if test="P_SHOWINTERSECT != null and P_SHOWINTERSECT !='' and !(P_SHOWINTERSECT eq '*'.toString())">
+                   , D.INTERSECTSITE
+            </if>
+        ),
+        </if>
+        FIN1 AS
+        (
+            SELECT DISTINCT
+                   F.PRODUCTSHAPE
+                 , F.COMPANYCLIENT
+                 , F.PRODUCTDEFNAME
+                 , F.PRODUCTDEFID
+                 , F.LOCALE
+                 , F.SHIPMENTSITE
+                 , F.RELATEDSITE
+                 , F.INTERSECTSITE
+                 , F.PRODUCTDEFVERSION
+                 , F.ROOTLOTID
+                 , F.LOTID
+                 , F.PROCESSSEGMENTID
+                 , F.PCSINPUTQTY
+                 , NVL(F.PCSDEFECTQTY, 0)                                                   AS PCSDEFECTQTY
+                 , F.PCSNORMALQTY
+                 , ROUND((F.PCSINPUTQTY/F.AREADIV), 2)                                      AS AREAINPUTQTY
+                 , ROUND((F.PCSDEFECTQTY/F.AREADIV), 2)                                     AS AREADEFECTQTY
+                 , ROUND((F.PCSNORMALQTY/F.AREADIV), 2)                                     AS AREANORMALQTY                 
+                 , (F.UNITPRICE*F.PCSINPUTQTY)/NVL(E.EXCHANGE_RATE, 1)                      AS PRICEINPUTQTY
+                 , (F.UNITPRICE*F.PCSDEFECTQTY)/NVL(E.EXCHANGE_RATE, 1)                     AS PRICEDEFECTQTY
+                 , (F.UNITPRICE*F.PCSNORMALQTY)/NVL(E.EXCHANGE_RATE, 1)                     AS PRICENORMALQTY
+                 , F.INSPPROCESSSEGMENT
+                 , F.ROOTCOMPLETE
+                 , F.PRODUCTDEFTYPE
+                 , F.SUMMARYDATE
+                 , F.CREATEDTIME
+              FROM DAT F
+            <choose>
+            <when test="PLANT eq 'IFC'.toString()">
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'KRW'
+            </when>
+            <when test="PLANT eq 'IFV'.toString()">
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'VND'
+            </when>
+            <when test="PLANT eq 'CCV'.toString()">
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'CNY'
+            </when>
+            <otherwise>
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'USD'
+            </otherwise>
+            </choose>
+             WHERE 1=1
+               AND F.PCSINPUTQTY IS NOT NULL
+               AND F.PCSINPUTQTY != 0
+            <if test="P_LOCALEDIV != null and P_LOCALEDIV !='' and !(P_LOCALEDIV eq '*'.toString())">
+               AND UPPER(F.LOCALE) = #{P_LOCALEDIV}
+            </if>
+            <if test="P_LINKPLANTID != null and P_LINKPLANTID !='' and !(P_LINKPLANTID eq '*'.toString())">
+               AND F.RELATEDSITE IN (SELECT regexp_substr(#{P_LINKPLANTID}, '[^,]+', 1, LEVEL)
+                                       FROM dual
+                                     CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_LINKPLANTID})-length(replace(#{P_LINKPLANTID},',',''))+1)
+            </if>
+            <if test="P_PRODSHAPETYPE != null and P_PRODSHAPETYPE !='' and !(P_PRODSHAPETYPE eq '*'.toString())">
+               AND F.PRODUCTSHAPE = #{P_PRODSHAPETYPE}
+            </if>
+            <if test="P_CUSTOMER != null and P_CUSTOMER !=''">
+               AND F.CUSTOMERID IN (SELECT regexp_substr(#{P_CUSTOMER}, '[^,]+', 1, LEVEL)
+                                      FROM dual
+                                    CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_CUSTOMER})-length(replace(#{P_CUSTOMER},',',''))+1)
+            </if>
+            <if test="P_PLANTID != null and P_PLANTID !='' and !(P_PLANTID eq '*'.toString())">
+               /*--2021.06.17 TOBE Modify 화면단에서 하나의 값만 넘김
+               AND F.SHIPMENTSITE IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT({P_PLANTID}, ','))*/
+               AND F.SHIPMENTSITE = #{P_PLANTID}
+            </if>
+            <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+               AND F.ROOTCOMPLETE = 'COMPLETE'
+            </if>
+        ),
+        FIN2 AS
+        (
+            SELECT DISTINCT
+                   F.PRODUCTSHAPE
+                 , F.COMPANYCLIENT
+                 , F.PRODUCTDEFNAME
+                 , F.PRODUCTDEFID
+                 , F.LOCALE
+                 , F.SHIPMENTSITE
+                 , F.RELATEDSITE
+                 , F.INTERSECTSITE
+                 , F.PRODUCTDEFVERSION
+                 , F.ROOTLOTID
+                 , F.PROCESSSEGMENTID
+                 , F.ROOTCOMPLETE
+                 , F.PRODUCTDEFTYPE
+                <choose>
+                <when test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+                 , F.ROOTLOTID                                                               AS LOTID
+                 , RIQ.INPUTQTY                                                              AS PCSINPUTQTY
+                 , SUM(F.PCSDEFECTQTY)       OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PCSDEFECTQTY
+                 , SUM(F.PCSNORMALQTY)       OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PCSNORMALQTY
+                 , SUM(F.AREAINPUTQTY)       OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS AREAINPUTQTY
+                 , SUM(F.AREADEFECTQTY)      OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS AREADEFECTQTY
+                 , SUM(F.AREANORMALQTY)      OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS AREANORMALQTY
+                 , SUM(F.PRICEINPUTQTY)      OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PRICEINPUTQTY
+                 , SUM(F.PRICEDEFECTQTY)     OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PRICEDEFECTQTY
+                 , SUM(F.PRICENORMALQTY)     OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PRICENORMALQTY
+                 , MAX(F.INSPPROCESSSEGMENT) OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS INSPPROCESSSEGMENT
+                </when>
+                <otherwise>
+                 , F.LOTID
+                 , F.PCSINPUTQTY
+                 , F.PCSDEFECTQTY
+                 , F.PCSNORMALQTY
+                 , F.AREAINPUTQTY
+                 , F.AREADEFECTQTY
+                 , F.AREANORMALQTY
+                 , F.PRICEINPUTQTY
+                 , F.PRICEDEFECTQTY
+                 , F.PRICENORMALQTY
+                 , F.INSPPROCESSSEGMENT
+                </otherwise>
+                </choose>
+              FROM FIN1 F
+            <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+              INNER JOIN ROOTINPUTQTY  RIQ  ON   RIQ.ROOTLOTID     = F.ROOTLOTID
+                                            AND  RIQ.INTERSECTSITE = F.INTERSECTSITE
+            </if>
+           ),
+           FINBASE AS
+           (
+              SELECT DISTINCT
+                     F.PRODUCTSHAPE
+                   , F.COMPANYCLIENT
+                   , F.PRODUCTDEFNAME
+                   , F.PRODUCTDEFID
+                   , F.LOCALE
+                   , F.SHIPMENTSITE
+                   , F.RELATEDSITE
+                   , F.INTERSECTSITE
+                   , F.PRODUCTDEFVERSION
+                   , F.PRODUCTDEFTYPE
+                   , MAX(F.PROCESSSEGMENTID)     OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS PROCESSSEGMENTID
+                   , SUM(F.PCSINPUTQTY)          OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS PCSINPUTQTY
+                   , SUM(F.PCSDEFECTQTY)         OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS PCSDEFECTQTY
+                   , SUM(F.PCSNORMALQTY)         OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS PCSNORMALQTY
+                   , SUM(F.AREAINPUTQTY)         OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS AREAINPUTQTY
+                   , SUM(F.AREADEFECTQTY)        OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS AREADEFECTQTY
+                   , SUM(F.AREANORMALQTY)        OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS AREANORMALQTY
+                   , SUM(F.PRICEINPUTQTY)        OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS PRICEINPUTQTY
+                   , SUM(F.PRICEDEFECTQTY)       OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS PRICEDEFECTQTY
+                   , SUM(F.PRICENORMALQTY)       OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS PRICENORMALQTY
+                   , MAX(F.INSPPROCESSSEGMENT)   OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE)    AS INSPPROCESSSEGMENT                   
+              FROM FIN2 F
+           ),
+           FINBASETOT AS
+           (
+               SELECT DISTINCT
+                      F.PRODUCTSHAPE
+                    , F.COMPANYCLIENT
+                    , F.PRODUCTDEFNAME
+                    , F.PRODUCTDEFID
+                    , F.LOCALE
+                    , F.SHIPMENTSITE
+                    , F.RELATEDSITE
+                    , ''                                                                                    AS INTERSECTSITE                    
+                    , F.PRODUCTDEFVERSION
+                    , F.PRODUCTDEFTYPE
+                    , MAX(F.PROCESSSEGMENTID)     OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS PROCESSSEGMENTID
+                    , SUM(F.PCSINPUTQTY)          OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS PCSINPUTQTY
+                    , SUM(F.PCSDEFECTQTY)         OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS PCSDEFECTQTY
+                    , SUM(F.PCSNORMALQTY)         OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS PCSNORMALQTY
+                    , SUM(F.AREAINPUTQTY)         OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS AREAINPUTQTY
+                    , SUM(F.AREADEFECTQTY)        OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS AREADEFECTQTY
+                    , SUM(F.AREANORMALQTY)        OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS AREANORMALQTY
+                    , SUM(F.PRICEINPUTQTY)        OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS PRICEINPUTQTY
+                    , SUM(F.PRICEDEFECTQTY)       OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS PRICEDEFECTQTY
+                    , SUM(F.PRICENORMALQTY)       OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS PRICENORMALQTY
+                    , MAX(F.INSPPROCESSSEGMENT)   OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION)    AS INSPPROCESSSEGMENT                    
+                 FROM FINBASE F
+                /*checkpoint 확인필요 데이터가 안나와서 수정함
+                --WHERE F.INTERSECTSITE IS NULL*/
+                WHERE 1 =1
+           ),
+           FINTOT AS
+           (
+               SELECT DISTINCT
+                      F.PRODUCTSHAPE
+                    , F.COMPANYCLIENT
+                    , F.PRODUCTDEFNAME
+                    , F.PRODUCTDEFID
+                    , F.LOCALE
+                    , F.SHIPMENTSITE
+                    , F.RELATEDSITE
+                    , F.INTERSECTSITE
+                    , F.PRODUCTDEFVERSION
+                    , F.PROCESSSEGMENTID
+                    , 100-(CASE WHEN F.PCSINPUTQTY = 0 THEN 0
+                           ELSE ROUND((F.PCSDEFECTQTY/F.PCSINPUTQTY)*100, 2)
+                           END)                                                AS PCSYIELDRATE
+                    , CASE WHEN F.PCSINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PCSDEFECTQTY/F.PCSINPUTQTY)*100, 2) 
+                            END                                                AS PCSDEFECTRATE
+                    , F.PCSINPUTQTY
+                    , F.PCSDEFECTQTY
+                    , F.PCSNORMALQTY
+                    , 100-(CASE WHEN F.AREAINPUTQTY = 0 THEN 0
+                           ELSE ROUND((F.AREADEFECTQTY/F.AREAINPUTQTY)*100, 2)
+                           END)                                                AS AREAYIELDRATE
+                    , CASE WHEN F.AREAINPUTQTY = 0 THEN 0
+                      ELSE ROUND((F.AREADEFECTQTY/F.AREAINPUTQTY)*100, 2)
+                      END                                                      AS AREADEFECTRATE
+                    , F.AREAINPUTQTY
+                    , F.AREADEFECTQTY
+                    , F.AREANORMALQTY
+                    , 100-(CASE WHEN F.PRICEINPUTQTY = 0 THEN 0
+                           ELSE ROUND((F.PRICEDEFECTQTY/F.PRICEINPUTQTY)*100, 2)
+                           END)                                                AS PRICEYIELDRATE
+                    , CASE WHEN F.PRICEINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PRICEDEFECTQTY/F.PRICEINPUTQTY)*100, 2)
+                            END                                                AS PRICEDEFECTRATE
+                    , F.PRICEINPUTQTY
+                    , F.PRICEDEFECTQTY
+                    , F.PRICENORMALQTY
+                    , F.INSPPROCESSSEGMENT
+                    , F.PRODUCTDEFTYPE
+               FROM FINBASETOT F
+           )
+           SELECT *
+             FROM
+                  (
+               SELECT S.PRODUCTSHAPE
+                    , S.COMPANYCLIENT
+                    , S.PRODUCTDEFNAME
+                    , S.PRODUCTDEFID
+                    , S.LOCALE
+                    , S.SHIPMENTSITE
+                    , S.RELATEDSITE
+                    , S.INTERSECTSITE
+                    , S.PRODUCTDEFVERSION
+                    , S.PCSYIELDRATE
+                    , S.PCSDEFECTRATE
+                    , S.PCSINPUTQTY
+                    , S.PCSDEFECTQTY
+                    , S.PCSNORMALQTY
+                    , S.AREAYIELDRATE
+                    , S.AREADEFECTRATE
+                    , S.AREAINPUTQTY
+                    , S.AREADEFECTQTY
+                    , S.AREANORMALQTY
+                    , S.PRICEYIELDRATE
+                    , S.PRICEDEFECTRATE
+                    , S.PRICEINPUTQTY
+                    , S.PRICEDEFECTQTY
+                    , S.PRICENORMALQTY
+                    , S.INSPPROCESSSEGMENT
+                    , S.PRODUCTDEFTYPE
+                 FROM FINTOT S
+               <if test="P_SHOWINTERSECT eq 'Y'.toString()">
+               UNION ALL
+               SELECT F.PRODUCTSHAPE
+                    , F.COMPANYCLIENT
+                    , F.PRODUCTDEFNAME
+                    , F.PRODUCTDEFID
+                    , F.LOCALE
+                    , F.SHIPMENTSITE
+                    , F.RELATEDSITE
+                    , F.INTERSECTSITE
+                    , F.PRODUCTDEFVERSION
+                    , 100- (CASE WHEN F.PCSINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PCSDEFECTQTY/F.PCSINPUTQTY)*100, 2)
+                            END)                                               AS PCSYIELDRATE
+                    , CASE WHEN F.PCSINPUTQTY = 0 THEN 0
+                      ELSE ROUND((F.PCSDEFECTQTY/F.PCSINPUTQTY)*100, 2) 
+                      END                                                      AS PCSDEFECTRATE
+                    , F.PCSINPUTQTY
+                    , F.PCSDEFECTQTY
+                    , F.PCSNORMALQTY
+                    , 100- (CASE WHEN F.AREAINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.AREADEFECTQTY/F.AREAINPUTQTY)*100, 2)
+                            END)                                               AS AREAYIELDRATE
+                    , CASE WHEN F.AREAINPUTQTY = 0 THEN 0
+                      ELSE ROUND((F.AREADEFECTQTY/F.AREAINPUTQTY)*100, 2)
+                      END                                                      AS AREADEFECTRATE
+                    , F.AREAINPUTQTY
+                    , F.AREADEFECTQTY
+                    , F.AREANORMALQTY
+                    , 100- (CASE WHEN F.PRICEINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PRICEDEFECTQTY/F.PRICEINPUTQTY)*100, 2)
+                            END)                                               AS PRICEYIELDRATE
+                    , CASE WHEN F.PRICEINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PRICEDEFECTQTY/F.PRICEINPUTQTY)*100, 2)
+                            END                                                AS PRICEDEFECTRATE
+                    , F.PRICEINPUTQTY
+                    , F.PRICEDEFECTQTY
+                    , F.PRICENORMALQTY
+                    , F.INSPPROCESSSEGMENT
+                    , F.PRODUCTDEFTYPE
+                 FROM FINBASE F
+                WHERE F.INTERSECTSITE IS NOT NULL
+               </if>
+           ) T
+           ORDER BY T.PRODUCTSHAPE
+                  , T.COMPANYCLIENT
+                  , T.PRODUCTDEFNAME
+                  , T.PRODUCTDEFID
+                  , T.LOCALE
+                  , T.SHIPMENTSITE
+                  , T.RELATEDSITE
+                  , T.INTERSECTSITE
+                  , T.PRODUCTDEFVERSION NULLS LAST
+    </select>
+
+
+
+
+
+
+
+    <!-- desc   : 품목별 수율현황 : 품목별 불량현황
+         modify : 불량세부 불량원인 그룹 컬럼 추가
+                  구간설정 판정 대상 변경(LOT생성 구간 -> 불량 판정사이트)
+         asis => SelectDefectStatusByProductItem
+    -->
+    <select id="selectDefectStatusByProductList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM02400Dao.selectDefectStatusByProductList */
+        WITH FINALDATA AS
+        (
+            SELECT YS.*
+                 , PS.PROCESSSEGMENTVERSION
+                 , RANK() OVER (PARTITION BY ROOTLOTID, LOTID ORDER BY TO_NUMBER(USERSEQUENCE), TO_NUMBER(SUBUSERSEQUENCE), WORKCOUNT DESC)   AS RNK
+              FROM       PCM_YIELDSUMMARY     YS
+              INNER JOIN BAS_PROCESSSEGMENT   PS  ON YS.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+             WHERE YS.SUMMARYDATE >= TO_TIMESTAMP(#{P_PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYDATE <![CDATA[<]]> TO_TIMESTAMP(#{P_PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYTYPE = 'Normal'
+               AND YS.SENDTIME IS NOT NULL
+            <choose>
+            <when test="P_INSPTYPE eq 'SHIPMENT'.toString() ">
+               AND PS.PROCESSSEGMENTCLASSID IN ('7030','7536')
+            </when>
+            <when test="P_INSPTYPE eq 'FINISH'.toString() ">
+               AND PS.PROCESSSEGMENTCLASSID IN ('7026','7534')
+            </when>            
+            <otherwise>
+               AND PS.PROCESSSEGMENTCLASSID IN ('8012','8014')
+            </otherwise>
+            </choose>
+            <if test="P_INSPECTIONPROCESS != null and P_INSPECTIONPROCESS !='' and !(P_INSPECTIONPROCESS eq 'Final'.toString())">
+               AND YS.PROCESSSEGMENTID = #{P_INSPECTIONPROCESS} --검사공정지정
+            </if>
+            <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+               AND YS.PRODUCTDEFID||YS.PRODUCTDEFVERSION IN (SELECT regexp_substr(#{P_PRODUCTDEFID}, '[^,]+', 1, LEVEL)
+                                                               FROM dual
+                                                             CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_PRODUCTDEFID})-length(replace(#{P_PRODUCTDEFID},',',''))+1)
+            </if>
+            <if test="P_ROOTLOT != null and P_ROOTLOT !='' ">
+               AND YS.ROOTLOTID IN (SELECT regexp_substr(#{P_ROOTLOT}, '[^,]+', 1, LEVEL)
+                                      FROM dual
+                                    CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_ROOTLOT})-length(replace(#{P_ROOTLOT},',',''))+1)
+            </if>
+            <if test="P_LOTNO != null and P_LOTNO !='' ">
+               AND YS.LOTID IN (SELECT regexp_substr(#{P_LOTNO}, '[^,]+', 1, LEVEL)
+                                  FROM dual
+                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_LOTNO})-length(replace(#{P_LOTNO},',',''))+1)
+            </if>
+            UNION ALL
+            SELECT YS.*
+                 , PS.PROCESSSEGMENTVERSION
+                 , RANK() OVER (PARTITION BY ROOTLOTID, LOTID ORDER BY TO_NUMBER(USERSEQUENCE), TO_NUMBER(SUBUSERSEQUENCE), WORKCOUNT DESC)   AS RNK
+              FROM       PCM_YIELDSUMMARY        YS
+              INNER JOIN BAS_PROCESSSEGMENT   PS  ON YS.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+             WHERE YS.SUMMARYDATE >= TO_TIMESTAMP(#{P_PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYDATE <![CDATA[<]]> TO_TIMESTAMP(#{P_PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYTYPE = 'CompleteDefect'
+            <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+               AND YS.PRODUCTDEFID||YS.PRODUCTDEFVERSION IN (SELECT regexp_substr(#{P_PRODUCTDEFID}, '[^,]+', 1, LEVEL)
+                                                               FROM dual
+                                                             CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_PRODUCTDEFID})-length(replace(#{P_PRODUCTDEFID},',',''))+1)
+            </if>
+            <if test="P_ROOTLOT != null and P_ROOTLOT !='' ">
+               AND YS.ROOTLOTID IN (SELECT regexp_substr(#{P_ROOTLOT}, '[^,]+', 1, LEVEL)
+                                      FROM dual
+                                    CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_ROOTLOT})-length(replace(#{P_ROOTLOT},',',''))+1)
+            </if>
+            <if test="P_LOTNO != null and P_LOTNO !='' ">
+               AND YS.LOTID IN (SELECT regexp_substr(#{P_LOTNO}, '[^,]+', 1, LEVEL)
+                                  FROM dual
+                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_LOTNO})-length(replace(#{P_LOTNO},',',''))+1)
+            </if>
+        ),
+        BASETGT AS
+        (
+            SELECT DISTINCT LO.LOCALE
+                 , SM.SHIPSITE                                  AS SHIPMENTSITE
+                 , CASE WHEN LO.LOCALE = 'Local' THEN SM.SHIPSITE
+                <choose>
+                <when test="P_LINKPLANTID != null and P_LINKPLANTID !='' and !(P_LINKPLANTID eq '*'.toString())">
+                   ELSE RP.RELATEPLANTID END                    AS RELATEDSITE
+                </when>
+                <otherwise>
+                   ELSE ''               END                    AS RELATEDSITE
+                </otherwise>
+                </choose>
+                 , PIS.PRODUCTTYPE                              AS PRODUCTSHAPE
+                 , PIS.CUSTOMERID
+                 , PIS.CUSTOMERNAME                             AS COMPANYCLIENT
+                 , SPD.PRODUCTDEFNAME                           AS PRODUCTDEFNAME
+                 , RP.RELATEPLANTID
+                 , FD.ROOTLOTID
+                 , FD.LOTID
+                 , FD.PLANTID                                   AS LOTCREATEDPLANTID
+                 , FD.PRODUCTDEFID
+                 , FD.PRODUCTDEFVERSION
+                 , FD.PROCESSDEFID
+                 , FD.PROCESSDEFVERSION
+                 , FD.PROCESSSEGMENTID
+                 , FD.USERSEQUENCE
+                 , FD.SUBUSERSEQUENCE
+                 , FD.WORKCOUNT
+                 , DC1.DICTIONARYNAME                            AS INSPPROCESSSEGMENT
+                 , FD.SUMMARYTYPE
+                 , FD.SUMMARYDATE
+                 , FD.SENDTIME
+                 , FD.CREATEDTIME
+                <choose>
+                <when test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+                 , CASE WHEN RLC.LOTCOUNT = RLC.ENDLOTCOUNT THEN 'COMPLETE'
+                   ELSE ''
+                   END                                           AS ROOTCOMPLETE
+                </when>
+                <otherwise>
+                  , ''                                           AS ROOTCOMPLETE
+                </otherwise>
+                </choose>
+                 , PIS.PCSSIZEXAXIS*PIS.PCSSIZEYAXIS AS M2SIZE
+                 , PIS.PCSMM                                     AS AREADIV
+                 , SOA.UNITPRICE                                 AS UNITPRICE
+                 , SOA.CURRENCY
+                 , LTD.DICTIONARYNAME                            AS PRODUCTDEFTYPE   -- 양산구분
+              FROM       FINALDATA    FD
+              INNER JOIN PCM_LOT                                                      L    ON   FD.LOTID               = L.LOTID
+              /*--2016.06.16 TOBE Modify
+              LEFT JOIN  FN_GETYIELDLOCALE(FD.PRODUCTDEFID||FD.PRODUCTDEFVERSION)     LO   ON   LO.PRODUCTDEFID        = FD.PRODUCTDEFID
+                                                                                           --checkpoint 확인필요 - asis 오류같아서 수정
+                                                                                           --AND  LO.PRODUCTDEFVERSION   = FD.PROCESSDEFVERSION
+                                                                                           AND  LO.PRODUCTDEFVERSION   = FD.PRODUCTDEFVERSION*/
+              LEFT JOIN  QAM_YIELD_LOCALE_V                                           LO   ON   LO.PRODUCTDEFID        = FD.PRODUCTDEFID
+                                                                                           AND  LO.PRODUCTDEFVERSION   = FD.PRODUCTDEFVERSION
+              LEFT JOIN  FN_GETYIELDSHIPMENT(FD.LOTID, FD.PRODUCTDEFID, FD.PRODUCTDEFVERSION)
+                                                                                      SM   ON   SM.RETLOTID            = FD.LOTID
+              LEFT JOIN  FN_GETYIELDRELPLANT(FD.LOTID, FD.PROCESSDEFID, FD.PROCESSDEFVERSION)
+                                                                                      RP   ON   RP.RETLOTID            = FD.LOTID
+                                                                                           AND  RP.RETPROCESSDEFID     = FD.PROCESSDEFID
+                                                                                           AND  RP.LV                  > 0
+            <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+              LEFT JOIN  FN_GETYIELDROOTCOMPLETE(FD.ROOTLOTID,#{P_INSPTYPE})          RLC  ON   RLC.RETROOTLOTID       = FD.ROOTLOTID
+            </if>
+              LEFT JOIN BAS_PRODUCTDEFINITION                                         SPD  ON   SPD.PRODUCTDEFID       = FD.PRODUCTDEFID
+                                                                                           AND  SPD.PRODUCTDEFVERSION  = FD.PRODUCTDEFVERSION
+              LEFT JOIN BAS_PROCESSSEGMENT                                            SG   ON   SG.PROCESSSEGMENTID    = FD.PROCESSSEGMENTID
+              LEFT JOIN CMD_DICTIONARY                                                DC1  ON   SG.PROCESSSEGMENTNAME  = DC1.DICTIONARYID
+                                                                                           AND  DC1.LANGUAGETYPE       = #{LANGUAGETYPE}
+              LEFT JOIN BAS_PRODUCTITEMSPEC                                           PIS  ON   PIS.ITEMID             = FD.PRODUCTDEFID
+                                                                                           AND  PIS.ITEMVERSION        = FD.PRODUCTDEFVERSION
+              LEFT JOIN MFM_PRODUCTIONORDER                                           PO   ON   PO.PRODUCTIONORDERID   = L.PRODUCTIONORDERID
+                                                                                           AND  PO.LINENO              = L.LINENO
+                                                                                           AND  PO.ENTERPRISEID        = L.ENTERPRISEID
+              LEFT JOIN BAS_SALEORDERAPPROVAL                                         SOA  ON   SOA.SALESORDERID       = L.PRODUCTIONORDERID
+                                                                                           AND  SOA.LINENO             = L.LINENO
+                                                                                           AND  SOA.ENTERPRISEID       = L.ENTERPRISEID
+              LEFT JOIN CMD_LOOKUP_VALUES                                             LTC  ON   LTC.LOOKUP_CODE        = L.LOTTYPE
+                                                                                           AND  LTC.LOOKUP_TYPE        = 'ProductionType'
+              LEFT JOIN CMD_DICTIONARY                                                LTD  ON   LTD.DICTIONARYID       = LTC.DICTIONARYID
+                                                                                           AND  LTD.LANGUAGETYPE       = #{LANGUAGETYPE}
+             WHERE FD.RNK =1
+            <if test="P_PRODUCTIONDIVISION != null and P_PRODUCTIONDIVISION !='' and !(P_PRODUCTIONDIVISION eq '*'.toString()) ">
+               AND L.LOTTYPE = #{P_PRODUCTIONDIVISION}
+            </if>
+        ),
+        LOTDFDTL AS
+        (
+            SELECT DL.*
+              FROM      BASETGT    BT
+              LEFT JOIN FN_GETYIELDDEFECTLIST(BT.LOTID, #{LANGUAGETYPE})    DL    ON   DL.LOTID = BT.LOTID
+            <if test="P_INSPECTIONPROCESS != null and P_INSPECTIONPROCESS !='' and !(P_INSPECTIONPROCESS eq 'Final'.toString())">
+                                                                                  AND  (DL.USERSEQUENCE||'.'||DL.SUBUSERSEQUENCE) <![CDATA[<=]]> (BT.USERSEQUENCE||'.'||BT.SUBUSERSEQUENCE)
+                                                                                  AND  DL.WORKCOUNT <![CDATA[<=]]>  BT.WORKCOUNT
+            </if>
+             WHERE 1=1
+               AND DL.SUMMARYTYPE = 'Normal'
+            <if test="P_EXCEPTDEFECTCLASS != null and P_EXCEPTDEFECTCLASS !='' and !(P_EXCEPTDEFECTCLASS eq '*'.toString())">
+               AND DL.DEFECTCODECLASSID NOT IN (SELECT regexp_substr(#{P_EXCEPTDEFECTCLASS}, '[^,]+', 1, LEVEL)
+                                                  FROM dual
+                                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_EXCEPTDEFECTCLASS})-length(replace(#{P_EXCEPTDEFECTCLASS},',',''))+1)
+            </if>
+            UNION ALL
+            SELECT
+                    DL.*
+              FROM BASETGT    BT
+              LEFT JOIN     FN_GETYIELDDEFECTLIST(BT.LOTID, #{LANGUAGETYPE})    DL    ON DL.LOTID = BT.LOTID
+             WHERE 1=1
+               AND DL.SUMMARYTYPE = 'CompleteDefect'
+            <if test="P_EXCEPTDEFECTCLASS != null and P_EXCEPTDEFECTCLASS !='' and !(P_EXCEPTDEFECTCLASS eq '*'.toString())">
+               AND DL.DEFECTCODECLASSID NOT IN (SELECT regexp_substr(#{P_EXCEPTDEFECTCLASS}, '[^,]+', 1, LEVEL)
+                                                  FROM dual
+                                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_EXCEPTDEFECTCLASS})-length(replace(#{P_EXCEPTDEFECTCLASS},',',''))+1)
+            </if>
+        ),
+        DFSUM AS
+        (
+            SELECT DD.LOTID
+            <choose>
+            <when test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+                 , DD.DISCOVERYSITE    AS PLANTID
+            </when>
+            <otherwise>
+                 , ''                  AS PLANTID
+            </otherwise>
+            </choose>                 
+                 , DD.DEFECTCODE
+                 , DD.DEFECTNAME
+                 , DD.QCSEGMENTID
+                 , DD.QCSEGMENTNAME
+                 , SUM(DD.DEFECTQTY)    AS DEFECTQTY
+              FROM LOTDFDTL    DD
+             WHERE DD.DEFECTQTY <![CDATA[<>]]> 0
+            <if test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+               AND DD.DISCOVERYSITE = #{P_INTERPLANTID}
+            </if>
+            GROUP BY DD.LOTID
+            <if test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+                   , DD.DISCOVERYSITE
+            </if>                 
+                   , DD.DEFECTCODE
+                   , DD.DEFECTNAME
+                   , DD.QCSEGMENTID 
+                   , DD.QCSEGMENTNAME 
+        ),
+        DATBASE AS
+        (
+            SELECT BT.LOCALE
+                 , BT.SHIPMENTSITE
+                 , BT.RELATEDSITE
+                 , CASE WHEN DS.PLANTID IS NULL THEN ''
+                   ELSE
+                       CASE WHEN BT.LOCALE = 'Local' THEN BT.SHIPMENTSITE
+                       ELSE DS.PLANTID    
+                       END
+                   END                             AS INTERSECTSITE
+                 , BT.PRODUCTSHAPE
+                 , BT.CUSTOMERID
+                 , BT.COMPANYCLIENT
+                 , BT.PRODUCTDEFNAME
+                 , BT.RELATEPLANTID
+                 , DS.PLANTID
+                 , IQ.INPUTQTY                      AS PCSINPUTQTY
+                 , BT.ROOTLOTID
+                 , BT.LOTID
+                 , BT.LOTCREATEDPLANTID
+                 , BT.PRODUCTDEFID
+                 , BT.PRODUCTDEFVERSION
+                 , BT.PROCESSDEFID
+                 , BT.PROCESSDEFVERSION
+                 , BT.PROCESSSEGMENTID
+                 , BT.USERSEQUENCE
+                 , BT.SUBUSERSEQUENCE
+                 , BT.WORKCOUNT
+                 , BT.INSPPROCESSSEGMENT
+                 , BT.SUMMARYTYPE
+                 , BT.SUMMARYDATE
+                 , BT.SENDTIME
+                 , BT.CREATEDTIME
+                 , BT.ROOTCOMPLETE
+                 , BT.M2SIZE
+                 , BT.AREADIV
+                 , BT.UNITPRICE
+                 , BT.CURRENCY
+                 , BT.PRODUCTDEFTYPE
+                 , NVL(DS.DEFECTQTY, 0)             AS PCSDEFECTQTY
+                 , DS.QCSEGMENTID||DS.DEFECTCODE    AS JOINCODE
+                 , DS.DEFECTNAME||NVL2(DS.QCSEGMENTNAME, '-'||DS.QCSEGMENTNAME, '') AS JOINNAME
+              FROM      BASETGT                     BT
+              LEFT JOIN DFSUM                       DS   ON   DS.LOTID = BT.LOTID
+              LEFT JOIN FN_GETYIELDINPUTQTY2(BT.LOTID, NVL(DS.PLANTID, '*') )
+                                                    IQ   ON   BT.LOTID = IQ.LOTID
+                                                         AND  IQ.RNK   = 1     
+        ),
+        DAT AS
+        (
+            SELECT DB.LOCALE
+                 , DB.SHIPMENTSITE
+                 , DB.RELATEDSITE
+                 , DB.INTERSECTSITE
+                 , DB.PRODUCTSHAPE
+                 , DB.CUSTOMERID
+                 , DB.COMPANYCLIENT
+                 , DB.PRODUCTDEFNAME
+                 , DB.RELATEPLANTID
+                 , DB.PLANTID
+                 , CASE WHEN DB.PCSINPUTQTY IS NULL THEN IQ.INPUTQTY
+                   ELSE DB.PCSINPUTQTY
+                   END                                AS PCSINPUTQTY
+                 , DB.ROOTLOTID
+                 , DB.LOTID
+                 , DB.PRODUCTDEFID
+                 , DB.PRODUCTDEFVERSION
+                 , DB.PROCESSDEFID
+                 , DB.PROCESSDEFVERSION
+                 , DB.PROCESSSEGMENTID
+                 , DB.USERSEQUENCE
+                 , DB.SUBUSERSEQUENCE
+                 , DB.WORKCOUNT
+                 , DB.INSPPROCESSSEGMENT
+                 , DB.SUMMARYTYPE
+                 , DB.SUMMARYDATE
+                 , DB.SENDTIME
+                 , DB.CREATEDTIME
+                 , DB.ROOTCOMPLETE
+                 , DB.M2SIZE
+                 , DB.AREADIV                              
+                 , DB.UNITPRICE
+                 , DB.CURRENCY
+                 , DB.PRODUCTDEFTYPE
+                 , CASE WHEN DB.PCSINPUTQTY IS NULL THEN NVL(IQ.INPUTQTY, 0) - NVL(DB.PCSDEFECTQTY, 0)
+                   ELSE NVL(DB.PCSINPUTQTY, 0) - NVL(DB.PCSDEFECTQTY, 0)
+                   END                                AS PCSNORMALQTY
+                 , DB.PCSDEFECTQTY
+                 , DB.JOINCODE
+                 , DB.JOINNAME
+             FROM      DATBASE DB
+             LEFT JOIN FN_GETYIELDINPUTQTY2(DB.LOTID, DB.LOTCREATEDPLANTID)  IQ  ON  DB.LOTID = IQ.LOTID
+                                                                                 AND IQ.RNK   = 1
+            /*--checkpoint 확인필요 NULL이 존재하여 LOT별과 차이발생하는 원인
+            WHERE DB.INTERSECTSITE IS NOT NULL*/
+           /*--checkpoint 여기서 정렬할 필요가 없는 것 같아서 주석처리
+           ORDER BY DB.PRODUCTSHAPE
+                  , DB.CUSTOMERID
+                  , DB.COMPANYCLIENT
+                  , DB.PRODUCTDEFNAME
+                  , DB.PRODUCTDEFID
+                  , DB.LOCALE
+                  , DB.SHIPMENTSITE
+                  , DB.PRODUCTDEFVERSION*/
+        ),
+        <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+        ROOTINPUTQTY AS
+        (
+            SELECT D.ROOTLOTID
+            <if test="P_SHOWINTERSECT != null and P_SHOWINTERSECT !='' and !(P_SHOWINTERSECT eq '*'.toString())">
+                 , D.INTERSECTSITE
+            </if>
+                 , NVL(SUM(D.PCSINPUTQTY), 0)     AS INPUTQTY
+              FROM
+                   (
+                      SELECT DISTINCT ROOTLOTID
+                           , LOTID
+                           , INTERSECTSITE
+                           , PCSINPUTQTY
+                        FROM DAT
+                   ) D
+            GROUP BY D.ROOTLOTID
+            <if test="P_SHOWINTERSECT != null and P_SHOWINTERSECT !='' and !(P_SHOWINTERSECT eq '*'.toString())">
+                   , D.INTERSECTSITE
+            </if>               
+        ),
+        </if>
+        FIN1 AS
+        (
+            SELECT DISTINCT
+                   F.PRODUCTSHAPE
+                 , F.COMPANYCLIENT
+                 , F.PRODUCTDEFNAME
+                 , F.PRODUCTDEFID
+                 , F.LOCALE
+                 , F.SHIPMENTSITE
+                 , F.RELATEDSITE
+                 , F.INTERSECTSITE
+                 , F.PRODUCTDEFVERSION
+                 , F.ROOTLOTID
+                 , F.LOTID
+                 , F.PROCESSSEGMENTID
+                 , F.INSPPROCESSSEGMENT
+                 , F.PCSINPUTQTY
+                 , NVL(F.PCSDEFECTQTY, 0)                                                   AS PCSDEFECTQTY
+                 , F.PCSNORMALQTY
+                 , ROUND((F.PCSINPUTQTY/F.AREADIV), 2)                                      AS AREAINPUTQTY
+                 , ROUND((F.PCSDEFECTQTY/F.AREADIV), 2)                                     AS AREADEFECTQTY
+                 , ROUND((F.PCSNORMALQTY/F.AREADIV), 2)                                     AS AREANORMALQTY                 
+                 , (F.UNITPRICE*F.PCSINPUTQTY)/NVL(E.EXCHANGE_RATE, 1)                      AS PRICEINPUTQTY
+                 , (F.UNITPRICE*F.PCSDEFECTQTY)/NVL(E.EXCHANGE_RATE, 1)                     AS PRICEDEFECTQTY
+                 , (F.UNITPRICE*F.PCSNORMALQTY)/NVL(E.EXCHANGE_RATE, 1)                     AS PRICENORMALQTY                 
+                 , F.ROOTCOMPLETE
+                 , F.PRODUCTDEFTYPE
+                 , F.SUMMARYDATE
+                 , F.CREATEDTIME
+                 , F.JOINCODE
+                 , F.JOINNAME
+              FROM DAT F
+            <choose>
+            <when test="PLANT eq 'IFC'.toString()">
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'KRW'
+            </when>
+            <when test="PLANT eq 'IFV'.toString()">
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'VND'
+            </when>
+            <when test="PLANT eq 'CCV'.toString()">
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'CNY'
+            </when>
+            <otherwise>
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'USD'
+            </otherwise>
+            </choose>
+             WHERE 1=1
+               AND F.PCSINPUTQTY IS NOT NULL
+               AND F.PCSINPUTQTY != 0
+            <if test="P_LOCALEDIV != null and P_LOCALEDIV !='' and !(P_LOCALEDIV eq '*'.toString())">
+               AND UPPER(F.LOCALE) = #{P_LOCALEDIV}
+            </if>
+            <if test="P_LINKPLANTID != null and P_LINKPLANTID !='' and !(P_LINKPLANTID eq '*'.toString())">
+               AND F.RELATEDSITE IN (SELECT regexp_substr(#{P_LINKPLANTID}, '[^,]+', 1, LEVEL)
+                                       FROM dual
+                                     CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_LINKPLANTID})-length(replace(#{P_LINKPLANTID},',',''))+1)
+            </if>
+            <if test="P_PRODSHAPETYPE != null and P_PRODSHAPETYPE !='' and !(P_PRODSHAPETYPE eq '*'.toString())">
+               AND F.PRODUCTSHAPE = #{P_PRODSHAPETYPE}
+            </if>
+            <if test="P_CUSTOMER != null and P_CUSTOMER !=''">
+               AND F.CUSTOMERID IN (SELECT regexp_substr(#{P_CUSTOMER}, '[^,]+', 1, LEVEL)
+                                      FROM dual
+                                    CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_CUSTOMER})-length(replace(#{P_CUSTOMER},',',''))+1)
+            </if>
+            <if test="P_PLANTID != null and P_PLANTID !='' and !(P_PLANTID eq '*'.toString())">
+               /*--2021.06.17 TOBE Modify 화면단에서 하나의 값만 넘김
+               AND F.SHIPMENTSITE IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT({P_PLANTID}, ','))*/
+               AND F.SHIPMENTSITE = #{P_PLANTID}
+            </if>
+            <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+               AND F.ROOTCOMPLETE = 'COMPLETE'
+            </if>
+        ),
+        FIN2 AS
+        (
+            SELECT DISTINCT
+                   F.PRODUCTSHAPE
+                 , F.COMPANYCLIENT
+                 , F.PRODUCTDEFNAME
+                 , F.PRODUCTDEFID
+                 , F.LOCALE
+                 , F.SHIPMENTSITE
+                 , F.RELATEDSITE
+                 , F.INTERSECTSITE
+                 , F.PRODUCTDEFVERSION
+                 , F.ROOTLOTID
+                 , F.PROCESSSEGMENTID
+                 , F.INSPPROCESSSEGMENT
+                 , F.PRODUCTDEFTYPE
+                 , F.JOINCODE
+                 , F.JOINNAME                 
+                <choose>
+                <when test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+                 , F.ROOTLOTID                                                               AS LOTID
+                 , RIQ.INPUTQTY                                                              AS PCSINPUTQTY
+                 , SUM(F.PCSDEFECTQTY)       OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PCSDEFECTQTY
+                 , SUM(F.PCSNORMALQTY)       OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PCSNORMALQTY
+                 , SUM(F.AREAINPUTQTY)       OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS AREAINPUTQTY
+                 , SUM(F.AREADEFECTQTY)      OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS AREADEFECTQTY
+                 , SUM(F.AREANORMALQTY)      OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS AREANORMALQTY
+                 , SUM(F.PRICEINPUTQTY)      OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PRICEINPUTQTY
+                 , SUM(F.PRICEDEFECTQTY)     OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PRICEDEFECTQTY
+                 , SUM(F.PRICENORMALQTY)     OVER(PARTITION BY F.ROOTLOTID, F.INTERSECTSITE) AS PRICENORMALQTY                 
+                </when>
+                <otherwise>
+                 , F.LOTID
+                 , F.PCSINPUTQTY
+                 , F.PCSDEFECTQTY
+                 , F.PCSNORMALQTY
+                 , F.AREAINPUTQTY
+                 , F.AREADEFECTQTY
+                 , F.AREANORMALQTY
+                 , F.PRICEINPUTQTY
+                 , F.PRICEDEFECTQTY
+                 , F.PRICENORMALQTY
+                </otherwise>
+                </choose>
+                 , ROW_NUMBER() OVER (PARTITION BY LOTID ORDER BY TO_NUMBER(F.PROCESSSEGMENTID)) AS RNK                 
+              FROM FIN1 F
+            <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+              INNER JOIN ROOTINPUTQTY  RIQ  ON   RIQ.ROOTLOTID = F.ROOTLOTID
+              <if test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+                                            AND  RIQ.INTERSECTSITE = F.INTERSECTSITE
+              </if>
+            </if>
+           ),
+           FINBASETOT AS
+           (
+              SELECT DISTINCT
+                     F.PRODUCTSHAPE
+                   , F.COMPANYCLIENT
+                   , F.PRODUCTDEFNAME
+                   , F.PRODUCTDEFID
+                   , F.LOCALE
+                   , F.SHIPMENTSITE
+                   , F.RELATEDSITE
+                   , F.INTERSECTSITE
+                   , F.PRODUCTDEFVERSION
+                   , F.PROCESSSEGMENTID
+                   , F.INSPPROCESSSEGMENT
+                   , SUM(DECODE(F.RNK,1, F.PCSINPUTQTY, 0))   OVER(PARTITION BY F.PRODUCTDEFID, F.INTERSECTSITE)    AS PCSINPUTQTY
+                   , SUM(F.PCSDEFECTQTY)                      OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE, F.PROCESSSEGMENTID, F.JOINCODE)    AS PCSDEFECTQTY
+                   , SUM(F.PCSNORMALQTY)                      OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE, F.PROCESSSEGMENTID, F.JOINCODE)    AS PCSNORMALQTY
+                   , SUM(DECODE(F.RNK,1, F.AREAINPUTQTY, 0))  OVER(PARTITION BY F.PRODUCTDEFID, F.INTERSECTSITE)    AS AREAINPUTQTY
+                   , SUM(F.AREADEFECTQTY)                     OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE, F.PROCESSSEGMENTID, F.JOINCODE)    AS AREADEFECTQTY
+                   , SUM(F.AREANORMALQTY)                     OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE, F.PROCESSSEGMENTID, F.JOINCODE)    AS AREANORMALQTY
+                   , SUM(DECODE(F.RNK,1, F.PRICEINPUTQTY, 0)) OVER(PARTITION BY F.PRODUCTDEFID, F.INTERSECTSITE)    AS PRICEINPUTQTY
+                   , SUM(F.PRICEDEFECTQTY)                    OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE, F.PROCESSSEGMENTID, F.JOINCODE)    AS PRICEDEFECTQTY
+                   , SUM(F.PRICENORMALQTY)                    OVER(PARTITION BY F.PRODUCTDEFID, F.PRODUCTDEFVERSION, F.INTERSECTSITE, F.PROCESSSEGMENTID, F.JOINCODE)    AS PRICENORMALQTY
+                   , F.PRODUCTDEFTYPE
+                   , F.JOINCODE
+                   , F.JOINNAME  
+              FROM FIN2 F
+                /*checkpoint 확인필요 데이터가 안나와서 수정함
+                --WHERE F.INTERSECTSITE IS NULL*/
+                WHERE 1 =1
+           ),
+           FINTOT AS
+           (
+               SELECT F.PRODUCTSHAPE
+                    , F.COMPANYCLIENT
+                    , F.PRODUCTDEFNAME
+                    , F.PRODUCTDEFID
+                    , F.LOCALE
+                    , F.SHIPMENTSITE
+                    , F.RELATEDSITE
+                    , F.INTERSECTSITE
+                    , F.PRODUCTDEFVERSION
+                    , F.PROCESSSEGMENTID
+                    , F.INSPPROCESSSEGMENT
+                    , 100-(CASE WHEN F.PCSINPUTQTY = 0 THEN 0
+                           ELSE ROUND((F.PCSDEFECTQTY/F.PCSINPUTQTY)*100, 2)
+                           END)                                                AS PCSYIELDRATE
+                    , CASE WHEN F.PCSINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PCSDEFECTQTY/F.PCSINPUTQTY)*100, 2) 
+                            END                                                AS PCSDEFECTRATE
+                    , F.PCSINPUTQTY
+                    , F.PCSDEFECTQTY
+                    , F.PCSNORMALQTY
+                    , 100-(CASE WHEN F.AREAINPUTQTY = 0 THEN 0
+                           ELSE ROUND((F.AREADEFECTQTY/F.AREAINPUTQTY)*100, 2)
+                           END)                                                AS AREAYIELDRATE
+                    , CASE WHEN F.AREAINPUTQTY = 0 THEN 0
+                      ELSE ROUND((F.AREADEFECTQTY/F.AREAINPUTQTY)*100, 2)
+                      END                                                      AS AREADEFECTRATE
+                    , F.AREAINPUTQTY
+                    , F.AREADEFECTQTY
+                    , F.AREANORMALQTY
+                    , 100-(CASE WHEN F.PRICEINPUTQTY = 0 THEN 0
+                           ELSE ROUND((F.PRICEDEFECTQTY/F.PRICEINPUTQTY)*100, 2)
+                           END)                                                AS PRICEYIELDRATE
+                    , CASE WHEN F.PRICEINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PRICEDEFECTQTY/F.PRICEINPUTQTY)*100, 2)
+                            END                                                AS PRICEDEFECTRATE
+                    , F.PRICEINPUTQTY
+                    , F.PRICEDEFECTQTY
+                    , F.PRICENORMALQTY
+                    , F.PRODUCTDEFTYPE
+                    , F.JOINCODE
+                    , F.JOINNAME                     
+               FROM          FINBASETOT F
+           )
+           SELECT *
+             FROM
+                  (
+               SELECT S.PRODUCTSHAPE
+                    , S.COMPANYCLIENT
+                    , S.PRODUCTDEFNAME
+                    , S.PRODUCTDEFID
+                    , S.LOCALE
+                    , S.SHIPMENTSITE
+                    , S.RELATEDSITE
+                    , S.INTERSECTSITE
+                    , S.PRODUCTDEFVERSION
+                    , S.PROCESSSEGMENTID
+                    , S.INSPPROCESSSEGMENT
+                    , S.PCSYIELDRATE
+                    , S.PCSDEFECTRATE
+                    , S.PCSINPUTQTY
+                    , S.PCSDEFECTQTY
+                    , S.PCSNORMALQTY
+                    , S.AREAYIELDRATE
+                    , S.AREADEFECTRATE
+                    , S.AREAINPUTQTY
+                    , S.AREADEFECTQTY
+                    , S.AREANORMALQTY
+                    , S.PRICEYIELDRATE
+                    , S.PRICEDEFECTRATE
+                    , S.PRICEINPUTQTY
+                    , S.PRICEDEFECTQTY
+                    , S.PRICENORMALQTY                    
+                    , S.PRODUCTDEFTYPE
+                    , S.JOINCODE
+                    , S.JOINNAME                      
+                 FROM FINTOT S
+               <if test="P_SHOWINTERSECT eq 'Y'.toString()">
+               UNION ALL
+               SELECT DISTINCT
+                      F.PRODUCTSHAPE
+                    , F.COMPANYCLIENT
+                    , F.PRODUCTDEFNAME
+                    , F.PRODUCTDEFID
+                    , F.LOCALE
+                    , F.SHIPMENTSITE
+                    , F.RELATEDSITE
+                    , F.INTERSECTSITE
+                    , F.PRODUCTDEFVERSION
+                    , F.PROCESSSEGMENTID
+                    , F.INSPPROCESSSEGMENT
+                    , 100- (CASE WHEN F.PCSINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PCSDEFECTQTY/F.PCSINPUTQTY)*100, 2)
+                            END)                                               AS PCSYIELDRATE
+                    , CASE WHEN F.PCSINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PCSDEFECTQTY/F.PCSINPUTQTY)*100, 2) 
+                            END                                                AS PCSDEFECTRATE
+                    , F.PCSINPUTQTY
+                    , F.PCSDEFECTQTY
+                    , F.PCSNORMALQTY
+                    , 100- (CASE WHEN F.AREAINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.AREADEFECTQTY/F.AREAINPUTQTY)*100, 2)
+                            END)                                               AS AREAYIELDRATE
+                    , CASE WHEN F.AREAINPUTQTY = 0 THEN 0
+                      ELSE ROUND((F.AREADEFECTQTY/F.AREAINPUTQTY)*100, 2)
+                      END                                                      AS AREADEFECTRATE
+                    , F.AREAINPUTQTY
+                    , F.AREADEFECTQTY
+                    , F.AREANORMALQTY
+                    , 100- (CASE WHEN F.PRICEINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PRICEDEFECTQTY/F.PRICEINPUTQTY)*100, 2)
+                            END)                                               AS PRICEYIELDRATE
+                    , CASE WHEN F.PRICEINPUTQTY = 0 THEN 0
+                            ELSE ROUND((F.PRICEDEFECTQTY/F.PRICEINPUTQTY)*100, 2)
+                            END                                                AS PRICEDEFECTRATE
+                    , F.PRICEINPUTQTY
+                    , F.PRICEDEFECTQTY
+                    , F.PRICENORMALQTY
+                    , F.INSPPROCESSSEGMENT
+                    , F.PRODUCTDEFTYPE
+                    , S.JOINCODE
+                    , S.JOINNAME                     
+                 FROM FINBASE F
+                WHERE F.INTERSECTSITE IS NOT NULL
+               </if>
+           ) T
+           ORDER BY T.PRODUCTSHAPE
+                  , T.COMPANYCLIENT
+                  , T.PRODUCTDEFNAME
+                  , T.PRODUCTDEFID
+                  , T.LOCALE
+                  , T.SHIPMENTSITE
+                  , T.RELATEDSITE
+                  , T.INTERSECTSITE
+                  , T.PRODUCTDEFVERSION NULLS LAST
+    </select>
+
+
+
+
+
+
+
+
+
+    <!-- desc   : 품목별 수율현황 : 불량 세부
+         modify : 불량세부 불량원인 그룹 컬럼 추가
+                  구간설정 판정 대상 변경(LOT생성 구간 -> 불량 판정사이트)
+         asis => SelectDefectDetailByProductItem
+    -->
+    <select id="selectDefectDetailByProductList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM02400Dao.selectDefectDetailByProductList */
+        WITH FINALDATA AS
+        (
+            SELECT YS.*
+                 , PS.PROCESSSEGMENTVERSION
+                 , RANK() OVER (PARTITION BY ROOTLOTID, LOTID ORDER BY TO_NUMBER(USERSEQUENCE), TO_NUMBER(SUBUSERSEQUENCE), WORKCOUNT DESC)   AS RNK
+              FROM       PCM_YIELDSUMMARY        YS
+              INNER JOIN BAS_PROCESSSEGMENT      PS  ON YS.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+             WHERE YS.SUMMARYDATE >= TO_TIMESTAMP(#{P_PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYDATE <![CDATA[<]]> TO_TIMESTAMP(#{P_PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYTYPE = 'Normal'
+               AND YS.SENDTIME IS NOT NULL
+            <choose>
+            <when test="P_INSPTYPE eq 'SHIPMENT'.toString() ">
+               AND PS.PROCESSSEGMENTCLASSID IN ('7030','7536')
+            </when>
+            <when test="P_INSPTYPE eq 'FINISH'.toString() ">
+               AND PS.PROCESSSEGMENTCLASSID IN ('7026','7534')
+            </when>            
+            <otherwise>
+               AND PS.PROCESSSEGMENTCLASSID IN ('8012','8014')
+            </otherwise>
+            </choose>
+            <if test="P_INSPECTIONPROCESS != null and P_INSPECTIONPROCESS !='' and !(P_INSPECTIONPROCESS eq 'Final'.toString())">
+               AND YS.PROCESSSEGMENTID = #{P_INSPECTIONPROCESS}
+            </if>
+            <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+               AND YS.PRODUCTDEFID||YS.PRODUCTDEFVERSION IN (SELECT regexp_substr(#{P_PRODUCTDEFID}, '[^,]+', 1, LEVEL)
+                                                               FROM dual
+                                                             CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_PRODUCTDEFID})-length(replace(#{P_PRODUCTDEFID},',',''))+1)
+            </if>
+            <if test="P_ROOTLOT != null and P_ROOTLOT !='' ">
+               AND YS.ROOTLOTID IN (SELECT regexp_substr(#{P_ROOTLOT}, '[^,]+', 1, LEVEL)
+                                      FROM dual
+                                    CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_ROOTLOT})-length(replace(#{P_ROOTLOT},',',''))+1)
+            </if>
+            <if test="P_LOTNO != null and P_LOTNO !='' ">
+               AND YS.LOTID IN (SELECT regexp_substr(#{P_LOTNO}, '[^,]+', 1, LEVEL)
+                                  FROM dual
+                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_LOTNO})-length(replace(#{P_LOTNO},',',''))+1)
+            </if>
+            UNION ALL
+            SELECT YS.*
+                 , PS.PROCESSSEGMENTVERSION
+                 , RANK() OVER (PARTITION BY ROOTLOTID, LOTID ORDER BY TO_NUMBER(USERSEQUENCE), TO_NUMBER(SUBUSERSEQUENCE), WORKCOUNT DESC)   AS RNK
+              FROM       PCM_YIELDSUMMARY        YS
+              INNER JOIN BAS_PROCESSSEGMENT   PS  ON YS.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+             WHERE YS.SUMMARYDATE >= TO_TIMESTAMP(#{P_PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYDATE <![CDATA[<]]> TO_TIMESTAMP(#{P_PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+               AND YS.SUMMARYTYPE = 'CompleteDefect'
+            <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+               AND YS.PRODUCTDEFID||YS.PRODUCTDEFVERSION IN (SELECT regexp_substr(#{P_PRODUCTDEFID}, '[^,]+', 1, LEVEL)
+                                                               FROM dual
+                                                             CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_PRODUCTDEFID})-length(replace(#{P_PRODUCTDEFID},',',''))+1)
+            </if>
+            <if test="P_ROOTLOT != null and P_ROOTLOT !='' ">
+               AND YS.ROOTLOTID IN (SELECT regexp_substr(#{P_ROOTLOT}, '[^,]+', 1, LEVEL)
+                                      FROM dual
+                                    CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_ROOTLOT})-length(replace(#{P_ROOTLOT},',',''))+1)
+            </if>
+            <if test="P_LOTNO != null and P_LOTNO !='' ">
+               AND YS.LOTID IN (SELECT regexp_substr(#{P_LOTNO}, '[^,]+', 1, LEVEL)
+                                  FROM dual
+                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_LOTNO})-length(replace(#{P_LOTNO},',',''))+1)
+            </if>
+        ),
+        BASETGT AS
+        (
+            SELECT DISTINCT LO.LOCALE
+                 , SM.SHIPSITE                                  AS SHIPMENTSITE
+                 , CASE WHEN LO.LOCALE = 'Local' THEN SM.SHIPSITE
+                <choose>
+                <when test="P_LINKPLANTID != null and P_LINKPLANTID !='' and !(P_LINKPLANTID eq '*'.toString())">
+                    ELSE RP.RELATEPLANTID END                   AS RELATEDSITE
+                </when>
+                <otherwise>
+                    ELSE ''               END                   AS RELATEDSITE
+                </otherwise>
+                </choose>
+                 , CASE WHEN LO.LOCALE = 'Local' THEN SM.SHIPSITE
+                <choose>
+                <when test="P_LINKPLANTID != null and P_LINKPLANTID !='' and !(P_LINKPLANTID eq '*'.toString())">
+                    ELSE IQ.PLANTID       END                   AS INTERSECTSITE
+                </when>
+                <otherwise>
+                    ELSE ''               END                   AS INTERSECTSITE
+                </otherwise>
+                </choose>
+                 , PIS.PRODUCTTYPE                              AS PRODUCTSHAPE
+                 , PIS.CUSTOMERID
+                 , PIS.CUSTOMERNAME                             AS COMPANYCLIENT
+                 , SPD.PRODUCTDEFNAME                           AS PRODUCTDEFNAME
+                 , RP.RELATEPLANTID
+                 , IQ.PLANTID
+                 , IQ.INPUTQTY                                  AS PCSINPUTQTY
+                 , FD.ROOTLOTID
+                 , FD.LOTID
+                 , FD.PRODUCTDEFID
+                 , FD.PRODUCTDEFVERSION
+                 , FD.PROCESSDEFID
+                 , FD.PROCESSDEFVERSION
+                 , FD.PROCESSSEGMENTID
+                 , FD.USERSEQUENCE
+                 , FD.SUBUSERSEQUENCE
+                 , FD.WORKCOUNT
+                 , DC1.DICTIONARYNAME                           AS INSPPROCESSSEGMENT
+                 , FD.SUMMARYTYPE
+                 , FD.SUMMARYDATE
+                 , FD.SENDTIME
+                 , FD.CREATEDTIME
+                <choose>
+                <when test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+                 , CASE WHEN RLC.LOTCOUNT = RLC.ENDLOTCOUNT THEN 'COMPLETE'
+                   ELSE ''
+                   END                                          AS ROOTCOMPLETE
+                </when>
+                <otherwise>
+                  , ''                                          AS ROOTCOMPLETE
+                </otherwise>
+                </choose>
+                 , PIS.PCSSIZEXAXIS*PIS.PCSSIZEYAXIS            AS M2SIZE
+                 , PIS.PCSMM                                    AS AREADIV
+                 , SOA.UNITPRICE                                AS UNITPRICE
+                 , SOA.CURRENCY
+                 , LTD.DICTIONARYNAME                           AS PRODUCTDEFTYPE
+              FROM       FINALDATA                                                     FD
+              INNER JOIN PCM_LOT                                                       L    ON   FD.LOTID               = L.LOTID
+              /*--2016.06.16 TOBE Modify
+              LEFT JOIN  FN_GETYIELDLOCALE(FD.PRODUCTDEFID||FD.PRODUCTDEFVERSION)      LO   ON   LO.PRODUCTDEFID        = FD.PRODUCTDEFID
+                                                                                            --checkpoint 확인필요
+                                                                                            --AND  LO.PRODUCTDEFVERSION   = FD.PROCESSDEFVERSION
+                                                                                            AND  LO.PRODUCTDEFVERSION   = FD.PRODUCTDEFVERSION*/
+              LEFT JOIN  QAM_YIELD_LOCALE_V                                            LO   ON   LO.PRODUCTDEFID        = FD.PRODUCTDEFID
+                                                                                            AND  LO.PRODUCTDEFVERSION   = FD.PRODUCTDEFVERSION
+              LEFT JOIN  FN_GETYIELDSHIPMENT(FD.LOTID, FD.PRODUCTDEFID, FD.PRODUCTDEFVERSION)
+                                                                                       SM   ON   SM.RETLOTID            = FD.LOTID
+              LEFT JOIN  FN_GETYIELDRELPLANT(FD.LOTID, FD.PROCESSDEFID, FD.PROCESSDEFVERSION)
+                                                                                       RP   ON   RP.RETLOTID            = FD.LOTID
+                                                                                            AND  RP.RETPROCESSDEFID     = FD.PROCESSDEFID
+                                                                                            AND  RP.LV                  > 0
+            <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+              LEFT JOIN  FN_GETYIELDROOTCOMPLETE(FD.ROOTLOTID,#{P_INSPTYPE})           RLC  ON   RLC.RETROOTLOTID       = FD.ROOTLOTID
+            </if>
+            <choose>
+            <when test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString()) ">
+              LEFT JOIN FN_GETYIELDINPUTQTY2(FD.LOTID, #{P_INTERPLANTID})              IQ   ON   FD.LOTID               = IQ.LOTID
+            </when>
+            <otherwise>
+              LEFT JOIN FN_GETYIELDINPUTQTY2(FD.LOTID, '*')                            IQ   ON   FD.LOTID               = IQ.LOTID
+            </otherwise>
+            </choose>
+              LEFT JOIN BAS_PRODUCTDEFINITION                                          SPD  ON   SPD.PRODUCTDEFID       = FD.PRODUCTDEFID
+                                                                                            AND  SPD.PRODUCTDEFVERSION  = FD.PRODUCTDEFVERSION
+              LEFT JOIN BAS_PROCESSSEGMENT                                             SG   ON   SG.PROCESSSEGMENTID    = FD.PROCESSSEGMENTID
+              LEFT JOIN CMD_DICTIONARY                                                 DC1  ON   SG.PROCESSSEGMENTNAME  = DC1.DICTIONARYID
+                                                                                            AND  DC1.LANGUAGETYPE       = #{LANGUAGETYPE}
+              LEFT JOIN BAS_PRODUCTITEMSPEC                                            PIS  ON   PIS.ITEMID             = FD.PRODUCTDEFID
+                                                                                            AND  PIS.ITEMVERSION        = FD.PRODUCTDEFVERSION
+              LEFT JOIN MFM_PRODUCTIONORDER                                            PO   ON   PO.PRODUCTIONORDERID   = L.PRODUCTIONORDERID
+                                                                                            AND  PO.LINENO              = L.LINENO
+                                                                                            AND  PO.ENTERPRISEID        = L.ENTERPRISEID
+              LEFT JOIN BAS_SALEORDERAPPROVAL                                          SOA  ON   SOA.SALESORDERID       = L.PRODUCTIONORDERID
+                                                                                            AND  SOA.LINENO             = L.LINENO
+                                                                                            AND  SOA.ENTERPRISEID       = L.ENTERPRISEID
+              LEFT JOIN CMD_LOOKUP_VALUES                                              LTC  ON   LTC.LOOKUP_CODE        = L.LOTTYPE
+                                                                                            AND  LTC.LOOKUP_TYPE        = 'ProductionType'
+              LEFT JOIN CMD_DICTIONARY                                                 LTD  ON   LTD.DICTIONARYID       = LTC.DICTIONARYID
+                                                                                            AND  LTD.LANGUAGETYPE       = #{LANGUAGETYPE}
+
+             WHERE FD.RNK = 1
+               AND IQ.RNK = 1
+            <if test="P_PRODUCTIONDIVISION != null and P_PRODUCTIONDIVISION !='' and !(P_PRODUCTIONDIVISION eq '*'.toString()) ">
+               AND L.LOTTYPE = #{P_PRODUCTIONDIVISION}
+            </if>
+        ),
+        LOTDFDTL AS
+        (
+            SELECT DL.*
+              FROM      BASETGT    BT
+              LEFT JOIN FN_GETYIELDDEFECTLIST(BT.LOTID, #{LANGUAGETYPE})  DL    ON   DL.LOTID = BT.LOTID
+            <if test="P_INSPECTIONPROCESS != null and P_INSPECTIONPROCESS !='' and !(P_INSPECTIONPROCESS eq 'Final'.toString())">
+                                                                                AND  (DL.USERSEQUENCE||'.'||DL.SUBUSERSEQUENCE) <![CDATA[<=]]>  (BT.USERSEQUENCE||'.'||BT.SUBUSERSEQUENCE)
+                                                                                AND  DL.WORKCOUNT <![CDATA[<=]]>  BT.WORKCOUNT
+            </if>
+             WHERE 1=1
+               AND DL.SUMMARYTYPE = 'Normal'
+            <if test="P_EXCEPTDEFECTCLASS != null and P_EXCEPTDEFECTCLASS !='' and !(P_EXCEPTDEFECTCLASS eq '*'.toString())">
+               AND DL.DEFECTCODECLASSID NOT IN (SELECT regexp_substr(#{P_EXCEPTDEFECTCLASS}, '[^,]+', 1, LEVEL)
+                                                  FROM dual
+                                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_EXCEPTDEFECTCLASS})-length(replace(#{P_EXCEPTDEFECTCLASS},',',''))+1)
+            </if>
+            UNION ALL
+            SELECT DL.*
+              FROM      BASETGT    BT
+              LEFT JOIN FN_GETYIELDDEFECTLIST(BT.LOTID, #{LANGUAGETYPE})    DL    ON DL.LOTID = BT.LOTID
+             WHERE 1=1
+               AND DL.SUMMARYTYPE = 'CompleteDefect'
+            <if test="P_EXCEPTDEFECTCLASS != null and P_EXCEPTDEFECTCLASS !='' and !(P_EXCEPTDEFECTCLASS eq '*'.toString())">
+               AND DL.DEFECTCODECLASSID NOT IN (SELECT regexp_substr(#{P_EXCEPTDEFECTCLASS}, '[^,]+', 1, LEVEL)
+                                                  FROM dual
+                                                CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_EXCEPTDEFECTCLASS})-length(replace(#{P_EXCEPTDEFECTCLASS},',',''))+1)
+            </if>
+        ),
+        DFSUM AS
+        (
+            SELECT DD.LOTID
+            <choose>
+            <when test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+                 , DD.DISCOVERYSITE    AS PLANTID
+            </when>
+            <otherwise>
+                 , ''                  AS PLANTID
+            </otherwise>
+            </choose>
+                 , DD.DISCOVERYSITE
+                 , DD.PROCESSSEGMENTNAME
+                 , DD.DEFECTCODE
+                 , DD.DEFECTNAME
+                 , DD.DEFECTQTY
+                 , DD.QCSEGMENTNAME
+                 , DD.REASONSITE
+                 , DD.REASONCONSUMABLEDEFNAME                      /*원인 품목명*/
+                 , DD.REASONSEGMENTNAME                            /*원인 공정명*/
+                 , DD.REASONAREANAME
+                 , DD.QCSEGMENTID
+              FROM LOTDFDTL    DD
+             WHERE DD.DEFECTQTY <![CDATA[<>]]> 0
+            <if test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+               AND DD.DISCOVERYSITE = #{P_INTERPLANTID}
+            </if>
+        ),
+        DAT AS
+        (
+            SELECT BT.*
+                 , DS.DISCOVERYSITE
+                 , DS.PROCESSSEGMENTNAME
+                 , DS.DEFECTCODE
+                 , DS.DEFECTNAME
+                 , DS.QCSEGMENTNAME
+                 , DS.REASONSITE
+                 , DS.REASONCONSUMABLEDEFNAME
+                 , DS.REASONSEGMENTNAME
+                 , DS.REASONAREANAME
+                 , NVL(BT.PCSINPUTQTY, 0) - NVL(DS.DEFECTQTY, 0)  AS PCSNORMALQTY
+                 , NVL(DS.DEFECTQTY, 0)                           AS PCSDEFECTQTY
+                 , DS.DEFECTQTY*BT.UNITPRICE                      AS PRICEDEFECTQTY
+                 , BT.PCSINPUTQTY                                 AS INPUTQTY
+                 , DS.QCSEGMENTID
+              FROM      BASETGT     BT
+              LEFT JOIN DFSUM       DS    ON  DS.LOTID   = BT.LOTID
+              <if test="P_INTERPLANTID != null and P_INTERPLANTID !='' and !(P_INTERPLANTID eq '*'.toString())">
+                                          AND DS.PLANTID = BT.INTERSECTSITE
+              </if>
+        ),
+        <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+        ROOTINPUTQTY AS
+        (
+            SELECT D.ROOTLOTID
+                 , SUM(INPUTQTY)        AS INPUTQTY
+              FROM
+                    (
+                        SELECT DISTINCT ROOTLOTID
+                             , LOTID
+                             , INPUTQTY
+                        FROM DAT
+                    ) D
+            GROUP BY D.ROOTLOTID
+        ),
+        </if>
+        FIN AS
+        (
+            SELECT F.PRODUCTSHAPE
+                 , F.COMPANYCLIENT
+                 , F.PRODUCTDEFNAME
+                 , F.PRODUCTDEFID
+                 , F.LOCALE
+                 , F.SHIPMENTSITE
+                 , F.RELATEDSITE
+                 , F.INTERSECTSITE
+                 , F.PRODUCTDEFVERSION
+                 , F.ROOTLOTID
+                 , F.DEFECTNAME                                                               /* 불량명*/
+                 , F.DEFECTCODE
+                 , F.QCSEGMENTNAME                                                            /* 품질공정명*/
+                 , NVL(F.PCSDEFECTQTY, 0)                                   AS PCSDEFECTQTY   /* 불량수*/
+                 , F.PRICEDEFECTQTY/NVL(E.EXCHANGE_RATE, 1)                 AS DEFECTPRICE    /* 불량금액*/
+                 , F.CURRENCY
+                 , F.REASONSITE                                                               /* 원인 Site ID*/
+                 , F.QCSEGMENTID
+                <choose>
+                <when test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+                 , F.ROOTLOTID                                              AS LOTID
+                 , RIQ.INPUTQTY                                             AS PCSINPUTQTY    /* 투입수*/
+                 , CASE WHEN RIQ.INPUTQTY = 0 THEN 0
+                   ELSE ROUND((NVL(F.PCSDEFECTQTY, 0)/RIQ.INPUTQTY)*100, 2)
+                   END                                                      AS PCSDEFECTRATE  /* 불량율*/
+                 , RIQ.INPUTQTY                                             AS REASONINPUTQTY /* 투입수*/
+                 , CASE WHEN RIQ.INPUTQTY = 0 THEN 0
+                   ELSE ROUND((NVL(F.PCSDEFECTQTY, 0)/RIQ.INPUTQTY)*100, 2)
+                   END                                                      AS REASONDEFECTRATE/* 불량율*/                 
+                </when>
+                <otherwise>
+                 , F.LOTID
+                 , F.PCSINPUTQTY                                                              /* 투입수*/
+                 , CASE WHEN F.PCSINPUTQTY = 0 THEN 0
+                   ELSE ROUND((NVL(F.PCSDEFECTQTY, 0)/F.PCSINPUTQTY)*100, 2)
+                   END                                                      AS PCSDEFECTRATE  /* 불량율*/
+                 , F.INPUTQTY                                               AS REASONINPUTQTY /* 투입수*/
+                 , CASE WHEN F.PCSINPUTQTY = 0 THEN    0
+                   ELSE ROUND((NVL(F.PCSDEFECTQTY, 0)/F.PCSINPUTQTY)*100, 2)
+                   END                                                      AS REASONDEFECTRATE/* 불량율*/
+                </otherwise>
+                </choose>
+                 , F.PROCESSSEGMENTID
+                 , F.DISCOVERYSITE                                                            /* 발견 Site ID*/
+                 , F.PROCESSSEGMENTNAME                                                       /* 발견공정명*/
+                 , F.REASONCONSUMABLEDEFNAME                                                  /* 원인 품목명*/
+                 , F.REASONSEGMENTNAME                                                        /* 원인 공정명*/
+                 , F.REASONAREANAME                                                           /* 원인 작업장*/
+                 , F.INSPPROCESSSEGMENT
+                 , F.PRODUCTDEFTYPE
+                 , ROW_NUMBER() OVER (PARTITION BY F.LOTID ORDER BY TO_NUMBER(F.PROCESSSEGMENTID)) AS RNK
+              FROM DAT F
+            <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+              INNER JOIN    ROOTINPUTQTY                RIQ        ON   RIQ.ROOTLOTID = F.ROOTLOTID
+            </if>
+            <choose>
+            <when test="PLANT eq 'IFC'.toString()">
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'KRW'
+            </when>
+            <when test="PLANT eq 'IFV'.toString()">
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'VND'
+            </when>
+            <when test="PLANT eq 'CCV'.toString()">
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'CNY'
+            </when>
+            <otherwise>
+              LEFT OUTER JOIN  QAM_YIELD_EXCHANGE_V E ON E.PLANTID = #{PLANT} AND E.CURRENCY_CODE = 'USD'
+            </otherwise>
+            </choose>
+             WHERE 1=1
+               AND F.PCSINPUTQTY IS NOT NULL
+               AND F.PCSINPUTQTY != 0
+            <if test="P_LOCALEDIV != null and P_LOCALEDIV !='' and !(P_LOCALEDIV eq '*'.toString())">
+               AND UPPER(F.LOCALE) = #{P_LOCALEDIV}
+            </if>
+            <if test="P_LINKPLANTID != null and P_LINKPLANTID !='' and !(P_LINKPLANTID eq '*'.toString())">
+               AND F.RELATEDSITE IN (SELECT regexp_substr(#{P_LINKPLANTID}, '[^,]+', 1, LEVEL)
+                                       FROM dual
+                                     CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_LINKPLANTID})-length(replace(#{P_LINKPLANTID},',',''))+1)
+            </if>
+            <if test="P_PRODSHAPETYPE != null and P_PRODSHAPETYPE !='' and !(P_PRODSHAPETYPE eq '*'.toString())">
+               AND F.PRODUCTSHAPE = #{P_PRODSHAPETYPE}
+            </if>
+            <if test="P_CUSTOMER != null and P_CUSTOMER !=''">
+               AND F.CUSTOMERID IN (SELECT regexp_substr(#{P_CUSTOMER}, '[^,]+', 1, LEVEL)
+                                      FROM dual
+                                    CONNECT BY LEVEL <![CDATA[<=]]> length(#{P_CUSTOMER})-length(replace(#{P_CUSTOMER},',',''))+1)
+            </if>
+            <if test="P_PLANTID != null and P_PLANTID !='' and !(P_PLANTID eq '*'.toString())">               
+               AND F.SHIPMENTSITE = #{P_PLANTID}
+            </if>
+            <if test="P_LOTSTANDARD != null and P_LOTSTANDARD !='' and (P_LOTSTANDARD eq 'ROOTLOT'.toString())">
+               AND F.ROOTCOMPLETE = 'COMPLETE'
+            </if>
+        )
+        SELECT S.PRODUCTSHAPE
+             , S.COMPANYCLIENT
+             , S.PRODUCTDEFNAME
+             , S.PRODUCTDEFID
+             , S.LOCALE
+             , S.SHIPMENTSITE
+             , S.RELATEDSITE
+             , S.INTERSECTSITE
+             , S.PRODUCTDEFVERSION
+             , S.ROOTLOTID
+             , S.LOTID
+             , S.DISCOVERYSITE
+             , S.PROCESSSEGMENTNAME
+             , DECODE(S.RNK, 1, S.PCSINPUTQTY, 0)           AS PCSINPUTQTY
+             , S.PCSDEFECTQTY
+             , S.PCSDEFECTRATE
+             , S.DEFECTPRICE
+             , S.REASONSITE
+             , DECODE(S.RNK, 1, S.REASONINPUTQTY, 0)        AS REASONINPUTQTY
+             , S.REASONDEFECTRATE
+             , S.REASONCONSUMABLEDEFNAME
+             , S.REASONSEGMENTNAME
+             , S.REASONAREANAME
+             , S.INSPPROCESSSEGMENT
+             , S.PRODUCTDEFTYPE                             AS PRODUCTDEFTYPE
+             , S.QCSEGMENTID||S.DEFECTCODE                  AS JOINCODE
+             , S.DEFECTNAME||NVL2(S.QCSEGMENTNAME, '-'||S.QCSEGMENTNAME, '')
+                                                            AS JOINNAME
+          FROM FIN S
+        ORDER BY S.PRODUCTSHAPE
+               , S.COMPANYCLIENT
+               , S.PRODUCTDEFNAME
+               , S.PRODUCTDEFID
+               , S.LOCALE
+               , S.SHIPMENTSITE
+               , S.RELATEDSITE
+               , S.INTERSECTSITE
+               , S.PRODUCTDEFVERSION
+               , S.PCSDEFECTRATE DESC
+    </select>
+</mapper>

@@ -1,0 +1,185 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.hra.dao.HRA90210Dao">
+    
+   <select id="selectMembers" parameterType="map" resultType="hashmap">
+   <![CDATA[
+	          SELECT DEF.EMP_TYPE                          /* EMPLOYEE TYPE (10,20: Staff 활성  30: Staff 비활성 */
+             , DEF.BLOB_IMAGE                              /* IMAGE DATA(사진 데이터)    */
+             , DEF.ORGANIZATION_NAME                       /* 부서 ID       */
+             , DEF.EMPLOYEE_NAME                           /* 이름          */
+             , DEF.JOB_NAME                                /* 직무          */
+             , DEF.GRADE_NAME                              /* 직급          */
+             , DEF.EMPLOYEE_NUMBER                         /* 사원번호      */
+             , DEF.POSITION_NAME                           /* 직책          */
+             , DEF.HIRE_DATE                               /* 입사일        */
+             , DEF.PROMOTION_DATE                          /* 승진일        */
+             , DEF.EMP_AGE                                 /* 나이          */
+             , NVL(DEF.EFFECTIVE_ORG_DATE, DEF.HIRE_DATE)  /* 부서일        */
+             , DEF.PERSON_ID                               /* PERSON ID     */
+             , DEF.ORG_GUNJAE                              /* ORG GUNJAE    */
+             , DEF.ORGANIZATION_ID                         /* 부서 ID       */
+             , DEF.PARENT_ORGANIZATION_ID                  /* 상위부서 ID   Upper Org 버튼 누를 경우 조직 ID 처리 */
+             , DECODE(DEF.REGISTERED_DISABLED_FLAG,'E', DEF.EU_TITLE_NAME, DEF.GRADE_TITLE) AS GRADE_TITLE     /* 호칭 + EU TITLE NAME 2013.01.03 하영호         */
+             , DEF.BIRTH_DATE                              /* 생년월일       */
+          FROM
+             (
+               SELECT CHO.EMP_TYPE                                                  AS  EMP_TYPE                  /* EMPLOYEE TYPE */
+                    , IMG.IMAGE                                                     AS  BLOB_IMAGE                /* IMAGE DATA    */
+                    , CHO.ORGANIZATION_NAME                                         AS  ORGANIZATION_NAME         /* 부서 ID       */
+                    , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), PPF.KOR_NAME, NVL(PPF.EU_NAME,PPF.KOR_NAME))                   AS  EMPLOYEE_NAME             /* 이름          */
+                    , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), PPF.JOB_NAME, PPF.JOB_ENG_NAME)               AS  JOB_NAME                  /* 직무          */
+                    , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), PPF.KOR_GRADE, PPF.ENG_GRADE)                 AS  GRADE_NAME                /* 직급          */
+                    , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), PPF.KOR_POSITION, PPF.ENG_POSITION)           AS  POSITION_NAME             /* 직책          */
+                    , PPF.EMPLOYEE_NUMBER                                           AS  EMPLOYEE_NUMBER           /* 사원번호      */
+                    , PPF.GRADE_SEQ                                                 AS  GRADE_SEQ                 /* GRADE SEQ     */
+                    , REPLACE(SUBSTR(PEI.PEI_INFORMATION1, 1, 10), '-', '/')        AS  HIRE_DATE                 /* 입사일        */
+                    , REPLACE(SUBSTR(PEI.PEI_INFORMATION6, 1, 10), '-', '/')        AS  PROMOTION_DATE            /* 승진일        */
+                    , SUBSTR(HJSHR_WORK_YMD_FNC(TO_CHAR(PPF.DATE_OF_BIRTH,'YYYYMMDD'), TO_CHAR(SYSDATE,'YYYYMMDD')), 1 , 2) AS EMP_AGE
+                    , ( SELECT TO_CHAR(MAX(PSAS.START_DATE), 'YYYY/MM/DD')
+                          FROM PER_ALL_ASSIGNMENTS_F  PAA
+                             , PER_SECONDARY_ASS_STATUSES  PSAS
+                             , FND_LOOKUP_VALUES  FLV
+                         WHERE PAA.ASSIGNMENT_ID = PSAS.ASSIGNMENT_ID
+                           AND PSAS.ATTRIBUTE2 = FLV.LOOKUP_CODE
+                           AND PAA.PERSON_ID = CHO.PERSON_ID 
+                           AND FLV.LOOKUP_TYPE = 'HJS_HR_ASG_REASON'
+                           AND FLV.TAG = 'Y' )                                      AS EFFECTIVE_ORG_DATE
+                    , HJSPFM_ASSIGN_FIRST_ORG_DATE (CHO.PERSON_ID, CHO.ORGANIZATION_ID, TRUNC(SYSDATE)) AS EFFECTIVE_ORG_DATE_OLD
+                    , CHO.PERSON_ID                                                 AS  PERSON_ID                 /* PERSON ID     */
+                    , CHO.ORG_GUNJAE                                                AS  ORG_GUNJAE                /* ORG GUNJAE    */
+                    , CHO.ORGANIZATION_ID                                           AS  ORGANIZATION_ID           /* 부서 ID       */
+                    , CHO.PARENT_ORGANIZATION_ID                                    AS  PARENT_ORGANIZATION_ID    /* 상위부서 ID   */
+                    , ( SELECT DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2),FLV.MEANING,FLV.DESCRIPTION)
+                          FROM PER_PEOPLE_EXTRA_INFO     PPEI
+                             , FND_LOOKUP_VALUES   FLV
+                         WHERE PPEI.PERSON_ID = CHO.PERSON_ID
+                           AND FLV.LOOKUP_CODE = PPEI.PEI_INFORMATION11
+                           AND PPEI.INFORMATION_TYPE(+) = 'HJS_HR_PERSONAL_DATE_INFO'
+                           AND FLV.LOOKUP_TYPE = 'HJS_HR_GRADE_TITLE' )             AS GRADE_TITLE                /* 호칭          */
+                    , ( SELECT FLV.LOOKUP_CODE
+                          FROM PER_PEOPLE_EXTRA_INFO     PPEI
+                             , FND_LOOKUP_VALUES   FLV
+                         WHERE PPEI.PERSON_ID = CHO.PERSON_ID
+                           AND FLV.LOOKUP_CODE = PPEI.PEI_INFORMATION11
+                           AND PPEI.INFORMATION_TYPE(+) = 'HJS_HR_PERSONAL_DATE_INFO'
+                           AND FLV.LOOKUP_TYPE = 'HJS_HR_GRADE_TITLE' )             AS GRADE_TITLE_CODE           /* 호칭코드       */
+                    , REPLACE(SUBSTR(PEI.PEI_INFORMATION10, 1, 10), '-', '/')       AS GRADE_TITLE_DATE           /* 호칭부여일     */
+                    , NVL(HJSPFM_GET_USER_PERSON_TYPE(TRUNC(SYSDATE), CHO.PERSON_ID), 'NONE') AS PERSON_TYPE
+                    , TO_CHAR(PPF.DATE_OF_BIRTH, 'YYYY/MM/DD')                      AS BIRTH_DATE                 /* 생년월일       */
+                    , PPF.EU_TITLE_NAME                           /* EU TITLE NAME 2013.01.03 하영호*/
+                    , PPF.REGISTERED_DISABLED_FLAG              /* EU TITLE NAME 2013.01.03 하영호*/
+                 FROM
+                    (
+                      SELECT '10_MANAGER'                              AS EMP_CLASS
+                           , '10'                                      AS EMP_TYPE
+                           , XGR.PERSON_ID                             AS PERSON_ID
+                           , '000000000'                               AS ORG_GUNJAE
+                           , ORG.ORGANIZATION_ID                       AS ORGANIZATION_ID
+                           , HOH.PARENT_ORGANIZATION_ID                AS PARENT_ORGANIZATION_ID
+                           , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), NVL(ORG.ATTRIBUTE2, ORG.NAME), NVL(ORG.ATTRIBUTE3, ORG.NAME)) AS ORGANIZATION_NAME
+                        FROM HR_ALL_ORGANIZATION_UNITS  ORG
+                           , HJSPFM_ORG_MANAGER_V1      XGR
+                           , HJSPFM_ORG_HIERARCHY_V3    HOH
+                       WHERE 1=1
+                         AND ORG.ORGANIZATION_ID    = HOH.CHILD_ORGANIZATION_ID
+                         AND ORG.ORGANIZATION_ID    = #{ORG_ID}  /* Parm1: Org ID */
+                         AND ORG.ORGANIZATION_ID    = XGR.ORGANIZATION_ID(+)
+                         AND HOH.ORG_HIERARCHY_NAME IS NOT NULL
+                         AND TRUNC(SYSDATE) BETWEEN HOH.DATE_FROM AND HOH.DATE_TO
+                         AND TRUNC(SYSDATE) BETWEEN XGR.EFFECTIVE_START_DATE(+) AND XGR.EFFECTIVE_END_DATE(+)
+                   UNION ALL
+                      SELECT '20_CHILD MANAGER'                        AS EMP_CLASS
+                           , '20'                                      AS EMP_TYPE
+                           , (
+                               SELECT XGR.PERSON_ID
+                                 FROM HJSPFM_ORG_MANAGER_V1 XGR
+                                WHERE 1=1
+                                  AND HOH.CHILD_ORGANIZATION_ID = XGR.ORGANIZATION_ID
+                                  AND TRUNC(SYSDATE) BETWEEN XGR.EFFECTIVE_START_DATE AND XGR.EFFECTIVE_END_DATE
+                             )                                         AS PERSON_ID
+                           , HOH.ORG_GUNJAE                            AS ORG_GUNJAE
+                           , HOH.CHILD_ORGANIZATION_ID                 AS ORGANIZATION_ID
+                           , NULL                                      AS PARENT_ORGANIZATION_ID
+                           , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), HOH.CHILD_ORGANIZATION_NAME, HOH.CHILD_ORGANIZATION_NAME_ENG) AS ORGANIZATION_NAME
+                        FROM HJSPFM_ORG_HIERARCHY_V3   HOH
+                       WHERE 1=1
+                         AND HOH.ORG_HIERARCHY_NAME        IS NOT NULL                   
+                         AND HOH.PARENT_ORGANIZATION_ID    = #{ORG_ID}  /* Parm1: Org ID */
+                         AND TRUNC(SYSDATE) BETWEEN HOH.DATE_FROM AND HOH.DATE_TO
+                   UNION ALL
+                      SELECT '30_MEMBER'                               AS EMP_CLASS
+                           , '30'                                      AS EMP_TYPE
+                           , XAF.PERSON_ID                             AS PERSON_ID
+                           , '999999999'                               AS ORG_GUNJAE
+                           , XAF.ORGANIZATION_ID                       AS ORGANIZATION_ID
+                           , NULL                                      AS PARENT_ORGANIZATION_ID
+                           , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), NVL(ORG.ATTRIBUTE2, ORG.NAME), NVL(ORG.ATTRIBUTE3, ORG.NAME)) AS ORGANIZATION_NAME
+                        FROM HR_ALL_ORGANIZATION_UNITS  ORG
+                           , PER_ALL_ASSIGNMENTS_F      XAF
+                       WHERE 1=1
+                         AND XAF.ORGANIZATION_ID    = ORG.ORGANIZATION_ID
+                         AND ORG.ORGANIZATION_ID    = #{ORG_ID}  /* Parm1: Org ID */
+                         AND ORG.ATTRIBUTE2     NOT IN ('경영층','(주)한진해운')
+                         AND XAF.PRIMARY_FLAG       = 'Y'
+                         AND XAF.ASSIGNMENT_TYPE    = 'E'
+                         AND XAF.ASSIGNMENT_STATUS_TYPE_ID != 3
+                         AND TRUNC(SYSDATE) BETWEEN XAF.EFFECTIVE_START_DATE AND XAF.EFFECTIVE_END_DATE
+                         AND NOT EXISTS ( SELECT 'x'
+                                            FROM HJSPFM_ORG_MANAGER_V1 XGR
+                                           WHERE 1=1
+                                             AND XAF.ORGANIZATION_ID = XGR.ORGANIZATION_ID
+                                             AND XAF.PERSON_ID       = XGR.PERSON_ID
+                                             AND TRUNC(SYSDATE) BETWEEN XGR.EFFECTIVE_START_DATE AND XGR.EFFECTIVE_END_DATE
+                                        )
+                   UNION ALL
+                      SELECT '15_MEMBER'                               AS EMP_CLASS
+                           , '15'                                      AS EMP_TYPE
+                           , XAF.PERSON_ID                             AS PERSON_ID
+                           , '111111111'                               AS ORG_GUNJAE
+                           , XAF.ORGANIZATION_ID                       AS ORGANIZATION_ID
+                           , NULL                                      AS PARENT_ORGANIZATION_ID
+                           , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), NVL(ORG.ATTRIBUTE2, ORG.NAME), NVL(ORG.ATTRIBUTE3, ORG.NAME)) AS ORGANIZATION_NAME
+                        FROM 
+                           (
+                             SELECT ORG.*
+                               FROM HR_ALL_ORGANIZATION_UNITS ORG
+                              WHERE 1=1
+                                AND ORG.ATTRIBUTE2  IN ('경영층','(주)한진해운')
+                                AND EXISTS ( SELECT 'x'
+                                               FROM HR_ALL_ORGANIZATION_UNITS XRG
+                                              WHERE 1=1
+                                                AND XRG.ATTRIBUTE2     IN ('경영층','(주)한진해운')
+                                                AND XRG.ORGANIZATION_ID = #{ORG_ID}    /* Parm1: Org ID */
+                                           )
+                           ) ORG
+                           , PER_ALL_ASSIGNMENTS_F      XAF
+                       WHERE 1=1
+                         AND XAF.ORGANIZATION_ID    = ORG.ORGANIZATION_ID
+                         AND XAF.PRIMARY_FLAG       = 'Y'
+                         AND XAF.ASSIGNMENT_TYPE    = 'E'
+                         AND XAF.ASSIGNMENT_STATUS_TYPE_ID != 3
+                         AND TRUNC(SYSDATE) BETWEEN XAF.EFFECTIVE_START_DATE AND XAF.EFFECTIVE_END_DATE
+                    ) CHO
+                    , HJS_SSHR_EMPLOYEE_LOV_V   PPF
+                    , PER_PEOPLE_EXTRA_INFO     PEI
+                    , PER_IMAGES                IMG
+                WHERE 1=1
+                  AND CHO.PERSON_ID            = PPF.PERSON_ID(+)
+                  AND CHO.PERSON_ID            = PEI.PERSON_ID(+)
+                  AND CHO.PERSON_ID            = IMG.PARENT_ID(+)
+                  AND IMG.TABLE_NAME(+)        = 'PER_PEOPLE_F'
+                  AND PEI.INFORMATION_TYPE(+)  = 'HJS_HR_PERSONAL_DATE_INFO'
+                  AND TRUNC(SYSDATE) BETWEEN PPF.EFFECTIVE_START_DATE(+) AND PPF.EFFECTIVE_END_DATE(+)
+             ) DEF
+         WHERE 1=1
+           AND DEF.PERSON_TYPE != 'Vessel'
+         ORDER BY DEF.EMP_TYPE
+             , DEF.ORG_GUNJAE
+             , DEF.GRADE_TITLE_CODE
+             , DEF.EMPLOYEE_NAME
+     ]]>
+    </select>
+</mapper>

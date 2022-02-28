@@ -1,0 +1,1120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BASCommonDao">
+<!-- 기준정보 공통 -->
+
+
+
+    <!-- 회사 정보 조회-->
+    <select id="selectEnterpriseList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME
+        ,NULL AS DESCRIPTION        
+    FROM DUAL
+    UNION ALL
+    </if>
+SELECT CODE, NAME, DESCRIPTION
+  FROM 
+    (SELECT 
+         A.ENTERPRISEID		AS CODE
+        ,A.ENTERPRISENAME 	AS NAME
+        ,A.ENTERPRISEID||'.'||A.ENTERPRISENAME AS DESCRIPTION
+    FROM	BAS_ENTERPRISE A 
+    WHERE 1=1
+    ORDER BY A.ENTERPRISEID)
+        
+    </select>    
+
+
+    <!-- Site 정보 조회-->
+    <select id="selectSiteList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME
+        ,NULL AS DESCRIPTION        
+    FROM DUAL
+    UNION ALL
+    </if>
+SELECT CODE, NAME, DESCRIPTION
+  FROM 
+    (SELECT 
+         A.PLANTID		AS CODE
+        ,A.PLANTID 	    AS NAME
+        ,A.PLANTID	    AS DESCRIPTION
+    FROM	BAS_PLANT A 
+    WHERE 1=1
+    ORDER BY A.PLANTID)
+        
+    </select>    
+    
+ <!-- 공장 정보 조회-->
+    <select id="selectFactoryList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME
+        ,NULL AS DESCRIPTION        
+    FROM DUAL
+    UNION ALL
+    </if>
+SELECT CODE, NAME, DESCRIPTION
+  FROM 
+    (	SELECT  A.FACTORYID AS CODE
+					,	D.DICTIONARYNAME   	AS NAME
+					,NULL AS DESCRIPTION
+				FROM    BAS_AREA 			A
+				LEFT JOIN CMD_DICTIONARY     D  ON  D.DICTIONARYID = A.AREANAME
+						  				       AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE A.AREATYPE = 'Factory'
+				AND A.PLANTID = #{PLANTID})
+        
+    </select>    
+    
+ <!-- 작업장 정보 조회-->
+    <select id="selectAreaList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME
+        ,NULL AS DESCRIPTION        
+    FROM DUAL
+    UNION ALL
+    </if>
+SELECT CODE, NAME, DESCRIPTION
+  FROM 
+    (	SELECT  A.AREAID AS CODE
+					,	D.DICTIONARYNAME   	AS NAME
+					,NULL AS DESCRIPTION
+				FROM    BAS_AREA 			A
+				LEFT JOIN CMD_DICTIONARY     D  ON  D.DICTIONARYID = A.AREANAME
+						  				       AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE 1=1
+				AND A.PLANTID = #{PLANTID})
+        
+    </select>    
+    
+    <!-- 검색조건 달력 조회-->
+    <select id="selectCustomDate" parameterType="map" resultType="hashmap">   
+		SELECT TRUNC(SYSDATE) AS THISDAY_S
+		      ,TRUNC(SYSDATE) - 1 AS LASTDAY_S
+		      ,TRUNC(SYSDATE, 'iw') AS THISWEEK_S
+		      ,TRUNC(SYSDATE, 'iw') - 7 AS LASTWEEK_S
+		      ,TRUNC(SYSDATE, 'MM') AS THISMONTH_S
+		      ,TRUNC(ADD_MONTHS(SYSDATE, -1), 'MM') AS LASTMONTH_S
+		      ,TRUNC(SYSDATE) + 1 AS THISDAY_E
+		      ,TRUNC(SYSDATE) AS LASTDAY_E
+		      ,TRUNC(SYSDATE, 'iw') + 7 AS THISWEEK_E
+		      ,TRUNC(SYSDATE, 'iw') AS LASTWEEK_E
+		      ,TRUNC(ADD_MONTHS(SYSDATE, 1), 'MM') AS THISMONTH_E
+		      ,TRUNC(SYSDATE, 'MM') AS LASTMONTH_E
+          	  ,TRUNC(ADD_MONTHS(SYSDATE, -2), 'MM') AS THISMONTH_Q
+		FROM   DUAL        
+    </select>
+    
+    <!-- 공통코드 조회-->
+    <select id="selectCustomCodeList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME
+        ,NULL AS DESCRIPTION        
+    FROM DUAL
+    UNION ALL
+    </if>
+SELECT CODE, NAME, DESCRIPTION
+  FROM 
+    (SELECT T.DICTIONARYID AS CODE
+		      ,NVL(T.DICTIONARYNAME, T.DICTIONARYID) AS NAME
+		      ,NULL AS DESCRIPTION
+		FROM   CMD_DICTIONARY T
+		WHERE  T.DICTIONARYID IN 
+                <foreach collection="ADD_LIST" item="item" index="index" separator="," open="(" close=")">
+                    #{item}
+                </foreach> 
+		AND    USE_YN = 'Y'
+		AND    LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		ORDER  BY T.DICTIONARYID
+		)
+        
+    </select>
+    
+    <!-- UOM 정보 조회-->
+    <select id="selectUOMList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME
+        ,NULL AS DESCRIPTION        
+    FROM DUAL
+    UNION ALL
+    </if>
+			SELECT CODE, NAME, DESCRIPTION
+			  FROM 
+			    (SELECT A.UOMDEFID   AS CODE
+			      ,A.UOMDEFNAME AS NAME
+			      ,NULL AS DESCRIPTION
+			FROM   BAS_UOMDEFINITION A
+			WHERE  1 = 1      
+			AND    A.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+			AND    A.VALIDSTATE = 'Valid'
+			ORDER  BY UOMDEFID ASC)        
+    </select>    
+
+    <!-- 품목유형코드 정보 조회-->
+    <select id="selectMasterDataClassList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME
+        ,NULL AS DESCRIPTION        
+    FROM DUAL
+    UNION ALL
+    </if>
+			SELECT CODE, NAME, DESCRIPTION
+			  FROM 
+			    (  SELECT MASTERDATACLASSID AS CODE
+					        ,ENTERPRISEID
+					        ,PLANTID
+					        ,MASTERDATACLASSNAME AS NAME
+					        ,IDCLASSID AS IDCLASSIDRULE
+					        ,DESCRIPTIONRULE
+					        ,DUPLICATERULE
+					        ,ITEMOWNER
+					        ,MESITEMTYPE
+					        ,DESCRIPTION
+					        ,VALIDSTATE
+					        ,ISAPPROVAL
+				  FROM   BAS_MASTERDATACLASS
+				  WHERE  1 = 1
+				  AND    VALIDSTATE = 'Valid'
+				  AND    ENTERPRISEID = #{SESSION_ENTERPRISEID}
+			    <if test="ITEMOWNER != null and ITEMOWNER !='' "> 
+			        AND ITEMOWNER = #{ITEMOWNER}
+			    </if>    
+			    <if test="MESITEMTYPE != null and MESITEMTYPE !='' "> 
+			        AND MESITEMTYPE = #{MESITEMTYPE}
+			    </if>    
+	ORDER  BY DECODE(CODE, 'Product', 1, 'SubAssembly', 2, 'Commodity', 3, 'OperationItem', 4, 5)
+				  )        
+    </select>
+    <!-- 품목유형코드 구분 정보 조회-->
+    <select id="selectCategoryMidList" parameterType="map" resultType="hashmap">    
+	     	SELECT	C.CATEGORYID AS CODE
+					,	D.DICTIONARYNAME AS NAME 
+                    , 	C.PARENTCATEGORYID	TOPPARENTCATEGORYID		
+				FROM	BAS_CATEGORY			C
+				LEFT JOIN CMD_DICTIONARY 	D	ON	D.DICTIONARYID = C.DICTIONARYID
+												AND	D.LANGUAGETYPE = 'en-US' -- 영문으로 인터페이스에 넘겨야함
+				WHERE	1 = 1
+				<!-- AND		COALESCE(C.PARENTCATEGORYID, '') <> '' 왜쓰는지 모르겠네-->
+				AND 	C.VALIDSTATE = 'Valid'
+				AND  C.PARENTCATEGORYID = #{TOPPARENTCATEGORYID}
+				ORDER BY CATEGORYID
+    </select>    
+    <!-- 품목유형코드 정보 조회-->
+    <select id="selectCategoryList" parameterType="map" resultType="hashmap">    
+	      SELECT C.PARENTCATEGORYID || '.' || D.DICTIONARYNAME CATEGORYID
+		            ,D.DICTIONARYNAME CATEGORYNAME
+		            ,C.PARENTCATEGORYID || '.' || D.DICTIONARYNAME AS P_INVENTORYCATEGORY
+		            , C.DICTIONARYID
+		      FROM   BAS_CATEGORY C
+		      LEFT   JOIN CMD_DICTIONARY D
+		      ON     D.DICTIONARYID = C.DICTIONARYID
+		      AND    D.LANGUAGETYPE = 'en-US' -- 영문으로 인터페이스에 넘겨야함
+		      WHERE  1 = 1		                  
+		      AND    C.VALIDSTATE = 'Valid'
+		      <choose>
+		          <when test="PARENTCATEGORYID != null and PARENTCATEGORYID !='' ">
+		          		AND C.PARENTCATEGORYID = #{PARENTCATEGORYID}
+		          </when>
+		          <otherwise>
+		          		AND	C.PARENTCATEGORYID IN ('DOUBLE', 'MULTI', 'R/F', 'SINGLE')
+		          </otherwise>
+	          </choose>
+
+		      <if test="CATEGORYNAME != null and CATEGORYNAME !='' "> 
+			  		AND UPPER(D.DICTIONARYNAME) like UPPER('%' || #{CATEGORYNAME} || '%') 
+			  </if>
+				ORDER BY CATEGORYID
+    </select>
+ 	<!-- Step 정보 조회-->
+    <select id="selectStepList" parameterType="map" resultType="hashmap">    
+		SELECT A.LOOKUP_TYPE AS CODE
+		      ,LISTAGG(B.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY A.DISPLAYSEQUENCE) AS NAME
+		      ,LISTAGG(A.LOOKUP_CODE, ',') WITHIN GROUP(ORDER BY A.DISPLAYSEQUENCE) AS DESCRIPTION
+		FROM   CMD_LOOKUP_VALUES A
+		LEFT   JOIN CMD_DICTIONARY B
+		ON     A.DICTIONARYID = B.DICTIONARYID
+		AND    B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE  A.LOOKUP_TYPE IN (SELECT Q.LOOKUP_CODE
+		                         FROM   CMD_LOOKUP_VALUES Q
+		                         WHERE  Q.LOOKUP_TYPE = 'StepType'
+		                         AND   Q.ENABLED_FLAG ='Y')
+		    AND A.ENABLED_FLAG ='Y'
+		GROUP  BY A.LOOKUP_TYPE
+    </select>
+    
+ 	<!-- 검사방법 정보 조회-->
+    <select id="selectInspectionList" parameterType="map" resultType="hashmap">    
+		SELECT IC.INSPECTIONCLASSID AS CODE
+		      ,DI.DICTIONARYNAME    AS NAME
+		FROM   BAS_INSPECTIONCLASS IC
+		LEFT   OUTER JOIN CMD_DICTIONARY DI ON     IC.INSPECTIONCLASSNAME = DI.DICTIONARYID
+		                                    AND    DI.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE  1 = 1
+		AND    IC.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+		AND    IC.INSPECTIONCLASSTYPE = 'OperationInspection'
+		AND	 IC.ISUSEITEM = 'Y'
+    </select>
+    
+    
+ 	<!-- 공정 정보 조회-->
+    <select id="selectProcessAList" parameterType="map" resultType="hashmap">
+     <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME                
+    FROM DUAL
+    UNION ALL
+    </if>
+    SELECT CODE, NAME
+  FROM 
+    (
+  		SELECT PSC.PROCESSSEGMENTCLASSID  AS CODE
+		         ,PSC.PROCESSSEGMENTCLASSID || '_' ||
+		         NVL(D.DICTIONARYNAME, PSC.PROCESSSEGMENTCLASSNAME) AS   NAME
+		  FROM   BAS_PROCESSSEGMENTCLASS PSC   
+		  LEFT   OUTER JOIN CMD_DICTIONARY D ON     PSC.PROCESSSEGMENTCLASSNAME = D.DICTIONARYID
+		                                     AND    D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+		  WHERE  1 = 1		  
+		  <if test="PROCESSSEGMENTCLASSTYPE != null and PROCESSSEGMENTCLASSTYPE !='' ">
+		            AND    PSC.PROCESSSEGMENTCLASSTYPE = #{PROCESSSEGMENTCLASSTYPE}
+			  <choose>
+		          <when test="PROCESSSEGMENTCLASSTYPE eq 'TopProcessSegmentClass'.toString()">
+		          		AND	PSC.PARENTPROCESSSEGMENTCLASSID IS NULL
+		          </when>
+		          <otherwise>
+		          		AND	PSC.PARENTPROCESSSEGMENTCLASSID IS NOT NULL
+		          </otherwise>
+	          </choose>
+	    </if>
+	    <if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' ">
+	    	AND ( UPPER(PSC.PROCESSSEGMENTCLASSID) 		  LIKE '%' || UPPER(#{PROCESSSEGMENTCLASSID}) ||'%'
+		          OR    UPPER(PSC.PROCESSSEGMENTCLASSNAME) LIKE '%' || UPPER(#{PROCESSSEGMENTCLASSID}) ||'%'
+		          OR    UPPER(D.DICTIONARYNAME) 				  LIKE '%' || UPPER(#{PROCESSSEGMENTCLASSID}) ||'%' )
+	    </if>
+
+	    <if test="PARENTPROCESSSEGMENTCLASSID != null and PARENTPROCESSSEGMENTCLASSID !='' ">
+	              AND    PSC.PARENTPROCESSSEGMENTCLASSID = #{PARENTPROCESSSEGMENTCLASSID}	    	
+	    </if>
+	    		    
+        AND   PSC.VALIDSTATE = 'Valid'
+        ORDER BY PSC.PROCESSSEGMENTCLASSID ASC
+        )
+    </select>    			
+
+ 	<!-- 공정 정보 조회-->
+    <select id="selectProcessBList" parameterType="map" resultType="hashmap">
+     <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME                
+    FROM DUAL
+    UNION ALL
+    </if>
+    SELECT CODE, NAME
+  FROM 
+    (
+  		SELECT PSC.PROCESSSEGMENTCLASSID  AS CODE
+		         ,PSC.PROCESSSEGMENTCLASSID || '_' ||
+		         NVL(D.DICTIONARYNAME, PSC.PROCESSSEGMENTCLASSNAME) AS   NAME
+		  FROM   BAS_PROCESSSEGMENTCLASS PSC   
+		  LEFT   OUTER JOIN CMD_DICTIONARY D ON     PSC.PROCESSSEGMENTCLASSNAME = D.DICTIONARYID
+		                                     AND    D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+		  WHERE  1 = 1		  
+		  <if test="PROCESSSEGMENTCLASSTYPE != null and PROCESSSEGMENTCLASSTYPE !='' ">
+		            AND    PSC.PROCESSSEGMENTCLASSTYPE = #{PROCESSSEGMENTCLASSTYPE}
+			  <choose>
+		          <when test="PROCESSSEGMENTCLASSTYPE eq 'TopProcessSegmentClass'.toString()">
+		          		AND	PSC.PARENTPROCESSSEGMENTCLASSID IS NULL
+		          </when>
+		          <otherwise>
+		          		AND	PSC.PARENTPROCESSSEGMENTCLASSID IS NOT NULL
+		          </otherwise>
+	          </choose>
+	    </if>
+	    <if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' ">
+	    	AND ( UPPER(PSC.PROCESSSEGMENTCLASSID) 		  LIKE '%' || UPPER(#{PROCESSSEGMENTCLASSID}) ||'%'
+		          OR    UPPER(PSC.PROCESSSEGMENTCLASSNAME) LIKE '%' || UPPER(#{PROCESSSEGMENTCLASSID}) ||'%'
+		          OR    UPPER(D.DICTIONARYNAME) 				  LIKE '%' || UPPER(#{PROCESSSEGMENTCLASSID}) ||'%' )
+	    </if>
+  			<choose>
+		          <when test="PARENTPROCESSSEGMENTCLASSID != null and PARENTPROCESSSEGMENTCLASSID !='' ">
+		          		AND    PSC.PARENTPROCESSSEGMENTCLASSID = #{PARENTPROCESSSEGMENTCLASSID}	  
+		          </when>
+		          <otherwise>
+		          		AND    PSC.PARENTPROCESSSEGMENTCLASSID = 'TEMPTEMPTEMP'	  
+		          </otherwise>
+	          </choose>	    		    
+        AND   PSC.VALIDSTATE = 'Valid'
+        ORDER BY PSC.PROCESSSEGMENTCLASSID ASC
+        )
+    </select>    			
+
+    
+    <!-- 공정 정보 조회-->
+    <select id="selectProcessBNameList" parameterType="map" resultType="hashmap">
+     <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME                
+    FROM DUAL
+    UNION ALL
+    </if>
+    SELECT CODE, NAME
+  FROM 
+    (
+  		SELECT PSC.PROCESSSEGMENTCLASSID  AS CODE
+		         ,NVL(D.DICTIONARYNAME, PSC.PROCESSSEGMENTCLASSNAME) AS   NAME
+		  FROM   BAS_PROCESSSEGMENTCLASS PSC   
+		  LEFT   OUTER JOIN CMD_DICTIONARY D ON     PSC.PROCESSSEGMENTCLASSNAME = D.DICTIONARYID
+		                                     AND    D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+		  WHERE  1 = 1		  
+		  <if test="PROCESSSEGMENTCLASSTYPE != null and PROCESSSEGMENTCLASSTYPE !='' ">
+		            AND    PSC.PROCESSSEGMENTCLASSTYPE = #{PROCESSSEGMENTCLASSTYPE}
+			  <choose>
+		          <when test="PROCESSSEGMENTCLASSTYPE eq 'TopProcessSegmentClass'.toString()">
+		          		AND	PSC.PARENTPROCESSSEGMENTCLASSID IS NULL
+		          </when>
+		          <otherwise>
+		          		AND	PSC.PARENTPROCESSSEGMENTCLASSID IS NOT NULL
+		          </otherwise>
+	          </choose>
+	    </if>
+	    <if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' ">
+	    	AND ( UPPER(PSC.PROCESSSEGMENTCLASSID) 		  LIKE '%' || UPPER(#{PROCESSSEGMENTCLASSID}) ||'%'
+		          OR    UPPER(PSC.PROCESSSEGMENTCLASSNAME) LIKE '%' || UPPER(#{PROCESSSEGMENTCLASSID}) ||'%'
+		          OR    UPPER(D.DICTIONARYNAME) 				  LIKE '%' || UPPER(#{PROCESSSEGMENTCLASSID}) ||'%' )
+	    </if>
+  			<choose>
+		          <when test="PARENTPROCESSSEGMENTCLASSID != null and PARENTPROCESSSEGMENTCLASSID !='' ">
+		          		AND    PSC.PARENTPROCESSSEGMENTCLASSID = #{PARENTPROCESSSEGMENTCLASSID}	  
+		          </when>
+		          <otherwise>
+		          		AND    PSC.PARENTPROCESSSEGMENTCLASSID = 'TEMPTEMPTEMP'	  
+		          </otherwise>
+	          </choose>	    		    
+        AND   PSC.VALIDSTATE = 'Valid'
+        ORDER BY PSC.PROCESSSEGMENTCLASSID ASC
+        )
+    </select>    			
+    
+	<!-- 공정 정보 조회-->
+    <select id="selectProcessMenuList" parameterType="map" resultType="hashmap">
+  		  SELECT PS.PROCESSSEGMENTID
+			        ,NVL(D1.DICTIONARYNAME, PS.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+			        ,NVL(D2.DICTIONARYNAME, MPS.PROCESSSEGMENTCLASSNAME) AS PROCESSSEGMENTCLASSNAME_MIDDLE
+			        ,NVL(D3.DICTIONARYNAME, TPS.PROCESSSEGMENTCLASSNAME) AS PROCESSSEGMENTCLASSNAME_TOP
+			        ,PS.PROCESSSEGMENTID AS P_PROCESSSEGMENTID
+			  FROM   BAS_PROCESSSEGMENT PS
+			  INNER  JOIN BAS_PROCESSSEGMENTCLASS MPS  ON     PS.PROCESSSEGMENTCLASSID = MPS.PROCESSSEGMENTCLASSID
+			                                           AND    MPS.PROCESSSEGMENTCLASSTYPE = 'MiddleProcessSegmentClass'  
+			  INNER  JOIN BAS_PROCESSSEGMENTCLASS TPS  ON     MPS.PARENTPROCESSSEGMENTCLASSID = TPS.PROCESSSEGMENTCLASSID
+			                                           AND    TPS.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+			  LEFT   OUTER JOIN CMD_DICTIONARY D1      ON     PS.PROCESSSEGMENTNAME = D1.DICTIONARYID
+			                                           AND    D1.LANGUAGETYPE = 'ko-KR'
+			  LEFT   OUTER JOIN CMD_DICTIONARY D2      ON     MPS.PROCESSSEGMENTCLASSNAME = D2.DICTIONARYID
+			                                           AND    D2.LANGUAGETYPE = 'ko-KR'
+			  LEFT   OUTER JOIN CMD_DICTIONARY D3      ON     TPS.PROCESSSEGMENTCLASSNAME = D3.DICTIONARYID
+			                                           AND    D3.LANGUAGETYPE = 'ko-KR'
+			  WHERE  1 = 1
+		  <if test="PARENTPROCESSSEGMENTCLASSID != null and PARENTPROCESSSEGMENTCLASSID !='' ">
+		             AND   TPS.PROCESSSEGMENTCLASSID = #{PARENTPROCESSSEGMENTCLASSID}			
+	     </if>			  
+		  <if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' ">
+		             AND   MPS.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID}			
+	     </if>
+	    <if test="PROCESSSEGMENT != null and PROCESSSEGMENT !='' ">
+	    	AND ( UPPER(PS.PROCESSSEGMENTID) 		  LIKE '%' || UPPER(#{PROCESSSEGMENT}) ||'%'
+		          OR    UPPER(PS.PROCESSSEGMENTNAME) LIKE '%' || UPPER(#{PROCESSSEGMENT}) ||'%'
+		          OR    UPPER(D1.DICTIONARYNAME) 				  LIKE '%' || UPPER(#{PROCESSSEGMENT}) ||'%' )
+	    </if>
+        ORDER BY PS.PROCESSSEGMENTID ASC
+    </select> 
+    
+	<!-- 아이템 정보 조회-->
+    <select id="selectItemList" parameterType="map" resultType="hashmap">
+  		              SELECT   A.PLANTID
+                 ,   A.ITEMID 
+                 ,   A.ITEMVERSION 
+                 ,   A.ITEMNAME
+                 ,   A.LOTCONTROL
+                 ,   MIS.DESCRIPTION
+                 ,   A.UOMDEFID
+                 ,   C.UOMDEFNAME
+                 ,   A.MASTERDATACLASSID
+                 ,   A.SPEC
+                 ,   A.CONSUMABLETYPE
+                 ,   MIS.MAKER
+                 , NULL AS CHK
+             FROM    BAS_ITEMMASTER           A 
+             INNER JOIN BAS_MASTERDATACLASS        B     ON     A.ENTERPRISEID       = B.ENTERPRISEID 
+                                                      AND    A.MASTERDATACLASSID  = B.MASTERDATACLASSID
+             LEFT OUTER JOIN BAS_MATERIALITEMSPEC  MIS   ON     MIS.ENTERPRISEID     = A.ENTERPRISEID
+                                                   AND    MIS.ITEMID           = A.ITEMID
+            LEFT OUTER JOIN BAS_UOMDEFINITION      C     ON     A.ENTERPRISEID       = C.ENTERPRISEID
+                                                       AND    A.UOMDEFID           = C.UOMDEFID 
+             WHERE 1=1
+			 	AND A.VALIDSTATE    = 'Valid'
+			 	AND A.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+	 
+                <if test="MASTERDATACLASSID != null and MASTERDATACLASSID !='' ">
+                	AND      A.MASTERDATACLASSID = #{MASTERDATACLASSID}
+                </if>
+                <if test="ITEMVERSION != null and ITEMVERSION !='' ">
+                	AND      UPPER(A.ITEMVERSION) LIKE UPPER('%' || #{ITEMVERSION} || '%')                	
+                </if>
+                <if test="ITEMNAME != null and ITEMNAME !='' ">
+                	AND      UPPER(A.ITEMNAME) LIKE UPPER('%' || #{ITEMNAME} || '%')
+                </if>
+                <if test="ITEMID != null and ITEMID !='' ">
+                	AND      UPPER(A.ITEMID) LIKE UPPER('%' || #{ITEMID} || '%')
+                </if>
+				<if test="ITEMIDNAME != null and ITEMIDNAME !='' ">
+                	AND      (UPPER(A.ITEMID) LIKE UPPER('%' || #{ITEMIDNAME} || '%')
+                				OR UPPER(A.ITEMNAME) LIKE UPPER('%' || #{ITEMIDNAME} || '%')
+                				)
+                </if>
+			    <if test="MESITEMTYPE != null and MESITEMTYPE !='' "> 
+			        AND B.MESITEMTYPE = #{MESITEMTYPE}
+			    </if>
+                
+        ORDER BY A.ITEMID  ASC
+    </select>
+    	<!-- 아이템 정보 조회(Routing용)-->
+    <select id="selectItemListRouting" parameterType="map" resultType="hashmap">
+  		              SELECT   A.PLANTID
+                 ,   A.ITEMID 
+                 ,   A.ITEMVERSION 
+                 ,   A.ITEMNAME
+                 ,   A.LOTCONTROL
+                 ,   MIS.DESCRIPTION
+                 ,   A.UOMDEFID
+                 ,   C.UOMDEFNAME
+                 ,   A.MASTERDATACLASSID
+                 ,   A.SPEC
+                 ,   A.CONSUMABLETYPE
+                 ,   MIS.MAKER
+                 , NULL AS CHK
+             FROM    BAS_ITEMMASTER           A 
+             INNER JOIN BAS_MASTERDATACLASS        B     ON     A.ENTERPRISEID       = B.ENTERPRISEID 
+                                                      AND    A.MASTERDATACLASSID  = B.MASTERDATACLASSID
+             LEFT OUTER JOIN BAS_MATERIALITEMSPEC  MIS   ON     MIS.ENTERPRISEID     = A.ENTERPRISEID
+                                                   AND    MIS.ITEMID           = A.ITEMID
+            LEFT OUTER JOIN BAS_UOMDEFINITION      C     ON     A.ENTERPRISEID       = C.ENTERPRISEID
+                                                       AND    A.UOMDEFID           = C.UOMDEFID 
+             WHERE 1=1
+			 	AND A.VALIDSTATE    = 'Valid'
+			 	AND A.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+	 
+                <if test="MASTERDATACLASSID != null and MASTERDATACLASSID !='' ">
+                	AND      A.MASTERDATACLASSID = #{MASTERDATACLASSID}
+                </if>
+                <if test="ITEMID != null and ITEMID !='' ">
+                	AND      (UPPER(A.ITEMID) LIKE UPPER('%' || #{ITEMID} || '%')
+                		 		OR UPPER(A.ITEMVERSION) LIKE UPPER('%' || #{ITEMID} || '%')
+                		 		OR UPPER(A.ITEMNAME) LIKE UPPER('%' || #{ITEMID} || '%')
+                		 		)
+                </if>				
+			    <if test="MESITEMTYPE != null and MESITEMTYPE !='' "> 
+			        AND B.MESITEMTYPE = #{MESITEMTYPE}
+			    </if>
+                
+        ORDER BY A.ITEMID  ASC
+    </select>
+     	<select id="selectNewID"  statementType="CALLABLE" parameterType="map">
+		/* smh.bas.dao.BASCommonDao.selectNewID */
+		{#{O_NEWID,mode=OUT,jdbcType=VARCHAR ,javaType=string} = call BAS_COMMON_PKG.FN_GET_ID(
+										   #{CLASSID}
+										  ,#{PREFIX}
+				 						  ,#{CREATOR}
+				 						  ,#{PADNUM}
+										)
+	     }
+    </select>
+    
+<!-- 공정 정보 조회-->
+    <select id="selectItemWarehouseList" parameterType="map" resultType="hashmap">
+  		SELECT  IW.ENTERPRISEID
+				    ,   IW.ITEMID           AS PRODUCTDEFID
+            ,   IW.ITEMVERSION      AS PRODUCTDEFVERSION
+            ,   IW.PLANTID
+            ,   IW.WAREHOUSEID
+            ,   WH.WAREHOUSENAME   
+        FROM    BAS_ITEMWAREHOUSE    IW
+        LEFT JOIN BAS_WAREHOUSE      WH  ON  IW.WAREHOUSEID = WH.WAREHOUSEID
+                                        AND IW.ENTERPRISEID = WH.ENTERPRISEID
+                                        AND IW.PLANTID = WH.PLANTID
+        WHERE   1 = 1
+				AND     IW.ENTERPRISEID = #{ENTERPRISEID}
+				AND     IW.ITEMID = #{PRODUCTDEFID}
+				AND     IW.ITEMVERSION = #{PRODUCTDEFVERSION}
+				
+    </select>
+    
+        <select id="selectCodeList" parameterType="map" resultType="hashmap">
+            <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+		    SELECT
+		         NULL AS CODE
+		        ,DECODE(#{CMB_TYPE}, 'null', '') AS NAME
+		        ,NULL AS DESCRIPTION
+		        ,NULL AS ATTRIBUTE1
+		        ,NULL AS ATTRIBUTE2
+		        ,NULL AS ATTRIBUTE3        
+		    FROM DUAL
+		    UNION ALL
+		    </if>    
+		SELECT CODE
+			,NAME
+			,DESCRIPTION
+			,ATTRIBUTE1
+			,ATTRIBUTE2
+			,ATTRIBUTE3
+		FROM
+		(SELECT A.LOOKUP_CODE AS CODE
+		      ,NVL(B.DICTIONARYNAME, MEANING) AS NAME
+		      ,A.DESCRIPTION      
+		      ,A.ATTRIBUTE1
+		      ,A.ATTRIBUTE2
+		      ,A.ATTRIBUTE3
+		FROM   CMD_LOOKUP_VALUES A
+		LEFT   JOIN CMD_DICTIONARY B     ON     A.DICTIONARYID = B.DICTIONARYID
+		                                 AND    B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE  A.LOOKUP_TYPE = #{LOOKUP_TYPE}
+		  AND   A.ENABLED_FLAG = 'Y'
+		ORDER BY A.DISPLAYSEQUENCE)
+
+    </select>
+    
+        <select id="selectSubSegmentList" parameterType="map" resultType="hashmap">    
+		SELECT T.SUBSEGMENTID1 AS SUBSEGMENTID
+		FROM   BAS_PROCESSSEGMENTEXT T
+		WHERE  T.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </select>
+    
+      <select id="selectJobInputTypeList" parameterType="map" resultType="hashmap">
+            SELECT CODE
+      ,NAME
+FROM   (SELECT NULL AS CODE
+              ,NULL AS NAME
+        FROM   DUAL)
+UNION ALL
+SELECT CODE
+      ,NAME
+FROM   (SELECT T.LOOKUP_CODE AS CODE
+              ,T.MEANING     AS NAME
+        FROM   CMD_LOOKUP_VALUES T
+        WHERE  T.LOOKUP_TYPE = 'InputType3'
+        AND    T.LOOKUP_CODE IN
+               (SELECT SUBSTR(LOOKUP_CODE, 3, 2)
+                 FROM   CMD_LOOKUP_VALUES Q
+                 WHERE  Q.LOOKUP_TYPE = 'JOBINPUTTYPE'
+                 AND    INSTR(Q.LOOKUP_CODE, #{OVERSEATRANS}) = 1)
+        ORDER  BY CODE)
+
+
+    </select>
+    
+      <select id="selectDurableProductList" parameterType="map" resultType="hashmap">
+SELECT 	 PRODUCTDEFID
+			,PRODUCTDEFNAME
+			,PRODUCTDEFVERSION
+			,PRODUCTDEFTYPE
+			,PRODUCTIONTYPE
+			,UNIT
+			,PRODUCTDEF
+FROM (SELECT PD.PRODUCTDEFID
+			      ,PD.PRODUCTDEFNAME
+			      ,PD.PRODUCTDEFVERSION
+			      ,PD.PRODUCTDEFTYPE
+			      ,PD.PRODUCTIONTYPE
+			      ,BU.UOMDEFNAME AS UNIT
+			      ,PD.PRODUCTDEFID || '|' || PD.PRODUCTDEFVERSION AS PRODUCTDEF
+			      ,PD.PRODUCTDEFID || ' ' || PD.PRODUCTDEFNAME AS SEARCH_KEY
+			FROM   BAS_PRODUCTDEFINITION PD
+			LEFT OUTER JOIN BAS_UOMDEFINITION BU ON BU.UOMDEFID = PD.UNIT 
+			                                     AND BU.VALIDSTATE = 'Valid'
+			                                     AND BU.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+			WHERE  1 = 1
+			ORDER  BY PD.PRODUCTDEFID
+			         ,PD.PRODUCTDEFVERSION)
+      WHERE 1=1
+		<if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' ">
+		  	AND PRODUCTDEFTYPE = #{PRODUCTDEFTYPE}
+		</if>
+		<if test="SEARCH_KEY != null and SEARCH_KEY !='' ">
+		  	AND UPPER(SEARCH_KEY) LIKE '%' || UPPER(#{SEARCH_KEY}) || '%'
+		</if>
+    </select>
+    
+ <select id="selectItemModelList" parameterType="map" resultType="hashmap">
+ 	SELECT ITEMID
+		 		,MIN(ITEMNAME) ITEMNAME
+		 		,CHK 		
+		 	FROM 
+		  		              (SELECT   CASE WHEN LENGTH(A.ITEMID) = 9 THEN
+											                     SUBSTR(A.ITEMID, 0, LENGTH(A.ITEMID) - 2)
+											                    ELSE
+											                     SUBSTR(A.ITEMID, 0, LENGTH(A.ITEMID) - 2)
+											                     END ITEMID 
+						                 ,   A.ITEMVERSION 
+						                 ,   A.ITEMNAME
+						                 ,	A.ITEMID || ' ' || A.ITEMNAME AS SEARCH_KEY
+						                 , NULL AS CHK
+             FROM    BAS_ITEMMASTER           A
+             WHERE 1=1
+			 	AND A.VALIDSTATE    = 'Valid'
+			 	AND A.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+	 		
+                <if test="MASTERDATACLASSID != null and MASTERDATACLASSID !='' ">
+                	AND      A.MASTERDATACLASSID = #{MASTERDATACLASSID}
+                </if>
+                )
+                WHERE 1=1
+                <if test="SEARCH_KEY != null and SEARCH_KEY !='' ">
+                	AND      UPPER(SEARCH_KEY) LIKE '%' || UPPER(#{SEARCH_KEY}) || '%'
+                </if>                            
+            GROUP BY ITEMID, CHK
+        ORDER BY ITEMID  ASC
+    </select>
+    
+ <select id="selectUserGroupList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME
+        ,NULL AS DESCRIPTION        
+    FROM DUAL
+    UNION ALL
+    </if>
+			SELECT CODE, NAME, DESCRIPTION
+			  FROM 
+			    (SELECT BU.USERGROUPID       AS CODE
+					      ,NVL(D.DICTIONARYNAME, BU.USERGROUPNAME) AS NAME  
+					      ,NULL AS DESCRIPTION
+					FROM   BAS_USERGROUP BU
+					LEFT   JOIN CMD_DICTIONARY D
+					ON     D.DICTIONARYID = BU.DICTIONARYID
+					AND    D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					ORDER BY NAME)        
+    </select>  
+
+    <!-- Site 조회  -->
+    <select id="selectGetPlantList" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BASCommonDao.selectGetPlantList */
+        SELECT A.PLANTID   AS CODE
+             , CASE WHEN DIC.DICTIONARYNAME IS NULL THEN A.PLANTID
+               ELSE DIC.DICTIONARYNAME 
+               END    AS NAME
+             ,'08:30' AS STARTBUSINESSHOUR
+          FROM      BAS_PLANT       A
+          LEFT JOIN CMD_DICTIONARY  DIC  ON DIC.DICTIONARYID  = A.PLANTNAME
+                                         AND DIC.LANGUAGETYPE = 'ko-KR'
+         WHERE 1 = 1
+           AND A.VALIDSTATE = 'Valid'
+        ORDER BY A.PLANTID ASC
+    </select>
+
+    <!-- 검사정의  -->
+    <select id="selectGetQcInspectionDefinitionList" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BASCommonDao.selectGetQcInspectionDefinitionList */
+        SELECT IDF.INSPECTIONDEFID              AS CODE
+             , DIC.DICTIONARYNAME               AS NAME
+          FROM       BAS_INSPECTIONDEFINITION IDF
+          INNER JOIN BAS_INSPECTIONCLASS      ICL    ON   ICL.INSPECTIONCLASSID = IDF.INSPECTIONCLASSID
+                                                     AND  ICL.VALIDSTATE        = #{VALIDSTATE}
+          INNER JOIN CMD_DICTIONARY           DIC    ON   DIC.DICTIONARYID      = IDF.INSPECTIONDEFNAME
+                                                     AND  DIC.LANGUAGETYPE      = #{LANGUAGETYPE}
+        WHERE  ICL.INSPECTIONCLASSTYPE = #{INSPECTIONCLASSTYPE}
+        AND    ICL.VALIDSTATE = #{VALIDSTATE}
+        ORDER  BY 1
+    </select>
+    
+    
+    <select id="selectUserList" parameterType="map" resultType="hashmap">    
+SELECT USERID
+      ,USERNAME
+FROM   CMD_USER_V T
+WHERE 1=1
+AND  T.PLANTID = #{SESSION_SITETYPE}
+<if test="USERIDNAME != null and USERIDNAME !='' ">
+	AND (UPPER(T.USERID) LIKE '%' || UPPER(#{USERIDNAME}) || '%'
+			OR 
+			UPPER(T.USERNAME) LIKE '%' || UPPER(#{USERIDNAME}) || '%'
+			)
+</if>
+ORDER  BY USERID
+
+    </select>    
+    
+        <select id="selectUserAreaList" parameterType="map" resultType="hashmap">    
+SELECT AREAID
+		,AREANAME
+FROM
+(SELECT AREAID
+	      ,CASE
+	           WHEN D.DICTIONARYNAME IS NULL THEN
+	            A.AREANAME
+	           ELSE
+	            D.DICTIONARYNAME
+	       END AS AREANAME
+	      ,A.PLANTID
+FROM   BAS_AREA A
+LEFT   OUTER JOIN CMD_DICTIONARY D   ON     A.AREANAME = D.DICTIONARYID
+                                    AND    D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+WHERE  1 = 1
+AND    A.PLANTID = #{SESSION_SITETYPE}
+AND    AREATYPE = 'Area'
+AND    A.VALIDSTATE = 'Valid'
+ORDER  BY AREAID ASC
+) X
+WHERE 1=1
+<if test="AREAIDNAME != null and AREAIDNAME !='' ">
+	AND (UPPER(X.AREAID) LIKE '%' || UPPER(#{AREAIDNAME}) || '%'
+			OR UPPER(X.AREANAME) LIKE '%' || UPPER(#{AREAIDNAME}) || '%'
+			)
+</if>
+    </select>
+
+ <select id="selectUserAreaGrdList" parameterType="map" resultType="hashmap">    
+  SELECT A.AREAID
+        ,COALESCE(AD.DICTIONARYNAME, A.AREANAME) AS AREANAME
+        ,COALESCE(C.MEANING, A.OWNTYPE) AS OWNTYPENAME
+        ,A.OWNTYPE
+        ,V.VENDORID
+        ,V.VENDORNAME
+        ,W.WAREHOUSEID
+        ,W.WAREHOUSENAME
+  FROM   BAS_AREA A
+  LEFT   JOIN CMD_DICTIONARY AD           ON     A.AREANAME = AD.DICTIONARYID
+                                          AND    AD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+  LEFT   JOIN CMD_LOOKUP_VALUES C         ON     C.LOOKUP_CODE = A.OWNTYPE
+                                          AND    C.LOOKUP_TYPE = 'OwnType'
+  LEFT   JOIN BAS_VENDOR V                ON     V.VENDORID = A.VENDORID
+                                          AND    V.ENTERPRISEID = A.ENTERPRISEID
+                                          AND    V.PLANTID = A.PLANTID
+  LEFT   JOIN BAS_WAREHOUSE W             ON     W.WAREHOUSEID = A.WAREHOUSEID
+                                          AND    W.ENTERPRISEID = A.ENTERPRISEID
+                                          AND    W.PLANTID = A.PLANTID
+  WHERE  1 = 1
+  AND    AREATYPE = 'Area'
+  AND    A.VALIDSTATE = 'Valid'
+		<if test="AREAIDNAME != null and AREAIDNAME !='' ">
+				AND (UPPER(A.AREAID) LIKE UPPER('%' || #{AREAIDNAME} || '%') 
+		        	  OR UPPER(AD.DICTIONARYNAME) LIKE UPPER('%' || #{AREAIDNAME}|| '%'))
+		</if>
+    </select>
+    
+    <!-- 검사종류 정보 조회 AS-IS : SelectInspectionClassListForCombo Ver. 10001-->
+    <select id="selectInspectionClassidList" parameterType="map" resultType="hashmap">   
+    /* smh.bas.dao.BASCommonDao.selectInspectionClassidList  */ 
+    	<if test="CMB_TYPE != null and CMB_TYPE != ''">
+    	SELECT
+	        NULL AS CODE
+	        ,#{CMB_TYPE} AS NAME
+	        ,NULL AS DISPNAME
+	        ,NULL AS CLASSTYPE
+	    FROM DUAL
+	    UNION ALL
+	    </if>
+		SELECT IC.INSPECTIONCLASSID AS CODE
+		      		,DI.DICTIONARYNAME    AS NAME
+		      		,DI.DICTIONARYNAME    AS DISPNAME
+		      		,IC.INSPECTIONCLASSTYPE AS CLASSTYPE
+		FROM   BAS_INSPECTIONCLASS IC
+		LEFT   OUTER JOIN CMD_DICTIONARY DI ON     IC.INSPECTIONCLASSNAME = DI.DICTIONARYID
+		                                    						AND    DI.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE  1 = 1
+		AND 	  IC.PARENTINSPECTIONCLASSID IS NULL
+		AND    IC.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+		AND    IC.VALIDSTATE = 'Valid'
+		<if test="INSPECTIONCLASSID != null and INSPECTIONCLASSID !='' "> 
+	        AND IC.INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+	    </if>
+		ORDER BY DISPNAME NULLS FIRST 
+    </select>
+
+ <select id="selectGovernanceList" parameterType="map" resultType="hashmap">    
+  SELECT GV.GOVERNANCENO
+		      ,GV.GOVERNANCETYPE
+		      ,GV.PRODUCTDEFID
+		      ,GV.PRODUCTDEFVERSION
+		      ,IM.ITEMNAME
+		      ,GV.RCPRODUCTDEFID
+		      ,GV.RCPRODUCTDEFVERSION
+		      ,RIM.ITEMNAME AS RCPRODUCTDEFNAME
+		      ,GV.STATUS
+		      ,GV.SPECPERSON AS SPECOWNER
+		      ,COALESCE(U.USERNAME, GV.SPECPERSON) AS SPECOWNERNAME
+		      ,GV.PCRNO AS CHANGEPOINTNO
+		FROM   BAS_GOVERNANCE GV    
+		LEFT   JOIN BAS_ITEMMASTER IM              ON     GV.PRODUCTDEFID = IM.ITEMID
+		                                           AND    GV.PRODUCTDEFVERSION = IM.ITEMVERSION
+		LEFT   JOIN BAS_ITEMMASTER RIM             ON     GV.RCPRODUCTDEFID = RIM.ITEMID
+		                                           AND    GV.RCPRODUCTDEFVERSION = RIM.ITEMVERSION
+		LEFT   JOIN CMD_USER_V U                   ON     GV.SPECPERSON = U.USERID
+		WHERE  1 = 1
+		AND    GV.GOVERNANCETYPE = 'RunningChange'
+		AND    GV.PRODUCTDEFID IS NOT NULL
+		AND    GV.RCPRODUCTDEFID IS NOT NULL
+		AND    GV.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+		AND    GV.PLANTID = #{SESSION_SITETYPE}
+		<if test="GOVERNANCENO != null and GOVERNANCENO !='' ">
+				AND    GV.GOVERNANCENO = #{GOVERNANCENO}
+		</if>
+		<if test="STATUS != null and STATUS !='' ">
+				AND    GV.STATUS = #{STATUS}
+		</if>
+		<if test="SEARCH_ITEMID != null and SEARCH_ITEMID !='' ">
+				AND    (GV.PRODUCTDEFID = #{SEARCH_ITEMID} OR GV.RCPRODUCTDEFID = #{SEARCH_ITEMID})
+		</if>
+		<if test="SEARCH_ITEMVERSION != null and SEARCH_ITEMVERSION !='' ">
+				AND    (GV.PRODUCTDEFVERSION = #{SEARCH_ITEMVERSION} OR GV.RCPRODUCTDEFVERSION = #{SEARCH_ITEMVERSION})
+		</if>
+    </select>
+    <select id="selectEmailList" parameterType="map" resultType="hashmap">    
+ SELECT BU.USERGROUPID
+				      ,BU.USERID
+				      ,BU.VALIDSTATE
+              ,U1.USER_NM
+              ,U1.DEPT_CD
+              ,U1.JIKWI_CD
+              ,CD.MEANING AS JIKWI_NM
+              ,U1.EMAIL_ADDR
+              ,U1.MBPH_NO
+              ,B.USERGROUPNAME
+              ,NVL(DEPT.DEPT_NM, U1.DEPT_CD) AS DEPT_NM
+              ,NULL AS CHK
+        FROM   BAS_USERGROUPUSER BU        
+        INNER JOIN BAS_USERGROUP B ON B.USERGROUPID = BU.USERGROUPID
+                                  AND B.VALIDSTATE = 'Valid'        
+        LEFT   OUTER JOIN CMD_USERS U1  ON     BU.USERID = U1.USER_ID
+        LEFT   OUTER JOIN CMD_DEPTS DEPT  ON   DEPT.DEPT_CD = U1.DEPT_CD
+                                          AND DEPT.USE_YN ='Y'
+        LEFT   OUTER JOIN CMD_LOOKUP_VALUES CD ON   CD.LOOKUP_CODE = U1.JIKWI_CD
+                                          AND CD.LOOKUP_TYPE = 'HRPostCode'
+                                          AND CD.ENABLED_FLAG ='Y'
+      WHERE  1 = 1
+      AND    BU.VALIDSTATE = 'Valid'
+      AND    BU.USERGROUPID = #{USERGROUPID}   
+      AND    U1.EMAIL_ADDR IS NOT NULL             
+        ORDER  BY BU.USERID
+    </select>
+
+<select id="selectApprovalCodeList" parameterType="map" resultType="hashmap">
+       <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+		    SELECT
+		         NULL AS CODE
+		        ,#{CMB_TYPE} AS NAME
+		        ,NULL AS DESCRIPTION
+		        ,NULL AS ATTRIBUTE1
+		        ,NULL AS ATTRIBUTE2
+		        ,NULL AS ATTRIBUTE3
+		        ,-1 AS DISPLAYSEQUENCE        
+		    FROM DUAL
+		    UNION ALL
+		    </if>    
+SELECT CODE
+      ,NAME
+      ,DESCRIPTION
+      ,ATTRIBUTE1
+      ,ATTRIBUTE2
+      ,ATTRIBUTE3
+      ,DISPLAYSEQUENCE
+FROM   (SELECT A.LOOKUP_CODE AS CODE
+              ,NVL(B.DICTIONARYNAME, MEANING) AS NAME
+              ,A.DESCRIPTION
+              ,A.ATTRIBUTE1
+              ,A.ATTRIBUTE2
+              ,A.ATTRIBUTE3
+              ,A.DISPLAYSEQUENCE
+        FROM   CMD_LOOKUP_VALUES A
+        LEFT   JOIN CMD_DICTIONARY B
+        ON     A.DICTIONARYID = B.DICTIONARYID
+        AND    B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        WHERE  A.LOOKUP_TYPE = 'DraftSettleState'
+        AND    A.ENABLED_FLAG = 'Y'
+        
+        UNION
+        
+        SELECT A.LOOKUP_CODE AS CODE
+              ,NVL(B.DICTIONARYNAME, MEANING) AS NAME
+              ,A.DESCRIPTION
+              ,A.ATTRIBUTE1
+              ,A.ATTRIBUTE2
+              ,A.ATTRIBUTE3
+              ,A.DISPLAYSEQUENCE
+        FROM   CMD_LOOKUP_VALUES A
+        LEFT   JOIN CMD_DICTIONARY B
+        ON     A.DICTIONARYID = B.DICTIONARYID
+        AND    B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        WHERE  A.LOOKUP_TYPE = 'ApprovalSettleState'
+        AND    A.ENABLED_FLAG = 'Y'
+        )
+		ORDER BY DISPLAYSEQUENCE
+    </select>    
+    
+<select id="selectChargeTypeList" parameterType="map" resultType="hashmap">
+       <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+		    SELECT
+		         NULL AS CODE
+		        ,#{CMB_TYPE} AS NAME
+		        ,NULL AS DESCRIPTION
+		        ,NULL AS ATTRIBUTE1
+		        ,NULL AS ATTRIBUTE2
+		        ,NULL AS ATTRIBUTE3
+		        ,-1 AS DISPLAYSEQUENCE        
+		    FROM DUAL
+		    UNION ALL
+		    </if>    
+SELECT CODE
+      ,NAME
+      ,DESCRIPTION
+      ,ATTRIBUTE1
+      ,ATTRIBUTE2
+      ,ATTRIBUTE3
+      ,DISPLAYSEQUENCE
+FROM   (SELECT A.LOOKUP_CODE AS CODE
+              ,NVL(B.DICTIONARYNAME, MEANING) AS NAME
+              ,A.DESCRIPTION
+              ,A.ATTRIBUTE1
+              ,A.ATTRIBUTE2
+              ,A.ATTRIBUTE3
+              ,A.DISPLAYSEQUENCE
+        FROM   CMD_LOOKUP_VALUES A
+        LEFT   JOIN CMD_DICTIONARY B
+        ON     A.DICTIONARYID = B.DICTIONARYID
+        AND    B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        WHERE  A.LOOKUP_TYPE = 'RoleClassification1'
+        AND    A.ENABLED_FLAG = 'Y'
+        
+        UNION
+        
+        SELECT A.LOOKUP_CODE AS CODE
+              ,NVL(B.DICTIONARYNAME, MEANING) AS NAME
+              ,A.DESCRIPTION
+              ,A.ATTRIBUTE1
+              ,A.ATTRIBUTE2
+              ,A.ATTRIBUTE3
+              ,A.DISPLAYSEQUENCE
+        FROM   CMD_LOOKUP_VALUES A
+        LEFT   JOIN CMD_DICTIONARY B
+        ON     A.DICTIONARYID = B.DICTIONARYID
+        AND    B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        WHERE  A.LOOKUP_TYPE = 'RoleClassification2'
+        AND    A.ENABLED_FLAG = 'Y'
+        )
+		ORDER BY DISPLAYSEQUENCE
+    </select>
+    
+     <select id="selectUOMDefList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME        
+    FROM DUAL
+    UNION ALL
+    </if>
+			SELECT CODE, NAME
+			  FROM 
+			    (SELECT	UD.UOMDEFID   AS CODE
+						,	UI.UOMDEFNAME AS NAME
+				  FROM	BAS_UOMDEFMAP		UD
+				 INNER JOIN BAS_UOMDEFINITION	UI	ON	UD.UOMDEFID = UI.UOMDEFID
+				 WHERE	1 = 1
+				   AND		UD.UOMCATEGORY = #{UOMCLASSID}
+					 AND     UD.VALIDSTATE = 'Valid'
+			ORDER  BY UD.UOMDEFID ASC)        
+    </select>    
+    
+     <select id="selectDurableKind" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+    SELECT
+         NULL AS CODE
+        ,#{CMB_TYPE} AS NAME        
+        ,NULL AS TOOLFORM
+    FROM DUAL
+    UNION ALL
+    </if>
+			SELECT CODE, NAME, TOOLFORM
+			  FROM 
+			    (
+			    SELECT LOOKUP_CODE AS CODE
+					      ,NVL(B.DICTIONARYNAME, MEANING) AS NAME
+					      ,LOOKUP_TYPE AS TOOLFORM
+					FROM   CMD_LOOKUP_VALUES A
+					LEFT   JOIN CMD_DICTIONARY B
+					ON     A.DICTIONARYID = B.DICTIONARYID
+					AND    B.LANGUAGETYPE = 'ko-KR'
+					WHERE  1 = 1
+					<if test="LOOKUP_TYPE != null and LOOKUP_TYPE != '' and LOOKUP_TYPE eq 'MW'.toString()">
+						AND    A.LOOKUP_TYPE IN ('ToolFormM', 'ToolFormW')
+					</if>
+					<if test="LOOKUP_TYPE != null and LOOKUP_TYPE != '' and LOOKUP_TYPE eq 'BJ'.toString()">
+						AND    A.LOOKUP_TYPE IN ('ToolFormB', 'ToolFormJ')
+					</if>
+					ORDER  BY LOOKUP_CODE
+								    
+			    )        
+    </select>
+    
+<select id="selectDurableKindDetail" parameterType="map" resultType="hashmap">
+		/* smh.bas.dao.BAS02000Dao.selectDurableKindDetail */
+		SELECT CODE
+      ,NAME
+      ,TOOLFORM
+FROM   (SELECT NULL AS CODE
+              ,NULL AS NAME
+              ,NULL AS TOOLFORM
+              ,-1   DISPLAYSEQUENCE
+        FROM   DUAL
+        UNION ALL
+        SELECT CD.LOOKUP_CODE AS CODE
+              ,CASE
+                   WHEN DIC.DICTIONARYNAME IS NULL THEN
+                    CD.MEANING
+                   ELSE
+                    DIC.DICTIONARYNAME
+               END  AS NAME
+              ,CD.LOOKUP_TYPE AS TOOLFORM
+              ,CD.DISPLAYSEQUENCE
+        FROM   CMD_LOOKUP_VALUES CD
+        LEFT   JOIN CMD_DICTIONARY DIC
+        ON     DIC.DICTIONARYID = CD.DICTIONARYID
+        AND    DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        WHERE  1 = 1       
+        
+	<if test="LOOKUP_TYPE != null and LOOKUP_TYPE != '' and LOOKUP_TYPE eq 'MW'.toString()">
+						          AND    (CD.LOOKUP_TYPE LIKE 'ToolKindM%' OR     CD.LOOKUP_TYPE LIKE 'ToolKindW%')
+					</if>
+					<if test="LOOKUP_TYPE != null and LOOKUP_TYPE != '' and LOOKUP_TYPE eq 'BJ'.toString()">
+						          AND    (CD.LOOKUP_TYPE LIKE 'ToolKindB%' OR     CD.LOOKUP_TYPE LIKE 'ToolKindJ%')
+					</if>
+					
+        AND    CD.ENABLED_FLAG = 'Y')
+ORDER  BY DISPLAYSEQUENCE ASC
+	</select>
+	<select id="selectCheckManager" parameterType="map" resultType="hashmap">
+	/* smh.bas.dao.BASCommonDao.selectCheckManager */
+	SELECT SU.USER_ID
+	FROM   CMD_USERS SU
+	WHERE  SU.USER_ID = #{SESSION_USER_ID}
+	AND    SU.AREARESPONSIBILITY = 'ProductionManager'
+		
+	</select>
+</mapper>

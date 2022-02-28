@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+  
+<mapper namespace="com.nbdf.cmd.cm.cmbm.dao.CMBM02200Dao">
+
+
+    <!-- 배치관리 권한등록 - 배치프로그램 - 조회  -->    
+    <select id="selectCmbmBatchCtrlAuth" parameterType="map" resultType="hashmap">
+        /* com.nbdf.cmd.cm.cmbm.dao.CMBM02200Dao.selectCmbmBatchCtrlAuth */        
+        SELECT DBC.CMD_JOB_GUBUNCD                                 AS BUSINESS_TYPE
+		     , LV1.MEANING                                         AS BUSINESS_TYPE_NM 
+		     , DECODE(DBC.BAT_PGM_GUBUN, 'SP', 'Procedure', 'Java') AS BAT_PGM_GUBUN
+		     , DBC.BATCH_CD                                        AS BATCH_CD
+		     , DBC.DESCRIPTION                                     AS BATCH_NM
+		     , NVL((SELECT DECODE(DBCA.USE_YN, 'Y', '1', '0')
+			          FROM CMD_BATCH_CTRL_AUTH DBCA
+			         WHERE 1=1		         
+			           AND DBCA.BATCH_CD      = DBC.BATCH_CD
+			           AND DBCA.PLATFORM_TYPE = #{PLATFORM_FLAG}
+			           AND DBCA.JOB_AUTH_ID   = #{JOB_AUTH_ID}
+			       ), 0)                                           AS USE_YN     
+		  FROM CMD_BATCH_CTRLS   DBC
+		     , CMD_LOOKUP_VALUES  LV1
+		 WHERE 1=1
+		   AND DBC.CMD_JOB_GUBUNCD = LV1.LOOKUP_CODE
+		   AND LV1.LOOKUP_TYPE     = 'SystemWorkType' 
+		 ORDER BY DBC.CMD_JOB_GUBUNCD
+                , DBC.BATCH_CD
+    </select>
+
+    <!-- 배치관리 권한등록 - 배치프로그램 - 저장 -->
+    <update id="saveCmbmBatchCtrlAuth" parameterType="map">
+    	/* com.nbdf.cmd.cm.cmbm.dao.CMBM02200Dao.saveCmbmBatchCtrlAuth */
+    	MERGE INTO CMD_BATCH_CTRL_AUTH CDA
+        USING (
+               SELECT #{PLATFORM_TYPE}     AS PLATFORM_TYPE     /* 플랫폼구분(W:WEB, M:MOBILE) */
+                    , #{JOB_AUTH_ID}       AS JOB_AUTH_ID       /* 업무권한ID                  */
+                    , #{BATCH_CD} 	       AS BATCH_CD          /* 배치코드                    */
+                    , #{USE_YN}            AS USE_YN            /* 사용여부                    */                   
+                    , #{CREATED_BY}        AS CREATED_BY        /* 최초생성자                  */
+                    , SYSDATE              AS CREATION_DATE     /* 최초생성일                  */
+                    , #{LAST_UPDATED_BY}   AS LAST_UPDATED_BY   /* 최종수정자                  */
+                    , SYSDATE              AS LAST_UPDATE_DATE  /* 최종수정일                  */
+                 FROM DUAL
+              ) IN_DATA
+        ON (
+            1=1
+            AND CDA.PLATFORM_TYPE = IN_DATA.PLATFORM_TYPE 
+            AND CDA.JOB_AUTH_ID   = IN_DATA.JOB_AUTH_ID 
+            AND CDA.BATCH_CD      = IN_DATA.BATCH_CD
+           )
+        WHEN MATCHED THEN
+            UPDATE
+               SET USE_YN           = DECODE(IN_DATA.USE_YN, '1', 'Y', 'N')
+                 , LAST_UPDATED_BY  = IN_DATA.LAST_UPDATED_BY
+                 , LAST_UPDATE_DATE = SYSDATE
+        WHEN NOT MATCHED THEN
+            INSERT (
+                    PLATFORM_TYPE
+			      , JOB_AUTH_ID
+			      , BATCH_CD
+			      , USE_YN
+			      , CREATED_BY
+			      , CREATION_DATE
+			      , LAST_UPDATED_BY
+			      , LAST_UPDATE_DATE
+	               ) 
+	        VALUES (
+                    IN_DATA.PLATFORM_TYPE
+                  , IN_DATA.JOB_AUTH_ID
+                  , IN_DATA.BATCH_CD
+                  , DECODE(IN_DATA.USE_YN, '1', 'Y', 'N')             
+                  , IN_DATA.CREATED_BY
+                  , IN_DATA.CREATION_DATE
+                  , IN_DATA.LAST_UPDATED_BY
+                  , IN_DATA.LAST_UPDATE_DATE
+            ) 
+    </update>
+    
+    <!-- 배치 프로그램 목록 조회  -->    
+    <select id="selectCmbmBatchCtrls" parameterType="map" resultType="hashmap">
+        /* com.nbdf.cmd.cm.cmbm.dao.CMBM02200Dao.selectCmbmBatchCtrls */        
+        SELECT DBC.CMD_JOB_GUBUNCD AS BUSINESS_TYPE
+		     , LV1.MEANING         AS BUSINESS_TYPE_NM 
+		     , DBC.BATCH_CD        AS BATCH_CD
+		     , DBC.DESCRIPTION     AS BATCH_NM
+		  FROM CMD_BATCH_CTRLS    DBC
+		     , CMD_LOOKUP_VALUES   LV1
+		 WHERE 1=1           
+		   AND DBC.CMD_JOB_GUBUNCD = LV1.LOOKUP_CODE
+   	       AND LV1.LOOKUP_TYPE   = 'CMD_JOB_GUBUNCD'
+		   
+	<if test="SRH_VALUE != null and SRH_VALUE != '' ">
+		<if test="SHR_CASE.equals('10') ">   
+		   AND DBC.DESCRIPTION     = #{SRH_VALUE}
+		</if>
+		
+		<if test="SHR_CASE.equals('20') ">   
+		   AND DBC.CMD_JOB_GUBUNCD = #{SRH_VALUE}
+		</if>   
+		
+		<if test="SHR_CASE.equals('30') ">   
+		   AND DBC.BATCH_CD        = #{SRH_VALUE}
+		</if>
+	</if> 
+		  
+		   AND EXISTS            (SELECT 1
+		                            FROM CMD_BATCH_CTRL_AUTH DBC
+		                           WHERE 1=1
+		                             AND DBC.BATCH_CD    = CSH.BATCH_CD 
+		                             AND DBC.USE_YN      = 'Y'
+		                             AND DBC.JOB_AUTH_ID = #{SRH_JOB_AUTH_ID}
+		                         )
+        ORDER BY CSH.BUSINESS_TYPE
+               , CSH.BATCH_CD  
+    </select>
+
+</mapper>
+

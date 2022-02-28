@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM03200Dao">
+   <select id="selectBatchAccept" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM03200Dao.selectBatchAccept */
+  		--
+        -- Id : SelectBatchAccept
+        -- Version : 10001
+        
+        SELECT    L.LOTID
+	              ,  PD.PRODUCTDEFID
+	              ,  PD.PRODUCTDEFNAME
+	              ,  PD.PRODUCTDEFVERSION
+	              ,  L.PROCESSSEGMENTID
+	              ,  COALESCE(PSD.DICTIONARYNAME, PS.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+	              ,  L.UNIT
+	              ,  L.QTY
+	              ,  L.PRODUCTIONORDERID
+	              ,  L.AREAID
+	              ,  COALESCE(ARD.DICTIONARYNAME, AR.AREANAME) AS AREANAME 
+	              ,  CASE WHEN PP.PATHTYPE = 'Start' OR PP.PATHTYPE = 'StartEnd' THEN TO_CHAR(L.LOTSTARTDATE,'YYYY-MM-DD HH24:MI:SS')
+	                      ELSE TO_CHAR(LH.SENDTIME,'YYYY-MM-DD HH24:MI:SS') 
+	                      END SEGMENTINCOMETIME
+	              ,  L.PANELQTY
+	              ,  L.USERSEQUENCE
+	              , NULL AS CHK                   
+        FROM    PCM_LOT         L
+        INNER JOIN BAS_PRODUCTDEFINITION PD  	ON  	L.PRODUCTDEFID = PD.PRODUCTDEFID
+                                            					AND 	L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION                                       
+        INNER JOIN BAS_PROCESSSEGMENT    PS  	ON  	L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                            					AND 	L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+                                            					AND   PS.VALIDSTATE = 'Valid'
+        LEFT  JOIN CMD_DICTIONARY        PSD 		ON  	PSD.DICTIONARYID = PS.PROCESSSEGMENTNAME
+                                            					AND 	PSD.LANGUAGETYPE = #{LANGUAGETYPE}                                         
+        INNER  JOIN BAS_AREA             AR  			ON 	L.AREAID = AR.AREAID
+        														AND  AR.VALIDSTATE = 'Valid'
+        LEFT   JOIN CMD_DICTIONARY     ARD 		ON  	AR.AREANAME = ARD.DICTIONARYID
+                                            					AND 	ARD.LANGUAGETYPE = #{LANGUAGETYPE}  
+        INNER  JOIN PCM_LOTWORKRESULT    CW  	ON  	L.LOTID = CW.LOTID
+					                                            AND 	L.PROCESSSEGMENTID = CW.PROCESSSEGMENTID
+					                                            AND 	L.PROCESSSEGMENTVERSION = CW.PROCESSSEGMENTVERSION
+					                                            AND 	L.PROCESSDEFID = CW.PROCESSDEFID
+					                                            AND 	L.PROCESSDEFVERSION = CW.PROCESSDEFVERSION
+					                                            AND 	L.WORKCOUNT = CW.WORKCOUNT
+        LEFT    JOIN PCM_LOTHISTORY      LH   		ON 	CW.PREVSENDLOTHISTKEY = LH.TXNHISTKEY
+        INNER   JOIN BAS_PROCESSPATH     PP   		ON  	L.PROCESSDEFID = PP.PROCESSDEFID
+					                                            AND 	L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+					                                            AND 	L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+					                                            AND 	L.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+					                                            AND   PP.VALIDSTATE = 'Valid'                                            
+        WHERE 1=1        
+        AND L.LOTSTATE = 'InProduction'
+        AND L.PROCESSSTATE = 'WaitForReceive'	-- 인수가능상태
+        AND COALESCE(L.ISREPRESENTROLLLOT, 'N') != 'Y'
+        AND NVL(L.ISLOCKING, 'N') != 'Y'   -- 2021-05-27 locking Lot은 안보이도록 처리, 노석안 과장 
+  		<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+  			-- 품목코드
+  			AND	L.PRODUCTDEFID = #{PRODUCTDEFID}
+  		</if>
+		<if test="AREAID != null and AREAID !='' ">
+  			-- 작업장
+  			AND	L.AREAID = #{AREAID}
+  		</if>
+		<if test="P_LOTID != null and P_LOTID !='' ">
+  			-- LOTID
+  			AND	UPPER(L.LOTID) LIKE '%' || UPPER(#{P_LOTID}) || '%'
+  		</if>
+  		
+        ORDER BY L.LOTID 
+	</select>
+	
+	   <select id="selectCommentByProcess" parameterType="map" resultType="hashmap">	
+				-- Id : SelectCommentByProcess
+				-- Version : 10001
+				SELECT
+						PP1.PROCESSPATHID
+					,	PP1.USERSEQUENCE
+					,	PP1.PROCESSSEGMENTID
+					,	NVL(PSN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+					,	PP1.DESCRIPTION
+					,	CASE WHEN PS.PROCESSSEGMENTID = #{PROCESSSEGMENTID} THEN 'Y'
+							 ELSE 'N'
+						END							AS ISCURRENTPROCESS
+				FROM	PCM_LOT						L
+				INNER JOIN BAS_PRODUCTDEFINITION      PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                        AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION	
+				INNER JOIN BAS_PROCESSPATH           PP1 ON SPLIT_PART(L.PROCESSPATHSTACK,'.',1) = PP1.PROCESSPATHID
+																	AND	PP1.VALIDSTATE = 'Valid' 				                                        			
+				<!-- LEFT OUTER JOIN BAS_PROCESSPATH		PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+														AND	L.PLANTID = PP.PLANTID
+														AND	PD.PROCESSDEFID = PP.PROCESSDEFID
+														AND	PD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+														AND	PP.VALIDSTATE = 'Valid' -->
+														--AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT	PS	ON	PP1.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+														AND	PP1.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY		PSN	ON	PS.PROCESSSEGMENTNAME = PSN.DICTIONARYID
+														AND	PSN.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND     ((L.ENTERPRISEID = 'SMLINES' <!-- AND PP.PATHSEQUENCE = PP1.PATHSEQUENCE -->) 
+				<!-- OR      ( L.ENTERPRISEID = 'YOUNGPOONG' AND (PP.PATHSEQUENCE = PP1.PATHSEQUENCE OR PP.PATHSEQUENCE = PP1.PATHSEQUENCE+1)) -->)
+				ORDER BY PP1.PATHSEQUENCE ASC
+	</select>
+	
+	<select id="selectProcessSpecByProcess" parameterType="map" resultType="hashmap">	    		
+				-- Id : SelectProcessSpecByProcess
+				-- Version : 10001
+				SELECT
+						PP.PROCESSPATHID
+					,	PP.USERSEQUENCE
+					,	PP.PROCESSSEGMENTID
+					,	NVL(PSN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+					,	IID.DICTIONARYNAME				AS SPECCLASSNAME
+					,	SD.LSL
+					,	SD.SL
+					,	SD.USL
+					,	CASE WHEN PP.PROCESSSEGMENTID = #{PROCESSSEGMENTID} THEN 'Y'
+							 ELSE 'N'
+						END								AS ISCURRENTPROCESS
+					,   PP.PATHSEQUENCE	
+					,   CASE WHEN L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID 
+					         THEN PP.PATHSEQUENCE
+					         ELSE 0
+					         END  LOTPATHSEQUENCE							
+				FROM	PCM_LOT							L
+				LEFT OUTER JOIN BAS_PROCESSPATH			PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+															AND	L.PLANTID = PP.PLANTID
+															AND	L.PROCESSDEFID = PP.PROCESSDEFID
+															AND	L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+															AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS	ON	PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+															AND	PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY			PSN	ON	PS.PROCESSSEGMENTNAME = PSN.DICTIONARYID
+															AND	PSN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_INSPECTIONITEMREL	IR	ON	L.PRODUCTDEFID = IR.RESOURCEID
+															AND	L.PRODUCTDEFVERSION = IR.RESOURCEVERSION
+															AND	IR.INSPECTIONDEFID = 'OperationInspection-OperationInspection'
+															AND	L.PROCESSSEGMENTID = IR.PROCESSSEGID
+				LEFT OUTER JOIN BAS_INSPITEM                    II      ON  IR.ENTERPRISEID   = II.ENTERPRISEID
+		                                     AND IR.INSPITEMID    = II.INSPITEMID   
+		        LEFT OUTER JOIN CMD_DICTIONARY              IID     ON  II.INSPITEMNAME   = IID.DICTIONARYID
+		                                     AND IID.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_SPECDEFINITION		S	ON	IR.SPECCLASSID = S.SPECCLASSID
+															AND	IR.SPECSEQUENCE = S.SPECSEQUENCE
+				INNER JOIN BAS_SPECDETAIL			SD	ON	S.SPECSEQUENCE = SD.SPECSEQUENCE
+															AND	SD.CONTROLTYPE = #{CONTROLTYPE} 
+															AND	SD.SPECCLASSID = #{SPECCLASSID} 
+				LEFT OUTER JOIN BAS_SPECCLASS			SC	ON	S.SPECCLASSID = SC.SPECCLASSID
+				LEFT OUTER JOIN CMD_DICTIONARY			DIC	ON	SC.SPECCLASSNAME = DIC.DICTIONARYID
+															AND	DIC.LANGUAGETYPE = #{LANGUAGETYPE} 
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+	</select>
+	
+ <select id="getEquipmentByArea" parameterType="map" resultType="hashmap">
+			-- 
+			-- Id : GetEquipmentByArea
+			-- Version : 10031
+			WITH USINGEQUIPMENT AS
+			(
+				SELECT
+						E.EQUIPMENTID
+					,	COUNT(LE.LOTID)			AS LOTCNT
+				FROM	PCM_LOT					L
+				INNER JOIN BAS_RESOURCE			RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+													AND	L.PLANTID = RC.PLANTID
+													AND	L.RESOURCEID = RC.RESOURCEID
+				INNER JOIN BAS_EQUIPMENT			E	ON	L.ENTERPRISEID = E.ENTERPRISEID
+													AND	L.PLANTID = E.PLANTID
+													AND	RC.AREAID = E.AREAID
+													AND	RC.EQUIPMENTCLASSID = E.EQUIPMENTCLASSID
+													AND	E.DETAILEQUIPMENTTYPE = #{DETAILEQUIPMENTTYPE}
+				LEFT OUTER JOIN	PCM_LOTEQUIPMENT	LE	ON	E.EQUIPMENTID = LE.EQUIPMENTID
+													AND	LE.TRACKINTIME IS NOT NULL
+													AND	LE.TRACKOUTTIME IS NULL
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND     E.VALIDSTATE = 'Valid'
+				GROUP BY E.EQUIPMENTID
+			)
+			SELECT
+			        '0'                         AS CHK
+				,	E.EQUIPMENTCLASSID
+				,	E.EQUIPMENTID
+				,	NVL(EN.DICTIONARYNAME, E.EQUIPMENTNAME)	AS EQUIPMENTNAME
+				,	TO_CHAR(LE.TRACKINTIME, 'YYYY-MM-DD HH24:MI:SS')	AS TRACKINTIME
+				,	TO_CHAR(LE.TRACKOUTTIME, 'YYYY-MM-DD HH24:MI:SS')	AS TRACKOUTTIME
+				,	0					        AS PCSQTY
+				,	0						    AS PNLQTY
+				,	''				            AS RECIPEID
+				,	''				            AS RECIPEVERSION
+				,	''				            AS RECIPETYPE
+			FROM	PCM_LOT					L
+			INNER JOIN BAS_RESOURCE			RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+												AND	L.PLANTID = RC.PLANTID
+												AND	L.RESOURCEID = RC.RESOURCEID
+			INNER JOIN BAS_EQUIPMENT			E	ON	L.ENTERPRISEID = E.ENTERPRISEID
+												AND	L.PLANTID = E.PLANTID
+												AND	RC.AREAID = E.AREAID
+												AND	RC.EQUIPMENTCLASSID = E.EQUIPMENTCLASSID
+												AND	E.DETAILEQUIPMENTTYPE = #{DETAILEQUIPMENTTYPE}
+												AND	E.STATE NOT IN ('Down')
+			INNER JOIN BAS_EQUIPMENTEXT	EE	ON	E.EQUIPMENTID = EE.EQUIPMENTID
+												AND	EE.MANAGEMENTSTATE IN ('Demo', 'Lease', 'Normal')
+												AND	EE.EQUIPMENTID IS NOT NULL
+			LEFT JOIN PCM_LOTEQUIPMENT	LE	ON	L.LOTID = LE.LOTID
+												AND	L.PROCESSSEGMENTID = LE.PROCESSSEGMENTID
+												AND	L.PROCESSSEGMENTVERSION = LE.PROCESSSEGMENTVERSION
+												AND E.EQUIPMENTID = LE.EQUIPMENTID
+			LEFT OUTER JOIN CMD_DICTIONARY	EN	ON	E.EQUIPMENTNAME = EN.DICTIONARYID
+												AND	EN.LANGUAGETYPE = #{LANGUAGETYPE}
+			WHERE	1 = 1
+			AND		L.ENTERPRISEID = #{ENTERPRISEID}
+			AND		L.PLANTID = #{PLANTID}
+			AND		L.LOTID = #{LOTID}
+			AND     E.VALIDSTATE = 'Valid'
+			ORDER BY E.EQUIPMENTID					
+    </select>
+</mapper>

@@ -1,0 +1,394 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : Lot보류
+    설명          : Lot보류
+    작성자       : 진성하
+    최초작성일 : 2021.04.10
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.04.10      진성하     최초  생성
+-->
+
+<mapper namespace="smh.pcm.dao.PCM04200Dao">
+
+    <!-- 조회-->
+    <select id="selectLotHoldList" parameterType="map" resultType="hashmap">
+ 		/* smh.pcm.dao.PCM04200Dao.selectLotHoldList */
+		SELECT	LH.TXNHISTKEY
+			,	LH.LOTID
+			,	DC1.DICTIONARYNAME									AS LOTTYPE
+			,	L.PRODUCTDEFID
+			,	L.PRODUCTDEFVERSION
+			,	PD.PRODUCTDEFNAME
+			,	L.PROCESSDEFID
+			,	L.PROCESSSEGMENTID
+			,	NVL(DS1.DICTIONARYNAME, SG.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+			,	L.USERSEQUENCE
+			,	L.PLANTID
+			,	L.AREAID
+			,   NVL(DCR.DICTIONARYNAME, AR.AREANAME)           AS AREANAME
+			,	NVL(PD.RTRSHT, 'Sheet')						AS RTRSHT
+			,	L.UNIT
+			,	L.QTY
+			,	L.PCSQTY
+			,	L.PANELQTY
+			,	(L.QTY / PD.PCSMM)					AS M2QTY
+			,	PO.PLANENDTIME										AS DELIVERYDATE
+			,	L.ISHOLD
+			,	TO_CHAR(L.ROOTLOTSTARTDATE, 'YYYY-MM-DD')			AS LOTINPUTDATE
+			,	DC2.DICTIONARYNAME									AS HOLDTOPCLASS
+			,	DC3.DICTIONARYNAME									AS HOLDMIDDLECLASS
+			,	DC4.DICTIONARYNAME									AS HOLDREASON
+			,	US.USERNAME											AS HOLDUSER
+			,	TO_CHAR(LH.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')	AS HOLDDATE
+			,	US2.USERNAME										AS RELEASEHOLDUSER
+			,	TO_CHAR(LH.RELEASEDATE, 'YYYY-MM-DD HH24:MI:SS')	AS RELEASEHOLDDATE
+			,	NVL(DC5.DICTIONARYNAME, L.PROCESSSTATE)			AS PROCESSSTATE
+			-- 2020.06.04 LEADTIME , 보류 누석 시간 수정
+			,	TO_CHAR(((SYSDATE - L.ROOTLOTSTARTDATE) * 24 * 60 * 60)/86400,'FM9999999999999.00') AS LEADTIME	
+			,	TO_CHAR(((SYSDATE - LH.CREATEDTIME) * 24 * 60 * 60)/86400,'FM9999999999999.00') AS ELAPSEDTIME	
+			,	'' as CHK
+		FROM	PCM_LOTHOLD					LH
+		INNER JOIN PCM_LOT					L	ON	LH.LOTID = L.LOTID
+		LEFT JOIN BAS_PRODUCTDEFINITION		PD	ON	L.PRODUCTDEFID = PD.PRODUCTDEFID
+	    										AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+		LEFT JOIN MFM_PRODUCTIONORDER		PO	ON	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+												AND L.LINENO = PO.LINENO
+												--AND PO.VALIDSTATE = 'Valid'
+		LEFT JOIN BAS_PROCESSSEGMENT		SG	ON	LH.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+												AND LH.PROCESSSEGMENTVERSION = SG.PROCESSSEGMENTVERSION
+												AND SG.VALIDSTATE = 'Valid'
+		LEFT JOIN BAS_PROCESSPATH           PH  ON	((L.SUBPROCESSDEFID IS NULL AND L.PROCESSDEFID = PH.PROCESSDEFID) OR (L.SUBPROCESSDEFID IS NOT NULL AND L.SUBPROCESSDEFID = PH.PROCESSDEFID))
+												AND	((L.SUBPROCESSDEFID IS NULL AND L.PROCESSDEFVERSION = PH.PROCESSDEFVERSION) OR (L.SUBPROCESSDEFID IS NOT NULL AND L.SUBPROCESSDEFVERSION = PH.PROCESSDEFVERSION))
+                                                AND L.PROCESSSEGMENTID = PH.PROCESSSEGMENTID
+		LEFT JOIN fn_area(#{SESSION_USER_ID}) AR 	ON	L.AREAID = AR.AREAID
+															AND	AR.ISMODIFY = 'Y' -- 등록화면
+		LEFT  JOIN CMD_DICTIONARY            DCR ON  AR.AREANAME = DCR.DICTIONARYID
+                                                      AND DCR.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT JOIN BAS_PROCESSSEGMENTCLASS	MSC	ON	SG.PROCESSSEGMENTCLASSID = MSC.PROCESSSEGMENTCLASSID			-- 중공정
+												AND MSC.VALIDSTATE = 'Valid'
+		LEFT JOIN BAS_PROCESSSEGMENTCLASS	TSC ON	MSC.PARENTPROCESSSEGMENTCLASSID = TSC.PROCESSSEGMENTCLASSID		-- 대공정
+												AND TSC.VALIDSTATE = 'Valid'
+		LEFT JOIN CMD_DICTIONARY				DS1	ON	SG.PROCESSSEGMENTNAME = DS1.DICTIONARYID
+												AND DS1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT JOIN CMD_LOOKUP_VALUES					CD1	ON	L.LOTTYPE = CD1.LOOKUP_CODE											-- 구분
+												AND CD1.LOOKUP_TYPE = 'ProductionType'
+												AND CD1.ENABLED_FLAG= 'Y'
+		LEFT JOIN CMD_DICTIONARY				DC1	ON	DC1.DICTIONARYID = CD1.DICTIONARYID
+												AND	DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT JOIN CMD_USER_V					US	ON	LH.HOLDUSER = US.USERID
+		LEFT JOIN CMD_USER_V					US2	ON	LH.RELEASEUSER = US2.USERID
+		LEFT JOIN BAS_REASONCODECLASS		RC1	ON	LH.HOLDTOPCLASSID = RC1.REASONCODECLASSID
+												AND RC1.PARENTREASONCODECLASSID = 'HoldCode'
+		LEFT JOIN CMD_DICTIONARY				DC2	ON	DC2.DICTIONARYID = RC1.REASONCODECLASSNAME
+												AND	DC2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT JOIN BAS_REASONCODECLASS		RC2	ON	LH.HOLDMIDDLECLASSID = RC2.REASONCODECLASSID
+												AND RC2.PARENTREASONCODECLASSID = RC1.REASONCODECLASSID
+		LEFT JOIN CMD_DICTIONARY				DC3	ON	DC3.DICTIONARYID = RC2.REASONCODECLASSNAME
+												AND	DC3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT JOIN BAS_REASONCODE				CD4 ON  LH.HOLDCODE = CD4.REASONCODEID
+		LEFT JOIN CMD_DICTIONARY				DC4	ON	DC4.DICTIONARYID = CD4.REASONCODENAME
+												AND	DC4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT JOIN CMD_DICTIONARY				DC5	ON	DC5.DICTIONARYID = UPPER(L.PROCESSSTATE)
+												AND	DC5.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE   L.LOTSTATE IN ('InProduction', 'InTransit')
+		AND 	LH.HOLDSTATUS = 'Y'
+		--2021.05.12 담당자 상관없이 조회로 변경
+        --AND		EXISTS
+        --		(
+        --			SELECT 	1
+        --			FROM	BAS_USERGROUPUSER	UC
+        --			WHERE	UC.USERID = LH.CREATOR
+        --			AND		UC.USERGROUPID IN (
+        --										SELECT  USERGROUPID
+        --										FROM	BAS_USERGROUPUSER
+        --										WHERE	USERID = {SESSION_USER_ID}
+        --									  )
+        --		)
+        -- LOTID 조회
+    <if test="LOTID != null and LOTID !='' "> 
+		AND		EXISTS
+				(
+					SELECT	1
+					FROM	ufn_selectStringToSplit(#{LOTID}, ',')		LMP
+					WHERE	L.LOTID = LMP.VALUE
+				)
+    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+		AND     L.PLANTID = #{PLANTID}
+    </if>
+		-- 품목코드
+    <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+		AND		EXISTS
+				(
+					SELECT	1
+					FROM	ufn_selectStringToSplit(#{PRODUCTDEFID}, ',')		PMP
+					WHERE	L.PRODUCTDEFID LIKE '%'||PMP.VALUE||'%'
+				)    
+	</if>
+		-- 품목VERSION
+    <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' "> 
+        AND     L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	</if>
+    <if test="PRODUCTNAME != null and PRODUCTNAME !='' "> 
+        AND     PD.PRODUCTDEFNAME LIKE '%'||#{PRODUCTNAME}||'%'
+	</if>
+		-- 작업장
+    <if test="AREAID != null and AREAID !='' "> 
+		AND		EXISTS
+				(
+					SELECT	1
+					FROM	ufn_selectStringToSplit(#{AREAID}, ',')		PMP
+					WHERE	L.AREAID = PMP.VALUE
+				)
+	</if>
+		-- 대공정
+    <if test="TOPSEGMENTCLASS != null and TOPSEGMENTCLASS !='' "> 
+		AND		EXISTS
+				(
+					SELECT	1
+					FROM	ufn_selectStringToSplit(#{TOPSEGMENTCLASS}, ',')		SMP
+					WHERE	TSC.PROCESSSEGMENTCLASSID = SMP.VALUE
+				)
+	</if>
+		-- 주요공정
+    <if test="MAINSEGMENTID != null and MAINSEGMENTID !='' "> 
+		AND		SG.ISMAINSEGMENT = 'Y'
+		AND		EXISTS
+				(
+					SELECT	1
+					FROM	ufn_selectStringToSplit(#{MAINSEGMENTID}, ',')		MMP
+					WHERE	SG.PROCESSSEGMENTID = MMP.VALUE
+				)
+	</if>
+		-- 구분
+    <if test="LOTPRODUCTTYPESTATUS != null and LOTPRODUCTTYPESTATUS !='' "> 
+		AND     L.LOTTYPE = #{LOTPRODUCTTYPESTATUS}
+	</if>
+        -- 제품구분
+    <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' "> 
+		AND		EXISTS
+				(
+					SELECT	1
+					FROM	ufn_selectStringToSplit(#{PRODUCTDEFTYPE}, ',')		PMP
+					WHERE	PD.PRODUCTDEFTYPE = PMP.VALUE
+				)
+	  </if>
+        -- 자사/외주구분
+    <if test="OWNTYPE != null and OWNTYPE !='' "> 
+		AND     AR.OWNTYPE = #{OWNTYPE}
+	  </if>
+        -- 대분류
+    <if test="HOLDTOPCLASSID != null and HOLDTOPCLASSID !='' "> 
+		AND     LH.HOLDTOPCLASSID = #{REASONCODETOPCLASS}
+	  </if>
+        -- 중분류
+    <if test="HOLDMIDDLECLASSID != null and HOLDMIDDLECLASSID !='' "> 
+		AND     LH.HOLDMIDDLECLASSID = #{HOLDMIDDLECLASSID}
+	</if>
+        -- 보류사유
+    <if test="REASONCODE != null and REASONCODE !='' "> 
+		AND     LH.HOLDCODE = #{REASONCODE}
+	</if>
+
+    </select>
+
+
+    <update id="updatePcmLot" parameterType="map" > 
+    UPDATE PCM_LOT 
+    SET ISHOLD = #{ISHOLD}        
+    	,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+    WHERE LOTID = #{LOTID}
+    
+    </update>
+
+    <!-- LOT 보류 조회-->
+    <select id="selectPcmLothold" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.TXNHISTKEY	
+        ,A.LOTID	
+        ,A.AREAID	
+        ,A.PROCESSDEFID	
+        ,A.PROCESSDEFVERSION	
+        ,A.PROCESSSEGMENTID	
+        ,A.PROCESSSEGMENTVERSION	
+        ,A.HOLDTOPCLASSID	
+        ,A.HOLDMIDDLECLASSID	
+        ,A.HOLDCODE	
+        ,A.HOLDCOMMENT	
+        ,A.HOLDUSER	
+        ,A.HOLDTIME	
+        ,A.HOLDSTATUS	
+        ,A.RELEASECOMMENTS	
+        ,A.RELEASEUSER	
+        ,A.RELEASEDATE	
+        ,A.TXNGROUPHISTKEY	
+        ,A.CREATOR	
+        ,A.CREATEDTIME	
+    FROM	PCM_LOTHOLD A 
+    WHERE 1=1 
+     AND A.LOTID = #{LOTID}
+     AND A.TXNHISTKEY = #{TXNHISTKEY}
+
+    </select>		
+    
+    <!--사유코드 조회-->
+    <select id="selectBasReasonCodeClassList" parameterType="map" resultType="hashmap">
+		SELECT	
+				REASONCODECLASSID
+			 , 	CASE
+			 		WHEN DIC.DICTIONARYNAME IS NULL	THEN CD.REASONCODECLASSNAME 
+			 		ELSE DIC.DICTIONARYNAME 
+			 	END 						AS REASONCODECLASSNAME
+		FROM	BAS_REASONCODECLASS	CD		
+		LEFT JOIN CMD_DICTIONARY 			DIC	ON DIC.DICTIONARYID = CD.REASONCODECLASSNAME
+												AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE	1 = 1
+    <if test="PARENTREASONCODECLASSID != null and PARENTREASONCODECLASSID !='' "> 
+        AND PARENTREASONCODECLASSID = #{PARENTREASONCODECLASSID}
+    </if>
+		AND 	VALIDSTATE = 'Valid'
+		ORDER BY REASONCODECLASSID
+    </select>	 
+    
+    <select id="selectBasReasonCodeList" parameterType="map" resultType="hashmap">
+     	SELECT 
+				CD.REASONCODEID
+			 , 	CASE
+			 		WHEN DIC.DICTIONARYNAME IS NULL	THEN CD.REASONCODENAME 
+			 		ELSE DIC.DICTIONARYNAME 
+			 	END 						AS REASONCODENAME
+			 ,  CD.DISPLAYSEQUENCE
+		FROM	BAS_REASONCODE				CD
+		LEFT JOIN CMD_DICTIONARY 			DIC	ON DIC.DICTIONARYID = CD.REASONCODENAME
+												AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE 	1 = 1
+		AND		CD.REASONCODECLASSID = #{REASONCODECLASSID}
+		ORDER BY CD.DISPLAYSEQUENCE ASC
+	</select>       	    
+
+    <!-- LOT 정보 상세조회-->
+    <select id="selectPcmLot" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.LOTID	 
+        ,A.PRODUCTIONORDERID	 
+        ,A.LINENO	 
+        ,A.LOTGROUPID	 
+        ,A.LOTNAME	 
+        ,A.ENTERPRISEID	 
+        ,A.PLANTID	 
+        ,A.FACTORYID	 
+        ,A.ORIGINALPLANTID	 
+        ,A.AREAID	 
+        ,A.EQUIPMENTID	 
+        ,A.LOCATIONID	 
+        ,A.RECIPEDEFID	 
+        ,A.RECIPEDEFVERSION	 
+        ,A.RAWMATERIALID	 
+        ,A.ROOTLOTID	 
+        ,A.PARENTLOTID	 
+        ,A.CHILDLOTID	 
+        ,A.CARRIERID	 
+        ,A.LOTTYPE	 
+        ,A.LOTCREATEDTYPE	 
+        ,A.LOTINPUTTYPE	 
+        ,A.ISREPRESENTROLLLOT	 
+        ,A.HASSUBLOT	 
+        ,A.PRODUCTDEFID	 
+        ,A.PRODUCTDEFVERSION	 
+        ,A.PREVPRODUCTDEFVERSION	 
+        ,A.PROCESSDEFID	 
+        ,A.PROCESSDEFVERSION	 
+        ,A.PROCESSPATHSTACK	 
+        ,A.USERSEQUENCE	 
+        ,A.PROCESSSEGMENTID	 
+        ,A.PROCESSSEGMENTVERSION	 
+        ,A.PRIORITY	 
+        ,A.DUEDATE	 
+        ,A.EXPECTEDCOMPLETEDATE	 
+        ,A.ROOTLOTSTARTDATE	 
+        ,A.LOTSTARTDATE	 
+        ,A.WEEK	 
+        ,A.TRACKINUSER	 
+        ,A.TRACKINTIME	 
+        ,A.TRACKOUTUSER	 
+        ,A.TRACKOUTTIME	 
+        ,A.LOTSTATE	 
+        ,A.PROCESSSTATE	 
+        ,A.ISHOLD	 
+        ,A.ISREWORK	 
+        ,A.ISLOCKING	 
+        ,A.REWORKTYPE	 
+        ,A.REWORKREASONCODE	 
+        ,A.ISPRINTLOTCARD	 
+        ,A.ISPRINTRCLOTCARD	 
+        ,A.LAYER	 
+        ,A.CREATEDQTY	 
+        ,A.LOTSTDPANELQTY	 
+        ,A.UNIT	 
+        ,A.DEFECTUNIT	 
+        ,A.QTY	 
+        ,A.DEFECTQTY	 
+        ,A.PSEUDODEFECTQTY	 
+        ,A.PCSQTY	 
+        ,A.ARRAYQTY	 
+        ,A.PANELQTY	 
+        ,A.PANELPERQTY	 
+        ,A.REWORKCOUNT	 
+        ,A.TOTALREWORKCOUNT	 
+        ,A.PUREORDER	 
+        ,A.PUREINPUT	 
+        ,A.SUBPROCESSDEFID	 
+        ,A.SUBPROCESSDEFVERSION	 
+        ,A.RECEIVEUSER	 
+        ,A.RECEIVETIME	 
+        ,A.STARTEDUSER	 
+        ,A.STARTEDDATE	 
+        ,A.SENDUSER	 
+        ,A.SENDTIME	 
+        ,A.HANDLETYPE	 
+        ,A.DESCRIPTION	 
+        ,A.CREATOR	 
+        ,A.CREATEDTIME	 
+        ,A.MODIFIER	 
+        ,A.MODIFIEDTIME	 
+        ,A.ISDEFECTED	 
+        ,A.WORKCOUNT	 
+        ,A.RESOURCEID	 
+        ,A.MKLOTID	 
+        ,A.PREVPRODUCTDEFID	 
+        ,A.PNLROOTLOTID	 
+        ,A.PNLCREATEDQTY	 
+        ,A.INPUTCONFIRMDATE	 
+        ,A.INPUTCONFIRMUSER	 
+        ,A.ISFINALINSPECTPROGESS	 
+        ,A.LOTINPUTQTY	 
+        ,A.ISFIRSTCREATELOT	 
+        ,A.ISOEM	 
+        ,A.ISSHRINKTEST	 
+    FROM	PCM_LOT A 
+    WHERE A.LOTID = #{LOTID}
+    </select>
+    
+    <!-- LOT 보류 변경 -->
+    <update id="updatePcmLothold" parameterType="map" >
+    UPDATE PCM_LOTHOLD 
+    SET HOLDSTATUS = #{HOLDSTATUS}
+    	,RELEASECOMMENTS = #{RELEASECOMMENTS}     
+        ,RELEASEUSER = #{CREATOR}     
+        ,RELEASEDATE = sysdate     
+        ,TXNGROUPHISTKEY = #{TXNGROUPHISTKEY}             
+    WHERE LOTID = #{LOTID}
+    AND TXNHISTKEY = #{TXNHISTKEY}
+    </update>
+</mapper>

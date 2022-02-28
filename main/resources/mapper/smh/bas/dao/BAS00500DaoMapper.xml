@@ -1,0 +1,927 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS00500Dao">
+	<sql id="insertDictionary">
+	BAS_COMMON_PKG.GENERATE_DICTIONARY
+	</sql>
+	
+    <select id="selectProcessSegmentExtlist" parameterType="map" resultType="hashmap">
+    <![CDATA[
+    	/* smh.bas.dao.BAS00500Dao.selectProcessSegmentExtlist */
+			 SELECT PG.PROCESSSEGMENTCLASSID
+				       ,PG.PROCESSSEGMENTID AS STANDARDOPERATIONID
+				       ,KR.DICTIONARYNAME AS PROCESSSEGMENTNAME_KR
+				       ,US.DICTIONARYNAME AS PROCESSSEGMENTNAME_US
+				       ,CN.DICTIONARYNAME AS PROCESSSEGMENTNAME_CN
+				       ,VN.DICTIONARYNAME AS PROCESSSEGMENTNAME_VN
+				       ,PG.SEGMENTTYPE
+				       ,TPSCN.DICTIONARYNAME AS TOPPROCESSSEGMENTCLASS
+				       ,MPSCN.DICTIONARYNAME AS MIDDLEPROCESSSEGMENTCLASS
+				       ,PG.STEPCLASS
+				       ,(SELECT LISTAGG(B.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY A.DISPLAYSEQUENCE)
+				        FROM   CMD_LOOKUP_VALUES A
+				        LEFT   JOIN CMD_DICTIONARY B         ON     A.DICTIONARYID = B.DICTIONARYID
+				                                             AND    B.LANGUAGETYPE = 'ko-KR'
+				        WHERE  A.LOOKUP_TYPE = PG.STEPCLASS
+				        AND  A.ENABLED_FLAG = 'Y'
+				        ) STEPTYPE
+				        ,(SELECT Q.DESCRIPTION
+						        FROM   (SELECT LISTAGG(A.LOOKUP_CODE, ',') WITHIN GROUP(ORDER BY A.DISPLAYSEQUENCE) AS DESCRIPTION
+						                      ,A.LOOKUP_TYPE
+						                FROM   CMD_LOOKUP_VALUES A
+						                LEFT   JOIN CMD_DICTIONARY B
+						                ON     A.DICTIONARYID = B.DICTIONARYID
+						                AND    B.LANGUAGETYPE = 'ko-KR'
+						                WHERE  A.LOOKUP_TYPE IN
+						                       (SELECT Q.LOOKUP_CODE
+						                        FROM   CMD_LOOKUP_VALUES Q
+						                        WHERE  Q.LOOKUP_TYPE = 'StepType'
+						                        AND Q.ENABLED_FLAG ='Y'
+						                        )
+						                    AND A.ENABLED_FLAG ='Y'
+						                GROUP  BY A.LOOKUP_TYPE) Q
+						        WHERE  PG.STEPCLASS = Q.LOOKUP_TYPE) AS STEPTYPEKEY
+				       ,PG.SUBSEGMENTID
+				       ,PG.ISTOOLWORK
+				       ,PG.ISINCOMINGINSPECTION
+				       ,PG.COSTCODE
+				       ,PG.VALIDSTATE
+				       ,NVL(CU.USER_NM, PG.CREATOR) AS CREATOR
+				       , TO_CHAR(PG.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+				       ,NVL(MU.USER_NM, PG.MODIFIER) AS MODIFIER
+				       , TO_CHAR(PG.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+				       ,PG.PROCESSSEGMENTNAME
+				       ,PG.ENTERPRISEID
+				       ,PG.ISREQUIREDMATERIAL
+				       ,PG.ISREQUIREDOPERATIONSPEC
+				       ,PG.ISREQUIREDTOOL
+				       ,PG.SUBSEGMENTID1
+				       ,PG.PLATINGTYPE
+			FROM   BAS_PROCESSSEGMENTEXT PG
+			LEFT   JOIN BAS_PROCESSSEGMENTCLASS MPSC ON     PG.PROCESSSEGMENTCLASSID = MPSC.PROCESSSEGMENTCLASSID
+			LEFT   JOIN BAS_PROCESSSEGMENTCLASS TPSC ON     MPSC.PARENTPROCESSSEGMENTCLASSID = TPSC.PROCESSSEGMENTCLASSID
+			LEFT   JOIN CMD_DICTIONARY MPSCN         ON     MPSCN.DICTIONARYID = MPSC.PROCESSSEGMENTCLASSNAME
+			                                         AND    MPSCN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+			LEFT   JOIN CMD_DICTIONARY TPSCN         ON     TPSCN.DICTIONARYID = TPSC.PROCESSSEGMENTCLASSNAME
+			                                         AND    TPSCN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+			LEFT   JOIN CMD_DICTIONARY KR            ON     KR.DICTIONARYID = PG.PROCESSSEGMENTNAME
+			                                         AND    KR.LANGUAGETYPE = 'ko-KR'
+			LEFT   JOIN CMD_DICTIONARY US            ON     US.DICTIONARYID = PG.PROCESSSEGMENTNAME
+			                                         AND    US.LANGUAGETYPE = 'en-US'
+			LEFT   JOIN CMD_DICTIONARY CN            ON     CN.DICTIONARYID = PG.PROCESSSEGMENTNAME
+			                                         AND    CN.LANGUAGETYPE = 'zh-CN'
+			LEFT   JOIN CMD_DICTIONARY VN            ON     VN.DICTIONARYID = PG.PROCESSSEGMENTNAME
+			                                         AND    VN.LANGUAGETYPE = 'vi-VN'
+			LEFT   JOIN CMD_USERS CU                 ON     CU.USER_ID = PG.CREATOR
+			LEFT   JOIN CMD_USERS MU                 ON     MU.USER_ID = PG.MODIFIER
+			WHERE  1 = 1
+			AND	PG.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+ 		]]>
+	    <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+	        AND PG.VALIDSTATE = #{VALIDSTATE}
+	    </if>
+		<choose>
+	          <when test="SEARCHTYPE eq 'ALLVIEWS'.toString()">
+	          		 AND (UPPER(PG.PROCESSSEGMENTID) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR UPPER(KR.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR	 UPPER(US.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR UPPER(CN.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR	 UPPER(VN.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')	)
+	          </when>
+	          <otherwise>
+	          	    <choose>
+			          	<when test="SEARCHTYPE eq 'PROCESSSEGMENTID'.toString()">	          		
+			          		AND	UPPER(PG.PROCESSSEGMENTID) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+			          	</when>
+			          	<otherwise>
+			          		<if test="SEARCHTYPE != null and SEARCHTYPE !='' "> 
+			          			AND (
+								 UPPER(KR.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR	 UPPER(US.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR UPPER(CN.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR	 UPPER(VN.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')	)
+			          		</if> 
+			          	</otherwise>
+			         </choose>
+	          </otherwise>
+          </choose>
+          ORDER BY PG.PROCESSSEGMENTID
+    </select>    
+    
+    <!-- 트리 조회 -->
+   <select id="selectTreeList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS00400Dao.selectTreeList */
+			SELECT PROCESSSEGMENTCLASSTYPE
+			      ,PROCESSSEGMENTCLASSID
+			      ,PROCESSSEGMENTCLASSNAME
+			      ,ENTERPRISEID
+			      ,DESCRIPTION
+			      ,PLANTID
+			      ,PARENTPROCESSSEGMENTCLASSID
+			      ,LVL
+			FROM   (SELECT 'TopProcessSegmentClass' AS PROCESSSEGMENTCLASSTYPE
+			              ,NULL AS PROCESSSEGMENTCLASSID
+			              ,#{SESSION_ENTERPRISEID} AS PROCESSSEGMENTCLASSNAME
+			              ,#{SESSION_ENTERPRISEID} AS ENTERPRISEID
+			              ,#{SESSION_ENTERPRISEID} AS DESCRIPTION
+			              ,NULL AS PLANTID
+			              ,NULL AS PARENTPROCESSSEGMENTCLASSID
+			              ,0 AS LVL
+              			  ,0 AS ORDSEQ
+			        FROM   DUAL
+			        UNION ALL
+			        SELECT A.PROCESSSEGMENTCLASSTYPE
+			              ,A.PROCESSSEGMENTCLASSID
+			              ,A.PROCESSSEGMENTCLASSID || '_' || CASE
+			                   WHEN D.DICTIONARYNAME IS NULL THEN
+			                    A.PROCESSSEGMENTCLASSNAME
+			                   ELSE
+			                    D.DICTIONARYNAME
+			               END AS PROCESSSEGMENTCLASSNAME
+			              ,A.ENTERPRISEID
+			              ,A.DESCRIPTION
+			              ,A.PLANTID
+			              ,A.PARENTPROCESSSEGMENTCLASSID
+			              ,LEVEL AS LVL
+              			  ,1 AS ORDSEQ
+			        FROM   BAS_PROCESSSEGMENTCLASS A
+			        LEFT   OUTER JOIN CMD_DICTIONARY D ON     A.PROCESSSEGMENTCLASSNAME = D.DICTIONARYID 
+			        												AND   D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			        WHERE  1 = 1
+					AND 	 A.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+					<!-- AND	 A.PLANTID = #{SESSION_SITETYPE}	 -->
+				    <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+				        <!-- AND A.VALIDSTATE = #{VALIDSTATE} -->
+				    </if>
+			        START  WITH A.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+			        CONNECT BY PRIOR A.PROCESSSEGMENTCLASSID = A.PARENTPROCESSSEGMENTCLASSID
+			            AND    A.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass')
+			ORDER  BY ORDSEQ,PROCESSSEGMENTCLASSID ASC
+    </select>
+    
+    <select id="selectProcessAList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00500Dao.selectProcessAList */
+        	SELECT  A.PROCESSSEGMENTCLASSTYPE
+		              ,A.PROCESSSEGMENTCLASSID               
+		              ,KR.DICTIONARYNAME AS PROCESSSEGMENTCLASSNAME_KR
+		               ,US.DICTIONARYNAME AS PROCESSSEGMENTCLASSNAME_US
+		               ,CN.DICTIONARYNAME AS PROCESSSEGMENTCLASSNAME_CN
+		               ,VN.DICTIONARYNAME AS PROCESSSEGMENTCLASSNAME_VN
+		               ,A.PROCESSSEGMENTCLASSNAME
+		               ,A.ENTERPRISEID
+		               ,A.DESCRIPTION
+		               ,A.PLANTID
+		               ,A.PARENTPROCESSSEGMENTCLASSID
+		               ,CASE
+		                   WHEN D1.DICTIONARYNAME IS NULL THEN
+		                    B.PROCESSSEGMENTCLASSNAME
+		                   ELSE
+		                    D1.DICTIONARYNAME
+		               END AS PARENTPROCESSSEGMENTCLASSNAME
+		               ,A.VALIDSTATE
+		               ,NVL(USC.USER_NM, A.CREATOR) AS CREATOR
+		               , TO_CHAR(A.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+		               ,NVL(USM.USER_NM, A.MODIFIER) AS MODIFIER
+		               , TO_CHAR(A.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+						, NULL AS CHK
+		        FROM   BAS_PROCESSSEGMENTCLASS A        
+		        LEFT   JOIN CMD_DICTIONARY KR         ON     KR.DICTIONARYID = A.PROCESSSEGMENTCLASSNAME
+		                                              AND    KR.LANGUAGETYPE = 'ko-KR'
+		        LEFT   JOIN CMD_DICTIONARY US         ON     US.DICTIONARYID = A.PROCESSSEGMENTCLASSNAME
+		                                              AND    US.LANGUAGETYPE = 'en-US'
+		        LEFT   JOIN CMD_DICTIONARY CN         ON     CN.DICTIONARYID = A.PROCESSSEGMENTCLASSNAME
+		                                              AND    CN.LANGUAGETYPE = 'zh-CN'
+		        LEFT   JOIN CMD_DICTIONARY VN         ON     VN.DICTIONARYID = A.PROCESSSEGMENTCLASSNAME
+		                                              AND    VN.LANGUAGETYPE = 'vi-VN'        
+		        LEFT   OUTER JOIN BAS_PROCESSSEGMENTCLASS B        ON     A.ENTERPRISEID = B.ENTERPRISEID
+		                                                           AND    A.PLANTID = B.PLANTID
+		                                                           AND    A.PARENTPROCESSSEGMENTCLASSID = B.PROCESSSEGMENTCLASSID        
+		        LEFT   OUTER JOIN CMD_DICTIONARY D1                ON     B.PROCESSSEGMENTCLASSNAME = D1.DICTIONARYID
+		                                                           AND    D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+		        LEFT   OUTER JOIN CMD_USERS USC                    ON     A.CREATOR = USC.USER_ID
+		        LEFT   OUTER JOIN CMD_USERS USM                    ON     A.MODIFIER = USM.USER_ID        
+		        WHERE  1 = 1        
+		        AND 	 A.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+	 		]]>
+		<if test="SEARCHKEY != null and SEARCHKEY !='' ">
+			          		 AND (		UPPER(KR.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHKEY} || '%')
+										OR	 UPPER(US.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHKEY} || '%')
+										OR UPPER(CN.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHKEY} || '%')
+										OR	 UPPER(VN.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHKEY} || '%')
+										)
+										
+			    </if>
+	 		  <choose>
+	          	<when test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' "> 
+	          		AND A.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID} 
+	          	</when>
+	          	<otherwise>
+	          		<if test="VALIDSTATE != null and VALIDSTATE !='' ">
+						AND    EXISTS
+			              (
+			                SELECT  1
+			                FROM  BAS_PROCESSSEGMENTEXT PGE 
+			                WHERE   VALIDSTATE =  #{VALIDSTATE}
+			                AND     PGE.PROCESSSEGMENTCLASSID = A.PROCESSSEGMENTCLASSID
+			                AND     PGE.ENTERPRISEID          = A.ENTERPRISEID
+			                UNION ALL
+			                SELECT 1 
+			                FROM BAS_PROCESSSEGMENTCLASS PGC 
+			                LEFT JOIN BAS_PROCESSSEGMENTEXT MG ON  PGC.PROCESSSEGMENTCLASSID = MG.PROCESSSEGMENTCLASSID 
+			                                                  AND PGC.ENTERPRISEID = MG.ENTERPRISEID
+			                WHERE 1=1
+			                   AND MG.PROCESSSEGMENTCLASSID IS NULL 
+			                   AND PGC.VALIDSTATE = #{VALIDSTATE}
+			              )
+				    </if>	    
+	          	</otherwise>
+		</choose>	 	
+		<choose>
+	          	<when test="PARENTPROCESSSEGMENTCLASSID != null and PARENTPROCESSSEGMENTCLASSID !='' ">	          		
+	          		AND  A.PARENTPROCESSSEGMENTCLASSID = #{PARENTPROCESSSEGMENTCLASSID}
+	          	</when>
+	          	<otherwise>
+	          		AND	A.PARENTPROCESSSEGMENTCLASSID  IS NULL
+	          	</otherwise>
+	         </choose>
+	         ORDER BY PROCESSSEGMENTCLASSID
+    </select>
+    
+    <select id="selectProcessBList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00500Dao.selectProcessBList */
+		      SELECT
+				        PG.PROCESSSEGMENTCLASSID   
+					,	PG.PROCESSSEGMENTID             
+				    ,	KR.DICTIONARYNAME          	 	AS PROCESSSEGMENTNAME_KR
+				    ,	US.DICTIONARYNAME          	 	AS PROCESSSEGMENTNAME_US
+				    ,	CN.DICTIONARYNAME          	 	AS PROCESSSEGMENTNAME_CN
+				    ,	VN.DICTIONARYNAME          	 	AS PROCESSSEGMENTNAME_VN
+				    ,	PG.SEGMENTTYPE
+				    ,	PG.STEPCLASS
+				       ,(SELECT LISTAGG(B.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY A.DISPLAYSEQUENCE)
+				        FROM   CMD_LOOKUP_VALUES A
+				        LEFT   JOIN CMD_DICTIONARY B         ON     A.DICTIONARYID = B.DICTIONARYID
+				                                             AND    B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+				        WHERE  A.LOOKUP_TYPE = PG.STEPCLASS
+				        AND  A.ENABLED_FLAG = 'Y') STEPTYPENAME
+						 ,(SELECT Q.DESCRIPTION
+						        FROM   (SELECT LISTAGG(A.LOOKUP_CODE, ',') WITHIN GROUP(ORDER BY A.DISPLAYSEQUENCE) AS DESCRIPTION
+						                      ,A.LOOKUP_TYPE
+						                FROM   CMD_LOOKUP_VALUES A
+						                LEFT   JOIN CMD_DICTIONARY B
+						                ON     A.DICTIONARYID = B.DICTIONARYID
+						                AND    B.LANGUAGETYPE = 'ko-KR'
+						                WHERE  A.LOOKUP_TYPE IN
+						                       (SELECT Q.LOOKUP_CODE
+						                        FROM   CMD_LOOKUP_VALUES Q
+						                        WHERE  Q.LOOKUP_TYPE = 'StepType'
+						                        AND Q.ENABLED_FLAG ='Y')
+						                   AND A.ENABLED_FLAG ='Y'
+						                GROUP  BY A.LOOKUP_TYPE) Q
+						        WHERE  PG.STEPCLASS = Q.LOOKUP_TYPE) AS STEPTYPEKEY
+					,   PG.STEPTYPE							        
+				    ,	PG.SUBSEGMENTID
+				    ,	PG.SUBSEGMENTID1
+				    ,	PG.ISTOOLWORK
+				    ,	PG.ISINCOMINGINSPECTION
+				    ,	PG.COSTCODE
+				    ,	PG.PLATINGTYPE
+				    ,	PG.VALIDSTATE
+					,	NVL(CU.USER_NM, PG.CREATOR) 		AS CREATOR
+				    , TO_CHAR(PG.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					,	NVL(MU.USER_NM, PG.MODIFIER) 		AS MODIFIER
+				    , TO_CHAR(PG.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+					,   PG.PROCESSSEGMENTNAME
+					,   PG.ENTERPRISEID
+				    ,   PG.ISREQUIREDMATERIAL
+		          	,   PG.ISREQUIREDOPERATIONSPEC
+		          	,   PG.ISREQUIREDTOOL
+		          	,   PG.PRIVATEPROCESS
+		          	, NULL AS CHK
+		        FROM BAS_PROCESSSEGMENTEXT             PG
+		        LEFT JOIN CMD_DICTIONARY         KR   ON KR.DICTIONARYID = PG.PROCESSSEGMENTNAME
+		                                AND KR.LANGUAGETYPE = 'ko-KR'
+		        LEFT JOIN CMD_DICTIONARY         US   ON US.DICTIONARYID = PG.PROCESSSEGMENTNAME
+		                                AND US.LANGUAGETYPE = 'en-US'
+		        LEFT JOIN CMD_DICTIONARY         CN   ON CN.DICTIONARYID = PG.PROCESSSEGMENTNAME
+		                                  AND CN.LANGUAGETYPE = 'zh-CN'                            
+		        LEFT JOIN CMD_DICTIONARY         VN   ON VN.DICTIONARYID = PG.PROCESSSEGMENTNAME
+		                                 AND VN.LANGUAGETYPE = 'vi-VN'  
+		              LEFT JOIN CMD_USERS                       CU   ON CU.USER_ID = PG.CREATOR
+		                LEFT JOIN CMD_USERS                       MU   ON MU.USER_ID = PG.MODIFIER
+		                
+		        WHERE   1 = 1
+		        AND  PG.PROCESSSEGMENTCLASSID =#{PROCESSSEGMENTCLASSID}
+		        AND  PG.ENTERPRISEID =#{SESSION_ENTERPRISEID}
+	 		]]>
+ 			<choose>
+	          	<when test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+	          		AND    PG.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	          	</when>
+	          	<otherwise>
+	          		<if test="VALIDSTATE != null and VALIDSTATE !='' ">
+						AND    PG.VALIDSTATE = #{VALIDSTATE}
+				    </if>	    
+	          	</otherwise>
+		</choose>	 	
+	    
+	     ORDER BY PG.PROCESSSEGMENTID			    	    
+    </select>    
+
+    <select id="selectProcessCList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00500Dao.selectProcessCList */
+	        SELECT PC.PROCESSSEGMENTID
+	              ,PC.ENTERPRISEID
+	              ,PC.EQPTSEQUENCE
+	              ,PC.PLANTID
+	              ,PC.EQUIPMENTCLASSID
+	              ,DI.DICTIONARYNAME EQUIPMENTCLASSNAME
+	              ,PC.RESOURCETYPE
+	              ,PC.ASSIGNEDUNITS
+	              ,PC.MANHOUR
+	              ,PC.DESCRIPTION
+	              ,PC.VALIDSTATE
+	              ,NVL(USC.USER_NM, PC.CREATOR) AS CREATOR
+	              , TO_CHAR(PC.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+	              ,NVL(USM.USER_NM, PC.MODIFIER) AS MODIFIER
+	              , TO_CHAR(PC.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+	              , NULL AS CHK
+	        FROM   BAS_PROCESSSEGMENTEQPTCLASS PC
+	        LEFT OUTER JOIN BAS_EQUIPMENTCLASS   EPC ON  PC.ENTERPRISEID = EPC.ENTERPRISEID
+	                                                AND PC.EQUIPMENTCLASSID = EPC.EQUIPMENTCLASSID
+	                                                
+	        LEFT OUTER JOIN CMD_DICTIONARY     DI  ON  EPC.EQUIPMENTCLASSNAME = DI.DICTIONARYID
+	                                               AND DI.LANGUAGETYPE =#{SESSION_LANGUAGETYPE} 
+	        LEFT OUTER JOIN CMD_USERS         USC  ON  PC.CREATOR    = USC.USER_ID
+	        LEFT OUTER JOIN CMD_USERS         USM  ON  PC.MODIFIER  = USM.USER_ID
+	        WHERE 1=1                       
+	        AND  PC.PROCESSSEGMENTID =#{PROCESSSEGMENTID}
+	        AND  PC.ENTERPRISEID =#{SESSION_ENTERPRISEID}
+	 		]]>
+			<choose>
+	          	<when test="EQPTSEQUENCE != null and EQPTSEQUENCE !='' "> 
+	          		AND    PC.EQPTSEQUENCE = #{EQPTSEQUENCE}
+	          	</when>
+	          	<otherwise>
+	          		<if test="VALIDSTATE != null and VALIDSTATE !='' ">
+						AND    PC.VALIDSTATE = #{VALIDSTATE}
+				    </if>	    
+	          	</otherwise>
+		</choose>
+	</select>  
+
+    <select id="selectProcessDupCList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00500Dao.selectProcessDupCList */
+	        SELECT PC.PROCESSSEGMENTID	              
+	        FROM   BAS_PROCESSSEGMENTEQPTCLASS PC	        
+	        WHERE 1=1                       
+	        AND  PC.PROCESSSEGMENTID =#{PROCESSSEGMENTID}
+	        AND  PC.ENTERPRISEID =#{SESSION_ENTERPRISEID}
+	        AND	PC.EQUIPMENTCLASSID = #{EQUIPMENTCLASSID}
+	 		]]>	    
+	</select>  
+	
+    <select id="selectProcessDList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00500Dao.selectProcessDList */
+		     SELECT  SA.PROCESSSEGMENTID
+		          ,  SA.ENTERPRISEID
+		          ,  SA.SPECSEQUENCE
+		          ,  SA.PLANTID
+		          ,   SA.INSPECTIONDEFID
+		          ,  SA.INSPITEMCLASSID
+		          ,  IC.RESOURCETYPE
+		          ,  SA.INSPITEMID 
+		          ,  II.INSPITEMVERSION
+		          ,  IID.DICTIONARYNAME               INSPITEMNAME  
+		          ,  SA.DESCRIPTION
+		          ,  SA.DEFAULTDISPLAY
+		          ,  SA.VALIDSTATE          
+		          ,  NVL(USC.USER_NM, SA.CREATOR)     AS CREATOR
+		          ,  SA.CREATEDTIME
+		          , TO_CHAR(SA.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+		          ,  NVL(USM.USER_NM, SA.MODIFIER)   AS MODIFIER
+		          , TO_CHAR(SA.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME        
+	        FROM   BAS_SPECATTRIBUTE               SA      
+	        LEFT JOIN    BAS_INSPITEM                 II      ON  SA.ENTERPRISEID = II.ENTERPRISEID
+	                                                                    AND SA.INSPITEMID =II.INSPITEMID
+	        INNER JOIN BAS_INSPECTIONCLASS            IC    ON IC.INSPECTIONCLASSID  = SA.INSPITEMCLASSID
+	                                      AND IC.ENTERPRISEID     = SA.ENTERPRISEID                                                          
+	        LEFT OUTER JOIN CMD_DICTIONARY             IID     ON  II.INSPITEMNAME = IID.DICTIONARYID
+	                                       AND IID.LANGUAGETYPE =#{SESSION_LANGUAGETYPE} 
+	        LEFT OUTER JOIN CMD_USERS                USC      ON  SA.CREATOR  = USC.USER_ID
+	        LEFT OUTER JOIN CMD_USERS                USM      ON  SA.MODIFIER  = USM.USER_ID
+	        WHERE 1=1                       
+	        AND  SA.PROCESSSEGMENTID =#{PROCESSSEGMENTID}
+	        AND  SA.ENTERPRISEID =#{SESSION_ENTERPRISEID}
+	 		]]>
+	    <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+			AND    SA.VALIDSTATE = #{VALIDSTATE}
+	    </if>
+	    <if test="INSPITEMID != null and INSPITEMID !='' ">
+			AND    SA.INSPITEMID  = #{INSPITEMID}
+	    </if>
+	    <if test="SPECSEQUENCE != null and SPECSEQUENCE !='' ">
+			AND    SA.SPECSEQUENCE = #{SPECSEQUENCE}
+	    </if>	    	    
+    </select>       
+    
+     <select id="selectSegmentList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00500Dao.selectSegmentList */
+	    	SELECT T.PROCESSSEGMENTID
+				FROM   BAS_PROCESSSEGMENT T
+				WHERE T.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+				  AND T.PROCESSSEGMENTVERSION = '*'
+		]]>			
+	</select>  
+    
+<!-- ID 신규채번 -->
+	<select id="selectNewItemID"  statementType="CALLABLE" parameterType="map">
+		/* smh.bas.dao.BAS00500Dao.selectNewItemID */
+		{#{O_NEWID,mode=OUT,jdbcType=VARCHAR ,javaType=string} = call BAS_COMMON_PKG.FN_GET_ID(
+										   #{CLASSID}
+										  ,#{PREFIX}
+				 						  ,#{CREATOR}
+				 						  ,'2'
+										)
+	     }
+    </select>
+
+  <insert id="insertProcessA" parameterType="map">
+  DECLARE
+  BEGIN
+    INSERT /* smh.bas.dao.BAS00500Dao.insertProcessA */	INTO BAS_PROCESSSEGMENTCLASS
+     	(PROCESSSEGMENTCLASSID
+		,PROCESSSEGMENTCLASSNAME
+		,ENTERPRISEID
+		,PLANTID
+		,PROCESSSEGMENTCLASSTYPE
+		,PROCESSTYPE
+		,PARENTPROCESSSEGMENTCLASSID
+		,CREATOR
+		,CREATEDTIME
+		,MODIFIER
+		,MODIFIEDTIME
+		,LASTTXNHISTKEY
+		,LASTTXNID
+		,LASTTXNUSER
+		,LASTTXNTIME
+		,LASTTXNCOMMENT
+		,VALIDSTATE)
+		VALUES
+		(
+		#{PROCESSSEGMENTCLASSID}
+		,#{PROCESSSEGMENTCLASSNAME}
+		,#{SESSION_ENTERPRISEID}
+		,#{SESSION_SITETYPE}
+		,#{PROCESSSEGMENTCLASSTYPE}
+		,#{PROCESSTYPE}
+		,#{PARENTPROCESSSEGMENTCLASSID}
+		,#{CREATOR}
+		,SYSDATE
+		,#{MODIFIER}
+		,SYSDATE
+		,#{LASTTXNHISTKEY}
+		,#{LASTTXNID}
+		,#{CREATOR}
+		,SYSDATE
+		,#{LASTTXNCOMMENT}
+		,#{VALIDSTATE}
+		);
+		    	
+		<!-- 다국어 테이블 저장용 -->							
+				IF #{PROCESSSEGMENTCLASSNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENTCLASS','ko-KR',#{PROCESSSEGMENTCLASSNAME}, #{CREATOR}, #{PROCESSSEGMENTCLASSNAME_KR}); END IF;
+				IF #{PROCESSSEGMENTCLASSNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENTCLASS','en-US',#{PROCESSSEGMENTCLASSNAME}, #{CREATOR}, #{PROCESSSEGMENTCLASSNAME_US}); END IF;
+				IF #{PROCESSSEGMENTCLASSNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENTCLASS','zh-CN',#{PROCESSSEGMENTCLASSNAME}, #{CREATOR}, #{PROCESSSEGMENTCLASSNAME_CN}); END IF;
+				IF #{PROCESSSEGMENTCLASSNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENTCLASS','vi-VN',#{PROCESSSEGMENTCLASSNAME}, #{CREATOR}, #{PROCESSSEGMENTCLASSNAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		END;
+    </insert>  
+    
+  <update id="updateProcessA" parameterType="map">
+  DECLARE
+  BEGIN
+     /* smh.bas.dao.BAS00500Dao.updateProcessA */	
+     UPDATE BAS_PROCESSSEGMENTCLASS SET
+	     	 PROCESSSEGMENTCLASSNAME = #{PROCESSSEGMENTCLASSNAME}
+			,VALIDSTATE			=#{VALIDSTATE}
+			,MODIFIER			=#{MODIFIER}
+			,MODIFIEDTIME		=SYSDATE
+			,LASTTXNHISTKEY	=#{LASTTXNHISTKEY}
+			,LASTTXNID			=#{LASTTXNID}
+			,LASTTXNUSER		=#{MODIFIER}
+			,LASTTXNTIME		=SYSDATE
+	WHERE PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID};
+		    	
+			<!-- 다국어 테이블 저장용 -->							
+				IF #{PROCESSSEGMENTCLASSNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENTCLASS','ko-KR',#{PROCESSSEGMENTCLASSNAME}, #{CREATOR}, #{PROCESSSEGMENTCLASSNAME_KR}); END IF;
+				IF #{PROCESSSEGMENTCLASSNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENTCLASS','en-US',#{PROCESSSEGMENTCLASSNAME}, #{CREATOR}, #{PROCESSSEGMENTCLASSNAME_US}); END IF;
+				IF #{PROCESSSEGMENTCLASSNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENTCLASS','zh-CN',#{PROCESSSEGMENTCLASSNAME}, #{CREATOR}, #{PROCESSSEGMENTCLASSNAME_CN}); END IF;
+				IF #{PROCESSSEGMENTCLASSNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENTCLASS','vi-VN',#{PROCESSSEGMENTCLASSNAME}, #{CREATOR}, #{PROCESSSEGMENTCLASSNAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		END;
+    </update>   
+    
+    <delete id="deleteProcessA" parameterType="map" >
+     /* smh.bas.dao.BAS00500Dao.deleteProcessA */  
+    DECLARE 
+    BEGIN
+    	DELETE  FROM BAS_PROCESSSEGMENTCLASS	WHERE PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID};
+    	
+    	DELETE  FROM CMD_DICTIONARY 			WHERE DICTIONARYID = #{PROCESSSEGMENTCLASSNAME};
+    END;
+    </delete>
+    
+  <insert id="insertSegment" parameterType="map">
+  DECLARE
+  BEGIN
+  INSERT /* smh.bas.dao.BAS00500Dao.insertSegment */	INTO BAS_PROCESSSEGMENT
+    	(PROCESSSEGMENTID
+		,PROCESSSEGMENTVERSION
+		,PROCESSSEGMENTCLASSID
+		,PROCESSSEGMENTNAME
+		,ENTERPRISEID
+		,PLANTID
+		,PROCESSSEGMENTTYPE
+		,ISTRACKINREQUIRED
+		,STEPCLASS
+		,STEPTYPE
+		,CREATOR
+		,CREATEDTIME
+		,MODIFIER
+		,MODIFIEDTIME
+		,LASTTXNHISTKEY
+		,LASTTXNID
+		,LASTTXNUSER
+		,LASTTXNTIME
+		,LASTTXNCOMMENT
+		,VALIDSTATE)
+		VALUES
+		(
+		#{PROCESSSEGMENTID}
+		,#{PROCESSSEGMENTVERSION}
+		,#{PROCESSSEGMENTCLASSID}
+		,#{PROCESSSEGMENTNAME}
+		,#{ENTERPRISEID}
+		,#{PLANTID}
+		,NVL(#{SEGMENTTYPE}, 'General')
+		,#{ISTRACKINREQUIRED}
+		,#{STEPCLASS}
+		,#{STEPTYPEKEY}
+		,#{CREATOR}
+		,SYSDATE
+		,#{MODIFIER}
+		,SYSDATE
+		,#{LASTTXNHISTKEY}
+		,#{LASTTXNID}
+		,#{CREATOR}
+		,SYSDATE
+		,#{LASTTXNCOMMENT}
+		,#{VALIDSTATE}
+		);	    	
+		<!-- 다국어 테이블 저장용 -->							
+				IF #{PROCESSSEGMENTNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENT','ko-KR',#{PROCESSSEGMENTNAME}, #{CREATOR}, #{PROCESSSEGMENTNAME_KR}); END IF;
+				IF #{PROCESSSEGMENTNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENT','en-US',#{PROCESSSEGMENTNAME}, #{CREATOR}, #{PROCESSSEGMENTNAME_US}); END IF;
+				IF #{PROCESSSEGMENTNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENT','zh-CN',#{PROCESSSEGMENTNAME}, #{CREATOR}, #{PROCESSSEGMENTNAME_CN}); END IF;
+				IF #{PROCESSSEGMENTNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENT','vi-VN',#{PROCESSSEGMENTNAME}, #{CREATOR}, #{PROCESSSEGMENTNAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		
+		<!-- 표준공정 추가시에 채공테이블에 자료 Insert -->		
+			MERGE INTO PCM_SEGMENTSTAYINGTIME
+    	USING DUAL
+    	        ON (    PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+				    AND PROCESSSEGMENTVERSION = '*'				    
+                    )
+           WHEN NOT MATCHED THEN
+				INSERT ( PROCESSSEGMENTID
+							,PROCESSSEGMENTVERSION
+							,ENTERPRISEID
+							,PLANTID
+							,RECEIVESTAYINGTIME
+							,TRACKINSTAYINGTIME
+							,TRACKOUTSTAYINGTIME
+							,SENDSTAYINGTIME
+							,CREATOR
+							,CREATEDTIME
+							,MODIFIER
+							,MODIFIEDTIME
+							,LASTTXNHISTKEY
+							,LASTTXNID
+							,LASTTXNUSER
+							,LASTTXNTIME
+							,LASTTXNCOMMENT
+							,VALIDSTATE
+							,OPERATIONTOTALTIME) 
+				    VALUES( 
+						#{PROCESSSEGMENTID}
+						,'*'
+						,#{ENTERPRISEID}
+						,#{PLANTID}
+						,0 
+						,0
+						,0
+						,0						
+						,#{CREATOR}  
+				        ,SYSDATE  
+				        ,#{MODIFIER}  
+				        ,SYSDATE  
+				        ,#{LASTTXNHISTKEY}  
+				        ,#{LASTTXNID}
+				        ,#{CREATOR} 
+				        ,SYSDATE
+				        ,#{LASTTXNCOMMENT}  
+						,#{VALIDSTATE}
+						,0
+						);
+		END;
+    </insert>  
+    
+  <update id="updateSegment" parameterType="map">
+  DECLARE
+  BEGIN
+     /* smh.bas.dao.BAS00500Dao.updateSegment */	
+     UPDATE BAS_PROCESSSEGMENT SET
+	     	 PROCESSSEGMENTTYPE	= NVL(#{SEGMENTTYPE}, 'General')
+	     	,PROCESSSEGMENTNAME = #{PROCESSSEGMENTNAME}
+			,STEPCLASS					= #{STEPCLASS}
+			,STEPTYPE						= #{STEPTYPEKEY}    
+			,VALIDSTATE			=#{VALIDSTATE}
+			,MODIFIER			=#{MODIFIER}
+			,MODIFIEDTIME		=SYSDATE
+			,LASTTXNHISTKEY	=#{LASTTXNHISTKEY}
+			,LASTTXNID			=#{LASTTXNID}
+			,LASTTXNUSER		=#{MODIFIER}
+			,LASTTXNTIME		=SYSDATE
+	WHERE PROCESSSEGMENTID = #{PROCESSSEGMENTID};
+		    	
+			<!-- 다국어 테이블 저장용 -->							
+				IF #{PROCESSSEGMENTNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENT','ko-KR',#{PROCESSSEGMENTNAME}, #{CREATOR}, #{PROCESSSEGMENTNAME_KR}); END IF;
+				IF #{PROCESSSEGMENTNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENT','en-US',#{PROCESSSEGMENTNAME}, #{CREATOR}, #{PROCESSSEGMENTNAME_US}); END IF;
+				IF #{PROCESSSEGMENTNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENT','zh-CN',#{PROCESSSEGMENTNAME}, #{CREATOR}, #{PROCESSSEGMENTNAME_CN}); END IF;
+				IF #{PROCESSSEGMENTNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_PROCESSSEGMENT','vi-VN',#{PROCESSSEGMENTNAME}, #{CREATOR}, #{PROCESSSEGMENTNAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		END;
+    </update>   
+    
+    <delete id="deleteSegment" parameterType="map" >
+     /* smh.bas.dao.BAS00500Dao.deleteSegment */  
+    DECLARE 
+    BEGIN
+    	DELETE  FROM BAS_PROCESSSEGMENT	WHERE PROCESSSEGMENTID = #{PROCESSSEGMENTID};
+    	
+    	DELETE  FROM CMD_DICTIONARY 			WHERE DICTIONARYID = #{PROCESSSEGMENTNAME};
+    END;
+    </delete>
+    
+  <insert id="insertProcessB" parameterType="map">
+    INSERT /* smh.bas.dao.BAS00500Dao.insertProcessB */	INTO BAS_PROCESSSEGMENTEXT	
+			(PROCESSSEGMENTID
+			,ENTERPRISEID
+			,PROCESSSEGMENTCLASSID
+			,PROCESSSEGMENTNAME
+			,PLANTID			
+			,STEPCLASS
+			,STEPTYPE			
+			,SEGMENTTYPE
+			,COSTCODE
+			,JOBUNIT
+			,SUBSEGMENTID1			
+			,DICTIONARYID
+			,CREATOR
+			,CREATEDTIME
+			,MODIFIER
+			,MODIFIEDTIME
+			,LASTTXNHISTKEY
+			,LASTTXNID
+			,LASTTXNUSER
+			,LASTTXNTIME
+			,LASTTXNCOMMENT
+			,VALIDSTATE
+			,SUBSEGMENTID
+			,ISTOOLWORK
+			,ISINCOMINGINSPECTION
+			,ISREQUIREDMATERIAL
+			,ISREQUIREDOPERATIONSPEC
+			,ISREQUIREDTOOL
+			,PLATINGTYPE
+			,PRIVATEPROCESS)
+			VALUES
+			(
+			 #{PROCESSSEGMENTID}
+			,#{ENTERPRISEID}
+			,#{PROCESSSEGMENTCLASSID}
+			,#{PROCESSSEGMENTNAME}
+			,#{PLANTID}
+			,#{STEPCLASS}
+			,#{STEPTYPE}
+			,#{SEGMENTTYPE}
+			,#{COSTCODE}
+			,#{SUBSEGMENTID1}
+			,#{DICTIONARYID}
+			,#{DESCRIPTION}
+			,#{CREATOR}
+			,SYSDATE
+			,#{MODIFIER}
+			,SYSDATE
+			,#{LASTTXNHISTKEY}
+			,#{LASTTXNID}
+			,#{CREATOR}
+			,SYSDATE
+			,#{LASTTXNCOMMENT}
+			,#{VALIDSTATE}
+			,#{SUBSEGMENTID}
+			,#{ISTOOLWORK}
+			,#{ISINCOMINGINSPECTION}
+			,#{ISREQUIREDMATERIAL}
+			,#{ISREQUIREDOPERATIONSPEC}
+			,#{ISREQUIREDTOOL}
+			,#{PLATINGTYPE}
+			,#{PRIVATEPROCESS}
+			)
+    </insert>  
+    
+  <update id="updateProcessB" parameterType="map">
+     UPDATE BAS_PROCESSSEGMENTEXT SET
+	     	 STEPCLASS							=#{STEPCLASS}
+			,STEPTYPE								=#{STEPTYPEKEY}
+			,PROCESSSEGMENTNAME = #{PROCESSSEGMENTNAME}
+			,DICTIONARYID	= #{PROCESSSEGMENTNAME}
+			,SEGMENTTYPE						=#{SEGMENTTYPE}
+			,COSTCODE							=#{COSTCODE}
+			,JOBUNIT								=#{JOBUNIT}
+			,SUBSEGMENTID						=#{SUBSEGMENTID}
+			,SUBSEGMENTID1					=#{SUBSEGMENTID1}
+			,ISTOOLWORK						=#{ISTOOLWORK}
+			,ISINCOMINGINSPECTION			=#{ISINCOMINGINSPECTION}
+			,ISREQUIREDMATERIAL				=#{ISREQUIREDMATERIAL}
+			,ISREQUIREDOPERATIONSPEC		=#{ISREQUIREDOPERATIONSPEC}
+			,ISREQUIREDTOOL					=#{ISREQUIREDTOOL}
+			,PLATINGTYPE						=#{PLATINGTYPE}
+			,PRIVATEPROCESS					=#{PRIVATEPROCESS}
+			,VALIDSTATE							=#{VALIDSTATE}
+			,MODIFIER							=#{MODIFIER}
+			,MODIFIEDTIME						=SYSDATE
+			,LASTTXNHISTKEY					=#{LASTTXNHISTKEY}
+			,LASTTXNID							=#{LASTTXNID}
+			,LASTTXNUSER						=#{MODIFIER}
+			,LASTTXNTIME						=SYSDATE
+	WHERE PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </update>   
+    
+    <delete id="deleteProcessB" parameterType="map" >
+     /* smh.bas.dao.BAS00500Dao.deleteProcessB */  
+    	DELETE  FROM BAS_PROCESSSEGMENTEXT		WHERE PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </delete>
+    
+  <insert id="insertProcessC" parameterType="map">
+       <selectKey keyProperty="NEW_SEQ" resultType="Integer" order="BEFORE">
+           SELECT NVL(MAX(EQPTSEQUENCE),0) +1  FROM BAS_PROCESSSEGMENTEQPTCLASS
+           WHERE ENTERPRISEID = #{ENTERPRISEID}
+              AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+        </selectKey>
+   	/* smh.bas.dao.BAS00500Dao.insertProcessC */	
+    INSERT	INTO BAS_PROCESSSEGMENTEQPTCLASS
+			    (PROCESSSEGMENTID
+				,ENTERPRISEID
+				,EQPTSEQUENCE
+				,PLANTID
+				,EQUIPMENTCLASSID
+				,CREATOR
+				,CREATEDTIME
+				,MODIFIER
+				,MODIFIEDTIME
+				,LASTTXNHISTKEY
+				,LASTTXNID
+				,LASTTXNUSER
+				,LASTTXNTIME
+				,LASTTXNCOMMENT
+				,VALIDSTATE)
+				VALUES
+				(
+				 #{PROCESSSEGMENTID}
+				,#{ENTERPRISEID}
+				,#{NEW_SEQ}
+				,#{PLANTID}
+				,#{EQUIPMENTCLASSID}
+				,#{CREATOR}
+				,SYSDATE
+				,#{MODIFIER}
+				,SYSDATE
+				,#{LASTTXNHISTKEY}
+				,#{LASTTXNID}
+				,#{CREATOR}
+				,SYSDATE
+				,#{LASTTXNCOMMENT}
+				,#{VALIDSTATE}
+				)
+    </insert>  
+    
+  <update id="updateProcessC" parameterType="map">
+  	/* smh.bas.dao.BAS00500Dao.updateProcessC */
+     UPDATE BAS_PROCESSSEGMENTEQPTCLASS SET
+		     	 EQUIPMENTCLASSID							=#{EQUIPMENTCLASSID}		
+				,VALIDSTATE							=#{VALIDSTATE}
+				,MODIFIER							=#{MODIFIER}
+				,MODIFIEDTIME						=SYSDATE
+				,LASTTXNHISTKEY					=#{LASTTXNHISTKEY}
+				,LASTTXNID							=#{LASTTXNID}
+				,LASTTXNUSER						=#{MODIFIER}
+				,LASTTXNTIME						=SYSDATE
+	WHERE ENTERPRISEID = #{ENTERPRISEID}
+	   AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	   AND EQPTSEQUENCE = #{EQPTSEQUENCE}
+    </update>   
+    
+    <delete id="deleteProcessC" parameterType="map" >
+     /* smh.bas.dao.BAS00500Dao.deleteProcessC */  
+    	DELETE  FROM BAS_PROCESSSEGMENTEQPTCLASS		
+    			 WHERE ENTERPRISEID = #{ENTERPRISEID}
+				   AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+				   AND EQPTSEQUENCE = #{EQPTSEQUENCE}
+    </delete>
+    
+ <insert id="insertProcessD" parameterType="map">
+       <selectKey keyProperty="NEW_SEQ" resultType="Integer" order="BEFORE">
+           SELECT NVL(MAX(SPECSEQUENCE),0) +1  FROM BAS_SPECATTRIBUTE
+           WHERE ENTERPRISEID = #{ENTERPRISEID}
+              AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+        </selectKey>
+   	/* smh.bas.dao.BAS00500Dao.insertProcessD */	
+    INSERT	INTO BAS_SPECATTRIBUTE
+			    (PROCESSSEGMENTID
+				,ENTERPRISEID
+				,SPECSEQUENCE
+				,PLANTID
+				,INSPECTIONDEFID
+				,INSPITEMCLASSID
+				,INSPITEMID
+				,DEFAULTDISPLAY
+				,DESCRIPTION
+				,CREATOR
+				,CREATEDTIME
+				,MODIFIER
+				,MODIFIEDTIME
+				,LASTTXNHISTKEY
+				,LASTTXNID
+				,LASTTXNUSER
+				,LASTTXNTIME
+				,LASTTXNCOMMENT
+				,VALIDSTATE)
+				VALUES
+				(
+				 #{PROCESSSEGMENTID}
+				,#{ENTERPRISEID}
+				,#{NEW_SEQ}
+				,#{PLANTID}
+				,#{INSPECTIONDEFID}
+				,#{INSPITEMCLASSID}
+				,#{INSPITEMID}
+				,#{DEFAULTDISPLAY}
+				,#{DESCRIPTION}				
+				,#{CREATOR}
+				,SYSDATE
+				,#{MODIFIER}
+				,SYSDATE
+				,#{LASTTXNHISTKEY}
+				,#{LASTTXNID}
+				,#{CREATOR}
+				,SYSDATE
+				,#{LASTTXNCOMMENT}
+				,#{VALIDSTATE}
+				)
+    </insert>  
+    
+  <update id="updateProcessD" parameterType="map">
+  	/* smh.bas.dao.BAS00500Dao.updateProcessD */
+     UPDATE BAS_SPECATTRIBUTE SET
+		     	 INSPECTIONDEFID							=#{INSPECTIONDEFID}
+		     	 ,INSPITEMCLASSID							=#{INSPITEMCLASSID}
+		     	 ,DEFAULTDISPLAY							=#{DEFAULTDISPLAY}
+		     	 ,INSPITEMID							=#{INSPITEMID}		
+				,VALIDSTATE							=#{VALIDSTATE}
+				,MODIFIER							=#{MODIFIER}
+				,MODIFIEDTIME						=SYSDATE
+				,LASTTXNHISTKEY					=#{LASTTXNHISTKEY}
+				,LASTTXNID							=#{LASTTXNID}
+				,LASTTXNUSER						=#{MODIFIER}
+				,LASTTXNTIME						=SYSDATE
+	WHERE ENTERPRISEID = #{ENTERPRISEID}
+	   AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	   AND SPECSEQUENCE = #{SPECSEQUENCE}
+    </update>   
+    
+    <delete id="deleteProcessD" parameterType="map" >
+     /* smh.bas.dao.BAS00500Dao.deleteProcessD */  
+    	DELETE  FROM BAS_SPECATTRIBUTE		
+		WHERE ENTERPRISEID = #{ENTERPRISEID}
+		   AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		   AND SPECSEQUENCE = #{SPECSEQUENCE}
+    </delete>
+</mapper>

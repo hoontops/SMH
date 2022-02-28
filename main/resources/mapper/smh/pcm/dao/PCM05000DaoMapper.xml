@@ -1,0 +1,340 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM05000Dao">
+
+	<!-- 공통팝업 품목 다건조회 -->
+	<select id="selectPopupList" parameterType="map" resultType="hashmap">
+	--id : selectPopupList
+		SELECT
+			*
+		FROM
+		<if test='P_POPTYPE == "PRODUCTDEFINITION"'>
+			(SELECT
+				 PD.PRODUCTDEFID
+				,PD.PRODUCTDEFNAME
+				,PD.PRODUCTDEFVERSION
+				,PD.PRODUCTDEFTYPE
+				,PD.PRODUCTIONTYPE
+				,PD.UNIT
+				,PD.PRODUCTDEFID || '|' || PD.PRODUCTDEFVERSION	AS PRODUCTDEF
+			FROM	
+				BAS_PRODUCTDEFINITION	PD
+			<trim prefix="WHERE" prefixOverrides="AND|OR">	
+				<if test="P_PRODUCTDEFNAME != null and P_PRODUCTDEFNAME != ''">				
+					AND EXISTS (SELECT 1 FROM UFN_SELECTSTRINGTOSPLIT(REPLACE(#{P_PRODUCTDEFNAME}, ' ', ''), ',') PMP WHERE (UPPER(PD.PRODUCTDEFID) LIKE '%' || UPPER(PMP.VALUE) || '%' OR UPPER(PD.PRODUCTDEFNAME) LIKE '%' || UPPER(PMP.VALUE) || '%'))
+				</if>
+				<if test="P_PRODUCTDIVISION != null and P_PRODUCTDIVISION != ''">
+					AND PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}
+				</if>
+				<if test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE != ''">
+					AND	PD.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE}
+				</if>
+				<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID != ''">
+					AND EXISTS (SELECT 1 FROM UFN_SELECTSTRINGTOSPLIT(REPLACE(#{P_PRODUCTDEFID}, ' ', ''), ',') PMP WHERE	PD.PRODUCTDEFID = PMP.VALUE)
+				</if> 
+			</trim>
+			ORDER BY PD.PRODUCTDEFID, PD.PRODUCTDEFVERSION
+			)
+		</if>
+		<if test='P_POPTYPE == "CUSTOMER"'>
+			(SELECT 
+				 A.CUSTOMERID
+				,A.CUSTOMERNAME 
+			FROM	
+				BAS_CUSTOMER A			    
+			<trim prefix="WHERE" prefixOverrides="AND|OR">	
+					A.VALIDSTATE = 'Valid'
+				<if test="P_ENTERPRISEID != null and P_ENTERPRISEID != ''">
+					AND A.ENTERPRISEID = #{P_ENTERPRISEID}
+				</if>	
+				<if test="P_PLANTID != null and P_PLANTID != ''">
+					AND A.PLANTID = #{P_PLANTID}
+				</if>
+				<if test="P_CUSTOMERNAME != null and P_CUSTOMERNAME != ''">
+					AND	UPPER(D.DICTIONARYNAME) LIKE '%' || UPPER(#{P_CUSTOMERNAME}) || '%'
+				</if>
+				<if test="P_CUSTOMERID != null and P_CUSTOMERID != ''">
+					AND	UPPER(A.CUSTOMERID) LIKE '%' || UPPER(#{P_CUSTOMERID}) || '%'
+				</if>
+				<if test="P_CUSTOMER != null and P_CUSTOMER != ''">
+					AND EXISTS (SELECT 1 FROM UFN_SELECTSTRINGTOSPLIT(#{P_CUSTOMER}, ',') PMP WHERE (UPPER(A.CUSTOMERID) LIKE '%' || UPPER(PMP.VALUE) || '%' OR UPPER(A.CUSTOMERNAME) LIKE '%' || UPPER(PMP.VALUE) || '%'))					
+				</if>
+			</trim>
+			ORDER BY A.CUSTOMERID ASC
+			)
+		</if>
+		<if test='P_POPTYPE == "PROCESSSEGMENT"'>
+			(SELECT	
+				 PS.PROCESSSEGMENTID                                                                                               -- 공정 ID
+				,DECODE(D1.DICTIONARYNAME, NULL, PS.PROCESSSEGMENTNAME,       D1.DICTIONARYNAME) AS PROCESSSEGMENTNAME		       -- 공정명
+				,DECODE(D2.DICTIONARYNAME, NULL, MPS.PROCESSSEGMENTCLASSNAME, D2.DICTIONARYNAME) AS PROCESSSEGMENTCLASSNAME_MIDDLE -- 중공정	
+				,DECODE(D3.DICTIONARYNAME, NULL, TPS.PROCESSSEGMENTCLASSNAME, D3.DICTIONARYNAME) AS PROCESSSEGMENTCLASSNAME_TOP    -- 대공정
+			FROM	
+				BAS_PROCESSSEGMENT			       PS
+				 -- MiddleProcessSegmentClass 중공정 
+				INNER JOIN BAS_PROCESSSEGMENTCLASS MPS ON PS.PROCESSSEGMENTCLASSID        = MPS.PROCESSSEGMENTCLASSID AND MPS.PROCESSSEGMENTCLASSTYPE = 'MiddleProcessSegmentClass'
+				INNER JOIN BAS_PROCESSSEGMENTCLASS TPS ON MPS.PARENTPROCESSSEGMENTCLASSID = TPS.PROCESSSEGMENTCLASSID AND TPS.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+			    LEFT OUTER JOIN CMD_DICTIONARY	    D1 ON PS.PROCESSSEGMENTNAME       = D1.DICTIONARYID AND D1.LANGUAGETYPE = #{P_LANGUAGETYPE}
+			    LEFT OUTER JOIN CMD_DICTIONARY      D2 ON MPS.PROCESSSEGMENTCLASSNAME = D2.DICTIONARYID AND D2.LANGUAGETYPE = #{P_LANGUAGETYPE}
+			    LEFT OUTER JOIN CMD_DICTIONARY      D3 ON TPS.PROCESSSEGMENTCLASSNAME = D3.DICTIONARYID AND D3.LANGUAGETYPE = #{P_LANGUAGETYPE}
+			<trim prefix="WHERE" prefixOverrides="AND|OR">	
+				<if test="P_PROCESSSEGMENTCLASSID_MIDDLE != null and P_PROCESSSEGMENTCLASSID_MIDDLE != ''">
+					AND PS.PROCESSSEGMENTCLASSID = #{P_PROCESSSEGMENTCLASSID_MIDDLE}
+				</if>
+				<if test="P_PROCESSSEGMENT != null and P_PROCESSSEGMENT != ''">
+					AND	EXISTS
+					(
+						SELECT	1
+						FROM	UFN_SELECTSTRINGTOSPLIT(#{P_PROCESSSEGMENT}, ',')	T
+						WHERE	(UPPER(PS.PROCESSSEGMENTID) LIKE '%' || UPPER(T.VALUE) || '%' OR UPPER(PS.PROCESSSEGMENTNAME) LIKE '%' || UPPER(T.VALUE) || '%' OR UPPER(D1.DICTIONARYNAME) LIKE '%' || UPPER(T.VALUE) || '%')
+					)										
+				</if>
+				<if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID != ''">
+					AND EXISTS (SELECT 1 FROM UFN_SELECTSTRINGTOSPLIT(#{P_PROCESSSEGMENTID}, ',') PMP WHERE PS.PROCESSSEGMENTID = PMP.VALUE)
+				</if>
+				<if test="P_PROCESSSEGMENTCLASSID_TOP != null and P_PROCESSSEGMENTCLASSID_TOP != ''">
+					AND MPS.PARENTPROCESSSEGMENTCLASSID = #{P_PROCESSSEGMENTCLASSID_TOP}
+				</if>
+				<!-- 2021-07-07 최성민 추가 -->
+				<if test="P_MULTI_ITEMID != null and P_MULTI_ITEMID != ''">
+					   AND EXISTS (SELECT 1 FROM
+						                BAS_PROCESSPATH BP
+						             WHERE BP.PROCESSDEFID = #{P_MULTI_ITEMID}
+						               AND BP.PROCESSDEFVERSION = #{P_MULTI_ITEMVERSION}
+						               AND BP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+						               AND BP.VALIDSTATE = 'Valid')
+				</if>
+				
+			</trim>
+			ORDER BY PS.PROCESSSEGMENTID ASC
+			)
+		</if>
+	</select>
+	<select id="selectWipListByProduct" parameterType="map" resultType="hashmap">
+	/* "selectWipListByProduct" 10001 */
+	--id : selectWipListByProduct
+		SELECT  CUSTOMER
+			 ,  LOTTYPE
+			 ,  PRODUCTDEFID
+			 ,  MAX(PRODUCTDEFNAME) 				PRODUCTDEFNAME
+			 <if test='INNERREVISIONTOTAL == "Y"'>				 
+			 ,  PRODUCTDEFVERSION 					ITEMVERSION
+			 </if>
+			 ,  USERSEQUENCE
+			 ,  PROCESSSEGMENTNAME
+			 ,  PLANTID
+			 ,  AREANAME
+			 ,  RTRSHT
+			 ,  COALESCE(SUM(WIPTOTALPCS), 0)        WIPTOTALPCS
+			 ,  COALESCE(SUM(WIPTOTALPNL), 0)        WIPTOTALPNL
+			 ,  COALESCE(SUM(WIPTOTALMM), 0)         WIPTOTALMM
+			 ,  COALESCE(SUM(SENDPCSQTY), 0)         SENDPCSQTY
+			 ,  COALESCE(SUM(SENDPANELQTY), 0)       SENDPANELQTY
+			 ,  COALESCE(SUM(SENDMMQTY), 0)          SENDMMQTY
+			 ,  COALESCE(SUM(RECEIVEPCSQTY), 0)      RECEIVEPCSQTY
+			 ,  COALESCE(SUM(RECEIVEPANELQTY), 0)    RECEIVEPANELQTY
+			 ,  COALESCE(SUM(RECEIVEMMQTY), 0)       RECEIVEMMQTY
+			 ,  COALESCE(SUM(WORKSTARTPCSQTY), 0)    WORKSTARTPCSQTY
+			 ,  COALESCE(SUM(WORKSTARTPANELQTY), 0)  WORKSTARTPANELQTY
+			 ,  COALESCE(SUM(WORKSTARTMMQTY), 0)     WORKSTARTMMQTY
+			 ,  COALESCE(SUM(WORKENDPCSQTY), 0)      WORKENDPCSQTY
+			 ,  COALESCE(SUM(WORKENDPANELQTY), 0)    WORKENDPANELQTY	 
+			 ,  COALESCE(SUM(WORKENDMMQTY), 0)       WORKENDMMQTY	
+			 ,  MAX(CURRENCY)           			 CURRENCY
+			 ,  COALESCE(SUM(WIPPRICE), 0)           WIPPRICE
+			 ,  MAX(ISINTRANSIT) 			         ISINTRANSIT
+		FROM
+		(
+			SELECT   COALESCE(D.DICTIONARYNAME, C.LOOKUP_CODE) AS STATE
+				  ,  X.LOTTYPE
+                        ,  X.PRODUCTDEFID
+                        ,  X.PRODUCTDEFNAME
+                        ,  X.PRODUCTDEFVERSION
+                        ,  X.USERSEQUENCE
+                        ,  X.PROCESSSEGMENTNAME
+                        ,  X.PLANTID
+                        ,  X.AREANAME
+                        ,  X.RTRSHT
+                        ,  COALESCE(X.SENDPCSQTY,0) + COALESCE(X.RECEIVEPCSQTY,0) + COALESCE(X.WORKSTARTPCSQTY,0) + COALESCE(X.WORKENDPCSQTY,0)           WIPTOTALPCS
+                        ,  COALESCE(X.SENDPANELQTY,0) +   COALESCE(X.RECEIVEPANELQTY,0) + COALESCE(X.WORKSTARTPANELQTY,0) + COALESCE(X.WORKENDPANELQTY,0) WIPTOTALPNL
+                        ,  COALESCE(X.SENDMMQTY,0) + COALESCE(X.RECEIVEMMQTY,0) + COALESCE(X.WORKSTARTMMQTY,0) + COALESCE(X.WORKENDMMQTY,0)               WIPTOTALMM
+                        ,  X.SENDPCSQTY
+                        ,  X.SENDPANELQTY
+                        ,  X.SENDMMQTY
+                        ,  X.RECEIVEPCSQTY
+                        ,  X.RECEIVEPANELQTY
+                        ,  X.RECEIVEMMQTY
+                        ,  X.WORKSTARTPCSQTY
+                        ,  X.WORKSTARTPANELQTY
+                        ,  X.WORKSTARTMMQTY
+                        ,  X.WORKENDPCSQTY
+                        ,  X.WORKENDPANELQTY
+                        ,  X.WORKENDMMQTY
+                        ,  X.CURRENCY
+                        ,  X.WIPPRICE
+                        ,  X.ISINTRANSIT
+                        ,  X.CUSTOMER
+			FROM  
+			(
+				SELECT   CASE WHEN L.PROCESSSTATE = 'Wait' THEN 'Receive'
+                                    WHEN L.PROCESSSTATE = 'Run'  THEN 'WorkStart'
+                                    WHEN L.PROCESSSTATE = 'WaitForSend' THEN 'WorkEnd'
+                               ELSE L.PROCESSSTATE END 				   			  PROCESSSTATE
+					  ,  COALESCE(SD2.DICTIONARYNAME,SC1.MEANING) 			  LOTTYPE
+				      ,  L.LOTID
+				      ,  PD.PRODUCTDEFID
+				      ,  PD.PRODUCTDEFNAME
+				      ,  PD.PRODUCTDEFVERSION      
+				      ,  L.USERSEQUENCE
+				      ,  COALESCE(SD1.DICTIONARYNAME,PS.PROCESSSEGMENTNAME)   PROCESSSEGMENTNAME
+				      ,  SP.PLANTID
+				      --,  COALESCE(UNISTR(SD3.DICTIONARYNAME),AR.AREANAME)             AREANAME
+				      ,  COALESCE(SD3.DICTIONARYNAME,AR.AREANAME)             AREANAME
+				      ,  COALESCE(SC2.MEANING,PD.RTRSHT)                     RTRSHT
+				      ,  SO.CURRENCY
+				      ,  SO.UNITPRICE
+					  ,	 ROUND(NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, QTY * UP.UNITPRICE),0),0)	WIPPRICE						      
+				      ,  CASE WHEN LP.LOTID IS NOT NULL THEN 'Y' ELSE 'N' END ISINTRANSIT
+				      -- 인수대기수량
+					  ,	 CASE WHEN L.PROCESSSTATE = 'WaitForReceive' THEN  L.QTY ELSE NULL            END 				  AS SENDPCSQTY
+					  ,  CASE WHEN L.PROCESSSTATE = 'WaitForReceive' THEN  L.PANELQTY ELSE NULL       END 				  AS SENDPANELQTY
+					  ,  CASE WHEN L.PROCESSSTATE = 'WaitForReceive' THEN  NVL(ROUND((L.QTY / PD.PCSMM), 2), 0) ELSE NULL END AS SENDMMQTY
+					  -- 작업시작(인수 완료 수량)
+					  ,	 CASE WHEN L.PROCESSSTATE = 'Wait' THEN  L.QTY ELSE NULL                      END 				  AS RECEIVEPCSQTY
+					  ,  CASE WHEN L.PROCESSSTATE = 'Wait' THEN  L.PANELQTY ELSE NULL                 END 				  AS RECEIVEPANELQTY					
+					  ,  CASE WHEN L.PROCESSSTATE = 'Wait' THEN  NVL(ROUND((L.QTY / PD.PCSMM), 2), 0) ELSE NULL           END AS RECEIVEMMQTY
+					  -- 작업완료(작업 시작 수량)
+					  ,	 CASE WHEN L.PROCESSSTATE = 'Run' THEN  L.QTY ELSE NULL                       END 				  AS WORKSTARTPCSQTY
+					  ,  CASE WHEN L.PROCESSSTATE = 'Run' THEN  L.PANELQTY ELSE NULL                  END 				  AS WORKSTARTPANELQTY		
+					  ,  CASE WHEN L.PROCESSSTATE = 'Run' THEN  NVL(ROUND((L.QTY / PD.PCSMM), 2), 0) ELSE NULL            END AS WORKSTARTMMQTY
+					  -- 인계 대기(작업완료 수량)
+					  ,	 CASE WHEN L.PROCESSSTATE = 'WaitForSend' THEN  L.QTY ELSE NULL               END 				  AS WORKENDPCSQTY
+					  ,  CASE WHEN L.PROCESSSTATE = 'WaitForSend' THEN  L.PANELQTY ELSE NULL          END 				  AS WORKENDPANELQTY
+					  ,  CASE WHEN L.PROCESSSTATE = 'WaitForSend' THEN  NVL(ROUND((L.QTY / PD.PCSMM), 2), 0) ELSE NULL    END AS WORKENDMMQTY
+					  ,  COALESCE(MC.CUSTOMERNAME,PO.CUSTOMERID) CUSTOMER			
+				FROM PCM_LOT L
+				INNER JOIN BAS_PRODUCTDEFINITION    PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                      AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				INNER JOIN BAS_PROCESSSEGMENT       PS ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				LEFT  JOIN BAS_SALEORDERAPPROVAL    SO ON  L.PRODUCTIONORDERID = SO.SALESORDERID
+				                                      AND L.LINENO = SO.LINENO
+				                                      --AND L.PLANTID = SO.PLANTID
+				LEFT OUTER JOIN BAS_UNITPRICEFORMES UP   ON L.PRODUCTDEFID         = UP.PRODUCTDEFID 
+                                              AND L.PRODUCTDEFVERSION    = UP.PRODUCTDEFVERSION 
+                                              AND SYSDATE BETWEEN UP.APPLY_START_DATE AND NVL(UP.APPLY_END_DATE, TO_DATE('9999-12-31 23:59:59','YYYY-MM-DD HH24:MI:SS'))                    	
+				INNER JOIN BAS_PLANT                SP ON  L.PLANTID = SP.PLANTID                                        
+				--INNER JOIN FN_AREA({USERID}) AR ON L.AREAID = AR.AREAID
+				INNER JOIN BAS_AREA 				AR ON L.AREAID = AR.AREAID
+				LEFT  JOIN CMD_DICTIONARY          SD1 ON  PS.PROCESSSEGMENTNAME = SD1.DICTIONARYID
+				                                      AND SD1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+				LEFT  JOIN BAS_PROCESSSEGMENTCLASS PC1 ON  PS.PROCESSSEGMENTCLASSID = PC1.PROCESSSEGMENTCLASSID 
+				                                      AND PC1.PROCESSSEGMENTCLASSTYPE = 'MiddleProcessSegmentClass'
+				LEFT  JOIN BAS_PROCESSSEGMENTCLASS PC2 ON  PS.PROCESSSEGMENTCLASSID = PC2.PROCESSSEGMENTCLASSID 
+				                                      AND PC2.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'               
+				LEFT  JOIN CMD_LOOKUP_VALUES       SC1 ON  PD.PRODUCTIONTYPE = SC1.LOOKUP_CODE
+				                                      AND SC1.LOOKUP_TYPE = 'ProductionType'
+				LEFT  JOIN CMD_DICTIONARY          SD2 ON  SC1.DICTIONARYID = SD2.DICTIONARYID
+				                                      AND SD2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+				LEFT  JOIN CMD_LOOKUP_VALUES       SC2 ON  PD.RTRSHT = SC2.LOOKUP_CODE      
+				                                      AND SC2.LOOKUP_TYPE = 'RTRSHT'   
+			    LEFT  JOIN CMD_DICTIONARY          SD3 ON  AR.AREANAME = SD3.DICTIONARYID
+			                                          AND SD3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+			    LEFT  JOIN MTM_LOTPLANTTRANSIT     LP  ON  L.LOTID = LP.LOTID
+			                                          AND L.PLANTID = LP.PLANTID
+			                                          AND LP.TRANSITSTATUS <![CDATA[<>]]> 'InProduction'   
+			    INNER JOIN MFM_PRODUCTIONORDER     PO  ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+			                                          AND L.LINENO = PO.LINENO
+			    LEFT  JOIN BAS_CUSTOMER            MC  ON  PO.CUSTOMERID = MC.CUSTOMERID
+			                                          AND PO.PLANTID = MC.PLANTID					                                          	
+			    WHERE 1=1             
+		        AND     COALESCE(l.isdefected ,'N')  = 'N'
+		        AND     l.lotstate IN ('InTransit','InProduction')	
+				-- 품목코드
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID != ''">
+					AND EXISTS (SELECT 1 FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',') PMP WHERE L.PRODUCTDEFID = PMP.VALUE)
+				</if>						
+				-- 품목타입
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION != ''">
+					AND PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}
+				</if>	
+				-- 품목VERSION
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''">
+					AND	PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>											
+				-- 품목명
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+					AND	    PD.PRODUCTDEFNAME LIKE 	#{PRODUCTDEFNAME}
+				</if>				
+				-- 고객사
+				<if test="CUSTOMERNAME != null and CUSTOMERNAME != ''">
+					AND EXISTS (SELECT 1 FROM UFN_SELECTSTRINGTOSPLIT(#{CUSTOMERID}, ',') PMP WHERE MC.CUSTOMERID = PMP.VALUE)							
+				</if>						
+				-- SITE
+				<if test="PLANTID != null and PLANTID !=''">
+					AND L.PLANTID = #{PLANTID}			
+				</if>							
+				-- 작업장
+				<if test="AREANAME != null and AREANAME != ''">
+					AND EXISTS (SELECT 1 FROM UFN_SELECTSTRINGTOSPLIT(#{AREAID}, ',') PMP WHERE L.AREAID = PMP.VALUE)							
+				</if>						
+				-- 공정
+				<if test="PROCESSSEGMENTNAME != null and PROCESSSEGMENTNAME !=''">
+					AND L.PROCESSSEGMENTID = #{PROCESSSEGMENTID}			
+				</if>							
+				-- 구분
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">
+					AND L.LOTTYPE = #{PRODUCTIONTYPE}			
+				</if>														        				        											
+				-- RTR/SHT
+				<if test="RTRSHT != null and RTRSHT !=''">
+					AND PD.RTRSHT = #{RTRSHT}			
+				</if>
+				-- HOLD
+				<if test="ISHOLD != null and ISHOLD !=''">
+					AND L.ISHOLD = #{ISHOLD}			
+				</if>	
+				-- LOCKING
+				<if test="ISLOCKING != null and ISLOCKING !=''">
+					AND L.ISLOCKING = #{ISLOCKING}			
+				</if>					
+		        -- 담당공장	
+		        <if test="P_OWNERFACTORY != null and P_OWNERFACTORY !=''">
+					AND PD.OWNERFACTORYID = #{P_OWNERFACTORY}			
+				</if>							        
+								
+				-- 작업구분
+				<if test="WORKTYPE != null and WORKTYPE !=''">	
+					<if test='WORKTYPE == "Normal"'>						        
+				        AND 	COALESCE(L.ISREWORK, 'N') = 'N' 
+				        AND 	L.WORKCOUNT = 0
+				        AND 	L.LOTCREATEDTYPE NOT IN ('Repair', 'Claim')
+			        </if>
+			        <if test='WORKTYPE == "IsRework"'>					        
+			        	AND 	(L.ISREWORK = 'Y' OR L.WORKCOUNT > 0)
+			        </if>
+			        <if test='WORKTYPE != "Normal" and WORKTYPE != "IsRework"'>
+			        	AND     L.LOTCREATEDTYPE = #{WORKTYPE}
+			        </if>
+		        </if>                                                                                   
+			)X
+			LEFT JOIN CMD_LOOKUP_VALUES	C   ON  X.PROCESSSTATE = C.LOOKUP_CODE
+                                              	AND C.LOOKUP_TYPE = 'WipProcessState'
+                  LEFT JOIN CMD_DICTIONARY 	D   ON C.DICTIONARYID = D.DICTIONARYID
+                                              	AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		)Y
+		GROUP BY CUSTOMER
+			 ,  LOTTYPE
+			 ,  PRODUCTDEFID			
+			 <if test='INNERREVISIONTOTAL == "Y"'>	
+			 ,  PRODUCTDEFVERSION
+			 </if>
+			 ,  USERSEQUENCE
+			 ,  PROCESSSEGMENTNAME
+			 ,  PLANTID
+			 ,  AREANAME
+			 ,  RTRSHT
+		ORDER BY PRODUCTDEFID,TO_NUMBER(USERSEQUENCE)
+	</select>
+</mapper>

@@ -1,0 +1,297 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : Window Time Lot 조회
+    설명          : 
+    작성자       : 김애리
+    최초작성일 : 2021.06.15
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.06.15      김애리     최초  생성
+-->
+
+<mapper namespace="smh.pcm.dao.PCM06500Dao">
+
+	<!-- Window Time Lot 조회 -->
+	<select id="selectWindowTimeLotList" parameterType="map" resultType="hashmap">
+		/* SelectWindowTimeLotList 10001 */
+		-- Id : SelectWindowTimeLotList
+				-- Version : 10001
+				
+				SELECT  XX.LOTTYPE
+				    ,   XX.PRODUCTDEFID
+				    ,	XX.PRODUCTDEFVERSION
+				    ,   XX.PRODUCTDEFNAME
+				    ,   XX.USERSEQUENCE
+				    ,   XX.PROCESSSEGMENTNAME
+				    ,   XX.PLANTID
+				    ,   XX.AREANAME
+				    ,   XX.RTRSHT
+				    ,   XX.LOTID
+				    ,   XX.UNIT
+				    ,	XX.WTIMETYPE
+				    ,   NVL(XX.QTY, 0)			AS QTY
+				    ,   NVL(XX.PANELQTY, 0)	AS PANELQTY
+				    ,   NVL(XX.MM,0)				AS MM
+				    --인수대기
+				    ,   NVL(XX.SENDPCSQTY, 0)			AS SENDPCSQTY
+				    ,   NVL(XX.SENDPANELQTY, 0)		AS SENDPANELQTY
+				    --인수
+				    ,   NVL(XX.RECEIVEPCSQTY, 0)		AS RECEIVEPCSQTY
+				    ,   NVL(XX.RECEIVEPANELQTY, 0)		AS RECEIVEPANELQTY
+				    --작업시작
+				    ,   NVL(XX.WORKSTARTPCSQTY, 0)   	AS WORKSTARTPCSQTY
+				    ,   NVL(XX.WORKSTARTPANELQTY, 0) 	AS WORKSTARTPANELQTY
+				    --작업완료
+				    ,   NVL(XX.WORKENDPCSQTY, 0)		AS WORKENDPCSQTY
+				    ,   NVL(XX.WORKENDPANELQTY, 0)		AS WORKENDPANELQTY
+				    ,   TO_CHAR(XX.SEGMENTINBOUNDTIME, 'YYYY-MM-DD HH24:MI:SS') AS SEGMENTINBOUNDTIME
+				    ,   XX.SEGMENT_LEADTIME
+				    ,   TO_CHAR(XX.LOTSTARTDATE, 'YYYY-MM-DD HH24:MI:SS') AS LOTSTARTDATE
+				    ,   XX.TOTALLEADTIME
+				    ,   TO_CHAR(XX.DUEDATE, 'YYYY-MM-DD HH24:MI:SS') AS DUEDATE
+				    ,   XX.LEFTDATE
+				    --인수대기(툴팁)
+				    ,   XX.RECEIVE_LEADTIME / 3600          AS RECEIVE_WAITING_TIME
+    				,   MOD(XX.RECEIVE_LEADTIME / 60, 60)   AS RECEIVE_WAITING_MINUTE
+				    ,   XX.PREVPROCESSSEGMENTNAME
+				    ,   XX.PREVAREANAME
+				    --인수(툴팁)
+				    ,   XX.TRACKIN_LEADTIME / 3600          AS TRACKIN_WAITING_TIME
+    				,   MOD(XX.TRACKIN_LEADTIME / 60, 60)   AS TRACKIN_WAITING_MINUTE
+				    ,   XX.RECEIVE_EQUIPMENT
+				    --작업시작(툴팁)
+				    ,   XX.TRACKOUT_LEADTIME / 3600         AS TRACKOUT_WAITING_TIME
+    				,   MOD(XX.TRACKOUT_LEADTIME / 60, 60)  AS TRACKOUT_WAITING_MINUTE
+				    ,   XX.WORKSTART_EQUIPMENT
+				    --작업완료(툴팁)
+				    ,   XX.SEND_LEADTIME / 3600             AS SEND_WAITING_TIME
+    				,   MOD(XX.SEND_LEADTIME / 60, 60)      AS SEND_WAITING_MINUTE
+				    ,   NVL(DC.DICTIONARYNAME, XX.WIPPROCESSSTATE) AS WIPPROCESSSTATE
+				    --FROM 공정
+				    ,   XX.FROMUSERSEQUENCE
+                    ,   XX.FROMPROCESSSEGMENTNAME
+                    ,   NVL(DC2.DICTIONARYNAME, XX.FROMPROCESSSTATE) AS FROMPROCESSSTATE
+                    --TO 공정
+                    ,   XX.TOUSERSEQUENCE
+                    ,   XX.TOPROCESSSEGMENTNAME
+                    ,   NVL(DC3.DICTIONARYNAME, XX.TOPROCESSSTATE) AS TOPROCESSSTATE
+                    --잔여시간, 실행시간(분)
+                    ,   CASE WHEN XX.WTIMETYPE = 'Min' THEN NVL(XX.LEFTTIME, 0)
+                    	ELSE 
+                    		CASE WHEN NVL(XX.LEFTTIME, 0) <![CDATA[<]]> 0 THEN 0
+                    		ELSE 
+                    			CASE WHEN NVL(XX.LEFTTIME, 0) > XX.WTIMELIMIT THEN XX.WTIMELIMIT 
+                    		    ELSE NVL(XX.LEFTTIME, 0)
+                    		    END 
+                    		END 
+                    	END AS LEFTTIME
+                    --,   NVL(XX.LEFTTIME, 0)    AS LEFTTIME
+                    ,   NVL(XX.ELAPSEDTIME, 0) AS ELAPSEDTIME
+                    --시작시간, 기준시간, 제한시간, 실행시간
+                    ,   TO_CHAR(XX.SETTIME, 'YYYY-MM-DD HH24:MI:SS') AS SETTIME
+                    ,   XX.WTIMELIMIT
+                    ,   TO_CHAR(XX.OCCURETIME, 'YYYY-MM-DD HH24:MI:SS') AS OCCURETIME
+                    ,   TO_CHAR(XX.WTIME, 'YYYY-MM-DD HH24:MI:SS') AS WTIME
+				FROM 
+				(
+				    SELECT  L.LOTTYPE   AS LOTTYPEID
+				        ,   NVL(D1.DICTIONARYNAME, C.MEANING) AS LOTTYPE
+				        ,   L.PRODUCTDEFID
+				        ,   L.PRODUCTDEFVERSION
+				        ,   PD.PRODUCTDEFNAME
+				        ,   L.USERSEQUENCE
+				        ,   L.PROCESSSEGMENTID
+				        ,   L.PROCESSSEGMENTVERSION
+				        ,   NVL(D2.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)  AS PROCESSSEGMENTNAME
+				        ,   L.PLANTID
+				        ,   L.AREAID
+				        ,   NVL(D3.DICTIONARYNAME, AR.AREANAME)  AS AREANAME
+				        ,   PD.RTRSHT
+				        ,   L.LOTID
+				        ,   L.UNIT
+				        ,   L.QTY
+				        ,   CEIL(L.PANELQTY)                    AS PANELQTY
+				        ,   ROUND(L.QTY / PD.PCSMM, 2)  AS MM
+				        --인수대기
+				        ,   LWR.SENDPCSQTY
+				        ,   LWR.SENDPANELQTY
+				        --인수
+				        ,   LWR.RECEIVEPCSQTY
+				        ,   LWR.RECEIVEPANELQTY
+				        --작업시작
+				        ,   LWR.WORKSTARTPCSQTY
+				        ,   LWR.WORKSTARTPANELQTY
+				        --작업완료
+				        ,   LWR.WORKENDPCSQTY
+				        ,   LWR.WORKENDPANELQTY
+				        ,   LWR.CREATEDTIME         AS SEGMENTINBOUNDTIME
+				        , 	(SYSDATE - LWR.CREATEDTIME) *24 	AS SEGMENT_LEADTIME
+				        ,   L.LOTSTARTDATE
+				        , 	SYSDATE - L.LOTSTARTDATE  		AS TOTALLEADTIME
+				        ,   L.DUEDATE
+				        ,	SYSDATE - L.DUEDATE					AS LEFTDATE
+				        --인수대기 :: 대기시간, 전 공정명, 전 작업장명
+				        , 	(LWR.RECEIVETIME - LWR.CREATEDTIME)	*24*60*60	AS RECEIVE_LEADTIME
+				        ,   PPH.PROCESSSEGMENTID            AS PREVPROCESSSEGMENTID
+				        ,   PPH.PROCESSSEGMENTVERSION       AS PREVPROCESSSEGMENTVERSION
+				        ,   NVL(D4.DICTIONARYNAME, PSP.PROCESSSEGMENTNAME) AS PREVPROCESSSEGMENTNAME
+				        ,   LH.PREVAREAID
+				        ,   NVL(D5.DICTIONARYNAME, PAR.AREANAME)  AS PREVAREANAME
+				        --인수 :: 인수설비, 호기
+				        ,	(LWR.WORKSTARTTIME - LWR.RECEIVETIME) *24*60*60 AS TRACKIN_LEADTIME
+				        ,   FN_PM_GETUSEEQUIPMENTLIST2(L.LOTID, L.PROCESSSEGMENTID, 'WaitForReceive', 'ko-KR')  AS RECEIVE_EQUIPMENT
+				        --작업시작 :: 작업설비, 호기
+				        ,	(LWR.WORKENDTIME - LWR.WORKSTARTTIME) *24*60*60 AS TRACKOUT_LEADTIME
+				        ,   FN_PM_GETUSEEQUIPMENTLIST2(L.LOTID, L.PROCESSSEGMENTID, 'Wait', 'ko-KR') AS WORKSTART_EQUIPMENT
+				        --작업완료 :: 자주검사, 계측검사
+				        ,	(LWR.WORKENDTIME - LWR.SENDTIME) *24*60*60 AS SEND_LEADTIME
+				        ,   CASE WHEN L.PROCESSSTATE = 'WaitForReceive'  THEN 'WaitForReceive'
+				                 WHEN L.PROCESSSTATE = 'Wait'            THEN 'Receive'
+				                 WHEN L.PROCESSSTATE = 'Run'             THEN 'WorkStart'
+				                 WHEN L.PROCESSSTATE = 'WaitForSend'     THEN 'WorkEnd'
+				            END WIPPROCESSSTATE
+				        --FROM 공정
+				        ,   LW.USERSEQUENCE         AS FROMUSERSEQUENCE
+                        ,   LW.PROCESSSEGMENTID     AS FROMPROCESSSEGMENTID
+                        ,   NVL(D6.DICTIONARYNAME, FPS.PROCESSSEGMENTNAME) AS FROMPROCESSSEGMENTNAME
+                        ,   CASE WHEN LW.PROCESSSTATE = 'WaitForReceive' THEN 'WaitForReceive'
+                                 WHEN LW.PROCESSSTATE = 'Wait'           THEN 'Receive'
+                                 WHEN LW.PROCESSSTATE = 'Run'            THEN 'WorkStart'
+                                 WHEN LW.PROCESSSTATE = 'WaitForSend'    THEN 'WorkEnd'
+                            END FROMPROCESSSTATE
+                        --TO 공정
+                        ,   TPH.USERSEQUENCE        AS TOUSERSEQUENCE
+                        ,   LW.TOPROCESSSEGMENTID
+                        ,   NVL(D7.DICTIONARYNAME, TPS.PROCESSSEGMENTNAME) AS TOPROCESSSEGMENTNAME
+                        ,   CASE WHEN LW.TOPROCESSSTATE = 'WaitForReceive' THEN 'WaitForReceive'
+                                 WHEN LW.TOPROCESSSTATE = 'Wait'           THEN 'Receive'
+                                 WHEN LW.TOPROCESSSTATE = 'Run'            THEN 'WorkStart'
+                                 WHEN LW.TOPROCESSSTATE = 'WaitForSend'    THEN 'WorkEnd'
+                            END TOPROCESSSTATE
+                        --잔여시간, 실행시간(분)
+                        ,	(NVL(LW.WTIME, SYSDATE) - LW.OCCURETIME) * 24*60 AS LEFTTIME
+                        --,	CASE WHEN LW.WTIME IS NULL THEN (LW.OCCURETIME - SYSDATE) * 24*60 ELSE NULL END AS LEFTTIME
+                        ,	CASE WHEN LW.WTIME IS NOT NULL THEN (LW.WTIME - LW.SETTIME)  * 24*60 ELSE NULL END AS ELAPSEDTIME
+                        --시작시간, 기준시간, 제한시간, 실행시간
+                        ,   LW.SETTIME
+                        ,   LW.WTIMELIMIT
+                        ,   LW.OCCURETIME
+                        ,   LW.WTIME
+                        ,	LW.WTIMETYPE
+				    FROM    PCM_LOTWTIME            LW
+				    INNER JOIN PCM_LOT              L   ON  LW.LOTID = L.LOTID
+				    INNER JOIN fn_area('MES807')    AR  ON  L.AREAID = AR.AREAID
+				    INNER JOIN PCM_LOTWORKRESULT    LWR ON  L.LOTID = LWR.LOTID
+				                                        AND L.PROCESSSEGMENTID = LWR.PROCESSSEGMENTID
+				                                        AND L.PROCESSSEGMENTVERSION = LWR.PROCESSSEGMENTVERSION
+				                                        AND L.PRODUCTDEFID = LWR.PRODUCTDEFID
+				                                        AND L.PRODUCTDEFVERSION = LWR.PRODUCTDEFVERSION
+				    INNER JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                        AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				    INNER JOIN BAS_PROCESSSEGMENT   PS  ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                        AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				    INNER JOIN BAS_PROCESSPATH      PP  ON  ((NVL(L.SUBPROCESSDEFID, '*') = '*' AND L.PROCESSDEFID = PP.PROCESSDEFID)  OR (NVL(L.SUBPROCESSDEFID, '*') != '*' AND L.SUBPROCESSDEFID = PP.PROCESSDEFID))
+				                                        AND ((NVL(L.SUBPROCESSDEFVERSION, '*') = '*' AND L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION)  OR (NVL(L.SUBPROCESSDEFVERSION, '*') != '*' AND L.SUBPROCESSDEFVERSION = PP.PROCESSDEFVERSION))
+				                                        AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+				                                        AND L.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+				    LEFT JOIN PCM_LOTHISTORY        LH  ON  L.LOTID = LH.LOTID
+				                                        AND LWR.PREVSENDLOTHISTKEY = LH.TXNHISTKEY
+				    LEFT JOIN BAS_PROCESSPATH       PPH ON  PP.PROCESSDEFID = PPH.PROCESSDEFID
+				                                        AND PP.PROCESSDEFVERSION = PPH.PROCESSDEFVERSION
+				                                        AND PPH.PATHSEQUENCE = PP.PATHSEQUENCE - 1
+				    LEFT JOIN BAS_PROCESSSEGMENT    PSP ON  PPH.PROCESSSEGMENTID = PSP.PROCESSSEGMENTID
+				                                        AND PPH.PROCESSSEGMENTVERSION = PSP.PROCESSSEGMENTVERSION
+				    LEFT JOIN CMD_LOOKUP_VALUES     C   ON  L.LOTTYPE = C.LOOKUP_CODE
+				                                        AND C.LOOKUP_TYPE = 'ProductionType'
+				    LEFT JOIN CMD_DICTIONARY        D1  ON  C.DICTIONARYID = D1.DICTIONARYID
+				                                        AND D1.LANGUAGETYPE = 'ko-KR'
+				    LEFT JOIN CMD_DICTIONARY        D2  ON  PS.PROCESSSEGMENTNAME = D2.DICTIONARYID
+				                                        AND D2.LANGUAGETYPE = 'ko-KR'
+				    LEFT JOIN CMD_DICTIONARY        D3  ON  AR.AREANAME = D3.DICTIONARYID
+				                                        AND D3.LANGUAGETYPE = 'ko-KR'
+				    LEFT JOIN CMD_DICTIONARY        D4  ON  PSP.PROCESSSEGMENTNAME = D4.DICTIONARYID
+				                                        AND D4.LANGUAGETYPE = 'ko-KR'
+				    LEFT JOIN BAS_AREA              PAR ON  LH.PREVAREAID = PAR.AREAID
+				    LEFT JOIN CMD_DICTIONARY        D5  ON  PAR.AREANAME = D5.DICTIONARYID
+				                                        AND D5.LANGUAGETYPE = 'ko-KR'
+				    LEFT JOIN BAS_PROCESSSEGMENT    FPS ON  LW.PROCESSSEGMENTID = FPS.PROCESSSEGMENTID
+                                                        AND LW.PROCESSSEGMENTVERSION = FPS.PROCESSSEGMENTVERSION
+                    LEFT JOIN CMD_DICTIONARY        D6  ON  FPS.PROCESSSEGMENTNAME = D6.DICTIONARYID
+                                                        AND D6.LANGUAGETYPE = 'ko-KR'
+                    LEFT JOIN BAS_PROCESSSEGMENT    TPS ON  LW.TOPROCESSSEGMENTID = TPS.PROCESSSEGMENTID
+                                                        AND LW.TOPROCESSSEGMENTVERSION = TPS.PROCESSSEGMENTVERSION
+                    LEFT JOIN CMD_DICTIONARY        D7  ON  TPS.PROCESSSEGMENTNAME = D7.DICTIONARYID
+                                                        AND D7.LANGUAGETYPE = 'ko-KR'
+                    LEFT JOIN BAS_PROCESSPATH       TPH ON  LW.TOPROCESSPATHID = TPH.PROCESSPATHID                                                                      
+				    WHERE   1 = 1
+				    AND 	LWR.CREATEDTIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+				    AND     L.LOTSTATE IN ('InProduction', 'InTransit')
+				    AND     NVL(L.ISDEFECTED, 'N') = 'N'
+				<if test="PLANTID != null and PLANTID !=''"> 
+                	AND 	PD.PLANTID = #{PLANTID}
+                </if>
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			    	AND 
+			     <foreach collection="PRODUCTDEFID" item="PRODUCTDEFID"  open="(" close=")" separator="OR">
+   	                PD.PRODUCTDEFID LIKE <![CDATA['%' ||]]> #{PRODUCTDEFID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+					  AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				 	  AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+				</if>
+				<if test="CUSTOMERID != null and CUSTOMERID !=''">  
+                	  AND PD.CUSTOMERID = #{CUSTOMERID}   --고객
+                </if>
+                <if test="LOTID != null and LOTID !=''"> 
+			    	AND 
+			     <foreach collection="LOTID" item="LOTID"  open="(" close=")" separator="OR">
+   	                L.LOTID LIKE <![CDATA['%' ||]]> #{LOTID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="AREAID != null and AREAID !=''">  
+                	  AND L.AREAID = #{AREAID}   --작업장
+                </if>
+                <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+			    	AND 
+			     <foreach collection="PROCESSSEGMENTID" item="PROCESSSEGMENTID"  open="(" close=")" separator="OR">
+   	                L.PROCESSSEGMENTID LIKE <![CDATA['%' ||]]> #{PROCESSSEGMENTID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">  
+                	  AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}   --생산구분
+                </if>
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+				  AND     PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}  --제품구분 - 제품,반제품
+				</if>
+	            --RTR/SHT
+	            <if test="RTRSHT != null and RTRSHT !=''">
+				  AND     PD.RTRSHT = #{RTRSHT}  
+				</if>
+	            )XX
+				LEFT JOIN CMD_LOOKUP_VALUES       CD  ON  XX.WIPPROCESSSTATE = CD.LOOKUP_CODE
+				                            		  AND CD.LOOKUP_TYPE = 'WipProcessState'
+				LEFT JOIN CMD_DICTIONARY 		  DC  ON  CD.DICTIONARYID = DC.DICTIONARYID
+				                            		  AND DC.LANGUAGETYPE = 'ko-KR'
+				LEFT JOIN CMD_LOOKUP_VALUES       CD2 ON  XX.FROMPROCESSSTATE = CD2.LOOKUP_CODE
+                                            		  AND CD2.LOOKUP_TYPE = 'WipProcessState'
+                LEFT JOIN CMD_DICTIONARY 		  DC2 ON  CD2.DICTIONARYID = DC2.DICTIONARYID
+                                            		  AND DC2.LANGUAGETYPE = 'ko-KR'
+                LEFT JOIN CMD_LOOKUP_VALUES       CD3 ON  XX.TOPROCESSSTATE = CD3.LOOKUP_CODE
+                                            		  AND CD3.LOOKUP_TYPE = 'WipProcessState'
+                LEFT JOIN CMD_DICTIONARY 		  DC3 ON  CD3.DICTIONARYID = DC3.DICTIONARYID
+                                            		  AND DC3.LANGUAGETYPE = 'ko-KR'                            
+				WHERE 1 = 1
+				--상태구분
+				<if test="WIPPROCESSSTATE != null and WIPPROCESSSTATE !=''">
+				  AND     XX.WIPPROCESSSTATE = #{WIPPROCESSSTATE}  
+				</if>
+	</select>
+</mapper>

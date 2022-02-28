@@ -1,0 +1,668 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM01800Dao">
+
+    <!-- 인수처리한 불량 Lot을 조회한다.(불량품 원인판정화면) -->
+    <select id="selectGetInboundDefectLotList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01800Dao.selectGetInboundDefectLotList_1002 */
+        SELECT TO_CHAR(L.CREATEDTIME, 'YYYYMMDDHH24MISS')   AS PROCESSDATE            -- 처리일시
+             , TO_CHAR(LDI.RECEIVETIME, 'YYYYMMDDHH24MISS') AS RECEIVETIME            -- 인수일시
+             , LDI.PRODUCTDEFID                                                       -- 품목코드
+             , LDI.PRODUCTDEFVERSION                                                  -- 품목버전
+             , PD.PRODUCTDEFNAME                                                      -- 품목명
+             , LDI.PLANTID                                                            -- Site ID
+             , LDI.USERSEQUENCE                                                       -- 공정수순
+             , LDI.PROCESSSEGMENTID                                                   -- 공정 ID
+             , LDI.PROCESSSEGMENTVERSION                                              -- 공정 Version
+             , PGD.DICTIONARYNAME                           AS PROCESSSEGMENTNAME     -- 공정명
+             , LDI.AREAID                                                             -- 작업장 ID
+             , AD.DICTIONARYNAME                            AS AREANAME               -- 작업장명
+             , U.USER_NM                                    AS RECEIVEUSER            -- 인수자
+             , LDI.LOTID                                                              -- 인수한 Lot No
+             , L.PARENTLOTID                                                          -- 인수한 Parent Lot No
+             , L.DEFECTQTY                                                            -- 불량 PCS수량
+             , CASE WHEN L.PANELPERQTY IS NULL OR L.PANELPERQTY = 0 THEN 0
+               ELSE ROUND(L.DEFECTQTY / L.PANELPERQTY, 0) 
+               END                                          AS DEFECTPNLQTY           -- 불량 PNL수량
+             , NVL(L.DEFECTUNIT, L.UNIT)                    AS UNIT                   -- UOM 단위(불량처리단위)
+             , C1D.DICTIONARYNAME                           AS LOTTYPE                -- 양산구분
+             , LDI.STATUS                                                             -- 처리상태
+             , C2D.DICTIONARYNAME                           AS STATUSNAME             -- 처리상태명
+             , LDI.ENTERPRISEID                                                       -- 회사 ID
+             , LDI.INTERFACESTATUS                          AS ISIFSUCCESS            -- 인터페이스 성공여부
+             , NULL                                         AS CHK
+          FROM            PCM_LOT                  L
+          INNER JOIN      QAM_QCLOTDEFECTINBOUND   LDI  ON   LDI.LOTID              = L.LOTID
+          <!--ASIS Group By 처리했으나 TOBE에서는 Group By 처리 사용되지 않아 여러행이 조회되어 찾아본 결과 사용하지 않는 아래 테이블 때문이므로 제외함
+          LEFT OUTER JOIN QAM_QCLOTDEFECTRESULT    LDR  ON   LDR.LOTID              = LDI.LOTID-->
+          LEFT OUTER JOIN BAS_PRODUCTDEFINITION    PD   ON   PD.PRODUCTDEFID        = LDI.PRODUCTDEFID
+                                                        AND  PD.PRODUCTDEFVERSION   = LDI.PRODUCTDEFVERSION
+          LEFT OUTER JOIN BAS_PROCESSSEGMENT       PG   ON   PG.PROCESSSEGMENTID    = LDI.PROCESSSEGMENTID
+                                                        AND  PG.PROCESSSEGMENTVERSION = LDI.PROCESSSEGMENTVERSION
+          LEFT OUTER JOIN BAS_AREA                 A    ON   A.AREAID               = LDI.AREAID
+          LEFT OUTER JOIN CMD_USERS                U    ON   U.USER_ID              = LDI.RECEIVEUSER
+          LEFT OUTER JOIN CMD_DICTIONARY           PGD  ON   PGD.DICTIONARYID       = PG.PROCESSSEGMENTNAME
+                                                        AND  PGD.LANGUAGETYPE       = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           AD   ON   AD.DICTIONARYID        = A.AREANAME
+                                                        AND  AD.LANGUAGETYPE        = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES        C1   ON   C1.LOOKUP_CODE         = L.LOTTYPE
+                                                        AND  C1.LOOKUP_TYPE         = 'ProductionType'
+          LEFT OUTER JOIN CMD_DICTIONARY           C1D  ON   C1D.DICTIONARYID       = C1.DICTIONARYID
+                                                        AND  C1D.LANGUAGETYPE       = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES        C2   ON   C2.LOOKUP_CODE         = LDI.STATUS
+                                                        AND  C2.LOOKUP_TYPE         = 'ProgressStatus'
+          LEFT OUTER JOIN CMD_DICTIONARY           C2D  ON   C2D.DICTIONARYID       = C2.DICTIONARYID
+                                                        AND  C2D.LANGUAGETYPE       = #{LANGUAGETYPE}
+         WHERE 1 = 1
+           AND LDI.VALIDSTATE = 'Valid'
+           AND L.LOTSTATE    != 'Terminated'
+           AND LDI.RECEIVETIME >= TO_TIMESTAMP(#{PERIODFR}, 'YYYYMMDDHH24MISSFF3')
+           AND LDI.RECEIVETIME <![CDATA[<]]>  TO_TIMESTAMP( #{PERIODTO}, 'YYYYMMDDHH24MISSFF3')
+        <if test="PLANTID != null and PLANTID !='' ">
+           AND LDI.PLANTID = #{PLANTID}
+        </if>
+
+        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+           AND EXISTS
+                    (
+                        SELECT 1
+                          FROM ufn_selectstringtosplitdouble(#{PRODUCTDEFID}, ',', '|')    MAP
+                         WHERE LDI.PRODUCTDEFID = MAP.VALUE1
+                           AND (LDI.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 IS NULL)
+                    )
+        </if>
+
+        <if test="AREAID != null and AREAID !='' ">
+           AND LDI.AREAID = #{AREAID}
+        </if>
+
+        <if test="LOTID != null and LOTID !='' ">
+           AND LDI.LOTID LIKE '%'|| #{LOTID} ||'%'
+        </if>
+
+        <if test="PARENTLOTID != null and PARENTLOTID !='' ">
+           AND L.PARENTLOTID LIKE '%'|| #{PARENTLOTID} ||'%'
+        </if>
+
+        <if test="LOTTYPE != null and LOTTYPE !='' and !(LOTTYPE eq '*'.toString()) ">
+           AND L.LOTTYPE = #{LOTTYPE}
+        </if>
+
+        <if test="PROCESSSEGMENTTYPE != null and PROCESSSEGMENTTYPE !='' and !(PROCESSSEGMENTTYPE eq '*'.toString()) ">
+           AND PG.PROCESSSEGMENTTYPE = #{PROCESSSEGMENTTYPE}
+        </if>
+        
+        <if test="CONFIRMATION != null and CONFIRMATION !='' and !(CONFIRMATION eq '*'.toString()) ">
+            <!--2021.07.29 TOBE Modify 
+            <choose>
+                <when test="CONFIRMATION eq 'Y'.toString() ">
+                    AND LDI.STATUS IN ('CauseComplete', 'DeadlineComplete')
+                </when>
+                <otherwise>
+                    AND LDI.STATUS IN ('InboundComplete', 'HoldComplete')
+                </otherwise>
+            </choose> -->
+            AND LDI.STATUS = #{CONFIRMATION}
+        </if>
+
+        <if test="DEADLINE != null and DEADLINE !='' and !(DEADLINE eq '*'.toString()) ">
+            <choose>
+                <when test="DEADLINE eq 'Y'.toString() ">
+                    AND LDI.STATUS = 'DeadlineComplete'
+                </when>
+                <otherwise>
+                    AND LDI.STATUS != 'DeadlineComplete'
+                </otherwise>
+            </choose>
+        </if>
+        ORDER BY LDI.RECEIVETIME DESC, L.CREATEDTIME DESC, LDI.PRODUCTDEFID
+    </select>
+
+    <!-- 인수처리한 불량 Lot별 불량코드를 조회한다. -->
+    <select id="selectGetDefectLotDefectCodeList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01800Dao.selectGetDefectLotDefectCodeList_10002 */
+        WITH REASONPRODUCT AS
+        (
+            SELECT CONSUMABLEDEFID          AS REASONCONSUMABLEDEFID
+                 , CONSUMABLEDEFVERSION     AS REASONCONSUMABLEDEFVERSION
+                 , CONSUMABLEDEFNAME        AS REASONCONSUMABLEDEFNAME
+              FROM BAS_CONSUMABLEDEFINITION
+             WHERE 1 = 1
+
+            UNION
+
+            SELECT PRODUCTDEFID
+                 , PRODUCTDEFVERSION
+                 , PRODUCTDEFNAME
+              FROM BAS_PRODUCTDEFINITION
+             WHERE 1 = 1
+        )
+        SELECT LD.TXNHISTKEY                                                             /*TXN Hist Key*/
+             , LD.LOTID                                                                  /*Lot No*/
+             , L.PARENTLOTID                                                             /*Parent Lot No*/
+             , LD.QCSEGMENTID||LD.DEFECTCODE                AS JOINCODE
+             , DD.DICTIONARYNAME||'-'||QSD.DICTIONARYNAME   AS JOINNAME
+             , LD.DEFECTCODE                                                             /*불량코드*/
+             , DD.DICTIONARYNAME                            AS DEFECTCODENAME            /*불량코드명*/
+             , LD.QCSEGMENTID                                                            /*품질공정 ID*/
+             , QSD.DICTIONARYNAME                           AS QCSEGMENTNAME             /*품질공정명*/
+             , LD.PRODUCTDEFID                                                           /*품목 ID*/
+             , LD.PRODUCTDEFVERSION                                                      /*품목 Version*/
+             , LD.PROCESSDEFID                                                           /*라우팅 ID*/
+             , LD.PROCESSDEFVERSION                                                      /*라우팅 Version*/
+             , LD.PROCESSPATHID                                                          /*공정별 라우팅 ID*/
+             , LD.USERSEQUENCE                                                           /*공정수순*/
+             , LD.REASONCONSUMABLEDEFID                                                  /*원인품목 ID*/
+             , LD.REASONCONSUMABLEDEFVERSION                                             /*원인품목 Version*/
+             , RP.REASONCONSUMABLEDEFNAME                                                /*원인품목명*/
+             , LD.REASONCONSUMABLELOTID                                                  /*원인자재 ID*/
+             , LD.REASONSEGMENTID                                                        /*원인공정 ID*/
+             , PGD.DICTIONARYNAME                           AS REASONSEGMENTNAME         /*원인공정명*/
+             , LD.REASONAREAID                                                           /*원인작업장 ID*/
+             , AD.DICTIONARYNAME                            AS REASONAREANAME            /*원인작업장명*/
+             , A.PLANTID                                    AS REASONPLANTID             /*원인 Site*/
+             , LD.DEFECTQTY                                                              /*불량코드별 PCS수량*/
+             , CASE WHEN L.PANELPERQTY IS NULL OR L.PANELPERQTY = 0 THEN 0
+               ELSE ROUND(LD.DEFECTQTY / L.PANELPERQTY, 0)
+               END                                          AS DEFECTPNLQTY              /*불량코드별 PNL수량*/
+             , CASE WHEN SUM(LDO.OUTBOUNDQTY) IS NULL THEN 0                          
+               ELSE SUM(LDO.OUTBOUNDQTY)                                              
+               END                                          AS OUTBOUNDQTY               /*반출수량*/
+             , CASE WHEN SUM(LDO.OUTBOUNDQTY) IS NULL THEN LD.DEFECTQTY               
+               ELSE LD.DEFECTQTY - SUM(LDO.OUTBOUNDQTY)                               
+               END                                          AS LEFTQTY                   /*잔량*/
+             , NVL(L.DEFECTUNIT, L.UNIT)                    AS UNIT                      /*UOM*/
+             , NVL(LDR.ISUNKNOWN, 'N')                      AS ISUNKNOWN                 /*원인불명(CheckBox)*/
+             , TO_CHAR(LDR.DEFINETIME, 'YYYYMMDDHH24MISS')  AS DEFINETIME                /*확정일시*/
+             , NVL(U.USER_NM, LDR.DEFINEUSER)               AS DEFINEUSER                /*확정자*/
+             , CD.DICTIONARYNAME                            AS STATUS                    /*불량코드별 처리상태*/
+             , LDR.STATUS                                   AS STATUSCODE                /*처리상태 코드 ID*/
+             , LD.ENTERPRISEID                                                           /*회사 ID*/
+             , LD.PLANTID                                                                /*Site ID*/
+             , LD.AREAID                                                                 /*작업장 ID*/
+             , LD.PROCESSSEGMENTID                                                       /*공정 ID*/
+             , LD.PROCESSSEGMENTVERSION                                                  /*공정 Version*/
+             , CASE WHEN OC.PERIODID IS NULL THEN 'N'       
+               ELSE 'Y'                                     
+               END                                          AS ISCLAIM                   /*Claim여부*/
+             , DC.CONFIRMSITE                                                            /*Site 자동확정여부*/
+             , NULL                                         AS CHK
+             , MAX(LD.CREATEDTIME)                          AS CREATEDTIME
+             , LD.OCCURREDSTEP                              AS OCCURREDSTEP              /*불량처리STEP*/
+          FROM            PCM_LOTDEFECT             LD
+          INNER JOIN      PCM_LOT                   L    ON   LD.LOTID              = L.LOTID
+          INNER JOIN      QAM_QCLOTDEFECTINBOUND    LDI  ON   LDI.LOTID             = L.LOTID
+          LEFT OUTER JOIN QAM_QCLOTDEFECTOUTBOUND   LDO  ON   LDO.LOTID             = LD.LOTID
+                                                         AND  LDO.TXNHISTKEY        = LD.TXNHISTKEY
+          LEFT OUTER JOIN QAM_QCLOTDEFECTRESULT     LDR  ON   LDR.LOTID             = LD.LOTID
+                                                         AND  LDR.TXNHISTKEY        = LD.TXNHISTKEY
+          LEFT OUTER JOIN OSM_OSPCLAIM              OC   ON   OC.LOTID              = LD.LOTID
+                                                         AND  OC.LOTHISTKEY         = LD.TXNHISTKEY
+          LEFT OUTER JOIN BAS_AREA                  A    ON   A.AREAID              = LD.REASONAREAID
+          LEFT OUTER JOIN BAS_PROCESSSEGMENT        PG   ON   PG.PROCESSSEGMENTID   = LD.REASONSEGMENTID
+          LEFT OUTER JOIN REASONPRODUCT             RP   ON   RP.REASONCONSUMABLEDEFID = LD.REASONCONSUMABLEDEFID
+                                                         AND  RP.REASONCONSUMABLEDEFVERSION = LD.REASONCONSUMABLEDEFVERSION
+          LEFT OUTER JOIN BAS_DEFECTCODE            DC   ON   DC.DEFECTCODE         = LD.DEFECTCODE
+          LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION   QS   ON   QS.QCSEGMENTID        = LD.QCSEGMENTID
+          LEFT OUTER JOIN CMD_USERS                 U    ON   U.USER_ID             = LDR.DEFINEUSER
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES         C    ON   C.LOOKUP_CODE         = LDR.STATUS
+                                                         AND  C.LOOKUP_TYPE         = 'DefectProductProgress'
+          LEFT OUTER JOIN CMD_DICTIONARY            CD   ON   CD.DICTIONARYID       = C.DICTIONARYID
+                                                         AND  CD.LANGUAGETYPE       = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY            AD   ON   AD.DICTIONARYID       = A.AREANAME
+                                                         AND  AD.LANGUAGETYPE       = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY            PGD  ON   PGD.DICTIONARYID      = PG.PROCESSSEGMENTNAME
+                                                         AND  PGD.LANGUAGETYPE      = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY            DD   ON   DD.DICTIONARYID       = DC.DICTIONARYID
+                                                         AND  DD.LANGUAGETYPE       = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY            QSD  ON   QSD.DICTIONARYID      = QS.QCSEGMENTNAME
+                                                         AND  QSD.LANGUAGETYPE      = #{LANGUAGETYPE}
+         WHERE 1 = 1
+           AND LDI.VALIDSTATE = 'Valid'
+           AND LD.VALIDSTATE = 'Valid'
+           AND LD.LOTID = #{LOTID}
+           <!-- 불량정보 팝업화면에서 불량정보의 잔량만큼 불량내역을 생성할 경우 불량정보의 데이터가 0으로 변경되는데 이경우 화면에서 조회되지 않도록 설정 -->
+           AND NVL(LD.DEFECTQTY, 0) <![CDATA[<>]]> 0               
+        GROUP BY LD.TXNHISTKEY
+               , LD.LOTID
+               , L.PARENTLOTID
+               , LD.DEFECTCODE
+               , DD.DICTIONARYNAME
+               , LD.QCSEGMENTID
+               , QSD.DICTIONARYNAME
+               , LD.PRODUCTDEFID
+               , LD.PRODUCTDEFVERSION
+               , LD.PROCESSDEFID
+               , LD.PROCESSDEFVERSION
+               , LD.PROCESSPATHID
+               , LD.USERSEQUENCE
+               , LD.REASONCONSUMABLEDEFID
+               , LD.REASONCONSUMABLEDEFVERSION
+               , RP.REASONCONSUMABLEDEFNAME
+               , LD.REASONCONSUMABLELOTID
+               , LD.REASONSEGMENTID
+               , PGD.DICTIONARYNAME
+               , LD.REASONAREAID
+               , AD.DICTIONARYNAME
+               , A.PLANTID
+               , LD.DEFECTQTY
+               , L.PANELPERQTY
+               , NVL(L.DEFECTUNIT, L.UNIT)
+               , LDR.ISUNKNOWN
+               , LDR.DEFINETIME 
+               , NVL(U.USER_NM, LDR.DEFINEUSER)
+               , CD.DICTIONARYNAME
+               , LDR.STATUS
+               , LD.ENTERPRISEID
+               , LD.PLANTID
+               , LD.AREAID
+               , LD.PROCESSSEGMENTID
+               , LD.PROCESSSEGMENTVERSION
+               , CASE WHEN OC.PERIODID IS NULL THEN 'N'
+                 ELSE 'Y'
+                 END
+               , DC.CONFIRMSITE
+               , LD.OCCURREDSTEP
+        ORDER BY LD.DEFECTCODE
+    </select>
+
+    <!-- 불량코드별 반출정보를 조회한다. -->
+    <select id="selectGetDefectCodeOutboundList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01800Dao.selectGetDefectCodeOutboundList */
+        SELECT LOTID
+             , TXNHISTKEY
+             , SEQUENCE
+             , REASONCOMMENT
+             , TO_CHAR(OUTBOUNDDATE, 'YYYYMMDDHH24MISS') AS OUTBOUNDDATE
+             , OUTBOUNDQTY
+             , OUTBOUNDUSER
+          FROM QAM_QCLOTDEFECTOUTBOUND
+         WHERE 1 = 1
+           AND LOTID = #{LOTID}
+           AND TXNHISTKEY = #{TXNHISTKEY}
+    </select>
+
+    <!-- 불량인수Lot 하나에 해당하는 불량코드들의 상태를 조회한다. - 체크 -->
+    <select id="selectInboundProgressChk" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01800Dao.selectInboundProgressChk */
+        SELECT CASE WHEN B.STATUS IS NULL THEN 'X'
+               ELSE B.STATUS END  AS     STATUS
+        FROM            PCM_LOTDEFECT          A
+        LEFT OUTER JOIN QAM_QCLOTDEFECTRESULT  B  ON   B.LOTID      = A.LOTID
+                                                  AND  B.TXNHISTKEY = A.TXNHISTKEY
+       WHERE 1 = 1
+         AND A.VALIDSTATE                    = 'Valid'
+         AND A.LOTID                         = #{LOTID}                      /*LOT ID*/
+
+    </select>
+
+    <!-- LOT 불량 확정 정보 - 체크 -->
+    <select id="selectQamQclotdefectresultChk" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01800Dao.selectQamQclotdefectresultChk */
+        SELECT LOTID
+          FROM QAM_QCLOTDEFECTRESULT
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+    
+    <!-- 불량 반출정보 - 체크 -->
+    <select id="selectQamQclotdefectoutboundChk" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01800Dao.selectQamQclotdefectoutboundChk */
+        SELECT LOTID
+          FROM QAM_QCLOTDEFECTOUTBOUND
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+           AND SEQUENCE                      = #{SEQUENCE}                   /*순서*/
+    </select>
+
+    <!-- 불량품 원인판정 - 확정 -->
+    <insert id="insertConfirmQamQclotdefectresult" parameterType="map">
+        /* smh.qam.dao.QAM01800Dao.insertConfirmQamQclotdefectresult */
+        INSERT INTO QAM_QCLOTDEFECTRESULT
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , LOTID                         /*LOT ID*/
+            , DEFINETIME                    /*불량확정일시*/
+            , DEFINEUSER                    /*불량확정자*/
+            , OUTBOUNDQTY                   /*반출수량*/
+            , LEFTQTY                       /*반출잔량*/
+            , STATUS                        /*처리상태*/
+            , ISUNKNOWN                     /*원인불명구분*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , TXNGROUPHISTKEY               /*TXN GroupHistKey*/
+            , TXNUSER                       /*TXN 사용자*/
+            , TXNTIME                       /*TXN 시간*/
+            , TXNREASONCODECLASS            /*TXN 사유코드 그룹*/
+            , TXNREASONCODE                 /*TXN 사유코드*/
+            , TXNCOMMENT                    /*TXN 코멘트*/
+        )VALUES(
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{LOTID}                        /*LOT ID*/
+            , TO_DATE(#{DEFINETIME}, 'YYYYMMDDHH24MISS') /*불량확정일시*/
+            , #{DEFINEUSER}                   /*불량확정자*/
+            , #{OUTBOUNDQTY}                  /*반출수량*/
+            , #{LEFTQTY}                      /*반출잔량*/
+            , #{STATUS}                       /*처리상태*/
+            , #{ISUNKNOWN}                    /*원인불명구분*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , #{CREATEDTIME}                  /*생성일*/
+            , #{TXNGROUPHISTKEY}              /*TXN GroupHistKey*/
+            , #{CREATOR}                      /*TXN 사용자*/
+            , SYSDATE                         /*TXN 시간*/
+            , #{TXNREASONCODECLASS}           /*TXN 사유코드 그룹*/
+            , #{TXNREASONCODE}                /*TXN 사유코드*/
+            , #{TXNCOMMENT}                   /*TXN 코멘트*/
+        )
+    </insert>
+
+    <!-- LOT 불량 정보 - 조정 -->
+    <insert id="insertMakeupPcmLotDefect" parameterType="map">
+        /* smh.qam.dao.QAM01800Dao.insertMakeupPcmLotDefect */
+        INSERT INTO PCM_LOTDEFECT
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , LOTID                         /*LOT ID*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , AREAID                        /*작업장 ID*/
+            , PRODUCTDEFID                  /*제품 정의 ID*/
+            , PRODUCTDEFVERSION             /*제품 정의 Version*/
+            , PROCESSDEFID                  /*라우팅 ID*/
+            , PROCESSDEFVERSION             /*라우팅 Version*/
+            , PROCESSPATHID                 /*공정별 라우팅 정의 ID*/
+            , USERSEQUENCE                  /*ProcessPath 상의 사용자 순서*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PROCESSSEGMENTVERSION         /*공정 Version*/
+            , WORKCOUNT                     /*작업차수*/
+            , DETECTIONSEGMENTCLASSID       /*연관공정그룹*/
+            , REASONAREAID                  /*원인 작업장 ID*/
+            , DEFECTCODE                    /*불량 코드*/
+            , DEFECTQTY                     /*불량 수량*/
+            , QCSEGMENTID                   /*품질 공정 ID*/
+            , REASONSEGMENTID               /*원인공정*/
+            , REASONCONSUMABLELOTID         /*원인자재LOT*/
+            , REASONCONSUMABLEDEFID         /*원인자재 정의 ID*/
+            , REASONCONSUMABLEDEFVERSION    /*원인자재 정의 VERSION*/
+            , RESOURCEID                    /*자원 ID*/
+            , REWORKCOUNT                   /*재작업횟수*/
+            , OCCURREDSTEP                  /*불량 발생 STEP*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , TXNGROUPHISTKEY               /*TXN GroupHistKey*/
+            , TXNUSER                       /*TXN 사용자*/
+            , TXNTIME                       /*TXN 시간*/
+            , TXNREASONCODECLASS            /*TXN 사유코드 그룹*/
+            , TXNREASONCODE                 /*TXN 사유코드*/
+            , TXNCOMMENT                    /*TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+            , DESCRIPTION                   /*비고*/
+            , REASONUSERSEQUENCE            /*원인공정순번*/
+            , REASONRESOURCEID              /*원인자원 ID*/
+        )VALUES(
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{LOTID}                        /*LOT ID*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{AREAID}                       /*작업장 ID*/
+            , #{PRODUCTDEFID}                 /*제품 정의 ID*/
+            , #{PRODUCTDEFVERSION}            /*제품 정의 Version*/
+            , #{PROCESSDEFID}                 /*라우팅 ID*/
+            , #{PROCESSDEFVERSION}            /*라우팅 Version*/
+            , #{PROCESSPATHID}                /*공정별 라우팅 정의 ID*/
+            , #{USERSEQUENCE}                 /*ProcessPath 상의 사용자 순서*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PROCESSSEGMENTVERSION}        /*공정 Version*/
+            , NVL(#{WORKCOUNT}, 0)            /*작업차수*/
+            , #{DETECTIONSEGMENTCLASSID}      /*연관공정그룹*/
+            , #{REASONAREAID}                 /*원인 작업장 ID*/
+            , #{DEFECTCODE}                   /*불량 코드*/
+            , #{DEFECTQTY}                    /*불량 수량*/
+            , #{QCSEGMENTID}                  /*품질 공정 ID*/
+            , #{REASONSEGMENTID}              /*원인공정*/
+            , #{REASONCONSUMABLELOTID}        /*원인자재LOT*/
+            , #{REASONCONSUMABLEDEFID}        /*원인자재 정의 ID*/
+            , #{REASONCONSUMABLEDEFVERSION}   /*원인자재 정의 VERSION*/
+            , #{RESOURCEID}                   /*자원 ID*/
+            , #{REWORKCOUNT}                  /*재작업횟수*/
+            , #{OCCURREDSTEP}                 /*불량 발생 STEP*/
+            , #{CREATOR}                      /*생성자*/
+            , #{CREATEDTIME}                  /*생성일-2021.08.03 원불량이 생성된 시점으로 데이터 생성*/
+            , #{TXNGROUPHISTKEY}              /*TXN GroupHistKey*/
+            , #{CREATOR}                      /*TXN 사용자*/
+            , SYSDATE                         /*TXN 시간*/
+            , #{TXNREASONCODECLASS}           /*TXN 사유코드 그룹*/
+            , #{TXNREASONCODE}                /*TXN 사유코드*/
+            , #{TXNCOMMENT}                   /*TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+            , #{DESCRIPTION}                  /*비고*/
+            , #{REASONUSERSEQUENCE}           /*원인공정순번*/
+            , #{REASONRESOURCEID}             /*원인자원 ID*/
+        )
+    </insert>
+
+    <!-- LOT 불량 반출정보 -->
+    <insert id="insertOutboundQamQclotdefectoutbound" parameterType="map">
+        /* smh.qam.dao.QAM01800Dao.insertOutboundQamQclotdefectoutbound */
+        INSERT INTO QAM_QCLOTDEFECTOUTBOUND
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , LOTID                         /*LOT ID*/
+            , SEQUENCE                      /*순서*/
+            , OUTBOUNDDATE                  /*반출일시*/
+            , REASONCOMMENT                 /*반출사유*/
+            , OUTBOUNDQTY                   /*반출수량*/
+            , LEFTQTY                       /*반출잔량*/
+            , OUTBOUNDUSER                  /*반출자*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , TXNGROUPHISTKEY               /*TXN GroupHistKey*/
+            , TXNUSER                       /*TXN 사용자*/
+            , TXNTIME                       /*TXN 시간*/
+            , TXNREASONCODECLASS            /*TXN 사유코드 그룹*/
+            , TXNREASONCODE                 /*TXN 사유코드*/
+            , TXNCOMMENT                    /*TXN 코멘트*/
+        )VALUES(
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{LOTID}                        /*LOT ID*/
+            , BAS_COMMON_PKG.FN_GET_NUMBER('LotOutboundSequence', NULL, #{CREATOR}, 'Y', 8)   /*순서*/
+            , TO_DATE(#{OUTBOUNDDATE}, 'YYYYMMDDHH24MISS') /*반출일시*/
+            , #{REASONCOMMENT}                /*반출사유*/
+            , #{OUTBOUNDQTY}                  /*반출수량*/
+            , #{LEFTQTY}                      /*반출잔량*/
+            , #{OUTBOUNDUSER}                 /*반출자*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , #{CREATEDTIME}                  /*생성일*/
+            , #{TXNGROUPHISTKEY}              /*TXN GroupHistKey*/
+            , #{CREATOR}                      /*TXN 사용자*/
+            , SYSDATE                         /*TXN 시간*/
+            , #{TXNREASONCODECLASS}           /*TXN 사유코드 그룹*/
+            , #{TXNREASONCODE}                /*TXN 사유코드*/
+            , #{TXNCOMMENT}                   /*TXN 코멘트*/
+        )
+    </insert>
+
+    <!-- 불량품 원인판정 - 확정 -->
+    <update id="updateConfirmQamQclotdefectresult" parameterType="map">
+        /* smh.qam.dao.QAM01800Dao.updateConfirmQamQclotdefectresult */
+        UPDATE QAM_QCLOTDEFECTRESULT
+           SET DEFINETIME                    = TO_DATE(#{DEFINETIME}, 'YYYYMMDDHH24MISS')/*불량확정일시*/
+             , DEFINEUSER                    = #{DEFINEUSER}                 /*불량확정자*/
+             , OUTBOUNDQTY                   = #{OUTBOUNDQTY}                /*반출수량*/
+             , LEFTQTY                       = #{LEFTQTY}                    /*반출잔량*/
+             , STATUS                        = #{STATUS}                     /*처리상태*/
+             , ISUNKNOWN                     = #{ISUNKNOWN}                  /*원인불명구분*/
+             , TXNGROUPHISTKEY               = #{TXNGROUPHISTKEY}            /*TXN GroupHistKey*/
+             , TXNUSER                       = #{MODIFIER}                   /*TXN 사용자*/
+             , TXNTIME                       = SYSDATE                       /*TXN 시간*/             
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    
+    <!-- LOT 불량 인수정보 수정 - 확정 -->
+    <update id="updateStatusQamQclotdefectinbound" parameterType="map">
+        /* smh.qam.dao.QAM01800Dao.updateStatusQamQclotdefectinbound */
+        UPDATE QAM_QCLOTDEFECTINBOUND
+           SET STATUS                        = #{STATUS}                     /*진행처리상태*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/             
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!-- LOT 불량 인수정보 수정 - 조정 -->
+    <update id="updateMakeupPcmLotDefect" parameterType="map">
+        /* smh.qam.dao.QAM01800Dao.updateMakeupPcmLotDefect */
+        UPDATE PCM_LOTDEFECT
+           SET DEFECTQTY                     = #{DEFECTQTY}                  /*불량 수량*/
+             , TXNUSER                       = #{MODIFIER}                   /*TXN 사용자*/
+             , TXNTIME                       = SYSDATE                       /*TXN 시간*/
+             , VALIDSTATE                    = NVL(#{VALIDSTATE},VALIDSTATE) /*유효여부*/             
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </update>
+
+    <!-- LOT 불량 반출정보 -->
+    <update id="updateOutboundQamQclotdefectoutbound" parameterType="map">
+        /* smh.qam.dao.QAM01800Dao.updateOutboundQamQclotdefectoutbound */
+        UPDATE QAM_QCLOTDEFECTOUTBOUND
+           SET OUTBOUNDDATE                  = TO_DATE(#{OUTBOUNDDATE}, 'YYYYMMDDHH24MISS') /*반출일시*/
+             , REASONCOMMENT                 = #{REASONCOMMENT}              /*반출사유*/
+             , OUTBOUNDQTY                   = #{OUTBOUNDQTY}                /*반출수량*/
+             , OUTBOUNDUSER                  = #{OUTBOUNDUSER}               /*반출자*/
+             , TXNGROUPHISTKEY               = #{TXNGROUPHISTKEY}            /*TXN GroupHistKey*/
+             , TXNUSER                       = #{MODIFIER}                   /*TXN 사용자*/
+             , TXNTIME                       = SYSDATE                       /*TXN 시간*/
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+           AND SEQUENCE                      = #{SEQUENCE}                   /*순서*/
+    </update>
+
+    <!-- LOT 불량 확정 정보 - 삭제 -->
+    <delete id="deleteConfirmQamQclotdefectresult" parameterType="map">
+        /* smh.qam.dao.QAM01800Dao.deleteConfirmQamQclotdefectresult */ 
+        DELETE
+          FROM QAM_QCLOTDEFECTRESULT
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </delete>
+    
+    <!-- LOT 불량 반출정보 - 삭제 -->
+    <delete id="deleteOutboundQamQclotdefectoutbound" parameterType="map">
+        /* smh.qam.dao.QAM01800Dao.deleteOutboundQamQclotdefectoutbound */ 
+        DELETE
+          FROM QAM_QCLOTDEFECTOUTBOUND
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+           AND SEQUENCE                      = #{SEQUENCE}                   /*순서*/
+    </delete>
+
+
+    <!-- Interface
+         desc : 불량확정 및 확정취소 시 ERP에 전송할 LOT 정보 조회
+     -->
+    <select id="selectInterfaceLotInfo" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01800Dao.selectInterfaceLotInfo */
+        SELECT PLD.ENTERPRISEID
+             , PLD.PLANTID                               AS ORGANIZATION_CODE
+             , PLD.PRODUCTDEFID                          AS ITEM_CODE         /* 제품 정의 ID */
+             , PLD.PRODUCTDEFVERSION                     AS ITEM_REVISION     /* 제품 정의 Version */
+             , NVL(NVL(LOT.DEFECTUNIT, LOT.UNIT), 'PNL') AS TRANSACTION_UOM   /* 단위 */
+             , PLD.LOTID                                 AS TRANSACTION_SOURCE_NAME /* lot id  */
+             , PLD.USERSEQUENCE                          AS OPERATION_SEQ_NUM /* 사용자 정의 순서 */
+             , PRO.TOP_PROCESSSEGMENTID                  AS DEPARTMENT        /*대공정*/
+             , PLD.LOTID                                 AS LOT_NUMBER        /* 로트번호 */
+          FROM PCM_LOT                        LOT
+             , PCM_LOTDEFECT                  PLD
+             , BAS_PROCESSSEGMENTID_HIERAR_V  PRO
+         WHERE 1=1
+           AND LOT.LOTID                 = PLD.LOTID
+           AND PLD.PROCESSSEGMENTID      = PRO.PROCESSSEGMENTID
+           AND PLD.PROCESSSEGMENTVERSION = PRO.PROCESSSEGMENTVERSION
+           AND PRO.VALIDSTATE            = 'Valid'
+           AND LOT.LOTID                 = #{LOTID}
+           AND PLD.TXNHISTKEY            = #{TXNHISTKEY}
+    </select>
+
+    <!-- Interface
+         desc : 확정취소 정보를 ERP에 전송하기 위해 조회
+    -->
+    <select id="selectInterfaceConfirmCancleInfo" parameterType="map"  resultType="Integer">
+        /* smh.qam.dao.QAM01800Dao.selectInterfaceConfirmCancleInfo */ 
+        SELECT DEFECTQTY
+          FROM PCM_LOTDEFECT
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND LOTID                         = #{LOTID}                      /*LOT ID*/
+    </select>
+    
+    <!-- Interface
+         desc : 불량확정 및 확정취소 시 ERP에 전송
+     -->
+    <insert id="insertInterfaceConfirm" parameterType="map">
+       <selectKey keyProperty="IF_SEQUENCE" resultType="Integer" order="BEFORE">
+           SELECT INF_QAM_SEQ.NEXTVAL
+             FROM DUAL
+            WHERE 1=1
+        </selectKey>    
+        /* smh.qam.dao.QAM01800Dao.insertInterfaceConfirm */
+        INSERT INTO IFC_MES_R_TRANSACTION_IF@ERPPROD
+        (     ENTERPRISEID                  /*회사ID*/
+            , ORGANIZATION_CODE             /*Site ID*/
+            , ITEM_CODE                     /*품목코드*/
+            , ITEM_REVISION                 /*폼목ver*/
+            , TRANSACTION_QUANTITY          /*트랜잭션 수량*/
+            , TRANSACTION_UOM               /*단위*/
+            , TRANSACTION_DATE              /*트랜잭션 일자*/
+            , SUBINVENTORY_CODE             /*창고코드*/
+            , TRANSACTION_SOURCE_NAME       /*작업지시 번호*/
+            , TRANSACTION_TYPE_ID           /*트랜잭션 타입 ID*/
+            , OPERATION_SEQ_NUM             /*공정순번*/
+            , DEPARTMENT                    /*부서코드(대공정코드)*/
+            , LOT_NUMBER                    /*로트번호*/
+            , CREATEDTIME                   /*생성일*/
+            , CREATOR                       /*생성자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , MODIFIER                      /*수정자*/
+            , IF_CRUD                       /*IF 변경구분*/
+            , IF_DATE                       /*IF 일시*/
+            , IF_PROCESS_TYPE               /*IF 처리여부*/
+            , IF_PROCESS_TIME               /**/
+            , IF_PROCESS_COMMENT            /**/
+            , IF_SEQUENCE                   /**/
+            , MES_TXNHISTKEY 
+        )VALUES(
+              #{ENTERPRISEID}                 /*회사ID*/
+            , #{ORGANIZATION_CODE}            /*Site ID*/
+            , #{ITEM_CODE}                    /*품목코드*/
+            , #{ITEM_REVISION}                /*폼목ver*/
+            , #{TRANSACTION_QUANTITY}         /*트랜잭션 수량*/
+            , NVL(#{TRANSACTION_UOM}, 'PNL')  /*단위*/
+            , SYSDATE                         /*트랜잭션 일자*/
+            , NULL                            /*창고코드*/
+            , #{TRANSACTION_SOURCE_NAME}      /*작업지시 번호*/
+            , #{TRANSACTION_TYPE_ID}          /*트랜잭션 타입 ID*/
+            , #{OPERATION_SEQ_NUM}            /*공정순번*/
+            , #{DEPARTMENT}                   /*부서코드(대공정코드)*/
+            , #{LOT_NUMBER}                   /*로트번호*/
+            , SYSDATE                         /*생성일*/
+            , #{CREATOR}                      /*생성자*/
+            , NULL                            /*수정일*/
+            , NULL                            /*수정자*/
+            , #{IF_CRUD}                      /*IF 변경구분*/
+            , SYSDATE                         /*IF 일시*/
+            , 'N'                             /*IF 처리여부*/
+            , NULL                            /**/
+            , NULL                            /**/
+            , #{IF_SEQUENCE}                  /**/
+            , #{TXNHISTKEY}
+        )
+    </insert>
+        
+</mapper>

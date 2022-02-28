@@ -1,0 +1,1674 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.dfm.dao.DFM00400Dao">
+
+	<!--
+		설		명	: Layer별 불량 현황 - [필터 - Lot No]
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-01 
+		수  정   이  력	:
+	-->
+	<select id="selectDefectMapLotList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectDefectMapLotList -  Layer별 불량 현황 - [필터 - Lot No]  */
+			
+			--
+			-- id : GetDefectMapLotList
+			-- version : 10002				
+			SELECT	C.LOTID							AS	P_LOTID
+				,	C.PRODUCTDEFID					AS	P_PRODUCTDEFID
+				,	D.ITEMNAME						AS	P_PRODUCTDEFNAME
+				,	#{P_CONPERIOD_PERIODFR}			AS	P_PERIOD_PERIODFR
+				,	#{P_CONPERIOD_PERIODTO}			AS	P_PERIOD_PERIODTO
+			FROM	PCM_LOT C
+					LEFT JOIN	BAS_ITEMMASTER D		ON 	C.PRODUCTDEFID = D.ITEMID
+													AND C.PRODUCTDEFVERSION = D.ITEMVERSION
+													AND D.MASTERDATACLASSID = 'Product'
+			WHERE	C.LOTID IN 
+					(	SELECT	A.LOTID
+						FROM	PCM_LOTWORKRESULT				A
+								INNER JOIN	BAS_PROCESSSEGMENT	B	ON A.PROCESSSEGMENTID = B.PROCESSSEGMENTID 
+						WHERE	1=1
+						AND		( 
+									
+									-- (21.08.10) WORKENDTIME(작업완료 시간) -> 인계완료된 시간 SENDTIME 변경
+									(		B.PROCESSSEGMENTCLASSID = '7012'	
+										AND	A.SENDTIME			-- (21.06.03  endtime로 다 변경)				--A.WORKSTARTTIME	
+												BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+																AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+									)
+									OR
+									(		B.PROCESSSEGMENTCLASSID = '7022'	
+										AND	A.SENDTIME BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+															  AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+									)
+									-- (21.08.10) 검사공정 최종 불량 현황에서도 같이 사용 필터 
+									OR
+									(		B.PROCESSSEGMENTCLASSID = '7014'	
+										AND	A.SENDTIME BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+															  AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')  
+									)
+								)
+						--LIMIT 1
+						--and rownum = 1
+					)
+			
+			<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString()) ">
+				AND		C.LOTID LIKE  '%' || UPPER(#{P_LOTID})|| '%'
+			</if>
+			
+			
+			<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+				AND		C.PRODUCTDEFID LIKE  '%' || UPPER(#{P_PRODUCTDEFID})|| '%'
+			</if>
+			ORDER BY C.LOTID
+			
+			
+	</select>
+	
+	<!--
+		설		명	: Layer별 불량 현황 - [필터 - 품목코드]
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-02 
+		수  정   이  력	:
+	-->
+	<select id="selectDefectMapProductList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectDefectMapProductList -  Layer별 불량 현황 - [필터 - 품목코드]  */
+			
+				--
+				-- id : GetDefectMapProductList
+				-- version : 10002
+				SELECT	C.PRODUCTDEFID					AS	P_PRODUCTDEFID
+					,	D.ITEMNAME						AS	P_PRODUCTDEFNAME
+					,	#{P_CONPERIOD_PERIODFR}			AS	P_PERIOD_PERIODFR
+					,	#{P_CONPERIOD_PERIODTO}			AS	P_PERIOD_PERIODTO
+				FROM	PCM_LOT C
+						LEFT JOIN	BAS_ITEMMASTER D		ON 	C.PRODUCTDEFID = D.ITEMID
+														AND C.PRODUCTDEFVERSION = D.ITEMVERSION
+														AND D.MASTERDATACLASSID = 'Product'
+				WHERE	--EXISTS
+                        C.LOTID IN		-- (21.06.17) 속도개선 lot 처럼 변경함 
+						(	SELECT	A.LOTID		--1 (21.06.17) 속도개선 lot 처럼 변경함
+							FROM	PCM_LOTWORKRESULT				A
+									INNER JOIN	BAS_PROCESSSEGMENT	B	ON A.PROCESSSEGMENTID = B.PROCESSSEGMENTID 
+							WHERE	1=1
+				            -- (21.06.17) 속도개선 lot 처럼 변경함
+				            --AND		C.LOTID = A.LOTID
+							AND		(
+					          			
+					          			-- (21.08.10) WORKENDTIME(작업완료 시간) -> 인계완료된 시간 SENDTIME 변경
+					          			(		B.PROCESSSEGMENTCLASSID = '7012'	
+					          				AND	A.SENDTIME			-- (21.06.03  endtime로 다 변경)	A.WORKSTARTTIME 
+					          				BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+								                					AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+				  						)
+						    			OR
+					          			(		B.PROCESSSEGMENTCLASSID = '7022'	
+					          				AND	A.SENDTIME BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+								                				  AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+				      					)
+				      					
+				      					-- (21.08.10) 검사공정 최종 불량 현황에서도 같이 사용 필터 
+										OR
+										(		B.PROCESSSEGMENTCLASSID = '7014'	
+											AND	A.SENDTIME BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+																  AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')  
+										)
+				      					
+				      					
+									)
+							--and rownum = 1			--(21.06.17) 속도개선 주석 처리 lot처럼 변경
+						)
+				
+				
+				<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND		C.PRODUCTDEFID LIKE  '%' || UPPER(#{P_PRODUCTDEFID})|| '%'
+				</if>	
+                
+				GROUP BY C.PRODUCTDEFID, D.ITEMNAME
+				ORDER BY C.PRODUCTDEFID
+	</select>
+	
+	
+	<!--
+		설		명	: Layer별 불량 현황 - [필터 - 품목 Rev]
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-02 
+		수  정   이  력	:
+	-->
+	<select id="selectProductDefVersionByRate" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProductDefVersionByRate -  Layer별 불량 현황 - [필터 - 품목 Rev] */
+				--
+				-- id : GetProductDefVersionByRate
+				-- version : 10001
+				
+				SELECT    ''  AS CHK
+				 	,		'' AS code 	
+					
+				   ,(
+					SELECT 	DICTIONARYNAME
+					  FROM 	CMD_DICTIONARY
+					 WHERE 	1 = 1
+					   AND 	DICTIONARYID = 'ALLVIEWS'        -- 전체조회
+					   AND 	LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					) AS value
+					,   '1'  AS P_CODE
+				FROM DUAL
+				
+				UNION ALL
+				
+			
+				
+				SELECT 			  ''  AS CHK	
+				    ,   ITEMVERSION AS code
+					,	ITEMVERSION AS value
+					,   '2'  AS P_CODE
+				FROM	BAS_ITEMMASTER
+				WHERE	1 = 1
+				AND		ITEMID = #{P_PRODUCTDEFID}
+					
+				ORDER BY
+							P_CODE, code 
+	</select>
+	
+	<!--
+		설		명	: Layer별 불량 현황 - [필터 - Layer 팝업]
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-02 
+		수  정   이  력	:
+	-->
+	<select id="selectLayerByProductdef" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectLayerByProductdef -  Layer별 불량 현황 - [필터 - Layer 팝업] */
+			
+			/*
+				--
+				-- id : GetLayerByProductdef
+				-- version : 10001
+				SELECT	DISTINCT  '' AS CHK  
+								, A.LAYER		
+				FROM	BAS_PRODUCTITEMSPEC A
+				WHERE	1=1
+				AND 	A.ITEMID = --P_PRODUCTDEFID
+				
+                 -- 품목 버전
+				--if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())"
+				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(
+									  		--P_PRODUCTDEFVERSION
+									  		) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	A.ITEMVERSION = LMP.VALUE
+						)
+				--/if
+				AND 	A.ENTERPRISEID = --P_ENTERPRISEID
+				*/
+				
+				/* [selectDefectMapRawList - Lot Defect Map 조회] 쿼리 참조 */
+				/* selectLayerByProductdef - Layer별 불량 현황 -> Layer No 팝업 조회*/
+				-- AOI 공정만
+				WITH T_AOI AS (
+					  SELECT OP.PLANTID
+							,OP.OPERATIONID
+							,OP.PROCESSSEGMENTID                        -- 공정ID
+							,PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    -- 공정명
+							,RT.MAINPRODUCTID
+							,RT.ENTERPRISEID
+							,OP.OPERATIONSEQUENCE          				-- [추가]
+					  FROM   BAS_OPERATION OP
+					INNER JOIN BAS_ROUTING      RT  
+							ON OP.ENTERPRISEID         = RT.ENTERPRISEID
+							AND OP.ASSEMBLYROUTINGID   = RT.ASSEMBLYROUTINGID
+					
+					INNER JOIN BAS_PROCESSPATH  PP  
+							ON  RT.MAINPRODUCTID        	= PP.PROCESSDEFID
+							AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+							AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID                                           
+					LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+							ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+							AND PG.ENTERPRISEID        		= OP.ENTERPRISEID
+					LEFT OUTER JOIN CMD_DICTIONARY          PN  
+							ON PN.DICTIONARYID        		= PG.PROCESSSEGMENTNAME
+							AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					-------------------------------------------------------------------------------
+	                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+	                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+	                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+			        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+			        AND  PG.ENTERPRISEID 					=	#{P_ENTERPRISEID} 
+					AND    PG.VALIDSTATE 					= 	'Valid'
+	                --------------------------------------------------------------------------------		
+							
+							
+					WHERE RT.ENTERPRISEID 	 				= #{P_ENTERPRISEID} 
+					
+					AND	OP.VALIDSTATE 		= 'Valid'
+					AND PN.DICTIONARYNAME 	LIKE '%AOI%'
+					
+					-- 조회 조건 (팝업 호출시 품목 코드는 필수로 선택 후 넘어 오도록 설정 추가 할것!)
+					<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND RT.MAINPRODUCTID  					= #{P_PRODUCTDEFID} 
+					</if>
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	RT.MAINPRODUCTVERSION = LMP.VALUE
+							)
+					</if>
+					
+				)
+				-- AOI 공정의 LAYER 정보
+				, T_PRE_EQUIPMENTHEADER AS (
+						 SELECT col_nm
+							  , col_val
+							  , OPERATIONID
+							  , PROCESSSEGMENTID
+							  , PROCESSSEGMENTNAME
+							  , OPERATIONSEQUENCE          -- [추가]
+						   FROM (
+								  SELECT    OS.AOIQCLAYER
+										  ,	OS.AOIQCLAYER2
+										  , OS.OPERATIONID
+										  , A.PROCESSSEGMENTID
+										  , A.PROCESSSEGMENTNAME
+										  , A.OPERATIONSEQUENCE          -- [추가]
+										FROM   BAS_OPERATIONSPECVALUE OS
+										INNER JOIN T_AOI A
+												ON 	OS.OPERATIONID 	    = A.OPERATIONID
+												AND	OS.ENTERPRISEID 	= A.ENTERPRISEID
+												AND OS.PLANTID       	= A.PLANTID
+												)
+						UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+				)
+				
+				-- (21.07.02) - 공정별로 LAYER 선택 가능함 같은 검사공정끼리만 
+				 SELECT DISTINCT  '' 		AS CHK  
+				      , COL_VAL  			AS LAYER
+				      , PROCESSSEGMENTID
+					  --, OPERATIONSEQUENCE			
+					  , MAX(OPERATIONSEQUENCE) AS OPERATIONSEQUENCE
+					  , PROCESSSEGMENTNAME	  
+	              FROM T_PRE_EQUIPMENTHEADER
+	              
+	              -- (21.07.27) REV 입력 안된 경우 하나만 나오도록 그룹핑
+                  GROUP BY COL_VAL  		
+				      , PROCESSSEGMENTID
+					  , PROCESSSEGMENTNAME	
+					  
+	              ORDER BY  COL_VAL
+				
+				
+	</select>
+	
+	
+	<!--
+		설		명	: Layer별 불량 현황 - [메인 조회 raw data]
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-02 
+		수  정   이  력	:
+	-->
+	<select id="selectDefectRateByLayerList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectDefectRateByLayerList -  Layer별 불량 현황 - [메인 조회 raw data] */
+				--
+				-- id : GetDefectRateByLayerList
+				-- version : 10001				
+				WITH	LOTLIST	AS 
+				(
+					SELECT	C.LOTSTARTDATE
+						,	C.LOTID
+						,	C.PRODUCTDEFID
+						,	C.PRODUCTDEFVERSION
+						,	C.PROCESSSEGMENTID
+					FROM	PCM_LOT C
+					WHERE	
+                            --EXISTS
+                        	C.LOTID IN		-- (21.06.17) 속도개선 lot 처럼 변경함 
+							(	SELECT	A.LOTID		--1 (21.06.17) 속도개선 lot 처럼 변경함
+								FROM	PCM_LOTWORKRESULT				A
+										INNER JOIN	BAS_PROCESSSEGMENT	B	ON A.PROCESSSEGMENTID = B.PROCESSSEGMENTID 
+								WHERE	1=1
+					            -- (21.06.17) 속도개선 lot 처럼 변경함
+				            	--AND		C.LOTID = A.LOTID
+								AND		(
+						          			
+						          			-- (21.08.10) WORKENDTIME -> SENDTIME 변경
+						          			(		B.PROCESSSEGMENTCLASSID = '7012'	
+						          				AND	A.SENDTIME			-- (21.06.03  endtime로 다 변경)		A.WORKSTARTTIME 
+						          				BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+									                					AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+					  						)
+							    			OR
+						          			(		B.PROCESSSEGMENTCLASSID = '7022'	
+						          				AND	A.SENDTIME BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+									                				  AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+					      					)
+										)
+								--LIMIT 1
+                                --AND ROWNUM = 1
+							)
+                            
+                   
+					
+                   
+					<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString()) ">
+						AND		C.LOTID = #{P_LOTID}
+					</if>
+					AND		C.PRODUCTDEFID = #{P_PRODUCTDEFID}
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString()) ">
+						AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	C.PRODUCTDEFVERSION = LMP.VALUE
+						)
+						
+					</if>
+                    
+				)
+				
+				 -- [CS,SS 추가]
+				, T_LAST_LAYER AS (
+					
+					SELECT	DISTINCT  A.LAYER	
+									, A.ITEMID	
+						FROM	BAS_PRODUCTITEMSPEC A
+						WHERE	1=1
+						AND 	A.ITEMID = #{P_PRODUCTDEFID}
+						
+						 -- 품목 버전
+						<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+						AND		EXISTS
+								(
+									SELECT	1
+									FROM	(SELECT DATA AS VALUE 
+											  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+											) LMP
+									WHERE	A.ITEMVERSION = LMP.VALUE
+								)
+						</if>
+						AND 	A.ENTERPRISEID = #{P_ENTERPRISEID}
+				)
+				
+				
+				
+				 -----------------------------(21.08.10) 인계 시간 조회
+	                , T_SENDTIME AS (
+	                        SELECT	A.LOTID		
+	                        , 			A.PROCESSSEGMENTID
+	                        , 			MAX(A.SENDTIME) 		AS 	SENDTIME		       -- 인계 시간
+	                        , 			B.PROCESSSEGMENTCLASSID
+	                    FROM			PCM_LOTWORKRESULT				A
+	                    INNER JOIN	BAS_PROCESSSEGMENT				B	
+	                    ON  			A.PROCESSSEGMENTID = B.PROCESSSEGMENTID 
+	                    AND 			B.PROCESSSEGMENTCLASSID IN ('7012','7014','7022')
+	                    WHERE		1=1
+	                    AND 			LOTID IN (
+	                        SELECT LOTID
+	                          FROM LOTLIST
+	                    )
+	                    GROUP BY    A.LOTID		
+	                        ,       A.PROCESSSEGMENTID
+	                        ,       B.PROCESSSEGMENTCLASSID
+	                )
+                -----------------------------
+                
+              
+              
+				SELECT	CASE M.SEGMENTTYPE
+							WHEN 'AOIInspection' THEN 'AOI'
+							WHEN 'AOIHoleInspection' THEN 'HOLE'
+				            ELSE 'BBT'
+				        END																			AS EQUIPMENTTYPE
+					,	M.PLANTID
+					,	M.ENTERPRISEID
+					,	M.AREAID
+					,	M.PRODUCTDEFID
+					,	M.PRODUCTDEFVERSION
+					,	M.PROCESSSEGMENTID
+					,	M.PROCESSSEGMENTVERSION
+					,	M.PROCESSDEFID
+					,	M.PROCESSDEFVERSION
+					,	M.LOTID
+					,	M.INSPECTIONQTY
+					
+					/*
+					,	COALESCE(AOI.GROUPCODE, '999')										AS	GROUPCODE
+					,	COALESCE(AOI.GROUPNAME, 'NONE')									AS	GROUPNAME
+					,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' THEN AOI.SUBCODE
+				            		ELSE HOLE.CODEID
+				         		END, '9999') 														AS	SUBCODE	
+					,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' THEN AOI.SUBNAME
+						            ELSE HOLE.CODENAME
+					         	END, 'NONE')														AS	SUBNAME
+					,  COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' THEN AOI.COLOR
+							 		ELSE HOLE.COLOR
+								END, '#000000')														AS	COLOR
+					,	M.DEFECTCOUNT
+					*/
+					----------------------------------------------------------------(21.06.17)
+                    -- 블량 그룹 
+                    ,  (
+                            CASE WHEN AOI.GROUPCODE = '005'  
+                                THEN T_AFT_ANALYSIS.GROUPCODE
+                                ELSE COALESCE(AOI.GROUPCODE, '999')
+                                END
+                        ) AS GROUPCODE
+                    -- 블량 그룹명 
+                    ,  (
+                            CASE WHEN AOI.GROUPCODE = '005'  
+                                THEN T_AFT_ANALYSIS.GROUPNAME
+                                ELSE COALESCE(AOI.GROUPNAME, 'NONE')
+                                END
+                        ) AS GROUPNAME
+                    -- 불량 코드   
+                    ,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' 
+                                    THEN (
+                                           CASE WHEN AOI.GROUPCODE = '005'  
+                                                THEN T_AFT_ANALYSIS.SUBCODE
+                                                ELSE AOI.SUBCODE
+                                                END 
+                                        )
+				            		ELSE HOLE.CODEID
+				         		END, '9999') 														AS	SUBCODE	 
+                    -- 불량 코드명
+                    ,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' 
+                                    THEN (
+                                           CASE WHEN AOI.GROUPCODE = '005'  
+                                                THEN T_AFT_ANALYSIS.SUBNAME
+                                                ELSE  AOI.SUBNAME
+                                                END 
+                                        )
+						            ELSE HOLE.CODENAME
+					         	END, 'NONE')														AS	SUBNAME
+                    -- 불량 색상
+                    ,  COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' 
+                                    THEN (
+                                           CASE WHEN AOI.GROUPCODE = '005'  
+                                                THEN T_AFT_ANALYSIS.COLOR
+                                                ELSE AOI.COLOR
+                                                END 
+                                        )
+							 		ELSE HOLE.COLOR
+								END, '#000000')														AS	COLOR
+                        
+                    -- 불량 수량 
+                    , (
+                           CASE WHEN AOI.GROUPCODE = '005'  
+                                THEN COALESCE(M.REPAIRTARGETQTY, 0) - COALESCE(M.REPAIRRESULTQTY, 0)
+                                ELSE M.DEFECTCOUNT
+                                END 
+                        ) AS DEFECTCOUNT
+                   -----------------------------------------------------------------------------------------
+					
+					
+					,	M.LAYERID
+					,	TO_CHAR(L.LOTSTARTDATE, 'YYYY-MM-DD HH24:MI:SS')			AS	EVENTTIME
+					,	M.ISREWORK
+					,	COALESCE(M.REPAIRTARGETQTY, 0)									AS REPAIRTARGETQTY
+					,	COALESCE(M.REPAIRRESULTQTY, 0)										AS REPAIRRESULTQTY
+					
+					-- [21.06.03] - CS/SS 추가
+						,   (
+								CASE WHEN M.LAYERID = '1L'
+									THEN    'CS'
+									WHEN M.LAYERID = L.LAYER
+									THEN    'SS'
+									ELSE M.LAYERID
+									END
+							)       AS LAYERNM
+					
+				FROM	PCM_QCAOIBBTWORKCOMPLETE		M		-- 확인 필요 AOI 코드가 어떻게 단겨져 오는지.
+				INNER JOIN LOTLIST 					L	ON	M.LOTID = L.LOTID
+														AND	M.PRODUCTDEFID = L.PRODUCTDEFID
+														AND	M.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+														
+				-----------------------------------------------------------------                                        
+                -- (21.06.17) 완료된 상태 체크   -> (21.06.18) 여러건 존재함 하나만 나오도록 수정
+                INNER JOIN (SELECT RESOURCEID
+								,  INSPECTIONDEFID  
+								, PROCESSSEGMENTID, PROCESSSEGMENTVERSION
+							 FROM  QAM_INSPECTIONRESULT   
+							 GROUP BY  RESOURCEID, INSPECTIONDEFID    
+							 			, PROCESSSEGMENTID, PROCESSSEGMENTVERSION
+							 ) Q_INSP
+                ON Q_INSP.RESOURCEID                 		=  M.LOTID
+                AND Q_INSP.INSPECTIONDEFID 					= 	'AOIInspection'
+                AND Q_INSP.PROCESSSEGMENTID					= M.PROCESSSEGMENTID
+				AND Q_INSP.PROCESSSEGMENTVERSION			= M.PROCESSSEGMENTVERSION
+                -----------------------------------------------------------------
+                LEFT OUTER JOIN (
+									SELECT	GRP.CODEID								AS	GROUPCODE
+										,	GRP.GROUPNAME							AS	GROUPNAME
+										,	GRP.DESCRIPTION 							AS	COLOR
+										,	SUB.CODEID									AS	SUBCODE
+										,	SUB.SUBNAME								AS	SUBNAME
+										,	'AOIInspection'								AS	SEGMENTTYPE
+										,   '005'                                       	AS  CHK_G_CODE
+                                        ,   (
+                                            CASE WHEN SUB.CODEID = '1001'
+                                                 THEN '5001'
+                                                 ELSE '5002'
+                                                 END
+                                        )   													AS CHK_S_CODE
+									FROM	
+									(
+										SELECT 	C.LOOKUP_CODE   AS CODEID
+											,	C.DESCRIPTION
+											,	D.DICTIONARYNAME						AS	GROUPNAME
+										FROM 	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN		CMD_DICTIONARY	D			ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					GRP
+									LEFT OUTER JOIN		
+									(
+										SELECT	C.LOOKUP_CODE   AS CODEID
+											,	D.DICTIONARYNAME						AS	SUBNAME
+											,	C.PARENTCODEID
+										FROM	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN 	CMD_DICTIONARY	D			ON 	C.DICTIONARYID = D.DICTIONARYID
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					SUB								ON	GRP.CODEID = SUB.PARENTCODEID
+									WHERE 1 = 1
+                                  AND GRP.CODEID IN ('001','002')
+                                  AND SUB.CODEID IN ('1001','2001')
+								)   T_AFT_ANALYSIS
+                ON M.SEGMENTTYPE = T_AFT_ANALYSIS.SEGMENTTYPE 
+                AND M.DEFECTCODE = T_AFT_ANALYSIS.CHK_S_CODE
+				-----------------------------------------------------------------
+				LEFT OUTER JOIN (
+									SELECT	GRP.CODEID									AS	GROUPCODE
+										,	GRP.GROUPNAME								AS	GROUPNAME
+										,	GRP.DESCRIPTION 							AS	COLOR
+										,	SUB.CODEID									AS	SUBCODE
+										,	SUB.SUBNAME									AS	SUBNAME
+										,	'AOIInspection'								AS	SEGMENTTYPE
+									FROM	
+									(
+										SELECT 	C.LOOKUP_CODE   AS CODEID
+											,	C.DESCRIPTION
+											,	D.DICTIONARYNAME						AS	GROUPNAME
+										FROM 	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN		CMD_DICTIONARY	D			ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					GRP
+									LEFT OUTER JOIN		
+									(
+										SELECT	C.LOOKUP_CODE   AS CODEID
+											,	D.DICTIONARYNAME						AS	SUBNAME
+											,	C.PARENTCODEID
+										FROM	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN 	CMD_DICTIONARY	D			ON 	C.DICTIONARYID = D.DICTIONARYID
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					SUB								ON	GRP.CODEID = SUB.PARENTCODEID
+								) AOI													ON	M.DEFECTCODE = AOI.SUBCODE
+																						AND	M.SEGMENTTYPE = AOI.SEGMENTTYPE
+				LEFT OUTER JOIN (
+									SELECT	C.LOOKUP_CODE   AS CODEID
+										,	D.DICTIONARYNAME							AS	CODENAME
+										,	C.DESCRIPTION 								AS	COLOR
+										,	'AOIHoleInspection'							AS	SEGMENTTYPE
+									FROM	CMD_LOOKUP_VALUES		C
+									LEFT OUTER JOIN		CMD_DICTIONARY			D		ON	C.DICTIONARYID = D.DICTIONARYID
+									LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC 	ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+									WHERE	1=1
+									AND 	C.LOOKUP_TYPE = 'DefectMapHoleDefectCode'
+									AND		C.ENABLED_FLAG = 'Y'
+									AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+								) HOLE													ON	M.DEFECTCODE = HOLE.CODEID 
+																						AND	M.SEGMENTTYPE = HOLE.SEGMENTTYPE
+																						
+				 -- [21.06.03] - 추가 CS / SS
+					LEFT OUTER JOIN T_LAST_LAYER  L
+					ON L.ITEMID = M.PRODUCTDEFID
+					
+				-----------------------------------(21.08.10) 인계 시간 조건 추가        
+                LEFT JOIN T_SENDTIME TT 
+                        ON TT.LOTID             			= M.LOTID
+                       AND TT.PROCESSSEGMENTID  	= M.PROCESSSEGMENTID
+                -----------------------------		
+					
+				
+				
+				WHERE	1=1
+                
+                AND		M.SEGMENTTYPE = (
+						CASE WHEN #{P_INSPECTIONTYPE} = 'AOI'
+							 THEN 'AOIInspection'
+							 WHEN #{P_INSPECTIONTYPE} = 'HOLE'
+							 THEN 'AOIHoleInspection'
+							 ELSE 'BBTInspection'
+							 END
+					)
+					-- [as-is 코드는]  AOIInspection,BBTInspection,AOIHoleInspection -> [to-be] AOI,BBT,HOLE로 변경됨  -> 값 넣어 줄때는 또 저렇게 넣어 줌...
+ 				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LAYERID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	M.LAYERID = LMP.VALUE
+						)
+						
+				-- (21.06.03) 정렬 추가 (말씀하시면 기준으로 정렬.. 어떤 기준으로 정렬 할지 모르겠음)
+				
+				AND	    	TT.SENDTIME			
+                BETWEEN		TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+				AND			TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')
+				 
+						
+	</select>
+	
+	<!--
+		설		명	: Layer별 불량 현황 - [뷸량그룹콤보]
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-03 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapDefectGrpComboList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProcDefectMapDefectGrpComboList -  Layer별 불량 현황 - [뷸량그룹콤보] */
+				
+				SELECT 	 '' 						AS CHK
+					,   C.LOOKUP_CODE   		AS code
+					--,	C.DESCRIPTION
+					,	D.DICTIONARYNAME	AS value
+					,  '2'       					AS P_CODE
+				FROM 	CMD_LOOKUP_VALUES									C
+				LEFT OUTER JOIN		CMD_DICTIONARY	D			
+				ON		C.DICTIONARYID 	= 	D.DICTIONARYID						           	   			   		    
+				WHERE	C.LOOKUP_TYPE 	= 	'DefectMapDefectGroup'
+				AND		C.ENABLED_FLAG 	= 	'Y'
+				AND		D.LANGUAGETYPE 	= 	#{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				AND     C.LOOKUP_CODE 	!= 	'005'
+
+				UNION ALL
+							  
+					SELECT 	    	''  			AS CHK
+						,				''  			AS code
+					   ,(
+						SELECT 	DICTIONARYNAME
+						  FROM 	CMD_DICTIONARY
+						 WHERE 	1 = 1
+						   AND 	DICTIONARYID 		= 'ALLVIEWS'        -- 전체조회
+						   AND 	LANGUAGETYPE 	= #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+						)           					AS value
+						,       		'1'  			AS P_CODE
+					FROM 	DUAL
+				order by P_CODE ,code
+				
+	</select>
+	
+	
+	<!--
+		설		명	: Layer별 불량 현황 - [불량코드 멀티콤보]
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-03 
+		수  정   이  력	:
+	-->
+	<select id="selectProcDefectMapDefectCodeComboList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectProcDefectMapDefectCodeComboList -  Layer별 불량 현황 - [불량코드 멀티콤보] */
+				--
+				-- id : GetDefectRateByLayerList
+				-- version : 10001				
+				WITH	LOTLIST	AS 
+				(
+					SELECT	C.LOTSTARTDATE
+						,	C.LOTID
+						,	C.PRODUCTDEFID
+						,	C.PRODUCTDEFVERSION
+						,	C.PROCESSSEGMENTID
+					FROM	PCM_LOT C
+					WHERE	
+                            --EXISTS
+							C.LOTID IN		-- (21.06.17) 속도개선 lot 처럼 변경함 
+							(	SELECT	A.LOTID		--1 (21.06.17) 속도개선 lot 처럼 변경함
+								FROM	PCM_LOTWORKRESULT				A
+										INNER JOIN	BAS_PROCESSSEGMENT	B	ON A.PROCESSSEGMENTID = B.PROCESSSEGMENTID 
+								WHERE	1=1
+					            -- (21.06.17) 속도개선 lot 처럼 변경함
+								--	AND		C.LOTID = A.LOTID
+								AND		(
+						          			
+						          			-- (21.08.10) WORKENDTIME -> SENDTIME 변경
+						          			(		B.PROCESSSEGMENTCLASSID = '7012'	
+						          				AND	A.SENDTIME			-- (21.06.03  endtime로 다 변경)		A.WORKSTARTTIME 
+						          				BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+									                					AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+					  						)
+							    			OR
+						          			(		B.PROCESSSEGMENTCLASSID = '7022'	
+						          				AND	A.SENDTIME BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+									                				  AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+					      					)
+										)
+								--LIMIT 1
+                                --AND ROWNUM = 1
+							)
+                            
+					<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString()) ">
+						AND		C.LOTID = #{P_LOTID}
+					</if>
+					AND		C.PRODUCTDEFID = #{P_PRODUCTDEFID}
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString()) ">
+						AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	C.PRODUCTDEFVERSION = LMP.VALUE
+						)
+						
+					</if>
+                    
+				)
+				
+				-----------------------------(21.08.10) 인계 시간 조회
+					, T_SENDTIME AS (
+							SELECT	A.LOTID		
+							, 			A.PROCESSSEGMENTID
+							, 			MAX(A.SENDTIME) 		AS 	SENDTIME		       -- 인계 시간
+							, 			B.PROCESSSEGMENTCLASSID
+						FROM			PCM_LOTWORKRESULT				A
+						INNER JOIN	BAS_PROCESSSEGMENT				B	
+						ON  			A.PROCESSSEGMENTID = B.PROCESSSEGMENTID 
+						AND 			B.PROCESSSEGMENTCLASSID IN ('7012','7014','7022')
+						WHERE		1=1
+						AND 			LOTID IN (
+							SELECT LOTID
+							  FROM LOTLIST
+						)
+						GROUP BY    A.LOTID		
+							,       A.PROCESSSEGMENTID
+							,       B.PROCESSSEGMENTCLASSID
+					)
+				-----------------------------
+                
+              
+				, T_SUBCODE AS ( 
+				SELECT	CASE M.SEGMENTTYPE
+							WHEN 'AOIInspection' THEN 'AOI'
+							WHEN 'AOIHoleInspection' THEN 'HOLE'
+				            ELSE 'BBT'
+				        END																AS EQUIPMENTTYPE
+					,	M.PLANTID
+					,	M.ENTERPRISEID
+					,	M.AREAID
+					,	M.PRODUCTDEFID
+					,	M.PRODUCTDEFVERSION
+					,	M.PROCESSSEGMENTID
+					,	M.PROCESSSEGMENTVERSION
+					,	M.PROCESSDEFID
+					,	M.PROCESSDEFVERSION
+					,	M.LOTID
+					,	M.INSPECTIONQTY
+					/*
+					,	COALESCE(AOI.GROUPCODE, '999')									AS	GROUPCODE
+					,	COALESCE(AOI.GROUPNAME, 'NONE')									AS	GROUPNAME
+					,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' THEN AOI.SUBCODE
+				            		ELSE HOLE.CODEID
+				         		END, '9999') 											AS	SUBCODE	
+					,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' THEN AOI.SUBNAME
+						            ELSE HOLE.CODENAME
+					         	END, 'NONE')											AS	SUBNAME
+					,  COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' THEN AOI.COLOR
+							 		ELSE HOLE.COLOR
+								END, '#000000')											AS	COLOR
+					,	M.DEFECTCOUNT
+					*/
+					
+					----------------------------------------------------------------(21.06.17)
+                    -- 블량 그룹 
+                    ,  (
+                            CASE WHEN AOI.GROUPCODE = '005'  
+                                THEN T_AFT_ANALYSIS.GROUPCODE
+                                ELSE COALESCE(AOI.GROUPCODE, '999')
+                                END
+                        ) AS GROUPCODE
+                    -- 블량 그룹명 
+                    ,  (
+                            CASE WHEN AOI.GROUPCODE = '005'  
+                                THEN T_AFT_ANALYSIS.GROUPNAME
+                                ELSE COALESCE(AOI.GROUPNAME, 'NONE')
+                                END
+                        ) AS GROUPNAME
+                    -- 불량 코드   
+                    ,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' 
+                                    THEN (
+                                           CASE WHEN AOI.GROUPCODE = '005'  
+                                                THEN T_AFT_ANALYSIS.SUBCODE
+                                                ELSE AOI.SUBCODE
+                                                END 
+                                        )
+				            		ELSE HOLE.CODEID
+				         		END, '9999') 														AS	SUBCODE	 
+                    -- 불량 코드명
+                    ,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' 
+                                    THEN (
+                                           CASE WHEN AOI.GROUPCODE = '005'  
+                                                THEN T_AFT_ANALYSIS.SUBNAME
+                                                ELSE  AOI.SUBNAME
+                                                END 
+                                        )
+						            ELSE HOLE.CODENAME
+					         	END, 'NONE')														AS	SUBNAME
+                    -- 불량 색상
+                    ,  COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' 
+                                    THEN (
+                                           CASE WHEN AOI.GROUPCODE = '005'  
+                                                THEN T_AFT_ANALYSIS.COLOR
+                                                ELSE AOI.COLOR
+                                                END 
+                                        )
+							 		ELSE HOLE.COLOR
+								END, '#000000')														AS	COLOR
+                        
+                    -- 불량 수량 
+                    , (
+                           CASE WHEN AOI.GROUPCODE = '005'  
+                                THEN COALESCE(M.REPAIRTARGETQTY, 0) - COALESCE(M.REPAIRRESULTQTY, 0)
+                                ELSE M.DEFECTCOUNT
+                                END 
+                        ) AS DEFECTCOUNT
+                   -----------------------------------------------------------------------------------------
+					
+					,	M.LAYERID
+					,	TO_CHAR(L.LOTSTARTDATE, 'YYYY-MM-DD HH24:MI:SS')													AS	EVENTTIME
+					,	M.ISREWORK
+					,	COALESCE(M.REPAIRTARGETQTY, 0)									AS REPAIRTARGETQTY
+					,	COALESCE(M.REPAIRRESULTQTY, 0)									AS REPAIRRESULTQTY
+				FROM	PCM_QCAOIBBTWORKCOMPLETE		M		-- 확인 필요 AOI 코드가 어떻게 단겨져 오는지.
+				INNER JOIN LOTLIST 					L	ON	M.LOTID = L.LOTID
+														AND	M.PRODUCTDEFID = L.PRODUCTDEFID
+														AND	M.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+														
+				-----------------------------------------------------------------                                        
+                -- (21.06.17) 완료된 상태 체크   -> (21.06.18) 여러건 존재함 하나만 나오도록 수정
+                INNER JOIN (SELECT RESOURCEID
+								,  INSPECTIONDEFID  
+								, PROCESSSEGMENTID, PROCESSSEGMENTVERSION
+							 FROM  QAM_INSPECTIONRESULT   
+							 GROUP BY  RESOURCEID, INSPECTIONDEFID    
+							 			, PROCESSSEGMENTID, PROCESSSEGMENTVERSION
+							 ) Q_INSP
+                ON Q_INSP.RESOURCEID                 		=  M.LOTID
+                AND Q_INSP.INSPECTIONDEFID 					= 	'AOIInspection'
+                AND Q_INSP.PROCESSSEGMENTID					= M.PROCESSSEGMENTID
+				AND Q_INSP.PROCESSSEGMENTVERSION			= M.PROCESSSEGMENTVERSION
+                -----------------------------------------------------------------
+                LEFT OUTER JOIN (
+									SELECT	GRP.CODEID								AS	GROUPCODE
+										,	GRP.GROUPNAME							AS	GROUPNAME
+										,	GRP.DESCRIPTION 							AS	COLOR
+										,	SUB.CODEID									AS	SUBCODE
+										,	SUB.SUBNAME								AS	SUBNAME
+										,	'AOIInspection'								AS	SEGMENTTYPE
+										,   '005'                                       	AS  CHK_G_CODE
+                                        ,   (
+                                            CASE WHEN SUB.CODEID = '1001'
+                                                 THEN '5001'
+                                                 ELSE '5002'
+                                                 END
+                                        )   													AS CHK_S_CODE
+									FROM	
+									(
+										SELECT 	C.LOOKUP_CODE   AS CODEID
+											,	C.DESCRIPTION
+											,	D.DICTIONARYNAME						AS	GROUPNAME
+										FROM 	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN		CMD_DICTIONARY	D			ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					GRP
+									LEFT OUTER JOIN		
+									(
+										SELECT	C.LOOKUP_CODE   AS CODEID
+											,	D.DICTIONARYNAME						AS	SUBNAME
+											,	C.PARENTCODEID
+										FROM	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN 	CMD_DICTIONARY	D			ON 	C.DICTIONARYID = D.DICTIONARYID
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					SUB								ON	GRP.CODEID = SUB.PARENTCODEID
+									WHERE 1 = 1
+                                  AND GRP.CODEID IN ('001','002')
+                                  AND SUB.CODEID IN ('1001','2001')
+								)   T_AFT_ANALYSIS
+                ON M.SEGMENTTYPE = T_AFT_ANALYSIS.SEGMENTTYPE 
+                AND M.DEFECTCODE = T_AFT_ANALYSIS.CHK_S_CODE
+				-----------------------------------------------------------------
+				
+														
+														
+				LEFT OUTER JOIN (
+									SELECT	GRP.CODEID									AS	GROUPCODE
+										,	GRP.GROUPNAME								AS	GROUPNAME
+										,	GRP.DESCRIPTION 							AS	COLOR
+										,	SUB.CODEID									AS	SUBCODE
+										,	SUB.SUBNAME									AS	SUBNAME
+										,	'AOIInspection'								AS	SEGMENTTYPE
+									FROM	
+									(
+										SELECT 	C.LOOKUP_CODE   AS CODEID
+											,	C.DESCRIPTION
+											,	D.DICTIONARYNAME						AS	GROUPNAME
+										FROM 	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN		CMD_DICTIONARY	D			ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					GRP
+									LEFT OUTER JOIN		
+									(
+										SELECT	C.LOOKUP_CODE   AS CODEID
+											,	D.DICTIONARYNAME						AS	SUBNAME
+											,	C.PARENTCODEID
+										FROM	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN 	CMD_DICTIONARY	D			ON 	C.DICTIONARYID = D.DICTIONARYID
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					SUB								ON	GRP.CODEID = SUB.PARENTCODEID
+								) AOI													ON	M.DEFECTCODE = AOI.SUBCODE
+																						AND	M.SEGMENTTYPE = AOI.SEGMENTTYPE
+				LEFT OUTER JOIN (
+									SELECT	C.LOOKUP_CODE   AS CODEID
+										,	D.DICTIONARYNAME							AS	CODENAME
+										,	C.DESCRIPTION 								AS	COLOR
+										,	'AOIHoleInspection'							AS	SEGMENTTYPE
+									FROM	CMD_LOOKUP_VALUES		C
+									LEFT OUTER JOIN		CMD_DICTIONARY			D		ON	C.DICTIONARYID = D.DICTIONARYID
+									LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC 	ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+									WHERE	1=1
+									AND 	C.LOOKUP_TYPE = 'DefectMapHoleDefectCode'
+									AND		C.ENABLED_FLAG = 'Y'
+									AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+								) HOLE													ON	M.DEFECTCODE = HOLE.CODEID 
+																						AND	M.SEGMENTTYPE = HOLE.SEGMENTTYPE
+																						
+																						
+				-----------------------------------(21.08.10) 인계 시간 조건 추가        
+				LEFT JOIN T_SENDTIME TT 
+						ON TT.LOTID             			= M.LOTID
+					   AND TT.PROCESSSEGMENTID  	= M.PROCESSSEGMENTID
+				-----------------------------
+				
+				
+				WHERE	1=1
+                
+                AND		M.SEGMENTTYPE = (
+						CASE WHEN #{P_INSPECTIONTYPE} = 'AOI'
+							 THEN 'AOIInspection'
+							 WHEN #{P_INSPECTIONTYPE} = 'HOLE'
+							 THEN 'AOIHoleInspection'
+							 ELSE 'BBTInspection'
+							 END
+					)
+					-- [as-is 코드는]  AOIInspection,BBTInspection,AOIHoleInspection -> [to-be] AOI,BBT,HOLE로 변경됨  -> 값 넣어 줄때는 또 저렇게 넣어 줌...
+ 				AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_LAYERID}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	M.LAYERID = LMP.VALUE
+						)
+				
+				-- (21.08.10) 인계 시간 조건 추가
+				AND	    	TT.SENDTIME			
+				BETWEEN		TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+				AND			TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')		
+						
+						
+				)
+				
+				
+				
+				  SELECT      ''        AS CHK
+							, SUBCODE   AS code
+							, SUBNAME   AS value
+							, GROUPCODE AS P_CODE
+					FROM  T_SUBCODE
+					
+					GROUP BY GROUPCODE
+							, SUBCODE
+							, SUBNAME
+					
+				UNION ALL
+				  
+				SELECT 	    	''  	AS CHK
+					,			''  	AS code
+				   ,(
+					SELECT 	DICTIONARYNAME
+					  FROM 	CMD_DICTIONARY
+					 WHERE 	1 = 1
+					   AND 	DICTIONARYID 	= 'ALLVIEWS'        -- 전체조회
+					   AND 	LANGUAGETYPE 	=  #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					)           		AS value
+					,       	'*'  	AS P_CODE
+				FROM 	DUAL
+				order by P_CODE ,code   
+				
+	</select>
+	
+	
+	<!--
+		설		명	: Layer별 불량 현황 - [메인 조회 Total Layer Defect Map]
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-03 
+		수  정   이  력	:
+	-->
+	<select id="selectLayerDefectMapDefectList" parameterType="map" resultType="hashmap">	
+				
+			
+			/* selectLayerDefectMapDefectList -  Layer별 불량 현황 - [메인 조회 Total Layer Defect Map] */
+						
+				WITH	LOTLIST	AS 
+				(
+					SELECT	C.LOTSTARTDATE
+						,	C.LOTID
+						,	C.PRODUCTDEFID
+						,	C.PRODUCTDEFVERSION
+						,	C.PROCESSSEGMENTID
+					FROM	PCM_LOT C
+					WHERE	
+                            --EXISTS
+							C.LOTID IN		-- (21.06.17) 속도개선 lot 처럼 변경함 
+							(	SELECT	A.LOTID		--1 (21.06.17) 속도개선 lot 처럼 변경함
+								FROM	PCM_LOTWORKRESULT				A
+										INNER JOIN	BAS_PROCESSSEGMENT	B	ON A.PROCESSSEGMENTID = B.PROCESSSEGMENTID 
+								WHERE	1=1
+					            -- (21.06.17) 속도개선 lot 처럼 변경함
+								--	AND		C.LOTID = A.LOTID
+								AND		(
+						          			
+						          			-- (21.08.10) WORKENDTIME -> SENDTIME 변경
+						          			(		B.PROCESSSEGMENTCLASSID = '7012'	
+						          				AND	A.SENDTIME			-- (21.06.03  endtime로 다 변경)		A.WORKSTARTTIME 
+						          				BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+									                					AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+					  						)
+							    			OR
+						          			(		B.PROCESSSEGMENTCLASSID = '7022'	
+						          				AND	A.SENDTIME BETWEEN	TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+									                				  AND	TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS') 
+					      					)
+										)
+								--LIMIT 1
+                                --AND ROWNUM = 1
+							)
+                            
+                   
+					
+                   
+					<if test="P_LOTID != null and P_LOTID !='' and !(P_LOTID eq '*'.toString()) ">
+						AND		C.LOTID = #{P_LOTID}
+					</if>
+					AND		C.PRODUCTDEFID = #{P_PRODUCTDEFID}
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString()) ">
+						AND		EXISTS
+						(
+							SELECT	1
+							FROM	(SELECT DATA AS VALUE 
+									  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+									) LMP
+							WHERE	C.PRODUCTDEFVERSION = LMP.VALUE
+						)
+						
+					</if>
+                    
+				)
+				
+				
+				 -- [CS,SS 추가]
+				, T_LAST_LAYER AS (
+					
+					SELECT	DISTINCT  A.LAYER	
+									, A.ITEMID	
+						FROM	BAS_PRODUCTITEMSPEC A
+						WHERE	1=1
+						AND 	A.ITEMID = #{P_PRODUCTDEFID}
+						
+						 -- 품목 버전
+						<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+						AND		EXISTS
+								(
+									SELECT	1
+									FROM	(SELECT DATA AS VALUE 
+											  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+											) LMP
+									WHERE	A.ITEMVERSION = LMP.VALUE
+								)
+						</if>
+						AND 	A.ENTERPRISEID = #{P_ENTERPRISEID}
+				)
+				
+				
+				--#####################################################################################[--  (21.07.20) 공정순수로 가장 큰 수로 TOTAL의 검사수를 구해야 된다.]
+               
+               , T_AOI AS (					
+					SELECT OP.PLANTID
+							,OP.OPERATIONID
+							,OP.PROCESSSEGMENTID                        -- 공정ID
+							,PN.DICTIONARYNAME AS PROCESSSEGMENTNAME    -- 공정명
+							,RT.MAINPRODUCTID
+							,RT.ENTERPRISEID
+							,OP.OPERATIONSEQUENCE          				-- [추가]
+							,RT.MAINPRODUCTVERSION            			-- (21.08.03) 추가
+					  FROM   BAS_OPERATION OP
+					INNER JOIN BAS_ROUTING      RT  
+							ON OP.ENTERPRISEID         = RT.ENTERPRISEID
+							AND OP.ASSEMBLYROUTINGID   = RT.ASSEMBLYROUTINGID
+					
+					INNER JOIN BAS_PROCESSPATH  PP  
+							ON  RT.MAINPRODUCTID        	= PP.PROCESSDEFID
+							AND RT.MAINPRODUCTVERSION   	= PP.PROCESSDEFVERSION
+							AND OP.PROCESSSEGMENTID     	= PP.PROCESSSEGMENTID                                           
+					LEFT OUTER JOIN BAS_PROCESSSEGMENTEXT   PG  
+							ON PG.PROCESSSEGMENTID    		= OP.PROCESSSEGMENTID 
+							AND PG.ENTERPRISEID        		= OP.ENTERPRISEID
+					LEFT OUTER JOIN CMD_DICTIONARY          PN  
+							ON PN.DICTIONARYID        		= PG.PROCESSSEGMENTNAME
+							AND PN.LANGUAGETYPE        		= #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+					-------------------------------------------------------------------------------
+	                -- (21.06.16) 조건 추가 진짜 AOI만 가져 오도록
+	                INNER JOIN  BAS_PROCESSSEGMENTEXT             PG
+	                ON PG.PROCESSSEGMENTID = OP.PROCESSSEGMENTID
+			        AND  PG.PROCESSSEGMENTCLASSID 	=	'7012'					-- AOI 공정만
+			        AND  PG.ENTERPRISEID 					=	#{P_ENTERPRISEID} 
+					AND    PG.VALIDSTATE 					= 	'Valid'
+	                --------------------------------------------------------------------------------		
+							
+							
+					WHERE RT.ENTERPRISEID 	 				= #{P_ENTERPRISEID} 
+					
+					AND	OP.VALIDSTATE 		= 'Valid'
+					AND PN.DICTIONARYNAME 	LIKE '%AOI%'
+					
+					-- 조회 조건 (팝업 호출시 품목 코드는 필수로 선택 후 넘어 오도록 설정 추가 할것!)
+					<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND RT.MAINPRODUCTID  					= #{P_PRODUCTDEFID} 
+					</if>
+					<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' and !(P_PRODUCTDEFVERSION eq '*'.toString())">
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFVERSION}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	RT.MAINPRODUCTVERSION = LMP.VALUE
+							)
+					</if>
+					
+				)
+				-- AOI 공정의 LAYER 정보
+				, T_PRE_EQUIPMENTHEADER AS (
+						 SELECT col_nm
+							  , col_val
+							  , OPERATIONID
+							  , PROCESSSEGMENTID
+							  , PROCESSSEGMENTNAME
+							  , OPERATIONSEQUENCE          -- [추가]
+							  , MAINPRODUCTVERSION        -- (21.08.03) 추가
+						   FROM (
+								  SELECT    OS.AOIQCLAYER
+										  ,	OS.AOIQCLAYER2
+										  , OS.OPERATIONID
+										  , A.PROCESSSEGMENTID
+										  , A.PROCESSSEGMENTNAME
+										  , A.OPERATIONSEQUENCE          		-- [추가]
+										  
+										  , A.MAINPRODUCTVERSION            -- (21.08.03) 추가
+										  
+										FROM   BAS_OPERATIONSPECVALUE OS
+										INNER JOIN T_AOI A
+												ON 	OS.OPERATIONID 	    = A.OPERATIONID
+												AND	OS.ENTERPRISEID 	= A.ENTERPRISEID
+												AND OS.PLANTID       	= A.PLANTID
+												)
+						UNPIVOT (col_val FOR col_nm IN (AOIQCLAYER, AOIQCLAYER2))
+				)
+				
+				, INSP_T AS (
+				-- (21.07.02) - 공정별로 LAYER 선택 가능함 같은 검사공정끼리만 
+				 SELECT DISTINCT  '' 		AS CHK  
+				      , COL_VAL  			AS LAYER
+				      , PROCESSSEGMENTID
+					  --, OPERATIONSEQUENCE		
+					  -- 같은 품목 코드에 REV가 가장 큰 것의 정렬 기준(21.08.03)
+                      , MAX(OPERATIONSEQUENCE) KEEP(DENSE_RANK FIRST ORDER BY MAINPRODUCTVERSION DESC) AS OPERATIONSEQUENCE
+                      , PROCESSSEGMENTNAME
+	              FROM T_PRE_EQUIPMENTHEADER
+	              
+	              -- (21.08.03) 추가 품목코드의 여러 버전값 나오지 않도록
+                  GROUP BY COL_VAL, PROCESSSEGMENTID, PROCESSSEGMENTNAME
+	              
+	              ORDER BY OPERATIONSEQUENCE, COL_VAL
+                )
+				  
+				--######################################################################################
+				
+				
+				-----------------------------(21.08.10) 인계 시간 조회
+					, T_SENDTIME AS (
+							SELECT	A.LOTID		
+							, 			A.PROCESSSEGMENTID
+							, 			MAX(A.SENDTIME) 		AS 	SENDTIME		       -- 인계 시간
+							, 			B.PROCESSSEGMENTCLASSID
+						FROM			PCM_LOTWORKRESULT				A
+						INNER JOIN	BAS_PROCESSSEGMENT				B	
+						ON  			A.PROCESSSEGMENTID = B.PROCESSSEGMENTID 
+						AND 			B.PROCESSSEGMENTCLASSID IN ('7012','7014','7022')
+						WHERE		1=1
+						AND 			LOTID IN (
+							SELECT LOTID
+							  FROM LOTLIST
+						)
+						GROUP BY    A.LOTID		
+							,       A.PROCESSSEGMENTID
+							,       B.PROCESSSEGMENTCLASSID
+					)
+				-----------------------------
+				
+				
+				
+				, T_GROUP AS (
+				  
+					SELECT	CASE M.SEGMENTTYPE
+								WHEN 'AOIInspection' THEN 'AOI'
+								WHEN 'AOIHoleInspection' THEN 'HOLE'
+								ELSE 'BBT'
+							END																AS EQUIPMENTTYPE
+						,	M.PLANTID
+						,	M.ENTERPRISEID
+						,	M.AREAID
+						,	M.PRODUCTDEFID
+						,	M.PRODUCTDEFVERSION
+						,	M.PROCESSSEGMENTID
+						,	M.PROCESSSEGMENTVERSION
+						,	M.PROCESSDEFID
+						,	M.PROCESSDEFVERSION
+						,	M.LOTID
+						,	M.INSPECTIONQTY
+						/*
+						,	COALESCE(AOI.GROUPCODE, '999')									AS	GROUPCODE
+						,	COALESCE(AOI.GROUPNAME, 'NONE')									AS	GROUPNAME
+						,	COALESCE(
+									CASE M.SEGMENTTYPE
+										WHEN 'AOIInspection' THEN AOI.SUBCODE
+										ELSE HOLE.CODEID
+									END, '9999') 											AS	SUBCODE	
+						,	COALESCE(
+									CASE M.SEGMENTTYPE
+										WHEN 'AOIInspection' THEN AOI.SUBNAME
+										ELSE HOLE.CODENAME
+									END, 'NONE')											AS	SUBNAME
+						,  COALESCE(
+									CASE M.SEGMENTTYPE
+										WHEN 'AOIInspection' THEN AOI.COLOR
+										ELSE HOLE.COLOR
+									END, '#000000')											AS	COLOR
+						,	M.DEFECTCOUNT
+						*/
+						
+						----------------------------------------------------------------(21.06.17)
+                    -- 블량 그룹 
+                    ,  (
+                            CASE WHEN AOI.GROUPCODE = '005'  
+                                THEN T_AFT_ANALYSIS.GROUPCODE
+                                ELSE COALESCE(AOI.GROUPCODE, '999')
+                                END
+                        ) AS GROUPCODE
+                    -- 블량 그룹명 
+                    ,  (
+                            CASE WHEN AOI.GROUPCODE = '005'  
+                                THEN T_AFT_ANALYSIS.GROUPNAME
+                                ELSE COALESCE(AOI.GROUPNAME, 'NONE')
+                                END
+                        ) AS GROUPNAME
+                    -- 불량 코드   
+                    ,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' 
+                                    THEN (
+                                           CASE WHEN AOI.GROUPCODE = '005'  
+                                                THEN T_AFT_ANALYSIS.SUBCODE
+                                                ELSE AOI.SUBCODE
+                                                END 
+                                        )
+				            		ELSE HOLE.CODEID
+				         		END, '9999') 														AS	SUBCODE	 
+                    -- 불량 코드명
+                    ,	COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' 
+                                    THEN (
+                                           CASE WHEN AOI.GROUPCODE = '005'  
+                                                THEN T_AFT_ANALYSIS.SUBNAME
+                                                ELSE  AOI.SUBNAME
+                                                END 
+                                        )
+						            ELSE HOLE.CODENAME
+					         	END, 'NONE')														AS	SUBNAME
+                    -- 불량 색상
+                    ,  COALESCE(
+								CASE M.SEGMENTTYPE
+									WHEN 'AOIInspection' 
+                                    THEN (
+                                           CASE WHEN AOI.GROUPCODE = '005'  
+                                                THEN T_AFT_ANALYSIS.COLOR
+                                                ELSE AOI.COLOR
+                                                END 
+                                        )
+							 		ELSE HOLE.COLOR
+								END, '#000000')														AS	COLOR
+                        
+                    -- 불량 수량 
+                    , (
+                           CASE WHEN AOI.GROUPCODE = '005'  
+                                THEN COALESCE(M.REPAIRTARGETQTY, 0) - COALESCE(M.REPAIRRESULTQTY, 0)
+                                ELSE M.DEFECTCOUNT
+                                END 
+                        ) AS DEFECTCOUNT
+                   -----------------------------------------------------------------------------------------
+						
+						,	M.LAYERID
+						,	TO_CHAR(L.LOTSTARTDATE, 'YYYY-MM-DD HH24:MI:SS')													AS	EVENTTIME
+						,	M.ISREWORK
+						,	COALESCE(M.REPAIRTARGETQTY, 0)									AS REPAIRTARGETQTY
+						,	COALESCE(M.REPAIRRESULTQTY, 0)									AS REPAIRRESULTQTY
+						
+						-- [21.06.03] - CS/SS 추가
+						,   (
+								CASE WHEN M.LAYERID = '1L'
+									THEN    'CS'
+									WHEN M.LAYERID = L.LAYER
+									THEN    'SS'
+									ELSE M.LAYERID
+									END
+							)       AS LAYERNM
+						
+					FROM	PCM_QCAOIBBTWORKCOMPLETE		M		-- 확인 필요 AOI 코드가 어떻게 단겨져 오는지.
+					INNER JOIN LOTLIST 					L	ON	M.LOTID = L.LOTID
+															AND	M.PRODUCTDEFID = L.PRODUCTDEFID
+															AND	M.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+															
+															
+				-----------------------------------------------------------------                                        
+                -- (21.06.17) 완료된 상태 체크   -> (21.06.18) 여러건 존재함 하나만 나오도록 수정
+                INNER JOIN (SELECT RESOURCEID
+								,  INSPECTIONDEFID  
+								, PROCESSSEGMENTID, PROCESSSEGMENTVERSION
+							 FROM  QAM_INSPECTIONRESULT   
+							 GROUP BY  RESOURCEID, INSPECTIONDEFID    
+							 			, PROCESSSEGMENTID, PROCESSSEGMENTVERSION
+							 ) Q_INSP
+                ON Q_INSP.RESOURCEID                 		=  M.LOTID
+                AND Q_INSP.INSPECTIONDEFID 					= 	'AOIInspection'
+                AND Q_INSP.PROCESSSEGMENTID					= M.PROCESSSEGMENTID
+				AND Q_INSP.PROCESSSEGMENTVERSION			= M.PROCESSSEGMENTVERSION
+                -----------------------------------------------------------------
+                LEFT OUTER JOIN (
+									SELECT	GRP.CODEID								AS	GROUPCODE
+										,	GRP.GROUPNAME							AS	GROUPNAME
+										,	GRP.DESCRIPTION 							AS	COLOR
+										,	SUB.CODEID									AS	SUBCODE
+										,	SUB.SUBNAME								AS	SUBNAME
+										,	'AOIInspection'								AS	SEGMENTTYPE
+										,   '005'                                       	AS  CHK_G_CODE
+                                        ,   (
+                                            CASE WHEN SUB.CODEID = '1001'
+                                                 THEN '5001'
+                                                 ELSE '5002'
+                                                 END
+                                        )   													AS CHK_S_CODE
+									FROM	
+									(
+										SELECT 	C.LOOKUP_CODE   AS CODEID
+											,	C.DESCRIPTION
+											,	D.DICTIONARYNAME						AS	GROUPNAME
+										FROM 	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN		CMD_DICTIONARY	D			ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					GRP
+									LEFT OUTER JOIN		
+									(
+										SELECT	C.LOOKUP_CODE   AS CODEID
+											,	D.DICTIONARYNAME						AS	SUBNAME
+											,	C.PARENTCODEID
+										FROM	CMD_LOOKUP_VALUES									C
+										LEFT OUTER JOIN 	CMD_DICTIONARY	D			ON 	C.DICTIONARYID = D.DICTIONARYID
+										WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) 					SUB								ON	GRP.CODEID = SUB.PARENTCODEID
+									WHERE 1 = 1
+                                  AND GRP.CODEID IN ('001','002')
+                                  AND SUB.CODEID IN ('1001','2001')
+								)   T_AFT_ANALYSIS
+                ON M.SEGMENTTYPE = T_AFT_ANALYSIS.SEGMENTTYPE 
+                AND M.DEFECTCODE = T_AFT_ANALYSIS.CHK_S_CODE
+				-----------------------------------------------------------------
+					
+					LEFT OUTER JOIN (
+										SELECT	GRP.CODEID									AS	GROUPCODE
+											,	GRP.GROUPNAME								AS	GROUPNAME
+											,	GRP.DESCRIPTION 							AS	COLOR
+											,	SUB.CODEID									AS	SUBCODE
+											,	SUB.SUBNAME									AS	SUBNAME
+											,	'AOIInspection'								AS	SEGMENTTYPE
+										FROM	
+										(
+											SELECT 	C.LOOKUP_CODE   AS CODEID
+												,	C.DESCRIPTION
+												,	D.DICTIONARYNAME						AS	GROUPNAME
+											FROM 	CMD_LOOKUP_VALUES									C
+											LEFT OUTER JOIN		CMD_DICTIONARY	D			ON	C.DICTIONARYID = D.DICTIONARYID						           	   			   		    
+											WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroup'
+											AND		C.ENABLED_FLAG = 'Y'
+											AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+										) 					GRP
+										LEFT OUTER JOIN		
+										(
+											SELECT	C.LOOKUP_CODE   AS CODEID
+												,	D.DICTIONARYNAME						AS	SUBNAME
+												,	C.PARENTCODEID
+											FROM	CMD_LOOKUP_VALUES									C
+											LEFT OUTER JOIN 	CMD_DICTIONARY	D			ON 	C.DICTIONARYID = D.DICTIONARYID
+											WHERE	C.LOOKUP_TYPE = 'DefectMapDefectGroupSub'
+											AND		C.ENABLED_FLAG = 'Y'
+											AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+										) 					SUB								ON	GRP.CODEID = SUB.PARENTCODEID
+									) AOI													ON	M.DEFECTCODE = AOI.SUBCODE
+																							AND	M.SEGMENTTYPE = AOI.SEGMENTTYPE
+					LEFT OUTER JOIN (
+										SELECT	C.LOOKUP_CODE   AS CODEID
+											,	D.DICTIONARYNAME							AS	CODENAME
+											,	C.DESCRIPTION 								AS	COLOR
+											,	'AOIHoleInspection'							AS	SEGMENTTYPE
+										FROM	CMD_LOOKUP_VALUES		C
+										LEFT OUTER JOIN		CMD_DICTIONARY			D		ON	C.DICTIONARYID = D.DICTIONARYID
+										LEFT JOIN 			BAS_EQUIPMENTDEFECTCODE 	EDC 	ON	C.LOOKUP_CODE = EDC.DEFECTITEMCODE
+										WHERE	1=1
+										AND 	C.LOOKUP_TYPE = 'DefectMapHoleDefectCode'
+										AND		C.ENABLED_FLAG = 'Y'
+										AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+									) HOLE													ON	M.DEFECTCODE = HOLE.CODEID 
+																							AND	M.SEGMENTTYPE = HOLE.SEGMENTTYPE
+					 -- [21.06.03] - 추가 CS / SS
+					LEFT OUTER JOIN T_LAST_LAYER  L
+					ON L.ITEMID = M.PRODUCTDEFID		
+					
+					-----------------------------------(21.08.10) 인계 시간 조건 추가        
+					LEFT JOIN T_SENDTIME TT 
+							ON TT.LOTID             			= M.LOTID
+						   AND TT.PROCESSSEGMENTID  	= M.PROCESSSEGMENTID
+					-----------------------------
+																					
+					
+					WHERE	1=1
+					
+					AND		M.SEGMENTTYPE = (
+							CASE WHEN #{P_INSPECTIONTYPE} = 'AOI'
+								 THEN 'AOIInspection'
+								 WHEN #{P_INSPECTIONTYPE} = 'HOLE'
+								 THEN 'AOIHoleInspection'
+								 ELSE 'BBTInspection'
+								 END
+						)
+						-- [as-is 코드는]  AOIInspection,BBTInspection,AOIHoleInspection -> [to-be] AOI,BBT,HOLE로 변경됨  -> 값 넣어 줄때는 또 저렇게 넣어 줌...
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_LAYERID}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	M.LAYERID = LMP.VALUE
+							)
+							
+					-- (21.08.10) 인계 시간 조건 추가
+					AND	    	TT.SENDTIME			
+					BETWEEN		TO_TIMESTAMP(#{P_CONPERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')	
+					AND			TO_TIMESTAMP(#{P_CONPERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')
+							
+				)
+
+				-- LOT별 LAYER별 감사수량 정보 수정
+                , T_TOTAL_PCS AS (
+                    SELECT  LAYERID
+                       ,    SUM(INSPECTIONQTY) AS TOTAL_INSPECTIONQTY
+                      FROM (
+                               SELECT   LAYERID
+                                   ,    LOTID
+                                   ,    INSPECTIONQTY
+                
+                              FROM T_GROUP
+                              GROUP BY LAYERID
+                                     , LOTID
+                                     , INSPECTIONQTY
+                      )
+                      GROUP BY  LAYERID
+                )
+				
+				 SELECT A.LAYERID
+                       ,  A.LAYERNM
+                       --(21.06.18) 로트는 함께 계산 되도록 수정
+                       ,  '' AS  LOTID				
+                       ,  A.GROUPCODE
+                       ,  A.GROUPNAME
+                       ,  A.SUBCODE
+                       ,  A.SUBNAME
+                       ,  SUM(A.DEFECTCOUNT)            AS DEFECTCOUNT
+                       ,  MAX(B.TOTAL_INSPECTIONQTY)    AS TOTAL_INSPECTIONQTY
+                       
+                       -- (21.06.21) 공정id 필요해서 추가로 넘김
+                       ,  A.PROCESSSEGMENTID     
+                       
+                       -- (21.07.02) 공정 순수 추가 
+                       , MAX(INSP.OPERATIONSEQUENCE) AS OPERATIONSEQUENCE       
+                       
+                     FROM T_GROUP A
+                    LEFT JOIN T_TOTAL_PCS B
+                    ON A.LAYERID = B.LAYERID
+                    
+                     --  (21.07.20) 공정순수로 가장 큰 수로 TOTAL의 검사수를 구해야 된다.
+                    LEFT JOIN INSP_T INSP
+                    ON INSP.LAYER 							= A.LAYERID
+                    AND INSP.PROCESSSEGMENTID       	= A.PROCESSSEGMENTID
+                    
+                    GROUP BY A.LAYERID
+                       ,  A.LAYERNM
+                       --(21.06.18) 로트는 함께 계산 되도록 수정
+                       --,  A.LOTID
+                       ,  A.GROUPCODE
+                       ,  A.GROUPNAME
+                       ,  A.SUBCODE
+                       ,  A.SUBNAME
+                       
+                       -- (21.06.21) 공정id 필요해서 추가로 넘김
+                       ,  A.PROCESSSEGMENTID            
+                    ORDER BY A.LAYERID,  A.GROUPCODE, A.SUBCODE
+				  
+	</select>
+	
+	<!--
+		설		명	: Layer별 불량 현황 - [불량그룹별 색상 정보]
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-03 
+		수  정   이  력	:
+	-->
+	<select id="selectLayerDefectMapDefectColorList" parameterType="map" resultType="hashmap">
+			
+			/* selectLayerDefectMapDefectColorList -  Layer별 불량 현황 - [불량그룹별 색상 정보] */
+			 SELECT
+					 A.LOOKUP_CODE          AS CODE
+					,A.DESCRIPTION         	AS COLOR -- 색상정보 
+				FROM	CMD_LOOKUP_VALUES A
+				WHERE 1=1
+					AND A.LOOKUP_TYPE 		= 'DefectMapDefectGroup'		-- 불량그룹 코드
+					AND A.ENABLED_FLAG 		= 'Y'
+				order by DISPLAYSEQUENCE asc
+	</select>
+	
+    
+	 
+
+</mapper>

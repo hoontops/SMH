@@ -1,0 +1,367 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM03300Dao">
+	
+	<!--
+	************************************************************
+	* 조회조건 sql
+	************************************************************
+	-->
+	<sql id="selectQamShrinkmeasureList_whereForList_fragment">
+	<if test="LOTID != null and LOTID !='' ">
+		AND A.LOTID = #{LOTID}
+	</if>
+	<if test="PLANTID != null and PLANTID !='' ">
+		AND A.PLANTID = #{PLANTID}
+	</if>
+	<if test="VALIDSTATE != null and VALIDSTATE !='' ">
+		AND A.VALIDSTATE = #{VALIDSTATE}
+	</if>
+	<if test="LOTSTARTDATEFR != null and LOTSTARTDATEFR !='' and LOTSTARTDATETO != null and LOTSTARTDATETO !='' ">
+		AND A.LOTSTARTDATE BETWEEN TO_DATE(#{LOTSTARTDATEFR}, 'YYYY-MM-DD') AND TO_DATE(#{LOTSTARTDATETO}, 'YYYY-MM-DD') 
+	</if>
+	<if test="MEASUREDATEFR != null and MEASUREDATEFR !='' and MEASUREDATETO != null and MEASUREDATETO !='' ">
+		AND A.MEASUREDATE BETWEEN TO_DATE(#{MEASUREDATEFR}, 'YYYY-MM-DD') AND TO_DATE(#{MEASUREDATETO}, 'YYYY-MM-DD') 
+	</if>
+	<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+		AND A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	</if>
+	<if test="PROCESSSEGMENTVERSION != null and PROCESSSEGMENTVERSION !='' ">
+		AND A.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	</if>
+	<if test='PROCESSCOMPLETEYN != null and PROCESSCOMPLETEYN =="Y" '> 
+		<!--  (공정수순 = MAX : 유효한 기준값 중 맨마지막 공정이 등록되어 있는 내역만 조회) -->
+		--진행완료
+		AND (TO_NUMBER(A.USERSEQUENCE), A.SHRINKPRODUCTID) IN 
+		(
+			SELECT  MAX(TO_NUMBER(OP.USERSEQUENCE)) AS USERSEQUENCE
+						,A.SHRINKPRODUCTID
+			FROM 	QAM_SHRINKPRODUCT A
+						,QAM_SHRINKPRODUCTOPERATION B
+						,BAS_OPERATION  OP
+			WHERE A.SHRINKPRODUCTID = B.SHRINKPRODUCTID 
+			AND B.OPERATIONID = OP.OPERATIONID 
+			AND B.VALIDSTATE = 'Valid'
+			GROUP BY  A.PRODUCTDEFID
+							,A.PRODUCTDEFVERSION
+							,A.SHRINKPRODUCTID
+		)
+	</if>
+	<if test="SHRINKMEASUREID != null and SHRINKMEASUREID !='' ">
+		AND A.SHRINKMEASUREID = #{SHRINKMEASUREID}
+	</if>
+	<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+		AND B.PRODUCTDEFID = #{PRODUCTDEFID}
+	</if>
+	<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+		AND B.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	</if>
+	</sql>
+	
+    <!-- 수축율현황 조회-->
+    <select id="selectQamShrinkmeasureList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03300Dao.selectQamShrinkmeasureList  */
+    SELECT A.SHRINKMEASUREID
+         , A.SHRINKPRODUCTID
+         , A.OPERATIONID
+         , A.LOTID
+         , A.ENTERPRISEID
+         , A.PLANTID
+         , A.AREAID
+         , A.PROCESSSEGMENTID
+         , A.PROCESSSEGMENTVERSION
+         , A.USERSEQUENCE
+         , FN_PROCESSSTATECONV(A.PROCESSSTATE) AS PROCESSSTATE
+         , A.ISLOCKING
+         , A.PCSQTY
+         , A.PANELQTY
+         <!-- , TO_CHAR(A.LOTSTARTDATE, 'YYYY-MM-DD HH24:MI:SS') AS LOTSTARTDATE -->
+         , TO_CHAR(A.LOTSTARTDATE, 'YYYY-MM-DD') AS LOTSTARTDATE
+         , A.MEASUREPNL
+         , A.GAUGER
+         , A.EQUIPMENTID
+         , A.EQUIPMENTDATAFM
+         , TO_CHAR(A.MEASUREDATE, 'YYYY-MM-DD HH24:MI:SS') AS MEASUREDATE
+         , A.SCALEABNORMALYN
+         , A.COMPVAL_X1
+         , A.COMPVAL_X2
+         , A.COMPVAL_Y1
+         , A.COMPVAL_Y2
+         , A.COMPVAL_XY1
+         , A.COMPVAL_XY2
+         , A.OPERVAL_X1
+         , A.OPERVAL_X2
+         , A.OPERVAL_Y1
+         , A.OPERVAL_Y2
+         , A.OPERVAL_XY1
+         , A.OPERVAL_XY2
+         , A.OPERCOMPVAL_X1
+         , A.OPERCOMPVAL_X2
+         , A.OPERCOMPVAL_Y1
+         , A.OPERCOMPVAL_Y2
+         , A.OPERCOMPVAL_XY1
+         , A.OPERCOMPVAL_XY2
+         , A.PRODVAL_X1
+         , A.PRODVAL_X2
+         , A.PRODVAL_Y1
+         , A.PRODVAL_Y2
+         , A.PRODVAL_XY1
+         , A.PRODVAL_XY2
+         , A.PRODCOMPVAL_X1
+         , A.PRODCOMPVAL_X2
+         , A.PRODCOMPVAL_Y1
+         , A.PRODCOMPVAL_Y2
+         , A.PRODCOMPVAL_XY1
+         , A.PRODCOMPVAL_XY2
+         , A.CREATOR
+         , A.CREATEDTIME
+         , A.MODIFIER
+         , A.MODIFIEDTIME
+         , A.LASTTXNHISTKEY
+         , A.LASTTXNID
+         , A.LASTTXNUSER
+         , A.LASTTXNTIME
+         , A.LASTTXNCOMMENT
+         , A.VALIDSTATE
+         , FN_QAM_GET_DICTIONARYNAME(EQ.EQUIPMENTNAME , #{SESSION_LANGUAGETYPE}) AS EQUIPMENTNAME
+         , B.PRODUCTDEFID
+         , B.PRODUCTDEFVERSION
+         , PD.PRODUCTDEFNAME
+         , FN_QAM_GET_DICTIONARYNAME(PS.PROCESSSEGMENTNAME , #{SESSION_LANGUAGETYPE}) AS PROCESSSEGMENTNAME
+         , FN_QAM_GET_DICTIONARYNAME(SA.AREANAME, #{SESSION_LANGUAGETYPE}) AS AREANAME
+      FROM QAM_SHRINKMEASUREMASTER  A
+         , QAM_SHRINKPRODUCT       B
+         , BAS_PRODUCTDEFINITION   PD
+         , BAS_EQUIPMENT           EQ
+         , BAS_PROCESSSEGMENT      PS
+         , BAS_AREA                SA 
+     WHERE 1=1
+       AND A.SHRINKPRODUCTID = B.SHRINKPRODUCTID
+       AND B.PRODUCTDEFID = PD.PRODUCTDEFID
+       AND B.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+       AND A.EQUIPMENTID = EQ.EQUIPMENTID(+) 
+       AND A.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+       AND A.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+       AND A.AREAID = SA.AREAID(+)
+    <include refid="selectQamShrinkmeasureList_whereForList_fragment" />
+    ORDER BY A.SHRINKMEASUREID, A.SHRINKPRODUCTID
+</select>
+
+<!-- 수축율현황 조회 > 선택 LOT 보기 팝업 -->
+<select id="selectQamShrinkmeasureLotList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03300Dao.selectQamShrinkmeasureLotList  */
+    SELECT DISTINCT
+           A.LOTID
+         , TO_CHAR(A.LOTSTARTDATE, 'YYYY-MM-DD') AS LOTSTARTDATE
+         , B.PRODUCTDEFID
+         , B.PRODUCTDEFVERSION
+      FROM QAM_SHRINKMEASUREMASTER A
+         , QAM_SHRINKPRODUCT       B
+     WHERE 1=1
+       AND A.SHRINKPRODUCTID = B.SHRINKPRODUCTID
+    <include refid="selectQamShrinkmeasureList_whereForList_fragment" />
+    ORDER BY A.LOTID
+	</select>
+	
+	<!-- 차트 - 수축율현황 그룹 조회-->
+    <select id="selectQamShrinkmeasureGroupList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03300Dao.selectQamShrinkmeasureGroupList  */
+    SELECT Z.*
+         , GREATEST(Z.GROUP1_X1, Z.GROUP1_X2, Z.GROUP1_Y1, Z.GROUP1_Y2, Z.GROUP1_XY1, Z.GROUP1_XY2) AS GROUP1_MAX
+         , GREATEST(Z.GROUP2_X1, Z.GROUP2_X2, Z.GROUP2_Y1, Z.GROUP2_Y2, Z.GROUP2_XY1, Z.GROUP2_XY2) AS GROUP2_MAX
+         , LEAST(Z.GROUP1_X1, Z.GROUP1_X2, Z.GROUP1_Y1, Z.GROUP1_Y2, Z.GROUP1_XY1, Z.GROUP1_XY2) AS GROUP1_MIN
+         , LEAST(Z.GROUP2_X1, Z.GROUP2_X2, Z.GROUP2_Y1, Z.GROUP2_Y2, Z.GROUP2_XY1, Z.GROUP2_XY2) AS GROUP2_MIN
+        <if test='FIRSTMEASUREYN=="1"'>
+         , GREATEST(GROUP0_X1, GROUP0_X2, Z.GROUP0_Y1, Z.GROUP0_Y2, Z.GROUP0_XY1, Z.GROUP0_XY2) AS GROUP0_MAX
+         , LEAST(GROUP0_X1, GROUP0_X2, Z.GROUP0_Y1, Z.GROUP0_Y2, Z.GROUP0_XY1, Z.GROUP0_XY2) AS GROUP0_MIN            
+        </if>
+    FROM ( 
+        SELECT X.PROCESSSEGMENTID
+             , X.PROCESSSEGMENTVERSION
+             , X.USERSEQUENCE
+             , FN_QAM_GET_DICTIONARYNAME(PS.PROCESSSEGMENTNAME ,#{SESSION_LANGUAGETYPE}) AS PROCESSSEGMENTNAME
+             , ROUND(AVG(X.GROUP1_X1),4)  AS GROUP1_X1
+             , ROUND(AVG(X.GROUP1_X2),4)  AS GROUP1_X2
+             , ROUND(AVG(X.GROUP1_Y1),4)  AS GROUP1_Y1
+             , ROUND(AVG(X.GROUP1_Y2),4)  AS GROUP1_Y2
+             , ROUND(AVG(X.GROUP1_XY1),4) AS GROUP1_XY1
+             , ROUND(AVG(X.GROUP1_XY2),4) AS GROUP1_XY2
+             , ROUND(AVG(X.GROUP2_X1),4)  AS GROUP2_X1        
+             , ROUND(AVG(X.GROUP2_X2),4)  AS GROUP2_X2        
+             , ROUND(AVG(X.GROUP2_Y1),4)  AS GROUP2_Y1        
+             , ROUND(AVG(X.GROUP2_Y2),4)  AS GROUP2_Y2 
+             , ROUND(AVG(X.GROUP2_XY1),4) AS GROUP2_XY1
+             , ROUND(AVG(X.GROUP2_XY2),4) AS GROUP2_XY2
+             <if test='VALUEDISPLAY=="LOT"'>
+             , X.LOTID
+             , X.GROUP_NUM
+             , MAX(X.COLOR_RNK)           AS COLOR_RNK
+             </if>
+             <if test='FIRSTMEASUREYN=="1"'>
+             , ROUND(AVG(X.GROUP0_X1),4)  AS GROUP0_X1        
+             , ROUND(AVG(X.GROUP0_X2),4)  AS GROUP0_X2        
+             , ROUND(AVG(X.GROUP0_Y1),4)  AS GROUP0_Y1        
+             , ROUND(AVG(X.GROUP0_Y2),4)  AS GROUP0_Y2 
+             , ROUND(AVG(X.GROUP0_XY1),4) AS GROUP0_XY1
+             , ROUND(AVG(X.GROUP0_XY2),4) AS GROUP0_XY2
+             </if>
+        FROM (
+                SELECT A.PROCESSSEGMENTID
+                     , A.PROCESSSEGMENTVERSION
+                     , A.USERSEQUENCE
+                     , A.OPERCOMPVAL_X1 AS GROUP1_X1
+                     , A.OPERCOMPVAL_X2 AS GROUP1_X2
+                     , A.OPERCOMPVAL_Y1 AS GROUP1_Y1
+                     , A.OPERCOMPVAL_Y2 AS GROUP1_Y2
+                     , A.OPERCOMPVAL_XY1 AS GROUP1_XY1
+                     , A.OPERCOMPVAL_XY2 AS GROUP1_XY2
+                     , NULL AS GROUP2_X1
+                     , NULL AS GROUP2_X2
+                     , NULL AS GROUP2_Y1
+                     , NULL AS GROUP2_Y2
+                     , NULL AS GROUP2_XY1
+                     , NULL AS GROUP2_XY2
+                     <if test='VALUEDISPLAY=="LOT"'>
+                     , A.LOTID
+                     , 1 AS GROUP_NUM
+                     , DENSE_RANK() OVER(ORDER BY LOTID) AS COLOR_RNK
+                     </if>
+                     <if test='FIRSTMEASUREYN=="1"'>
+                     , NULL AS GROUP0_X1
+                     , NULL AS GROUP0_X2
+                     , NULL AS GROUP0_Y1
+                     , NULL AS GROUP0_Y2
+                     , NULL AS GROUP0_XY1
+                     , NULL AS GROUP0_XY2
+                     </if>
+                FROM   QAM_SHRINKMEASUREMASTER A
+                WHERE  1=1
+                AND    LOTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{GROUP1_LOTID}, ','))
+                GROUP BY A.PROCESSSEGMENTID
+                       , A.PROCESSSEGMENTVERSION
+                       , A.USERSEQUENCE
+                       , A.OPERCOMPVAL_X1 
+                       , A.OPERCOMPVAL_X2 
+                       , A.OPERCOMPVAL_Y1 
+                       , A.OPERCOMPVAL_Y2 
+                       , A.OPERCOMPVAL_XY1
+                       , A.OPERCOMPVAL_XY2
+                       <if test='VALUEDISPLAY=="LOT"'>
+                       , A.LOTID
+                       </if>
+                UNION
+                SELECT A.PROCESSSEGMENTID
+                     , A.PROCESSSEGMENTVERSION
+                     , A.USERSEQUENCE
+                     , NULL AS GROUP1_X1
+                     , NULL AS GROUP1_X2
+                     , NULL AS GROUP1_Y1
+                     , NULL AS GROUP1_Y2
+                     , NULL AS GROUP1_XY1
+                     , NULL AS GROUP1_XY2
+                     , A.OPERCOMPVAL_X1 AS GROUP2_X1
+                     , A.OPERCOMPVAL_X2 AS GROUP2_X2
+                     , A.OPERCOMPVAL_Y1 AS GROUP2_Y1
+                     , A.OPERCOMPVAL_Y2 AS GROUP2_Y2
+                     , A.OPERCOMPVAL_XY1 AS GROUP2_XY1
+                     , A.OPERCOMPVAL_XY2 AS GROUP2_XY2
+                     <if test='VALUEDISPLAY=="LOT"'>
+                     , A.LOTID
+                     , 2 AS GROUP_NUM
+                     , DENSE_RANK() OVER(ORDER BY LOTID) AS COLOR_RNK
+                     </if>
+                     <if test='FIRSTMEASUREYN=="1"'>
+                     , NULL AS GROUP0_X1
+                     , NULL AS GROUP0_X2
+                     , NULL AS GROUP0_Y1
+                     , NULL AS GROUP0_Y2
+                     , NULL AS GROUP0_XY1
+                     , NULL AS GROUP0_XY2
+                     </if>
+                FROM   QAM_SHRINKMEASUREMASTER A
+                WHERE  1=1
+                AND    LOTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{GROUP2_LOTID}, ','))
+                GROUP BY A.PROCESSSEGMENTID
+                       , A.PROCESSSEGMENTVERSION
+                       , A.USERSEQUENCE
+                       , A.OPERCOMPVAL_X1 
+                       , A.OPERCOMPVAL_X2 
+                       , A.OPERCOMPVAL_Y1 
+                       , A.OPERCOMPVAL_Y2 
+                       , A.OPERCOMPVAL_XY1
+                       , A.OPERCOMPVAL_XY2
+                       <if test='VALUEDISPLAY=="LOT"'>
+                       , A.LOTID
+                       </if>
+                <if test='FIRSTMEASUREYN=="1"'>
+                UNION
+                SELECT A.PROCESSSEGMENTID
+                     , A.PROCESSSEGMENTVERSION
+                     , A.USERSEQUENCE
+                     , NULL AS GROUP1_X1
+                     , NULL AS GROUP1_X2
+                     , NULL AS GROUP1_Y1
+                     , NULL AS GROUP1_Y2
+                     , NULL AS GROUP1_XY1
+                     , NULL AS GROUP1_XY2
+                     , NULL AS GROUP2_X1
+                     , NULL AS GROUP2_X2
+                     , NULL AS GROUP2_Y1
+                     , NULL AS GROUP2_Y2
+                     , NULL AS GROUP2_XY1
+                     , NULL AS GROUP2_XY2
+                     <if test='VALUEDISPLAY=="LOT"'>
+                     , A.LOTID
+                     , 0 AS GROUP_NUM
+                     , DENSE_RANK() OVER(ORDER BY LOTID) AS COLOR_RNK
+                     </if>
+                     , A.OPERCOMPVAL_X1  AS GROUP0_X1
+                     , A.OPERCOMPVAL_X2  AS GROUP0_X2
+                     , A.OPERCOMPVAL_Y1  AS GROUP0_Y1
+                     , A.OPERCOMPVAL_Y2  AS GROUP0_Y2
+                     , A.OPERCOMPVAL_XY1 AS GROUP0_XY1
+                     , A.OPERCOMPVAL_XY2 AS GROUP0_XY2                     
+                FROM   QAM_SHRINKMEASUREMASTER A
+                WHERE  1=1
+                AND    LOTID IN (SELECT QS.LOTID FROM QAM_SHRINKFIRSTLOT QS WHERE QS.SHRINKPRODUCTID = #{SHRINKPRODUCTID})
+                GROUP BY A.PROCESSSEGMENTID
+                       , A.PROCESSSEGMENTVERSION
+                       , A.USERSEQUENCE
+                       , A.OPERCOMPVAL_X1 
+                       , A.OPERCOMPVAL_X2 
+                       , A.OPERCOMPVAL_Y1 
+                       , A.OPERCOMPVAL_Y2 
+                       , A.OPERCOMPVAL_XY1
+                       , A.OPERCOMPVAL_XY2
+                       <if test='VALUEDISPLAY=="LOT"'>
+                       , A.LOTID
+                       </if>
+                </if>
+             ) X
+           , BAS_PROCESSSEGMENT PS
+        WHERE  1=1 
+        AND    X.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+        AND    X.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+        GROUP BY X.PROCESSSEGMENTID
+               , X.PROCESSSEGMENTVERSION
+               , X.USERSEQUENCE
+               , PS.PROCESSSEGMENTNAME
+               <if test='VALUEDISPLAY=="LOT"'>
+               , X.LOTID
+               , X.GROUP_NUM
+               </if>
+    ) Z
+    ORDER BY TO_NUMBER(Z.USERSEQUENCE) 
+    </select>
+    
+    <!-- 초도측정 체크시 GROUP1의 LOTID를 기준으로 SHRINKPRODUCTID 조회 -->
+    <select id="selectShrinkProductIdInfo" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03300Dao.selectShrinkProductIdInfo  */
+    SELECT DISTINCT A.SHRINKPRODUCTID
+      FROM QAM_SHRINKMEASUREMASTER A
+     WHERE 1=1
+     AND A.LOTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{GROUP1_LOTID}, ','))  
+    </select>    
+</mapper>

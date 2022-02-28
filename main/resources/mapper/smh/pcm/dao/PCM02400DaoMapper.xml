@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM02400Dao">
+
+	<!-- 상단 Roll Lot 정보 -->
+	<select id="selectRollCuttingTarget" parameterType="map" resultType="hashmap">
+		/* selectRollCuttingTarget 10001 */
+		-- Id : selectRollCuttingTarget
+				SELECT   '' AS CHK
+			  ,  PO.PRODUCTIONORDERID SALESORDERID
+		      ,  PO.LINENO LINENO
+		      ,  PD.PRODUCTDEFID
+		      ,  PD.PRODUCTDEFNAME
+		      ,  PD.PRODUCTDEFVERSION  ITEMVERSION
+		      ,  PO.PLANQTY
+		      ,  L.PROCESSSEGMENTID
+		      ,  COALESCE(SD1.DICTIONARYNAME,PS.PROCESSSEGMENTNAME) PROCESSSEGMENTNAME
+		      ,  L.USERSEQUENCE
+		      ,  L.AREAID
+		      ,  COALESCE(SD2.DICTIONARYNAME,AR.AREANAME) AREANAME
+		      ,  L.LOTID
+		      ,  PO.LOTINPUTPNLQTY LOTSIZE
+		      ,  L.STARTEDDATE
+		      ,  L.CREATEDQTY  INPUTQTY
+		      ,  TO_NUMBER(L.QTY)  PCS
+		      --,  CEIL(L.QTY/PD.PCSPNL :: NUMERIC)    PNL
+		      ,  TO_NUMBER(CEIL(L.QTY/L.PANELPERQTY))  PNL
+		      ,  ROUND((L.QTY / PD.PCSMM), 2)    MM
+		      ,  COALESCE(PO.INPUTSEQUENCE,'1') INPUTSEQUENCE
+		      ,  L.PANELPERQTY
+		      ,  PP1.PROCESSSEGMENTID      AFTERPROCESSSEGMENTID
+		      ,  PP1.PROCESSSEGMENTVERSION AFTERPROCESSSEGMENTVERSION		
+		      ,  L.DESCRIPTION
+		      ,  PD.MATERIALCLASS
+		      ,  PD.MATERIALSEQUENCE		
+		      ,	SC1.MEANING AS WORKTYPENAME		      		      
+		FROM PCM_LOT L
+		INNER JOIN MFM_PRODUCTIONORDER   PO ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+		                                   AND L.LINENO = PO.LINENO
+		INNER JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+		                                   AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+		INNER JOIN BAS_PROCESSSEGMENT    PS ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+		                                   AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+		INNER JOIN BAS_PROCESSPATH       PP ON  L.PROCESSDEFID = PP.PROCESSDEFID 
+		                                   AND L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+		                                   AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+		INNER JOIN BAS_PROCESSPATH      PP1 ON  PP.PROCESSDEFID = PP1.PROCESSDEFID
+		                                   AND PP.PROCESSDEFVERSION = PP1.PROCESSDEFVERSION
+		                                   AND PP.PATHSEQUENCE + 1 = PP1.PATHSEQUENCE  				                                   
+		LEFT  JOIN CMD_DICTIONARY       SD1 ON  PS.PROCESSSEGMENTNAME = SD1.DICTIONARYID
+		                                   AND SD1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}     
+		INNER  JOIN BAS_AREA             AR ON L.AREAID = AR.AREAID
+		LEFT   JOIN CMD_DICTIONARY      SD2 ON  AR.AREANAME = SD2.DICTIONARYID
+		                                   AND SD2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+        LEFT   JOIN CMD_LOOKUP_VALUES      SC1 ON  SC1.LOOKUP_CODE = (CASE	WHEN L.ISREWORK = 'Y' OR L.WORKCOUNT  >  0 THEN 'IsRework'  ELSE 'Normal' END)
+		                                     AND SC1.LOOKUP_TYPE  = 'LotWorkType'
+		WHERE 1=1
+		AND   PD.RTRSHT = 'RTR'
+		AND   COALESCE(L.ISREPRESENTROLLLOT,'N') = 'N'
+		AND   L.LOTSTATE IN ('InProduction', 'InTransit')
+		AND   COALESCE(L.ISHOLD,'N') = 'N'
+		AND   PD.MATERIALCLASS IN ('FG','SB','BA')
+		AND   PS.PROCESSSEGMENTCLASSID IN (	 
+										    SELECT PROCESSSEGMENTCLASSID 
+			                                FROM BAS_PROCESSSEGMENTCLASS  T
+			                                WHERE T.PARENTPROCESSSEGMENTCLASSID = '10'
+		                                   )
+		AND   L.PROCESSSTATE = 'WaitForSend'
+		AND   COALESCE(L.ISDEFECTED,'N') <![CDATA[<>]]> 'Y' 
+		AND	  REGEXP_INSTR(L.LOTID,'[0-9]') != 1
+		-- 품목코드
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">					
+			AND EXISTS
+			(
+				SELECT	1
+				FROM	UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')		PMP
+				WHERE	L.PRODUCTDEFID = PMP.VALUE
+			)
+		</if>
+		<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''">	
+			AND	L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+		</if>
+		-- 작업장
+		<if test="AREANAME != null and AREANAME !=''">	
+			AND	L.AREAID = #{AREAID}
+		</if>	
+    	-- LOTID 조회
+		<if test="LOTID != null and LOTID !=''">					
+			AND EXISTS
+			(
+				SELECT	1
+				FROM	UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',')		LMP
+				WHERE	L.LOTID = LMP.VALUE
+			)
+		</if>
+
+	</select>
+	<select id="selectTransitAreaList" parameterType="map" resultType="hashmap">
+		/* GetTransitAreaList 10032 */
+		-- Id : selectTransitAreaList
+			SELECT BOR.RESOURCEID
+		     , MR.DESCRIPTION  RESOURCENAME
+		     , MR.AREAID
+		     , MR.RESOURCEID
+		     , COALESCE(AN.DICTIONARYNAME, A.AREANAME)	AS AREANAME     
+		     , MR.EQUIPMENTCLASSID
+		     --, BOR.ISPRIMARYRESOURCE
+		     , CASE WHEN RR.LOTID IS NOT NULL THEN 'Y'
+		     		ELSE 'N'
+		       END						AS ISPRIMARYRESOURCE
+		     --2020-04-03 강유라 PDA 인계작업장 바인딩시 resourceAreaId,resourceAreaName으로 바인딩하기위해 추가
+	         , BOR.RESOURCEID||'|'||MR.AREAID 			AS RESOURCEAREAID
+	         , MR.DESCRIPTION							AS RESOURCEAREANAME 
+		FROM PCM_LOT L
+		INNER JOIN BAS_BILLOFRESOURCE	BOR	ON L.PROCESSDEFID = BOR.PROCESSDEFID
+											AND	L.PROCESSDEFVERSION = BOR.PROCESSDEFVERSION
+											
+											<choose>
+									          	<when test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+									          		AND	BOR.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+									          	</when>
+									          	<otherwise>
+									          		AND	L.PROCESSSEGMENTID = BOR.PROCESSSEGMENTID
+									          	</otherwise>
+											</choose>		
+											<if test="PROCESSSEGMENTVERSION != null and PROCESSSEGMENTVERSION !=''">	
+												AND	BOR.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+											</if>																				
+											AND	BOR.RESOURCETYPE = #{RESOURCETYPE}
+		INNER JOIN BAS_RESOURCE			MR	ON	BOR.RESOURCEID = MR.RESOURCEID            
+											AND	BOR.ENTERPRISEID = MR.ENTERPRISEID   
+											AND	BOR.PLANTID = MR.PLANTID   
+		LEFT OUTER JOIN BAS_AREA			A	ON	MR.ENTERPRISEID = A.ENTERPRISEID
+											AND	MR.PLANTID = A.PLANTID
+											AND	MR.AREAID = A.AREAID
+		LEFT OUTER JOIN CMD_DICTIONARY	AN	ON	A.AREANAME = AN.DICTIONARYID
+											AND	AN.LANGUAGETYPE =  #{SESSION_LANGUAGETYPE}
+		LEFT OUTER JOIN PCM_REWORKRETURN	RR	ON	L.LOTID = RR.LOTID
+											AND	BOR.PROCESSSEGMENTID = RR.TOPROCESSSEGMENTID
+											AND	BOR.RESOURCEID = RR.TORESOURCEID
+		WHERE	1 = 1
+		AND		L.ENTERPRISEID = #{ENTERPRISEID}
+		AND		L.PLANTID = #{PLANTID}
+		AND		L.LOTID = #{LOTID}
+		ORDER BY BOR."sequence"
+	</select>
+	<select id="selectLotIdMaxSequence_Rollcut" parameterType="map" resultType="hashmap">
+		/* GetLotIdMaxSequence_Rollcut 10001 */
+		-- Id : selectLotIdMaxSequence_Rollcut
+		SELECT COALESCE(MAX(X.SEQ),0) AS LASTSEQUENCE
+		FROM
+		(
+			SELECT  TO_NUMBER(SUBSTR(L.LOTID,LENGTH(L.LOTID)-2,3))	AS SEQ
+			FROM PCM_LOT L
+			WHERE (LOTID LIKE '%' || #{LOTID} || '%')
+			AND     L.LOTCREATEDTYPE <![CDATA[<>]]> 'Defect'	      
+		)X      
+	</select>
+</mapper>

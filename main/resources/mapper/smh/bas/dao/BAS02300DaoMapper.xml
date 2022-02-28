@@ -1,0 +1,321 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 승인
+    설명          : 승인처리 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2021.03.10
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.03.10      진성하     최초  생성
+-->
+
+<mapper namespace="smh.bas.dao.BAS02300Dao">
+
+
+    <!-- 승인 정보 변경 :승인,반려-->
+    <update id="updateBasApproval" parameterType="map" >
+    DECLARE
+     V_IS_LAST VARCHAR2(1) := 'N';
+    BEGIN
+	    BEGIN
+	     SELECT  CASE WHEN APPROVER = #{MODIFIER} and APPROVEDATE is null  THEN
+	     			'Y'
+	     			END
+	       INTO V_IS_LAST 
+	      FROM BAS_APPROVAL
+	     WHERE APPROVALID = #{APPROVALID}
+   		    AND APPROVALTYPE = #{APPROVALTYPE}
+		    AND ENTERPRISEID = #{ENTERPRISEID}
+		    AND PLANTID = #{PLANTID}; 
+	 	EXCEPTION WHEN NO_DATA_FOUND THEN
+	 		V_IS_LAST := 'N';
+	 	END;  
+	 	
+	    UPDATE BAS_APPROVAL 
+	    SET  
+	        APPROVALSTATUS = #{APPROVALSTATUS}     
+	        ,REVIEWDATE = case when REVIEWER = #{MODIFIER} and REVIEWDATE is null then sysdate
+	                           else REVIEWDATE end
+	        ,APPROVEDATE = case when APPROVER = #{MODIFIER} and APPROVEDATE is null then sysdate
+	                           else APPROVEDATE end
+	        ,MODIFIER = #{MODIFIER}     
+	        ,MODIFIEDTIME = SYSDATE     
+	        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+	        ,LASTTXNID = #{LASTTXNID}     
+	        ,LASTTXNUSER = #{LASTTXNUSER}     
+	        ,LASTTXNTIME = SYSDATE     
+	        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+	    WHERE APPROVALID = #{APPROVALID}
+	    AND APPROVALTYPE = #{APPROVALTYPE}
+	    AND ENTERPRISEID = #{ENTERPRISEID}
+	    AND PLANTID = #{PLANTID};
+	    	 	
+	    /* 모델등록 GOVERNANACE Table 상태 Update */
+	    IF #{APPROVALSTATUS} = 'Reject' THEN
+	    	UPDATE BAS_GOVERNANCE SET STATUS = #{GOVERNANACESTATUS}
+	    	WHERE GOVERNANCENO = #{APPROVALID}
+	    	  AND GOVERNANCETYPE = #{APPROVALTYPE};
+	   	ELSIF #{APPROVALSTATUS} = 'Approval' THEN
+	   		IF V_IS_LAST = 'Y' THEN /* 최종승인인 경우만 */
+	   		NULL;
+	   		/* 2021-05-10 미사용 처리 */
+	   		/* 2021-05-27 재사용 처리, 미사용처리를 왜 했는지 기억이 안남.. */ 
+		   		UPDATE BAS_GOVERNANCE G SET STATUS = #{GOVERNANACESTATUS}
+													,CAMWORKSTATE =   NVL((SELECT CASE
+									                   WHEN PC.RCITEMID IS NOT NULL THEN
+									                    'Complete'
+									                   ELSE
+									                    NULL
+									               END
+									        FROM   PCM_CAMREQUEST PC
+									        WHERE  PC.RCITEMID = G.PRODUCTDEFID
+									        AND    PC.RCITEMVERSION = G.PRODUCTDEFVERSION), G.CAMWORKSTATE)		
+		    	WHERE GOVERNANCENO = #{APPROVALID}
+		    	  AND GOVERNANCETYPE = #{APPROVALTYPE};		    	   
+	        END IF;	   	
+	    END IF;
+	 END;
+	    
+    </update>
+	<!-- 승인 정보 변경 :전결-->
+    <update id="updateBasApproval2" parameterType="map" >
+    UPDATE BAS_APPROVAL 
+    SET  
+        APPROVALSTATUS = #{APPROVALSTATUS}     
+        ,REVIEWDATE = case when REVIEWER = #{MODIFIER} and REVIEWDATE is null then sysdate
+                           else REVIEWDATE end
+        ,APPROVEDATE = case when APPROVEDATE is null then sysdate
+                           else APPROVEDATE end
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+    WHERE APPROVALID = #{APPROVALID}
+    AND APPROVALTYPE = #{APPROVALTYPE}
+    AND ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    </update>
+
+    <!-- 승인 정보 조회-->
+    <select id="selectBasApprovalList" parameterType="map" resultType="hashmap">
+    SELECT  AP.APPROVALID
+		,	TO_CHAR(AP.REQUESTDATE, 'YYYYMMDD') AS REQUESTDATE
+	    ,   AP.APPROVALSTATUS
+	    ,	G.GOVERNANCETYPE					AS APPROVALTYPE
+	    --,   AP.APPROVALTYPE
+	    ,   G.PRODUCTCLASS						AS PRODUCTIONTYPE
+	    ,   G.CUSTOMERID
+	    ,   C.CUSTOMERNAME
+	    ,   G.PRODUCTDEFID						AS ITEMID
+	    ,   G.PRODUCTDEFVERSION					AS ITEMVERSION
+	    ,   IM.ITEMNAME
+	    ,   G.SPECPERSON                        AS SPECOWNER
+	    ,   COALESCE(U1.USERNAME, G.SPECPERSON) AS SPECOWNERNAME
+	    ,   AP.REVIEWER							AS REVIEWERID
+	    ,   COALESCE(U2.USERNAME, AP.REVIEWER)  AS REVIEWERNAME
+	    ,   TO_CHAR(AP.REVIEWDATE, 'YYYYMMDD')	AS REVIEWDATE
+	    ,   AP.APPROVER
+	    ,   COALESCE(U3.USERNAME, AP.APPROVER)  AS APPROVERNAME
+	    ,   TO_CHAR(AP.APPROVEDATE, 'YYYYMMDD')	AS APPROVEDATE
+	    ,   AT.DESCRIPTION                          AS REJECTREASON
+	    ,	AP.ENTERPRISEID
+	    ,	AP.PLANTID
+	    ,	G.GOVERNANCENO
+	FROM    BAS_APPROVAL             	AP
+	LEFT JOIN BAS_APPROVALTRANSACTION    AT  ON  AP.APPROVALTYPE = AT.APPROVALTYPE
+	                                                    AND AP.APPROVALID = AT.APPROVALID
+	                                                    AND AP.ENTERPRISEID = AT.ENTERPRISEID
+	                                                    AND AP.PLANTID = AT.PLANTID
+	                                                    AND AT.RESULTS = 'Reject'
+                                          AND  AT.SEQUENCE = (SELECT MAX(SEQUENCE) FROM BAS_APPROVALTRANSACTION ATT
+                                                                                        WHERE ATT.APPROVALID = AT.APPROVALID
+                                                                                          AND ATT.APPROVALTYPE = AT.APPROVALTYPE
+                                                                                          AND ATT.ENTERPRISEID = AT.ENTERPRISEID
+                                                                                          AND ATT.PLANTID = AT.PLANTID
+                                                                                          AND ATT.RESULTTYPE = 'Reject' )
+	INNER JOIN BAS_GOVERNANCE            G   ON  AP.APPROVALID = G.GOVERNANCENO
+	                                                    AND AP.ENTERPRISEID = G.ENTERPRISEID
+	                                                    AND AP.PLANTID = G.PLANTID
+	            LEFT JOIN BAS_ITEMMASTER             IM  ON  G.PRODUCTDEFID = IM.ITEMID
+	                                                    AND G.PRODUCTDEFVERSION = IM.ITEMVERSION
+	                                                    AND G.ENTERPRISEID = IM.ENTERPRISEID
+	            LEFT JOIN BAS_CUSTOMER               C   ON  G.CUSTOMERID = C.CUSTOMERID
+	            										AND AP.ENTERPRISEID = C.ENTERPRISEID
+	                                                    AND AP.PLANTID = C.PLANTID
+	            LEFT JOIN CMD_USER_V                   U1  ON  G.SPECPERSON = U1.USERID
+	            LEFT JOIN CMD_USER_V                   U2  ON  AP.REVIEWER = U2.USERID
+	            LEFT JOIN CMD_USER_V                   U3  ON  AP.APPROVER = U3.USERID
+	WHERE   1 = 1 
+		<if test="EXCEPTYN eq 'Y'.toString()">	    	
+	    	AND AP.APPROVEDATE IS NULL
+	    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND AP.PLANTID = #{PLANTID}
+    </if>
+    <if test="REQUESTDATE_FROM != null and REQUESTDATE_FROM !='' "> 
+        AND AP.REQUESTDATE <![CDATA[>=]]> TO_TIMESTAMP(SUBSTR(#{REQUESTDATE_FROM},1,14),'YYYYMMDDHH24MISS')
+    </if>
+    <if test="REQUESTDATE_TO != null and REQUESTDATE_TO !='' "> 
+        AND AP.REQUESTDATE <![CDATA[<=]]> TO_TIMESTAMP(SUBSTR(#{REQUESTDATE_TO},1,14),'YYYYMMDDHH24MISS')
+    </if>
+    <if test="CUSTOMER != null and CUSTOMER !='' "> 
+		AND EXISTS
+               (
+                   SELECT  1
+                   FROM    ufn_selectStringToSplit(#{CUSTOMER}, ',')      LMP
+                   WHERE   G.CUSTOMERID = LMP.VALUE
+               )
+    </if>
+    <if test="INVENTORYCATEGORY != null and INVENTORYCATEGORY !='' "> 
+        AND IM.INVENTORYCATEGORY = #{INVENTORYCATEGORY}
+    </if>
+    <if test="APPROVALTYPE != null and APPROVALTYPE !='' "> 
+        AND AP.APPROVALTYPE = #{APPROVALTYPE}
+    </if>
+    <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' "> 
+        AND G.PRODUCTCLASS = #{PRODUCTIONTYPE}
+    </if>
+    <if test="APPROVALSTATUS != null and APPROVALSTATUS !='' "> 
+        AND AP.APPROVALSTATUS = #{APPROVALSTATUS}
+    </if>
+    <if test="ITEMID != null and ITEMID !='' "> 
+		AND EXISTS
+              (
+                  SELECT  1
+                  FROM    UFN_SELECTSTRINGTOSPLIT2(#{ITEMID}, ',', '|')      LMP
+                  WHERE   IM.ITEMID = LMP.VALUE
+                  AND     (IM.ITEMVERSION = LMP.VALUE2 OR LMP.VALUE2 = '')
+              )
+    </if>
+    <if test="PRODUCTNAME != null and PRODUCTNAME !='' "> 
+        AND IM.ITEMNAME = #{PRODUCTNAME}
+    </if>
+    <if test="SPECOWNER != null and SPECOWNER !='' "> 
+		AND EXISTS (
+						SELECT	1
+						FROM 	ufn_selectStringToSplit(#{SPECOWNER}, ',')	M
+						WHERE 	G.SPECPERSON = M.VALUE
+				   )
+    </if>
+    ORDER BY AP.REQUESTDATE ASC
+    </select>
+
+
+    <!-- 승인 처리결과 변경 -->
+    <update id="updateBasApprovaltransaction" parameterType="map" >
+    UPDATE BAS_APPROVALTRANSACTION 
+    SET 
+        RESULTS = #{RESULTS}     
+        ,ENDDATE = sysdate     
+        ,DESCRIPTION = #{REJECTREASON}     
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = sysdate     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+    WHERE APPROVALID = #{APPROVALID}
+    AND APPROVALTYPE = #{APPROVALTYPE}
+    AND ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    AND RESULTS IS NULL
+    AND SEQUENCE = (SELECT MAX(SEQUENCE) 
+    				FROM BAS_APPROVALTRANSACTION
+    				WHERE APPROVALID = #{APPROVALID}
+				    AND APPROVALTYPE = #{APPROVALTYPE}
+				    AND ENTERPRISEID = #{ENTERPRISEID}
+				    AND PLANTID = #{PLANTID}
+				    AND ACTOR = #{MODIFIER}
+				    AND RESULTS IS NULL)
+    </update>
+
+    <!-- 승인 처리결과 변경 : 전결 -->
+    <update id="updateBasApprovaltransaction2" parameterType="map" >
+    DECLARE
+    BEGIN
+    UPDATE BAS_APPROVALTRANSACTION 
+    SET 
+        RESULTS = #{RESULTS}     
+        ,ENDDATE = sysdate     
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = sysdate     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+    WHERE APPROVALID = #{APPROVALID}
+    AND APPROVALTYPE = #{APPROVALTYPE}
+    AND ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    AND RESULTS IS NULL
+     AND RESULTS IS NULL
+    AND SEQUENCE = (SELECT MAX(SEQUENCE) 
+    				FROM BAS_APPROVALTRANSACTION
+    				WHERE APPROVALID = #{APPROVALID}
+				    AND APPROVALTYPE = #{APPROVALTYPE}
+				    AND ENTERPRISEID = #{ENTERPRISEID}
+				    AND PLANTID = #{PLANTID}
+				    AND ACTOR = #{MODIFIER}
+				    AND RESULTS IS NULL);
+				    
+				    
+	UPDATE BAS_GOVERNANCE G SET STATUS = #{GOVERNANACESTATUS}		
+				,CAMWORKSTATE =   NVL((SELECT CASE
+									                   WHEN PC.RCITEMID IS NOT NULL THEN
+									                    'Complete'
+									                   ELSE
+									                    NULL
+									               END
+									        FROM   PCM_CAMREQUEST PC
+									        WHERE  PC.RCITEMID = G.PRODUCTDEFID
+									        AND    PC.RCITEMVERSION = G.PRODUCTDEFVERSION), G.CAMWORKSTATE)		
+		    	WHERE GOVERNANCENO = #{APPROVALID}
+		    	  AND GOVERNANCETYPE = #{APPROVALTYPE};
+		    	  
+	
+		    	  
+	END;
+    </update>
+
+    <!-- 승인 처리결과 조회-->
+    <select id="selectBasApprovaltransactionList" parameterType="map" resultType="hashmap">
+    SELECT 
+        AT.PLANTID
+      --,   COALESCE(D.DICTIONARYNAME, AT.RESULTS) 		AS ACCEPTSTATE
+      ,	AT.RESULTS										AS ACCEPTSTATE
+      ,   AP.REVIEWER									AS REVIEWERID
+      ,   COALESCE(U.USERNAME, AP.REVIEWER)   			AS REVIEWERNAME
+      ,   AT.ACTOR
+      ,   COALESCE(U2.USERNAME, AT.ACTOR)     			AS ACCEPTUSER
+      ,   TO_CHAR(AT.ENDDATE, 'YYYY-MM-DD HH24:MI:SS')  AS ACCEPTDATE
+      ,   AT.DESCRIPTION                      			AS REJECTREASON
+      ,   CASE WHEN COALESCE(AT.RESULTS, '') = 'Reject' THEN TO_CHAR(AT.ENDDATE, 'YYYYMMDD') ELSE NULL END REJECTDATE
+      ,   AT.RESULTTYPE
+    FROM	BAS_APPROVALTRANSACTION AT 
+    INNER JOIN BAS_APPROVAL            AP  ON  AT.APPROVALTYPE = AP.APPROVALTYPE
+                                          AND AT.APPROVALID = AP.APPROVALID
+                                          AND AT.ENTERPRISEID = AP.ENTERPRISEID
+                                          AND AT.PLANTID = AP.PLANTID
+    LEFT JOIN CMD_USER_V                 U   ON  AP.REVIEWER = U.USERID
+    LEFT JOIN CMD_USER_V                 U2  ON  AT.ACTOR = U2.USERID
+    WHERE 1=1 
+    <if test="APPROVALID != null and APPROVALID !='' "> 
+        AND AT.APPROVALID = #{APPROVALID}
+    </if>
+    <if test="ENTERPRISEID != null and ENTERPRISEID !='' "> 
+        AND AT.ENTERPRISEID = #{ENTERPRISEID}
+    </if>
+    ORDER BY  AT.SEQUENCE
+    </select>
+
+        
+</mapper>

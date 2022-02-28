@@ -1,0 +1,200 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM02700Dao">
+<!-- 재공불량 금액현황 정보-->
+
+    <!-- 재공불량 금액현황 정보 조회 AS-IS : GetWorkDefectPriceStatus ver. 10001-->
+    <select id="selectQamWorkDefectPriceStatusList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM02700Dao.selectQamWorkDefectPriceStatusList  */
+    WITH REASONPRODUCT AS
+        (
+            SELECT
+                    CONSUMABLEDEFID                AS REASONCONSUMABLEDEFID
+                ,CONSUMABLEDEFVERSION        AS REASONCONSUMABLEDEFVERSION
+                ,CONSUMABLEDEFNAME            AS REASONCONSUMABLEDEFNAME
+            FROM    BAS_CONSUMABLEDEFINITION
+            WHERE     1 = 1
+
+            UNION
+
+            SELECT
+                    PRODUCTDEFID
+                ,PRODUCTDEFVERSION
+                ,PRODUCTDEFNAME
+            FROM     BAS_PRODUCTDEFINITION
+            WHERE     1 = 1
+        )
+        SELECT LD.CREATEDTIME                                                     AS OCCURDATE         /*발생일시*/
+             , LD.PLANTID                                                                              /*발생 Site*/
+             , LCD.DICTIONARYNAME                                                AS LOTTYPE            /*양산구분*/
+             , L.PRODUCTDEFID                                                                          /*품목코드*/
+             , L.PRODUCTDEFVERSION                                                                     /*품목 Version*/
+             , PD.PRODUCTDEFNAME                                                                       /*품목명*/
+             , LD.LOTID                                                                                /*Lot No*/
+             , L.PARENTLOTID                                                                           /*Parent Lot No*/
+             , A.PLANTID                                                         AS REASONPLANTID      /*원인 Site*/
+             , LD.REASONCONSUMABLEDEFID                                                                /*원인 품목 ID*/
+             , LD.REASONCONSUMABLEDEFVERSION                                                           /*원인 품목 Version*/
+             , RSP.REASONCONSUMABLEDEFNAME                                                             /*원인 품목명*/
+             , LD.REASONCONSUMABLELOTID                                                                /*원인 자재 Lot No*/
+             , LD.REASONSEGMENTID                                                                      /*원인 공정ID*/
+             , RSD.DICTIONARYNAME                                                AS REASONSEGMENTNAME  /*원인 공정명*/
+             , LD.REASONAREAID                                                                         /*원인 작업장ID*/
+             , RAD.DICTIONARYNAME                                                AS REASONAREANAME     /*원인 작업장*/
+             , A.VENDORID                                                                              /*원인 업체ID*/
+             , V.VENDORNAME                                                                            /*원인 업체명*/
+             <!-- , LD.DEFECTCODE                                                                           불량 코드 -->
+             <!-- ,DCD.DICTIONARYNAME                                           AS DEFECTCODENAME     불량명 -->
+             , LD.QCSEGMENTID||LD.DEFECTCODE                                    AS DEFECTCODE          /*불량코드+품질공정*/
+             , DCD.DICTIONARYNAME ||'-'|| QSD.DICTIONARYNAME AS DEFECTCODENAME
+             , LD.DEFECTQTY                                                                            /*불량 수량*/
+             , SOA.UNITPRICE                                                                           /*수주 단가*/
+             , LD.DEFECTQTY * SOA.UNITPRICE                                     AS DEFECTAMOUNT2       /*불량반영금액(판가)*/
+             , (PQS.CUMULATIVERATE * SOA.UNITPRICE) / 100                       AS PCSAMOUNT           /*PCS 단가*/
+             , LD.DEFECTQTY * ((PQS.CUMULATIVERATE * SOA.UNITPRICE) / 100)      AS DEFECTAMOUNT        /*불량 금액*/
+             , SOA.CURRENCY                                                                            /*화폐단위*/
+             , LD.PROCESSSEGMENTID                                                                     /*발견 공정ID*/
+             , PSD.DICTIONARYNAME                                               AS PROCESSSEGMENTNAME  /*발견 공정명*/
+             , LD.CREATOR                                                       AS DISCOVERUSERID      /*발견자ID*/
+             , UR.USER_NM                                                       AS DISCOVERUSERNAME    /*발견자명*/
+             , CASE WHEN LDI.RECEIVETIME IS NULL
+                       THEN 'N'
+                       ELSE 'Y' END                                             AS ISINBOUND           /*인수여부*/
+             , CASE WHEN (LDR.STATUS = 'Confirm'
+                             OR LDR.STATUS = 'DeadlineComplete')
+                       THEN 'Y'
+                       ELSE 'N' END                                             AS ISCONFIRMATION      /*확정여부*/
+             , CASE WHEN LDR.STATUS = 'DeadlineComplete'
+                       THEN 'Y'
+                       ELSE 'N' END                                             AS ISCLOSE             /*마감여부*/
+             , CASE WHEN OC.VALIDSTATE = 'Valid'
+                       THEN 'Y'
+                       ELSE 'N' END                                             AS ISCLAIM             /*Claim 포함여부*/
+          FROM             PCM_LOTDEFECT                 LD
+          INNER JOIN       PCM_LOT                       L    ON   L.LOTID                        = LD.LOTID
+                                                              <!--2021.05.26 TOBE Add 불량취소한 내역은 제외하기 위해-->
+                                                              AND  L.ISDEFECTED                   = 'Y'
+          LEFT OUTER JOIN  QAM_QCLOTDEFECTINBOUND        LDI  ON   LDI.LOTID                      = LD.LOTID
+          LEFT OUTER JOIN  QAM_QCLOTDEFECTRESULT         LDR  ON   LDR.TXNHISTKEY                 = LD.TXNHISTKEY
+                                                              AND  LDR.LOTID                      = LD.LOTID
+          LEFT OUTER JOIN  PCM_LOTWORKRESULT             LR   ON   LR.LOTID                       = LD.LOTID
+                                                              AND  LR.PROCESSSEGMENTID            = LD.REASONSEGMENTID
+          LEFT OUTER JOIN  OSM_OSPCLAIM                  OC   ON   OC.LOTID                       = LD.LOTID
+                                                              AND  OC.LOTHISTKEY                  = LD.TXNHISTKEY
+          LEFT OUTER JOIN  BAS_PRODUCTDEFINITION         PD   ON   PD.PRODUCTDEFID                = L.PRODUCTDEFID
+                                                              AND  PD.PRODUCTDEFVERSION           = L.PRODUCTDEFVERSION
+          LEFT OUTER JOIN  BAS_AREA                      A    ON   A.AREAID                       = LD.REASONAREAID
+          LEFT OUTER JOIN  BAS_PLANT                     P    ON   P.PLANTID                      = A.PLANTID
+          LEFT OUTER JOIN  BAS_VENDOR                    V    ON   V.VENDORID                     = A.VENDORID
+                                                              AND  V.ENTERPRISEID                 = A.ENTERPRISEID
+                                                              AND  V.PLANTID                      = A.PLANTID
+          LEFT OUTER JOIN  BAS_DEFECTCODE                DC   ON   DC.DEFECTCODE                  = LD.DEFECTCODE
+          LEFT OUTER JOIN  BAS_PRODUCTQUOTATIONSEGMENT   PQS  ON   PQS.PRODUCTDEFID               = LD.PRODUCTDEFID
+                                                              AND  PQS.PRODUCTDEFVERSION          = LD.PRODUCTDEFVERSION
+                                                              AND  PQS.PROCESSDEFID               = LD.PROCESSDEFID
+                                                              AND  PQS.PROCESSDEFVERSION          = LD.PROCESSDEFVERSION
+                                                              AND  PQS.PROCESSSEGMENTID           = LD.PROCESSSEGMENTID
+                                                              AND  PQS.PROCESSSEGMENTVERSION      = LD.PROCESSSEGMENTVERSION
+          LEFT OUTER JOIN  BAS_SALEORDERAPPROVAL         SOA  ON   SOA.SALESORDERID               = L.PRODUCTIONORDERID
+                                                              AND  SOA.LINENO                     = L.LINENO
+                                                              AND  SOA.ENTERPRISEID               = L.ENTERPRISEID
+                                                              AND  SOA.PLANTID                    = L.PLANTID
+          LEFT OUTER JOIN  BAS_PROCESSSEGMENT            PS   ON   PS.PROCESSSEGMENTID            = LD.PROCESSSEGMENTID
+                                                              AND  PS.PROCESSSEGMENTVERSION       = LD.PROCESSSEGMENTVERSION
+          LEFT OUTER JOIN  BAS_PROCESSSEGMENT            RS   ON   RS.PROCESSSEGMENTID            = LD.REASONSEGMENTID
+          LEFT OUTER JOIN  REASONPRODUCT                 RSP  ON   RSP.REASONCONSUMABLEDEFID      = LD.REASONCONSUMABLEDEFID
+                                                              AND  RSP.REASONCONSUMABLEDEFVERSION = LD.REASONCONSUMABLEDEFVERSION
+          LEFT OUTER JOIN  CMD_LOOKUP_VALUES             LC   ON   LC.LOOKUP_CODE                 = L.LOTTYPE
+                                                              AND  LC.LOOKUP_TYPE                 = 'ProductionType'
+          LEFT OUTER JOIN  CMD_USERS                     UR   ON   UR.USER_ID                     = LD.CREATOR
+          LEFT OUTER JOIN  CMD_DICTIONARY                RSD  ON   RSD.DICTIONARYID               = RS.PROCESSSEGMENTNAME
+                                                              AND  RSD.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN  CMD_DICTIONARY                RAD  ON   RAD.DICTIONARYID               = A.AREANAME
+                                                              AND  RAD.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN  CMD_DICTIONARY                DCD  ON   DCD.DICTIONARYID               = DC.DICTIONARYID
+                                                              AND  DCD.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN  CMD_DICTIONARY                PSD  ON   PSD.DICTIONARYID               = PS.PROCESSSEGMENTNAME
+                                                              AND  PSD.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN  CMD_DICTIONARY                LCD  ON   LCD.DICTIONARYID               = LC.DICTIONARYID
+                                                              AND  LCD.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN  QAM_QCSEGMENTDEFINITION       QS   ON   LD.QCSEGMENTID                 = QS.QCSEGMENTID
+          LEFT OUTER JOIN  CMD_DICTIONARY                QSD  ON   QS.QCSEGMENTNAME               = QSD.DICTIONARYID
+                                                              AND  QSD.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+         WHERE 1 = 1
+           AND LD.PLANTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PLANTID}, ','))
+           AND LD.CREATEDTIME BETWEEN TO_DATE(#{PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+                                  AND TO_DATE(#{PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')
+        <if test="PRODUCTIONDIVISION != null and PRODUCTIONDIVISION !='' and  !'*'.equals(PRODUCTIONDIVISION) ">
+            AND L.LOTTYPE = #{PRODUCTIONDIVISION}                           <!--양산구분 조회조건-->
+        </if>
+        <if test="DEFECTLOTID != null and DEFECTLOTID !='' ">
+            AND L.LOTID LIKE '%' || #{DEFECTLOTID} || '%'
+        </if>
+        <if test="LOTID != null and LOTID !='' ">
+            AND L.PARENTLOTID LIKE '%' || #{LOTID} || '%'
+        </if>
+        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+            AND L.PRODUCTDEFID = #{PRODUCTDEFID}                            <!--품목 조회조건-->
+        </if>
+        <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+            AND L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}                  <!--품목 Rev-->
+        </if>
+        <if test="REASONRESOURCETYPE != null and REASONRESOURCETYPE !='' and  !'*'.equals(REASONRESOURCETYPE) ">
+            AND A.OWNTYPE = #{REASONRESOURCETYPE}                           <!--원인 자원구분 조회조건-->
+        </if>
+        <if test="REASONPLANTID != null and REASONPLANTID !='' and  !'*'.equals(REASONPLANTID) ">
+            AND A.PLANTID = #{REASONPLANTID}                                <!--원인Site 조회조건-->
+        </if>
+        <if test="AREAID != null and AREAID !='' ">
+            AND LD.REASONAREAID = #{AREAID}                                 <!--원인작업장 조회조건-->
+        </if>
+        <if test="VENDORID != null and VENDORID !='' ">
+            AND A.VENDORID = #{VENDORID}                                    <!--원인업체 조회조건-->
+        </if>
+        <if test="DEFECTCODE != null and DEFECTCODE !='' ">
+            AND LD.DEFECTCODE = #{DEFECTCODE}                               <!--불량코드 조회조건-->
+        </if>
+        <if test="DISCOVERYSEGMENTID != null and DISCOVERYSEGMENTID !='' ">
+            AND LD.PROCESSSEGMENTID = #{DISCOVERYSEGMENTID}                 <!--발견공정 조회조건-->
+        </if>
+        <if test="INBOUND != null and INBOUND !='' and  !'*'.equals(INBOUND) ">
+            <if test='INBOUND == "Y"'>
+            AND    LDI.RECEIVETIME IS NOT NULL                              <!--인수여부 조회조건-->
+            </if>
+            <if test='INBOUND != "Y"'>
+            AND LDI.RECEIVETIME IS NULL
+            </if>
+        </if>
+        <if test="CONFIRMATION != null and CONFIRMATION !='' and  !'*'.equals(CONFIRMATION) ">
+            <if test='CONFIRMATION == "Y"'>
+                AND (LDR.STATUS = 'Confirm' OR LDR.STATUS = 'DeadlineComplete') <!--확정여부 조회조건-->
+            </if>
+            <if test='CONFIRMATION != "Y"'>
+                AND (LDR.STATUS = 'ConfirmCancel' OR LDR.STATUS IS NULL)
+            </if>
+        </if>
+        <if test="DEADLINE != null and DEADLINE !='' and  !'*'.equals(DEADLINE) ">
+            <if test='DEADLINE == "Y"'>
+                AND LDR.STATUS = 'DeadlineComplete'                         <!--마감여부 조회조건-->
+            </if>
+            <if test='DEADLINE != "Y"'>
+                AND (LDR.STATUS != 'DeadlineComplete' OR LDR.STATUS IS NULL)
+            </if>
+        </if>
+        <if test="ISCLAIM != null and ISCLAIM !='' and  !'*'.equals(ISCLAIM) ">
+            <if test='ISCLAIM == "Y"'>
+                AND OC.VALIDSTATE = 'Valid'                                 <!--Claim 대상 확정여부 조회조건-->
+            </if>
+            <if test='ISCLAIM != "Y"'>
+                AND (OC.VALIDSTATE = 'Invalid' OR OC.VALIDSTATE IS NULL)
+            </if>
+        </if>
+        <if test="CURRENCY != null and CURRENCY !='' and  !'*'.equals(CURRENCY) ">
+            AND SOA.CURRENCY = #{CURRENCY}                                  <!--통화 조회조건-->
+        </if>
+        ORDER BY LD.CREATEDTIME DESC
+	</select>    
+	
+</mapper>

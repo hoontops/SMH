@@ -1,0 +1,628 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM05700Dao">
+
+	
+	<select id="selectDelayLotList" parameterType="map" resultType="hashmap">
+	/* "SelectDelayLotList" 10001 */
+	--id : selectDelayLotList
+	SELECT *
+			FROM
+			(
+				SELECT     Y.PLANTID
+				        ,  Y.LOTTYPE
+					    ,  Y.AREANAME
+					    ,  Y.PRODUCTDEFID
+					    ,  Y.PRODUCTDEFVERSION
+					    ,  Y.PRODUCTDEFNAME
+					    ,  Y.ISHOLD
+					    ,  Y.ISLOCKING
+					    ,  Y.USERSEQUENCE
+					    ,  Y.PROCESSSEGMENTID
+					    ,  Y.PROCESSSEGMENTVERSION
+					    ,  Y.PROCESSSEGMENTNAME
+					    ,  Y.RESOURCENAME
+					    ,  Y.LOTID
+					    ,  Y.WIPPROCESSSTATE
+					    ,  Y.WAITRECEIVEQTY
+					    ,  Y.WAITRECEIVEPNL
+					    ,  Y.WAITQTY
+					    ,  Y.WAITPNL
+					    ,  Y.RUNQTY
+					    ,  Y.RUNPNL
+					    ,  Y.WAITSENDQTY
+					    ,  Y.WAITSENDPNL
+					    ,  Y.LOTSTARTDATE    -- 공정 입고일
+					    ,  Y.SENDTIME
+				        ,  REPLACE(Y.SEGMNETDELAYTIME, SUBSTR(Y.SEGMNETDELAYTIME, -6) ,'') || ' ' || Y.LANUAGETIME SEGMNETDELAYTIME --공정체공시간
+				        --,  Y.SEGMENTDELAYTIMEH  -- 현장작업장 체공
+				        ,  Y.AREADELAYTIME  -- 현장작업장 체공
+					    ,  Y.CURRENTSTATESTAYINGTIME -- 현상태체공
+						,  COALESCE(SD.DICTIONARYNAME, DL.DELAYREASONCODE) REASONCODEID
+					    ,  CASE WHEN Y.PROCESSSTATE = 'WaitForReceive' THEN RECEIVESTAYINGTIME / 3600
+				                WHEN Y.PROCESSSTATE = 'Wait'           THEN TRACKINSTAYINGTIME / 3600
+				                WHEN Y.PROCESSSTATE = 'Run'            THEN TRACKOUTSTAYINGTIME / 3600
+				                WHEN Y.PROCESSSTATE = 'WaitForSend'    THEN SENDSTAYINGTIME / 3600
+					            END   STAYINGLOCKSTD       				    
+					    ,  CASE WHEN Y.PROCESSSTATE = 'WaitForReceive'  THEN CASE WHEN Y.CURRENTSTATESTAYINGTIME_SEC > COALESCE(RECEIVESTAYINGTIME ,99999999999999999999999999)
+					                                                              THEN 'Staying'
+					                                                              ELSE 'Normal'
+					                                                              END
+				                WHEN     Y.PROCESSSTATE = 'Wait'  THEN CASE WHEN Y.CURRENTSTATESTAYINGTIME_SEC > COALESCE(TRACKINSTAYINGTIME ,99999999999999999999999999)
+					                                                              THEN 'Staying'
+					                                                              ELSE 'Normal'	                                                              
+					                                                              END
+				                WHEN     Y.PROCESSSTATE = 'Run'  THEN CASE WHEN Y.CURRENTSTATESTAYINGTIME_SEC > COALESCE(TRACKOUTSTAYINGTIME ,99999999999999999999999999)
+					                                                              THEN 'Staying'
+					                                                              ELSE 'Normal'	                          	                                                              
+					                                                              END
+				                WHEN     Y.PROCESSSTATE = 'WaitForSend'  THEN CASE WHEN Y.CURRENTSTATESTAYINGTIME_SEC > COALESCE(SENDSTAYINGTIME ,99999999999999999999999999)
+					                                                              THEN 'Staying'
+					                                                              ELSE 'Normal'
+					                                                              END
+					             END   STAYINGLOCK     
+						, TO_CHAR(CHECKTIME,'YYYY-MM-DD HH24:MI:SS') CHECKTIME  					                          
+				FROM
+				(
+					SELECT X.PLANTID
+					    ,  X.LOTTYPE
+					    ,  X.AREANAME
+					    ,  X.PRODUCTDEFID
+					    ,  X.PRODUCTDEFVERSION
+					    ,  X.PRODUCTDEFNAME
+					    ,  X.ISHOLD
+					    ,  X.ISLOCKING
+					    ,  X.USERSEQUENCE
+					    ,  X.PROCESSSEGMENTID
+					    ,  X.PROCESSSEGMENTVERSION
+					    ,  X.PROCESSSEGMENTNAME
+					    ,  X.RESOURCENAME
+					    ,  X.LOTID
+					    ,  COALESCE(SD.DICTIONARYNAME,X.WIPPROCESSSTATE) WIPPROCESSSTATE
+					    ,  X.PROCESSSTATE
+					    ,  X.WAITRECEIVEQTY
+					    ,  X.WAITRECEIVEPNL
+					    ,  X.WAITQTY
+					    ,  X.WAITPNL
+					    ,  X.RUNQTY
+					    ,  X.RUNPNL
+					    ,  X.WAITSENDQTY
+					    ,  X.WAITSENDPNL
+					    ,  TO_CHAR(X.LOTSTARTDATE,'YYYY-MM-DD HH24:MI:SS') LOTSTARTDATE
+					    ,  X.SENDTIME
+					    ,  ROUND((TRUNC(CURRENT_TIMESTAMP, 'MI') - X.AREADELAY) * 24, 3)  AS AREADELAYTIME
+					    ,  ROUND((TRUNC(CURRENT_TIMESTAMP, 'MI') - X.SENDTIME) * 24, 1)	AS  SEGMENTDELAYTIMEH
+					    , REPLACE(PCM_TIME_FORMAT01_FN((TRUNC(CURRENT_TIMESTAMP, 'MI') - X.SENDTIME)* 86400)
+					             ,'day',X.LANUAGEDAY) SEGMNETDELAYTIME
+					    ,  CASE WHEN X.PROCESSSTATE = 'WaitForReceive' THEN ROUND((TRUNC(CURRENT_TIMESTAMP, 'MI') - X.SENDTIME) * 24, 1)  
+					            WHEN X.PROCESSSTATE = 'Wait'           THEN ROUND((TRUNC(CURRENT_TIMESTAMP, 'MI') - X.RECEIVETIME) * 24, 1)
+					            WHEN X.PROCESSSTATE = 'Run'            THEN ROUND((TRUNC(CURRENT_TIMESTAMP, 'MI') - X.TRACKINTIME) * 24, 1)
+					            WHEN X.PROCESSSTATE = 'WaitForSend'    THEN ROUND((TRUNC(CURRENT_TIMESTAMP, 'MI') - X.TRACKOUTTIME) * 24, 1)
+					            END CURRENTSTATESTAYINGTIME  
+					    ,  CASE WHEN X.PROCESSSTATE = 'WaitForReceive' THEN (TRUNC(CURRENT_TIMESTAMP, 'MI') - X.SENDTIME)  * 86400
+					            WHEN X.PROCESSSTATE = 'Wait'           THEN (TRUNC(CURRENT_TIMESTAMP, 'MI') - X.RECEIVETIME) * 86400
+					            WHEN X.PROCESSSTATE = 'Run'            THEN (TRUNC(CURRENT_TIMESTAMP, 'MI') - X.TRACKINTIME) * 86400
+					            WHEN X.PROCESSSTATE = 'WaitForSend'    THEN (TRUNC(CURRENT_TIMESTAMP, 'MI') - X.TRACKOUTTIME) * 86400
+					            END CURRENTSTATESTAYINGTIME_SEC    
+ 					    ,  CASE WHEN X.PROCESSSTATE = 'WaitForReceive' THEN X.SENDTIME   
+					            WHEN X.PROCESSSTATE = 'Wait'           THEN X.RECEIVETIME
+					            WHEN X.PROCESSSTATE = 'Run'            THEN X.TRACKINTIME
+					            WHEN X.PROCESSSTATE = 'WaitForSend'    THEN X.TRACKOUTTIME
+					            END CHECKTIME
+					    ,   X.PROCESSDEFID
+					    ,   X.PROCESSDEFVERSION		
+					    ,	X.LANUAGETIME
+					FROM
+					(
+						SELECT L.PLANTID 
+						    ,  COALESCE(SD2.DICTIONARYNAME,L.LOTTYPE) LOTTYPE
+						    ,  COALESCE(SD1.DICTIONARYNAME,L.AREAID) AREANAME
+						    ,  L.PRODUCTDEFID
+						    ,  L.PRODUCTDEFVERSION
+						    ,  PD.PRODUCTDEFNAME
+						    ,  COALESCE(L.ISHOLD,'N') ISHOLD
+						    ,  COALESCE(L.ISLOCKING,'N') ISLOCKING
+						    ,  L.USERSEQUENCE
+						    ,  L.PROCESSSEGMENTID
+						    ,  L.PROCESSSEGMENTVERSION
+						    ,  COALESCE(SD3.DICTIONARYNAME,L.PROCESSSEGMENTID)PROCESSSEGMENTNAME
+						    ,  MR.DESCRIPTION RESOURCENAME
+						    ,  L.LOTID
+						    ,  CASE WHEN L.PROCESSSTATE = 'WaitForReceive' THEN 'WaitForReceive'
+						            WHEN L.PROCESSSTATE = 'Wait'           THEN 'Receive'
+						            WHEN L.PROCESSSTATE = 'Run'            THEN 'WorkStart'
+						            WHEN L.PROCESSSTATE = 'WaitForSend'    THEN 'WorkEnd'
+						            END  WIPPROCESSSTATE						    
+						    ,  L.PROCESSSTATE
+						    ,  CASE WHEN L.PROCESSSTATE = 'WaitForReceive' THEN L.QTY
+						            ELSE 0
+						            END WAITRECEIVEQTY
+						    ,  CASE WHEN L.PROCESSSTATE = 'WaitForReceive' THEN CEIL(L.QTY / L.PANELPERQTY)
+						            ELSE 0
+						            END WAITRECEIVEPNL     
+						    ,  CASE WHEN L.PROCESSSTATE = 'Wait' THEN L.QTY
+						            ELSE 0
+						            END WAITQTY
+						    ,  CASE WHEN L.PROCESSSTATE = 'Wait' THEN CEIL(L.QTY / L.PANELPERQTY)
+						            ELSE 0
+						            END WAITPNL 
+						    ,  CASE WHEN L.PROCESSSTATE = 'Run' THEN L.QTY
+						            ELSE 0
+						            END RUNQTY
+						    ,  CASE WHEN L.PROCESSSTATE = 'Run' THEN CEIL(L.QTY / L.PANELPERQTY)
+						            ELSE 0
+						            END RUNPNL        
+						    ,  CASE WHEN L.PROCESSSTATE = 'WaitForSend' THEN L.QTY
+						            ELSE 0
+						            END WAITSENDQTY
+						    ,  CASE WHEN L.PROCESSSTATE = 'WaitForSend' THEN CEIL(L.QTY / L.PANELPERQTY)
+						            ELSE 0
+						            END WAITSENDPNL      
+						    ,  NVL(WR.SENDTIME, L.LOTSTARTDATE) AS LOTSTARTDATE      
+						    ,  L.RECEIVETIME
+						    ,  L.TRACKINTIME
+						    ,  L.TRACKOUTTIME
+						    , NVL(WR.SENDTIME, L.LOTSTARTDATE) AS SENDTIME   --전공정 인계 시간이 없는것은 분할 되거나 한 것이므로 lot 투입시간을 인계시간으로 본다. 
+						    --,  CASE WHEN PP.PATHTYPE = 'Start' OR PP.PATHTYPE = 'StartEnd' THEN L.LOTSTARTDATE
+						    --        ELSE L.SENDTIME
+						    --        END SENDTIME
+						    ,  SD4.DICTIONARYNAME LANUAGEDAY       
+						    ,  SD5.DICTIONARYNAME LANUAGETIME
+						    ,  L.PROCESSDEFID
+						    ,  L.PROCESSDEFVERSION
+						    ,  LH2.TXNTIME AS AREADELAY						     
+						FROM PCM_LOT L
+						INNER JOIN FN_AREA(#{MODIFIER}) SA ON L.AREAID = SA.AREAID
+						LEFT  JOIN CMD_DICTIONARY       SD1 ON  SA.AREANAME = SD1.DICTIONARYID
+						                                   AND SD1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+						LEFT  JOIN CMD_LOOKUP_VALUES    SC1 ON  L.LOTTYPE = SC1.LOOKUP_CODE
+						                                   AND SC1.LOOKUP_TYPE = 'ProductionType'
+						LEFT  JOIN CMD_DICTIONARY       SD2 ON  SC1.DICTIONARYID = SD2.DICTIONARYID
+						                                   AND SD2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+						INNER JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID =PD.PRODUCTDEFID
+						                                   AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+						INNER JOIN BAS_PROCESSSEGMENT    PS ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+						                                   AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+						LEFT  JOIN CMD_DICTIONARY       SD3 ON PS.PROCESSSEGMENTNAME = SD3.DICTIONARYID
+						                                   AND SD3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+						LEFT  JOIN BAS_RESOURCE          MR ON  L.RESOURCEID = MR.RESOURCEID        
+						                                   AND L.ENTERPRISEID = MR.ENTERPRISEID
+						                                   AND L.PLANTID = MR.PLANTID
+						LEFT JOIN (
+								SELECT LOTID, MAX(SENDTIME) SENDTIME
+								  FROM PCM_LOTWORKRESULT 
+								  GROUP BY LOTID
+								  ) 					 WR ON L.LOTID = WR.LOTID
+						INNER JOIN PCM_LOTWORKRESULT     LW ON  L.LOTID = LW.LOTID
+						                                   AND L.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+						                                   AND L.WORKCOUNT = LW.WORKCOUNT
+						LEFT  JOIN PCM_LOTHISTORY        LH ON  LW.LOTID = LH.LOTID
+						                                   AND LW.PREVSENDLOTHISTKEY = LH.TXNHISTKEY
+						LEFT  JOIN (SELECT LOTID,PROCESSSEGMENTID, MAX(TXNTIME) AS TXNTIME
+									FROM PCM_LOTHISTORY
+									WHERE TXNID LIKE '%saveChangeArea.updatePcmLotArea'
+									GROUP BY LOTID,PROCESSSEGMENTID   
+									)                   LH2 ON  L.LOTID = LH2.LOTID
+						                                   AND  L.PROCESSSEGMENTID = LH2.PROCESSSEGMENTID    --작업장 변경에 따른 체공 시간을 위해 
+						INNER JOIN BAS_PROCESSPATH       PP ON  PP.PROCESSPATHID = CASE WHEN COALESCE(L.SUBPROCESSDEFID, ' ') = ' ' THEN SPLIT_PART(L.PROCESSPATHSTACK, '.', 1)
+																						ELSE SPLIT_PART(L.PROCESSPATHSTACK, '.', 2) END
+					    LEFT JOIN CMD_DICTIONARY        SD4 ON  SD4.DICTIONARYID = 'DAY'  	                               
+					                                       AND SD4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					    LEFT JOIN CMD_DICTIONARY        SD5 ON  SD5.DICTIONARYID = 'TIME'  	                               
+					                                       AND SD5.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}                                   
+						WHERE 1=1
+						AND   L.LOTSTATE IN ('InTransit','InProduction')
+						AND   COALESCE(L.ISDEFECTED,'N') = 'N'
+				   		 --품목코드
+						<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">
+							AND EXISTS
+			                            (
+			                                SELECT  1
+			                                FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')      LMP
+			                                WHERE   L.PRODUCTDEFID = LMP.VALUE			                                
+			                            )
+						</if>
+						<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''">
+							AND EXISTS
+			                            (
+			                                SELECT  1
+			                                FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFVERSION}, ',')      LMP
+			                                WHERE   L.PRODUCTDEFVERSION = LMP.VALUE			                                
+			                            )
+						</if>											
+					    --품목명
+						<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+							AND EXISTS
+			                            (
+			                                SELECT  1
+			                                FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFNAME}, ',')      LMP
+			                                WHERE   PD.PRODUCTDEFNAME LIKE '%' || LMP.VALUE || '%'			                                
+			                            )
+						</if>		
+					    --LOTID
+						<if test="LOTID != null and LOTID !=''">
+							AND EXISTS
+			                            (
+			                                SELECT  1
+			                                FROM    UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',')      LMP
+			                                WHERE   L.LOTID = LMP.VALUE
+			                            )
+						</if>
+			            --공정 
+						<if test="PROCESSSEGMENTNAME != null and PROCESSSEGMENTNAME !=''">
+							AND EXISTS
+			                            (
+			                                SELECT  1
+			                                FROM    UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID}, ',')      LMP
+			                                WHERE   L.PROCESSSEGMENTID = LMP.VALUE
+			                            )
+						</if>
+					    --작업장 
+						<if test="AREANAME != null and AREANAME !=''">
+							AND EXISTS
+			                            (
+			                                SELECT  1
+			                                FROM    UFN_SELECTSTRINGTOSPLIT(#{AREAID}, ',')      LMP
+			                                WHERE   L.AREAID = LMP.VALUE
+			                            )
+						</if>					   
+					    --상태구분
+						<if test="PROCESSSTATE != null and PROCESSSTATE !=''">
+							AND		L.PROCESSSTATE = #{PROCESSSTATE}
+						</if>
+					    --양산구분
+						<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">
+							AND		L.LOTTYPE = #{PRODUCTIONTYPE}
+						</if>	
+						<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+							AND		PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}
+						</if>
+						-- Hold 
+						<if test="ISHOLD != null and ISHOLD !=''">
+							AND     L.ISHOLD = #{ISHOLD}
+						</if>
+                        -- LOCKING 
+                        <if test="ISLOCKING != null and ISLOCKING !=''">
+							AND     L.ISLOCKING = #{ISLOCKING}
+						</if>
+						<if test="PLANTID != null and PLANTID !=''">
+							AND     L.PLANTID = #{PLANTID}
+						</if>
+					)X
+					LEFT JOIN CMD_LOOKUP_VALUES SC	ON  SC.LOOKUP_CODE = X.WIPPROCESSSTATE
+					                           		AND SC.LOOKUP_TYPE = 'WipProcessState'
+					LEFT JOIN CMD_DICTIONARY 	SD 	ON  SC.DICTIONARYID = SD.DICTIONARYID
+					                           		AND SD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}				
+					WHERE 1=1
+				)y
+				LEFT JOIN PCM_SEGMENTSTAYINGTIME ST ON  Y.PROCESSSEGMENTID = ST.PROCESSSEGMENTID
+				                                   AND Y.PROCESSSEGMENTVERSION = ST.PROCESSSEGMENTVERSION
+				LEFT JOIN PCM_DELAYLOT           DL ON  Y.LOTID = DL.LOTID
+				                                   AND Y.PROCESSSEGMENTID = DL.PROCESSSEGMENTID
+				                                   AND Y.PROCESSSEGMENTVERSION = DL.PROCESSSEGMENTVERSION
+				                                   AND Y.PROCESSDEFID = DL.PROCESSDEFID
+				                                   AND Y.PROCESSDEFVERSION = DL.PROCESSDEFVERSION
+			    LEFT JOIN BAS_REASONCODE         RC ON  DL.DELAYREASONCODE = RC.REASONCODEID
+			                                       AND RC.REASONCODECLASSID = 'QCLockInWaitingTime'			                                   
+			    LEFT JOIN CMD_DICTIONARY         SD ON  RC.REASONCODENAME = SD.DICTIONARYID
+			                                       AND SD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}			                                   
+	   		)Z
+	   		WHERE 1=1
+		    --체공 여부
+	   		<if test="STAYINGLOCK != null and STAYINGLOCK !=''">
+	   			AND     Z.STAYINGLOCK = #{STAYINGLOCK}
+	   		</if>
+		    	
+	</select>
+	<select id="selectDelayList" parameterType="map" resultType="hashmap">
+	/* "SelectDelayList" 10001 */
+	--id : selectDelayList
+	SELECT
+						X.PLANTID
+					,	X.LOTTYPENAME
+					,	X.AREANAME
+					,	X.PRODUCTDEFID
+					,	X.PRODUCTDEFVERSION
+					,	X.PRODUCTDEFNAME
+					,	X.PROCESSSEGMENTNAME
+					,	COALESCE(PSN.DICTIONARYNAME, X.PROCESSSTATE)	AS PROCESSSTATE
+					,	X.DELAYREASONCODE
+					,	X.DELAYCOMMENT
+					,	(X.STDDELAYTIME / 3600) AS STDDELAYTIME
+					,	X.DELAYTIME
+					,	X.CHECKSTARTTIME
+					,	X.CHECKENDTIME
+					,	X.LOTID
+				FROM
+				(
+					SELECT
+							L.PLANTID
+						,	COALESCE(LTN.DICTIONARYNAME, L.LOTTYPE)	AS LOTTYPENAME
+						,	COALESCE(AN.DICTIONARYNAME, A.AREAID)	AS AREANAME
+						,	L.PRODUCTDEFID
+						,	L.PRODUCTDEFVERSION
+						,	PD.PRODUCTDEFNAME
+						,	COALESCE(PSN.DICTIONARYNAME, DL.PROCESSSEGMENTID)	AS PROCESSSEGMENTNAME
+						,	CASE WHEN DL.PROCESSSTATE = 'WaitForReceive'	THEN 'WaitForReceive'
+								 WHEN DL.PROCESSSTATE = 'Wait'				THEN 'Receive'
+								 WHEN DL.PROCESSSTATE = 'Run'				THEN 'WorkStart'
+								 WHEN DL.PROCESSSTATE = 'WaitForSend'		THEN 'WorkEnd'
+							END						AS PROCESSSTATE
+						,	COALESCE(RCN.DICTIONARYNAME, DL.DELAYREASONCODE)	AS DELAYREASONCODE
+						,	DL.DELAYCOMMENT
+						,	DL.STDDELAYTIME
+						,	REPLACE(PCM_TIME_FORMAT01_FN(DL.DELAYTIME), 'day',DN.DICTIONARYNAME)	AS DELAYTIME
+						,	DL.CHECKSTARTTIME
+						,	DL.CHECKENDTIME
+						,	DL.LOTID
+					FROM	PCM_DELAYLOT				DL
+					INNER JOIN PCM_LOT				L	ON	DL.LOTID = L.LOTID
+					INNER JOIN BAS_PRODUCTDEFINITION	PD	ON	DL.PRODUCTDEFID = PD.PRODUCTDEFID
+														AND	DL.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+					INNER JOIN BAS_AREA				A	ON	DL.AREAID = A.AREAID
+					LEFT  JOIN CMD_DICTIONARY		AN	ON	A.AREANAME = AN.DICTIONARYID
+														AND	AN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					INNER JOIN BAS_PROCESSSEGMENT	PS	ON	DL.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+														AND	DL.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+					LEFT  JOIN CMD_DICTIONARY		PSN	ON	PS.PROCESSSEGMENTNAME = PSN.DICTIONARYID
+														AND	PSN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					LEFT  JOIN CMD_LOOKUP_VALUES	LT	ON	L.LOTTYPE = LT.LOOKUP_CODE
+														AND	LT.LOOKUP_TYPE = 'ProductionType'
+					LEFT  JOIN CMD_DICTIONARY		LTN	ON	LT.DICTIONARYID = LTN.DICTIONARYID
+														AND	LTN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					LEFT  JOIN CMD_DICTIONARY		DN	ON	DN.DICTIONARYID = 'DAY'
+														AND	DN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					LEFT  JOIN BAS_REASONCODE		RC	ON	DL.DELAYREASONCODE = RC.REASONCODEID
+					LEFT  JOIN CMD_DICTIONARY		RCN	ON	RC.REASONCODENAME = RCN.DICTIONARYID
+														AND	RCN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					WHERE	1 = 1
+					AND 	DL.CHECKENDTIME <![CDATA[>=]]> TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8))
+					AND 	DL.CHECKENDTIME <![CDATA[<]]> TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8))
+					<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">
+						AND EXISTS
+                            (
+                                SELECT  1
+                                FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')      LMP
+                                WHERE   DL.PRODUCTDEFID = LMP.VALUE			                                
+                            )
+					</if>
+					<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''">
+						AND EXISTS
+                            (
+                                SELECT  1
+                                FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFVERSION}, ',')      LMP
+                                WHERE   DL.PRODUCTDEFVERSION = LMP.VALUE			                                
+                            )
+					</if>	
+					<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+						AND EXISTS
+                            (
+                                SELECT  1
+                                FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFNAME}, ',')      LMP
+                                WHERE   PD.PRODUCTDEFNAME LIKE '%' || LMP.VALUE || '%'			                                
+                            )
+					</if>	
+					<if test="LOTID != null and LOTID !=''">
+						AND EXISTS
+                            (
+                                SELECT  1
+                                FROM    UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',')      LMP
+                                WHERE   DL.LOTID = LMP.VALUE
+                            )
+					</if>
+					<if test="PROCESSSEGMENTNAME != null and PROCESSSEGMENTNAME !=''">
+						AND EXISTS
+                            (
+                                SELECT  1
+                                FROM    UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID}, ',')      LMP
+                                WHERE   DL.PROCESSSEGMENTID = LMP.VALUE
+                            )
+					</if>
+					<if test="AREANAME != null and AREANAME !=''">
+						AND EXISTS
+                            (
+                                SELECT  1
+                                FROM    UFN_SELECTSTRINGTOSPLIT(#{AREAID}, ',')      LMP
+                                WHERE   DL.AREAID = LMP.VALUE
+                            )
+					</if>
+					<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">
+						AND		L.LOTTYPE = #{PRODUCTIONTYPE}
+					</if>
+					<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+						AND		PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}
+					</if>		
+					<if test="PLANTID != null and PLANTID !=''">
+						AND     DL.PLANTID = #{PLANTID}
+					</if>	
+					-- Hold 
+					<if test="ISHOLD != null and ISHOLD !=''">
+						AND     L.ISHOLD = #{ISHOLD}
+					</if>
+                    -- LOCKING 
+                    <if test="ISLOCKING != null and ISLOCKING !=''">
+						AND     L.ISLOCKING = #{ISLOCKING}
+					</if>		
+					
+				)							X
+				LEFT  JOIN CMD_LOOKUP_VALUES	PS	ON	X.PROCESSSTATE = PS.LOOKUP_CODE
+													AND	PS.LOOKUP_TYPE = 'WipProcessState'
+				LEFT  JOIN CMD_DICTIONARY		PSN	ON	PS.DICTIONARYID = PSN.DICTIONARYID
+													AND	PSN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE	1 = 1
+				ORDER BY X.CHECKENDTIME
+	</select>
+	<select id="selectReasonCodeByProcess" parameterType="map" resultType="hashmap">
+	/* "GetReasonCodeByProcess" 10001 */
+	--id : selectReasonCodeByProcess
+		SELECT
+				RC.REASONCODEID
+			,	COALESCE(DIC.DICTIONARYNAME, RC.REASONCODENAME)	AS REASONCODENAME
+		FROM	BAS_REASONCODE			RC
+		LEFT OUTER JOIN CMD_DICTIONARY	DIC	ON	RC.REASONCODENAME = DIC.DICTIONARYID
+											AND	DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE	1 = 1
+		AND		RC.REASONCODECLASSID = #{REASONCODECLASSID}
+	</select>
+	<select id="selectInputWaitingCodeDelayLot" parameterType="map" resultType="hashmap">
+	--id : selectInputWaitingCodeDelayLot
+		SELECT
+			LOTID
+			,PRODUCTDEFID
+			,PRODUCTDEFVERSION
+			,PROCESSDEFID
+			,PROCESSDEFVERSION
+			,PROCESSSEGMENTID
+			,PROCESSSEGMENTVERSION
+			,PROCESSSTATE
+			,WORKCOUNT
+			,ENTERPRISEID
+			,PLANTID
+			,AREAID
+			,STDDELAYTIME
+			,DELAYTIME
+			,CHECKSTARTTIME
+			,CHECKENDTIME
+			,DELAYREASONCODE
+			,DELAYCOMMENT
+			,DESCRIPTION
+			,CREATOR
+			,CREATEDTIME
+			,MODIFIER
+			,MODIFIEDTIME
+			,LASTTXNHISTKEY
+			,LASTTXNID
+			,LASTTXNUSER
+			,LASTTXNTIME
+			,LASTTXNCOMMENT
+			,VALIDSTATE
+		FROM	PCM_DELAYLOT
+		WHERE 1 = 1
+		AND	WORKCOUNT = #{WORKCOUNT}
+		AND PROCESSDEFVERSION = #{PROCESSDEFVERSION} 
+		AND PRODUCTDEFID = #{PRODUCTDEFID}
+		AND LOTID = #{LOTID}
+		AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION} 
+		AND PROCESSSTATE = #{PROCESSSTATE}
+		AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} 
+		AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		AND PROCESSDEFID = #{PROCESSDEFID}
+	</select>
+	<select id="selectInputWaitingCodeSegmentStayingTime" parameterType="map" resultType="hashmap">
+	--id : selectInputWaitingCodeSegmentStayingTime
+		SELECT
+			PROCESSSEGMENTID
+			,PROCESSSEGMENTVERSION
+			,ENTERPRISEID
+			,PLANTID
+			,RECEIVESTAYINGTIME
+			,TRACKINSTAYINGTIME
+			,TRACKOUTSTAYINGTIME
+			,SENDSTAYINGTIME
+			,DESCRIPTION
+			,CREATOR
+			,CREATEDTIME
+			,MODIFIER
+			,MODIFIEDTIME
+			,LASTTXNHISTKEY
+			,LASTTXNID
+			,LASTTXNUSER
+			,LASTTXNTIME
+			,LASTTXNCOMMENT
+			,VALIDSTATE
+			,OPERATIONTOTALTIME
+		FROM	PCM_SEGMENTSTAYINGTIME
+		WHERE	1 = 1
+		AND	PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION} 
+		AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}  
+	</select>
+	<insert id="insertAbnormalOccurenceByDelayLot" parameterType="map">
+	--id : insertAbnormalOccurenceByDelayLot
+		INSERT INTO PCM_DELAYLOT
+		(
+			LOTID
+			,PROCESSDEFID
+			,PROCESSDEFVERSION
+			,PROCESSSEGMENTID
+			,PROCESSSEGMENTVERSION
+			,PROCESSSTATE
+			,PRODUCTDEFID
+			,PRODUCTDEFVERSION
+			,WORKCOUNT
+			,ENTERPRISEID
+			,PLANTID
+			,AREAID
+			,STDDELAYTIME
+			,DELAYTIME
+			,CHECKSTARTTIME
+			,CHECKENDTIME
+			,DELAYREASONCODE
+			,DELAYCOMMENT
+			,CREATOR
+			,CREATEDTIME
+			,LASTTXNHISTKEY
+			,LASTTXNID
+			,LASTTXNUSER
+			,LASTTXNTIME
+		) 
+		VALUES
+		(
+			#{LOTID}
+			,#{PROCESSDEFID}
+			,#{PROCESSDEFVERSION}
+			,#{PROCESSSEGMENTID}
+			,#{PROCESSSEGMENTVERSION}
+			,#{PROCESSSTATE}
+			,#{PRODUCTDEFID}
+			,#{PRODUCTDEFVERSION}
+			,#{WORKCOUNT}
+			,#{ENTERPRISEID}
+			,#{PLANTID}
+			,#{AREAID}
+			,#{STDDELAYTIME}
+			,#{DELAYTIME}
+			,#{CHECKSTARTTIME}
+			,#{CHECKENDTIME}
+			,#{DELAYREASONCODE}
+			,#{DELAYCOMMENT}
+			,#{MODIFIER}
+			,SYSDATE
+			,#{LASTTXNHISTKEY}
+			,#{LASTTXNID}
+			,#{LASTTXNUSER}
+			,SYSDATE
+		)
+	</insert>
+	<update id="updateAbnormalOccurenceByDelayLot" parameterType="map" >
+	--id : updateAbnormalOccurenceByDelayLot
+		UPDATE PCM_DELAYLOT
+		SET 
+			ENTERPRISEID = #{ENTERPRISEID}
+			, PLANTID = #{PLANTID}
+			, AREAID = #{AREAID}
+			, STDDELAYTIME = #{STDDELAYTIME}
+			, DELAYTIME = #{DELAYTIME}
+			, CHECKSTARTTIME = #{CHECKSTARTTIME}
+			, CHECKENDTIME = #{CHECKENDTIME}
+			, DELAYREASONCODE = #{DELAYREASONCODE}
+			, DELAYCOMMENT = #{DELAYCOMMENT}
+			, MODIFIER = #{MODIFIER}
+			, MODIFIEDTIME = SYSDATE
+			, LASTTXNHISTKEY = #{LASTTXNHISTKEY}
+			, LASTTXNID = #{LASTTXNID}
+			, LASTTXNUSER = #{LASTTXNUSER}
+			, LASTTXNTIME = SYSDATE	
+		WHERE 1 = 1
+				AND	WORKCOUNT = #{WORKCOUNT}
+				AND PROCESSDEFVERSION = #{PROCESSDEFVERSION} 
+				AND PRODUCTDEFID = #{PRODUCTDEFID}
+				AND LOTID = #{LOTID}
+				AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION} 
+				AND PROCESSSTATE = #{PROCESSSTATE}
+				AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} 
+				AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+				AND PROCESSDEFID = #{PROCESSDEFID}
+	</update>
+</mapper>

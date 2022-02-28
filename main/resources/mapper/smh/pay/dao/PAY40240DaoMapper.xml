@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+  
+<mapper namespace="smh.pay.dao.PAY40240Dao">
+
+    <!-- 팀원 근태 현황 조회-->
+    <select id="selectPayAttendanceStatusList" parameterType="map" resultType="hashmap">
+        /* smh.pay.dao.PAY40240Dao.selectPayAttendanceStatusList */
+         SELECT DEF.ORG_NAME                         /* 부서명         */
+              , DEF.GRADE_NAME                       /* 직급           */
+              , DEF.EMPLOYEE_NUMBER                  /* 사번           */
+              , DEF.EMP_NAME                         /* 성명           */
+              , DEF.YEARLY_GRANT_HOLIDAY_DAY         /* 연휴부여일수   */
+              , DEF.YEARLY_USE_HOLIDAY_DAY           /* 연휴사용일수   */
+              , DEF.EXCHANGE_GRANT_HOLIDAY_DAY       /* 대휴부여일수   */
+              , DEF.EXCHANGE_USE_HOLIDAY_DAY         /* 대휴사용일수   */
+              , DEF.DAY_120                          /* 청휴           */
+              , DEF.DAY_150                          /* 출장           */
+              , DEF.DAY_310                          /* 연장근로시간   */
+              , DEF.DAY_510                          /* 지각/조퇴      */
+              , DEF.DAY_520                          /* 결근           */
+              , DEF.PERSON_ID                        /* PERSON_ID      */
+              , DEF.ORGANIZATION_ID                  /* ORG ID         */
+           FROM
+              (
+                SELECT PPF.PERSON_ID                       AS  PERSON_ID                        /* PERSON_ID      */
+                     , PPF.EMPLOYEE_NUMBER                 AS  EMPLOYEE_NUMBER                  /* 사번           */
+                     , PPF.KOR_NAME                        AS  EMP_NAME                         /* 성명           */
+                     , PPF.KOR_GRADE                       AS  GRADE_NAME                       /* 직급           */
+                     , PPF.ORG_NAME                        AS  ORG_NAME                         /* 부서명         */
+                     , PPF.ORGANIZATION_ID                 AS  ORGANIZATION_ID                  /* 부서ID         */
+                     , PPF.GRADE_SEQ                       AS  GRADE_SEQ                        /* 직급순서       */
+                     , APP.YEARLY_GRANT_HOLIDAY_DAY        AS  YEARLY_GRANT_HOLIDAY_DAY         /* 연휴부여일수   */
+                     , APP.YEARLY_RESIDUE_HOLIDAY_DAY      AS  YEARLY_RESIDUE_HOLIDAY_DAY       /* 연휴잔여일수   */
+                     , APP.YEARLY_USE_HOLIDAY_DAY          AS  YEARLY_USE_HOLIDAY_DAY           /* 연휴사용일수   */
+                     , APP.EXCHANGE_GRANT_HOLIDAY_DAY      AS  EXCHANGE_GRANT_HOLIDAY_DAY       /* 대휴부여일수   */
+                     , APP.EXCHANGE_USE_HOLIDAY_DAY        AS  EXCHANGE_USE_HOLIDAY_DAY         /* 대휴사용일수   */
+                     , APP.EXCHANGE_RESIDUE_HOLIDAY_DAY    AS  EXCHANGE_RESIDUE_HOLIDAY_DAY     /* 대휴잔여일수   */
+                     , HTT.DAY_120                         AS  DAY_120                          /* 청휴           */
+                     , HTT.DAY_150                         AS  DAY_150                          /* 출장           */
+                     , HTT.DAY_310                         AS  DAY_310                          /* 연장근로시간   */
+                     , ATT.DAY_510                         AS  DAY_510                          /* 지각/조퇴      */
+                     , ATT.DAY_520                         AS  DAY_520                          /* 결근           */
+                  FROM
+                     ( /* 연차, 대휴 */
+                       SELECT SPP.HJSPAY_EXCH_YEAR_HOLIDAY_SEQ      /* 연휴.대휴 PK   */
+                            , SPP.APPLY_YYYY                        /* 신청년도(YYYY) */
+                            , SPP.PERSON_ID                         /* PERSON_ID      */
+                            , SPP.YEARLY_GRANT_HOLIDAY_DAY          /* 연휴부여일수   */
+                            , SPP.YEARLY_RESIDUE_HOLIDAY_DAY        /* 연휴잔여일수   */
+                            , SPP.YEARLY_USE_HOLIDAY_DAY            /* 연휴사용일수   */
+                            , SPP.EXCHANGE_GRANT_HOLIDAY_DAY        /* 대휴부여일수   */
+                            , SPP.EXCHANGE_USE_HOLIDAY_DAY          /* 대휴사용일수   */
+                            , SPP.EXCHANGE_RESIDUE_HOLIDAY_DAY      /* 대휴잔여일수   */
+                         FROM
+                            (
+                              SELECT XPP.HJSPAY_EXCH_YEAR_HOLIDAY_SEQ                        AS  HJSPAY_EXCH_YEAR_HOLIDAY_SEQ      /* 연휴.대휴 PK   */
+                                   , XPP.APPLY_YYYY                                          AS  APPLY_YYYY                        /* 신청년도(YYYY) */
+                                   , XPP.PERSON_ID                                           AS  PERSON_ID                         /* PERSON_ID      */
+                                   , DECODE(XPP.STATE, 'Y', XPP.YEARLY_GRANT_HOLIDAY_DAY)    AS  YEARLY_GRANT_HOLIDAY_DAY          /* 연휴부여일수   */
+                                   , XPP.YEARLY_RESIDUE_HOLIDAY_DAY                          AS  YEARLY_RESIDUE_HOLIDAY_DAY        /* 연휴잔여일수   */
+                                   , XPP.YEARLY_USE_HOLIDAY_DAY                              AS  YEARLY_USE_HOLIDAY_DAY            /* 연휴사용일수   */
+                                   , DECODE(XPP.STATE, 'Y', XPP.EXCHANGE_GRANT_HOLIDAY_DAY)  AS  EXCHANGE_GRANT_HOLIDAY_DAY        /* 대휴부여일수   */
+                                   , XPP.EXCHANGE_USE_HOLIDAY_DAY                            AS  EXCHANGE_USE_HOLIDAY_DAY          /* 대휴사용일수   */
+                                   , XPP.EXCHANGE_RESIDUE_HOLIDAY_DAY                        AS  EXCHANGE_RESIDUE_HOLIDAY_DAY      /* 대휴잔여일수   */
+                                   , DECODE(XPF.EMPLOYMENT_CATEGORY, 'CONTRACT', (SELECT SUBSTR(PAC.SEGMENT1, 1, 4)
+                                                                                    FROM FND_ID_FLEX_STRUCTURES FIFS
+                                                                                       , PER_PERSON_ANALYSES    PPA
+                                                                                       , PER_ANALYSIS_CRITERIA  PAC
+                                                                                   WHERE 1=1
+                                                                                     AND PPA.PERSON_ID               = XPF.PERSON_ID
+                                                                                     AND FIFS.ID_FLEX_STRUCTURE_CODE = 'HJS_HR_CONTRACT_DATE_INFO'
+                                                                                     AND PPA.ID_FLEX_NUM             = FIFS.ID_FLEX_NUM
+                                                                                     AND PPA.ANALYSIS_CRITERIA_ID    = PAC.ANALYSIS_CRITERIA_ID
+                                                                                     AND TO_DATE(#{FROM_DATE}, 'YYYY-MM') BETWEEN TO_DATE(SUBSTR(PAC.SEGMENT1, 1, 10), 'YYYY-MM-DD') 
+                                                                                                                           AND TO_DATE(SUBSTR(PAC.SEGMENT2, 1, 10), 'YYYY-MM-DD') /* Param1: 시작일자  */
+                                                                                     AND ROWNUM = 1 )
+                                    , SUBSTR(#{FROM_DATE}, 1, 4)   )  AS COND_YYYY      /* Param1: 시작일자  */
+                                FROM
+                                   (  SELECT DISTINCT HOH.CHILD_ORGANIZATION_ID
+                                        FROM HJSPFM_ORG_HIERARCHY_V1    HOH
+                                     CONNECT BY HOH.PARENT_ORGANIZATION_ID  = PRIOR HOH.CHILD_ORGANIZATION_ID
+                                     START WITH HOH.CHILD_ORGANIZATION_ID   IN (
+                                                                                  SELECT HOM.ORGANIZATION_ID
+                                                                                    FROM HJSPFM_ORG_MANAGER_V1 HOM
+                                                                                   WHERE 1=1
+                                                                                     AND HOM.PERSON_ID  = #{PERSON_ID}     /* 로그인 PERSON ID 641 */
+                                                                                     AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE
+                                                                                                            AND HOM.EFFECTIVE_END_DATE
+                                                                               )
+                                   ) ORG
+                                   , HJSPAY_EXCHANGE_YEARLY_HOLIDAY XPP
+                                   , HJS_SSHR_EMPLOYEE_LOV_V        XPF
+                               WHERE 1=1
+                                 AND XPF.PERSON_ID        =  XPP.PERSON_ID
+                                 AND TRUNC(SYSDATE)       BETWEEN XPF.EFFECTIVE_START_DATE AND XPF.EFFECTIVE_END_DATE
+                                 AND XPF.ORGANIZATION_ID  =  ORG.CHILD_ORGANIZATION_ID
+                                 AND
+                                   (
+                                     ( XPF.REGISTERED_DISABLED_FLAG = 'H' AND  XPF.EMPLOYMENT_CATEGORY IN ('CONTRACT', 'OUTSOURCING', 'STAFF')) OR
+                                     ( XPF.REGISTERED_DISABLED_FLAG = 'R' AND  XPF.EMPLOYEE_CATEGORY = 'GMTP')
+                                   )
+                            ) SPP
+                        WHERE 1=1
+                          AND SPP.APPLY_YYYY = SPP.COND_YYYY
+                     ) APP,
+                     ( /* 120 : 청휴, 150 : 출장, 310 : 연장근로 */
+                       SELECT HWA.PERSON_ID                                           AS  PERSON_ID
+                            , SUM(DECODE(HWA.CALENDER_TYPE, '120', HWA.REQUEST_DAY))  AS  DAY_120
+                            , SUM(DECODE(HWA.CALENDER_TYPE, '150', HWA.REQUEST_DAY))  AS  DAY_150
+                            , SUM(DECODE(HWA.CALENDER_TYPE, '310', HWA.REQUEST_DAY))  AS  DAY_310
+                         FROM HJSPAY_WORK_APPLY    HWA
+                        WHERE 1=1
+                          AND HWA.STATUS           = '20' /* 승인 */
+                          AND HWA.CALENDER_TYPE    IN ('120', '150', '310')
+                          AND HWA.END_DATE         BETWEEN TO_DATE(#{FROM_DATE}, 'YYYY-MM') AND LAST_DAY(TO_DATE(#{TO_DATE}, 'YYYY-MM'))  /* Param1: 시작일자 ~ 종료일자 */
+                        GROUP BY HWA.PERSON_ID
+                     ) HTT,
+                     ( /* 510 : 지각, 520 : 결근, 530 : 조퇴 */
+                       SELECT XCC.PERSON_ID                                                    AS  PERSON_ID
+                            , SUM(DECODE(XCC.CALENDAR_TYPE, '520', 1))                         AS  DAY_520
+                            , SUM(DECODE(XCC.CALENDAR_TYPE, '510', DECODE(XCC.LATE_YN, 'Y', 1)
+                                                          , '530', 1))                         AS  DAY_510
+                         FROM HJSPAY_CALENDAR    XCC
+                        WHERE 1=1
+                          AND XCC.CALENDAR_TYPE    IN ('510', '520', '530')
+                          AND XCC.CALENDAR_DAY     BETWEEN TO_DATE(#{FROM_DATE}, 'YYYY-MM') AND LAST_DAY(TO_DATE(#{TO_DATE}, 'YYYY-MM'))   /* Param1: 시작일자 ~ 종료일자 */
+                        GROUP BY XCC.PERSON_ID
+                     ) ATT,
+                     (  SELECT DISTINCT HOH.CHILD_ORGANIZATION_ID
+                          FROM HJSPFM_ORG_HIERARCHY_V1    HOH
+                       CONNECT BY HOH.PARENT_ORGANIZATION_ID  = PRIOR HOH.CHILD_ORGANIZATION_ID
+                       START WITH HOH.CHILD_ORGANIZATION_ID   IN (
+                                                                    SELECT HOM.ORGANIZATION_ID
+                                                                      FROM HJSPFM_ORG_MANAGER_V1 HOM
+                                                                     WHERE 1=1
+                                                                       AND HOM.PERSON_ID  = #{PERSON_ID}     /* 로그인 PERSON ID 641 */
+                                                                       AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE
+                                                                                              AND HOM.EFFECTIVE_END_DATE
+                                                                 )
+                     ) ORG
+                     , HJS_SSHR_EMPLOYEE_LOV_V  PPF
+                 WHERE 1=1
+                   AND PPF.PERSON_ID        =  APP.PERSON_ID(+)
+                   AND PPF.PERSON_ID        =  HTT.PERSON_ID(+)
+                   AND PPF.PERSON_ID        =  ATT.PERSON_ID(+)
+                   AND PPF.PERSON_TYPE     != 'Vessel'
+                   AND TRUNC(SYSDATE)       BETWEEN PPF.EFFECTIVE_START_DATE AND PPF.EFFECTIVE_END_DATE
+                   AND PPF.ORGANIZATION_ID  = ORG.CHILD_ORGANIZATION_ID
+                   AND
+                     (
+                       (PPF.REGISTERED_DISABLED_FLAG = 'H' AND  PPF.EMPLOYMENT_CATEGORY IN ('CONTRACT', 'OUTSOURCING', 'STAFF')) OR
+                       (PPF.REGISTERED_DISABLED_FLAG = 'R' AND  PPF.EMPLOYEE_CATEGORY = 'GMTP')
+                     )
+                 ORDER BY PPF.ORG_NAME
+                     , PPF.GRADE_SEQ
+                     , PPF.KOR_NAME
+              ) DEF
+   WHERE 1 = 1           
+     AND DEF.ORGANIZATION_ID = NVL(#{ORGANIZATION_ID}, DEF.ORGANIZATION_ID)    /* Param2: Org ID */
+              
+    </select>
+
+</mapper>

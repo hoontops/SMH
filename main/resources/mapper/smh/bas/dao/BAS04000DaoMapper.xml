@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS04000Dao">
+    <sql id="insertDictionary">
+    BAS_COMMON_PKG.GENERATE_DICTIONARY
+    </sql>
+        
+    <!-- 설비 불량코드 연계정보 조회 -->
+    <select id="selectEquipmentdefectcodeList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04000Dao.selectEquipmentdefectcodeList */
+        SELECT EQP.DEFECTCODECLASSID
+             , EQP.DEFECTITEMCODE
+             , EQP.EQUIPMENTID
+             , EQP.DEFECTCODE
+             , EQP.DESCRIPTION
+             , USC.USER_NM          AS CREATOR
+             , TO_CHAR(EQP.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+             , USM.USER_NM          AS MODIFIER
+             , TO_CHAR(EQP.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+             , EQP.LASTTXNHISTKEY
+             , EQP.LASTTXNID
+             , EQP.LASTTXNUSER
+             , EQP.LASTTXNTIME
+             , EQP.LASTTXNCOMMENT
+             , EQP.VALIDSTATE
+             , DIAREA.DICTIONARYNAME AS AREANAME
+            ,  NULL                  AS CHK
+          FROM            BAS_EQUIPMENTDEFECTCODE    EQP
+          LEFT OUTER JOIN BAS_EQUIPMENT              EQ     ON   EQ.EQUIPMENTID      = EQP.EQUIPMENTID
+          LEFT OUTER JOIN BAS_AREA                   BA     ON   EQ.ENTERPRISEID     = BA.ENTERPRISEID
+                                                            AND  EQ.ENTERPRISEID     = #{SESSION_ENTERPRISEID}
+                                                            AND  EQ.AREAID           = BA.AREAID                  
+          LEFT OUTER JOIN CMD_DICTIONARY             DIAREA ON   DIAREA.DICTIONARYID = BA.AREANAME
+                                                            AND  DIAREA.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+          LEFT OUTER JOIN CMD_USERS                  USC    ON   EQP.CREATOR         = USC.USER_ID
+          LEFT OUTER JOIN CMD_USERS                  USM    ON   EQP.MODIFIER        = USM.USER_ID
+         WHERE 1 = 1         
+        ]]>
+           <choose>
+               <when test="DEFECTCODECLASSID eq 'VRS'.toString()">
+                   AND EQP.DEFECTCODECLASSID NOT IN ('BBT', 'HOLE')
+               </when>
+               <otherwise>
+                   AND EQP.DEFECTCODECLASSID = #{DEFECTCODECLASSID}
+               </otherwise>
+           </choose>    
+           <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+               AND EQP.VALIDSTATE = #{VALIDSTATE}
+           </if>
+        ORDER BY EQP.DEFECTCODECLASSID
+              ,  EQP.DEFECTITEMCODE
+              ,  EQP.EQUIPMENTID
+              ,  EQP.DEFECTCODE
+    </select>
+
+    <!-- 불량항목 리스트 조회 -->
+    <select id="selectDefectItemList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04000Dao.selectDefectItemList */
+		SELECT DECODE(#{LOOKUP_TYPE}, 'DefectMapDefectGroupSub', CLV.PARENTCODEID
+		                            , 'DefectMapBBTDefectCode', 'BBT'
+		                            , 'DefectMapHoleDefectCode', 'HOLE'
+		                            , CLV.PARENTCODEID)  AS PARENTCODEID
+		     , CLV.LOOKUP_CODE
+		     , DIK.DICTIONARYNAME    AS DICTIONARYNAME_KR
+		     , DIE.DICTIONARYNAME    AS DICTIONARYNAME_US
+		     , DIC.DICTIONARYNAME    AS DICTIONARYNAME_CN
+		     , DIV.DICTIONARYNAME    AS DICTIONARYNAME_VN
+		     , CLV.DICTIONARYID
+		     , CLV.CREATED_BY        AS CREATOR
+		     , TO_CHAR(CLV.CREATION_DATE, 'YYYYMMDDHH24MISS')     AS CREATEDTIME
+		     , CLV.LAST_UPDATED_BY   AS MODIFIER
+		     , TO_CHAR(CLV.LAST_UPDATE_DATE, 'YYYYMMDDHH24MISS')  AS MODIFIEDTIME
+		     , DECODE(CLV.ENABLED_FLAG, 'Y', 'Valid', 'N', 'Invalid', 'Valid') AS VALIDSTATE
+		     , CLT.LOOKUP_TYPE
+		     , NULL                  AS CHK
+		  FROM CMD_LOOKUP_TYPES      CLT
+		     , CMD_LOOKUP_VALUES     CLV
+		     , CMD_DICTIONARY        DIK
+		     , CMD_DICTIONARY        DIE
+		     , CMD_DICTIONARY        DIC
+		     , CMD_DICTIONARY        DIV
+		     , CMD_USERS             CUC
+		     , CMD_USERS             CUM
+		 WHERE CLT.LOOKUP_TYPE     = CLV.LOOKUP_TYPE
+		   AND CLV.DICTIONARYID    = DIK.DICTIONARYID(+)
+		   AND DIK.LANGUAGETYPE(+) = 'ko-KR'
+		   AND CLV.DICTIONARYID    = DIE.DICTIONARYID(+)
+		   AND DIE.LANGUAGETYPE(+) = 'en-US'
+		   AND CLV.DICTIONARYID    = DIC.DICTIONARYID(+)
+		   AND DIC.LANGUAGETYPE(+) = 'zh-CN'
+		   AND CLV.DICTIONARYID    = DIV.DICTIONARYID(+)
+		   AND DIV.LANGUAGETYPE(+) = 'vi-VN'		  
+		   AND CLV.CREATED_BY      = CUC.USER_ID(+)
+		   AND CLV.LAST_UPDATED_BY = CUM.USER_ID(+)        
+        ]]>
+		   AND CLT.LOOKUP_TYPE = #{LOOKUP_TYPE}  
+           <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+               AND CLV.ENABLED_FLAG = DECODE(#{VALIDSTATE}, 'Valid', 'Y', 'Invalid', 'N', #{VALIDSTATE})
+           </if>         
+        ORDER BY DECODE(CLT.PARENTCODECLASSID, NULL, #{PARENTCODEID}, CLV.PARENTCODEID)
+               , CLV.LOOKUP_CODE
+    </select>
+    
+    <!-- 설비 불량코드 연계정보 - 체크 -->
+    <select id="selectEquipmentdefectcodeChk" parameterType="map" resultType="hashmap">   
+        /* smh.bas.dao.BAS04000Dao.selectEquipmentdefectcodeChk */
+        SELECT EQUIPMENTID
+          FROM BAS_EQUIPMENTDEFECTCODE 
+         WHERE EQUIPMENTID       = #{EQUIPMENTID}        /*설비 ID*/
+           AND DEFECTCODECLASSID = #{DEFECTCODECLASSID}  /*불량 코드 그룹 ID*/
+           AND DEFECTITEMCODE    = #{DEFECTITEMCODE}     /*불량 항목 코드*/
+           AND DEFECTCODE        = #{DEFECTCODE}         /*불량 코드*/
+           AND ROWNUM            = 1
+    </select>
+    
+    <!-- 설비 불량코드 연계정보 등록 -->
+    <insert id="insertEquipmentdefectcode" parameterType="map">
+        INSERT /* smh.bas.dao.BAS04000Dao.insertEquipmentdefectcode */ INTO BAS_EQUIPMENTDEFECTCODE
+        (     EQUIPMENTID                   /*설비 ID*/
+            , DEFECTCODECLASSID             /*불량 코드 그룹 ID*/
+            , DEFECTITEMCODE                /*불량 항목 코드*/
+            , DEFECTCODE                    /*불량 코드*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+        )VALUES(
+              #{EQUIPMENTID}                  /*설비 ID*/
+            , #{DEFECTCODECLASSID}            /*불량 코드 그룹 ID*/
+            , #{DEFECTITEMCODE}               /*불량 항목 코드*/
+            , #{DEFECTCODE}                   /*불량 코드*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+        )
+    </insert>
+
+    <!-- 설비 불량코드 연계정보 수정 -->
+    <update id="updateEquipmentdefectcode" parameterType="map">
+    UPDATE /* smh.bas.dao.BAS04000Dao.updateEquipmentdefectcode */ BAS_EQUIPMENTDEFECTCODE
+       SET DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+         , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+         , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+         , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+         , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+         , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+         , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+         , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+         , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+     WHERE EQUIPMENTID                   = #{EQUIPMENTID}                /*설비 ID*/
+       AND DEFECTCODECLASSID             = #{DEFECTCODECLASSID}          /*불량 코드 그룹 ID*/
+       AND DEFECTITEMCODE                = #{DEFECTITEMCODE}             /*불량 항목 코드*/
+       AND DEFECTCODE                    = #{DEFECTCODE}                 /*불량 코드*/
+    </update>
+    
+    <!-- 설비 불량코드 연계정보 삭제 -->
+    <delete id="deleteEquipmentdefectcode" parameterType="map">
+        /* smh.bas.dao.BAS04000Dao.deleteEquipmentdefectcode */
+        DELETE
+          FROM BAS_EQUIPMENTDEFECTCODE 
+         WHERE EQUIPMENTID       = #{EQUIPMENTID}        /*설비 ID*/
+           AND DEFECTCODECLASSID = #{DEFECTCODECLASSID}  /*불량 코드 그룹 ID*/
+           AND DEFECTITEMCODE    = #{DEFECTITEMCODE}     /*불량 항목 코드*/
+           AND DEFECTCODE        = #{DEFECTCODE}         /*불량 코드*/
+    </delete>    
+</mapper>

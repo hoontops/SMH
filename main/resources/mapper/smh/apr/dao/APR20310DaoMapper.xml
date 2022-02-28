@@ -1,0 +1,259 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.apr.dao.APR20310Dao">
+
+    <!-- 피평가자 개인정보-->
+    <select id="selectAbilityUserList" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR20310Dao.selectabilityUserList */
+    	SELECT '' AS CHK
+    		   ,DEF.APPRAISAL_PERIOD                       /* 평가기간     */
+               ,DEF.ORG_NAME                               /* 부서명       */
+               ,DEF.GRADE_NAME                             /* 직급         */
+               ,DEF.JOB_NAME                               /* 직무         */
+               ,DEF.APPRAISEE_NAME                         /* 피평가자     */
+               ,DEF.APPRAISER_1ST_NAME                     /* 1차평가자    */
+               ,DEF.APPRAISER_2ND_NAME                     /* 2차평가자    */
+               ,DEF.ASSESSMENT_STATUS_NAME                 /* 평가상태     */
+              , DEF.HJSPFM_APPRAISAL_MASTER_SEQ            /* PK 일련번호  */
+              , DEF.PARTICIPANT_FLAG                       /* 내신권자 구분*/
+              , DEF.OBJECT_VERSION_NUMBER                  /* OVN          */
+              , DEF.ASSESSMENT_STATUS                      /* 평가상태코드 */
+              , DEF.LINK                                   /* 링크여부     */  
+              , DEF.EMPLOYEE_NUMBER
+              , DEF.APPRAISAL_TYPE
+              , DEF.APPRAISAL_YEAR
+              , DEF.PARTICIPANT_ID_1
+           FROM
+              (
+                SELECT DECODE('ko', 'ko', HAMV.ORG_NAME, HAMV.ORG_ENG_NAME)                              AS ORG_NAME
+                     , HAMV.ORGANIZATION_ID                                                           AS ORGANIZATION_ID
+                     , HAMV.GRADE_ID                                                                  AS GRADE_ID
+                     , DECODE('ko', 'ko', HAMV.KOR_GRADE, HAMV.ENG_GRADE)                                AS GRADE_NAME
+                     , DECODE('ko', 'ko', HAMV.JOB_NAME, HAMV.JOB_ENG_NAME)                              AS JOB_NAME
+                     , DECODE('ko', 'ko', HAMV.APPRAISEE_NAME, HAMV.APPRAISEE_ENG_NAME)                  AS APPRAISEE_NAME
+                     , DECODE('ko', 'ko', HAMV.APPRAISER_1ST_NAME, HAMV.APPRAISER_1ST_ENG_NAME)          AS APPRAISER_1ST_NAME
+                     , DECODE('ko', 'ko', HAMV.APPRAISER_2ND_NAME, HAMV.APPRAISER_2ND_ENG_NAME)          AS APPRAISER_2ND_NAME
+                     , HAMV.APPRAISER_1ST_GROUP                                                       AS APPRAISER_1ST_GROUP
+                     , HAMV.ASSESSMENT_STATUS                                                         AS ASSESSMENT_STATUS
+                     , HJSHRF_LOOKUP_DESC_FNC('APPRAISAL_ASSESSMENT_STATUS', HAMV.ASSESSMENT_STATUS)  AS ASSESSMENT_STATUS_NAME
+                     , DECODE('ko', 'ko', HAMV.PARTICIPANT_NAME_1, HAMV.PARTICIPANT_ENG_NAME_1)          AS PARTICIPANT_NAME_1
+                     , DECODE('ko', 'ko', HAMV.PARTICIPANT_NAME_2, HAMV.PARTICIPANT_ENG_NAME_2)          AS PARTICIPANT_NAME_2
+                     , DECODE('ko', 'ko', HAMV.PARTICIPANT_NAME_3, HAMV.PARTICIPANT_ENG_NAME_3)          AS PARTICIPANT_NAME_3
+                     , HAMV.APPRAISAL_YEAR                                                            AS APPRAISAL_YEAR
+                     , HAMV.APPRAISAL_SEQUENCE                                                        AS APPRAISAL_SEQUENCE
+                     , HAMV.HJSPFM_APPRAISAL_MASTER_SEQ                                               AS HJSPFM_APPRAISAL_MASTER_SEQ
+                     , HAMV.OBJECT_VERSION_NUMBER                                                     AS OBJECT_VERSION_NUMBER
+                     , TO_CHAR(HAMV.APPRAISAL_START_DATE, 'MM/DD') || ' ~ ' ||
+                       TO_CHAR(HAMV.APPRAISAL_END_DATE  , 'MM/DD')                                    AS APPRAISAL_PERIOD
+                     , DECODE(#{PARTICIPANT_ID_1}, HAMV.PARTICIPANT_ID_1, '1' 
+                               , HAMV.PARTICIPANT_ID_2, '2'
+                               , HAMV.PARTICIPANT_ID_3, '3')                                          AS PARTICIPANT_FLAG   /* 로그인 PERSON ID       */
+                     , DECODE(HAMV.ASSESSMENT_STATUS, '020', 'N', 'Y')                                AS LINK
+                     , HAMV.EMPLOYEE_NUMBER    
+                     , HAMV.APPRAISAL_TYPE
+                     , HAMV.PARTICIPANT_ID_1                  
+                  FROM HJSPFM_APPRAISAL_MASTER_V  HAMV
+                 WHERE 1=1
+                   AND HAMV.APPRAISAL_TYPE    = 'A120'      /* 역량평가 TYPE 고정       */
+                   AND HAMV.STATUS            = '020'      /* 평가진행 상태            */
+                   <if test = "ASSESSMENT_STATUS != null and ASSESSMENT_STATUS !='' ">
+				   	AND HAMV.ASSESSMENT_STATUS  = #{ASSESSMENT_STATUS}
+				   </if>
+                   AND HAMV.APPRAISAL_TEMPLATE_ID > 0       /* 2007.01.10 수정        */
+                   AND                                      /* 로그인 PERSON ID       */
+                     ( HAMV.PARTICIPANT_ID_1  = #{PARTICIPANT_ID_1}  OR
+                       HAMV.PARTICIPANT_ID_2  = #{PARTICIPANT_ID_1}  OR
+                       HAMV.PARTICIPANT_ID_3  = #{PARTICIPANT_ID_1}
+                     )                                    
+                   AND HAMV.APPRAISAL_YEAR = #{APPRAISAL_YEAR}        /* PARAM1 평가년도 */
+                   AND HAMV.APPRAISAL_SEQUENCE = '1'       /* 차수 고정값     */
+              ) DEF
+    </select>
+    <!-- 평가표 Master조회-->
+    <select id="selectAbilityTableMaster" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR20310Dao."selectAbilityTableMaster" */
+    	SELECT 
+    			HJSPFM_COMP_GOAL_MASTER_SEQ
+    			,JOB_PARTICIPANT_COMMENT1 
+    	  FROM	HJSPFM_COMPETENCE_GOAL_MASTER
+		 WHERE	HJSPFM_COMP_GOAL_MASTER_SEQ = #{HJSPFM_COMP_GOAL_MASTER_SEQ}
+    </select>
+   <!-- 평가표 조회-->
+    <select id="selectAbilityTableList" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR20310Dao.selectAbilityTableList */
+    	SELECT  SUBSTR(DEF.COMPETENCE_NAME, INSTR(DEF.COMPETENCE_NAME, '.', 1) + 1 )  AS  COMPETENCE_NAME           /* 역량명 (Competences) */
+            , DEF.COMPETENCE_DESCRIPTION                                  AS  COMPETENCE_DESCRIPTION        /* 역량설명 (Definition)*/
+            , DEF.HJSHR_COMPETENCE_INFO_M_SEQ                             AS  HJSHR_COMPETENCE_INFO_M_SEQ   /* 역량별 상세요구수준    */
+            , DEF.REQUIRED_LEVEL                                          AS  REQUIRED_LEVEL                /* 역량별 상세요구수준    */
+            , DEF.REQUIRED_LEVEL_NAME                                     AS  REQUIRED_LEVEL_NAME           /* 요구수준 Level (Requirement Skill)*/
+            , DEF.REQUIRED_LEVEL_STEP_VALUE                               AS  REQUIRED_LEVEL_STEP_VALUE     /* 요구수준 STEP VALUE  */
+            /* 2015 평가시스템 개편에 따른 "JOB > Self Assessment" 항목 HIDDEN, 2015-01-26, EYLEE */
+            /*, DEF.SELF_ASSESSMENT_STEP_VALUE                              AS  SELF_ASSESSMENT_STEP_VALUE */    /* 본인평가 STEP VALUE  */
+            , HJSPFM_GET_STEP_VALUE_LEVEL_ID(DEF.PARTICIPANT_PROFICIENCY) AS  PARTICIPANT_STEP_VALUE        /* 파트장 STEP VALUE */
+            , HJSPFM_GET_SCALE_NAME_LEVEL_ID(DEF.PARTICIPANT_RATING)      AS  PARTICIPANT_RATING_NM         /* 파트장 등급명(Rating)  */
+            , DEF.PARTICIPANT_COMMENT                                     AS  PARTICIPANT_COMMENT           /* 파트장 항목별 리뷰 */
+            , DEF.PARTICIPANT_PROFICIENCY                                 AS  PARTICIPANT_PROFICIENCY       /* 파트장 수준ID     */
+            , DEF.PARTICIPANT_RATING                                      AS  PARTICIPANT_RATING            /* 파트장 등급ID     */
+            , DEF.PARTICIPANT_SCORE                                       AS  PARTICIPANT_SCORE             /* 파트장 평가점수     */   
+            , DEF.SELF_ASSESSMENT_COMMENT                                 AS  SELF_ASSESSMENT_COMMENT       /* 본인평가  COMMENT  */
+            , DEF.OBJECT_VERSION_NUMBER                                   AS  OBJECT_VERSION_NUMBER         /* OVN              */
+            , DEF.HJSPFM_COMP_GOAL_MASTER_SEQ                             AS  HJSPFM_COMP_GOAL_MASTER_SEQ   /* Master PK 일련번호 */
+            , DEF.HJSPFM_COMP_GOAL_DETAIL_SEQ                             AS  HJSPFM_COMP_GOAL_DETAIL_SEQ   /* Detail PK 일련번호 */
+            , DEF.HJSPFM_APPRAISAL_MASTER_OVN                             AS  HJSPFM_APPRAISAL_MASTER_OVN   /* OVN              */
+            , DEF.HJSPFM_APPRAISAL_MASTER_SEQ                             AS  HJSPFM_APPRAISAL_MASTER_SEQ   /* 평가마스터 PK      */
+            , DEF.COMPETENCE_TYPE                                         AS  COMPETENCE_TYPE               /* 역량TYPE          */
+            , DEF.COMPETENCE_ID                                           AS  COMPETENCE_ID
+        FROM
+            (
+              SELECT FLV.MEANING                                                     AS CATEGORY_NAME
+                   , PCE.COMPETENCE_TYPE                                             AS COMPETENCE_TYPE
+                   , PCE.COMPETENCE_ID                                               AS COMPETENCE_ID
+                   , DECODE('ko-KR', 'ko-KR', HCM.KR_NAME, HCM.US_NAME)                       AS COMPETENCE_NAME
+                   , DECODE('ko-KR', 'ko-KR', HCM.KR_DESCRIPTION, HCM.US_DESCRIPTION)         AS COMPETENCE_DESCRIPTION
+                   , HGD.SELF_ASSESSMENT_RATING                                      AS SELF_ASSESSMENT_RATING
+                   , HGD.SELF_ASSESSMENT_COMMENT                                     AS SELF_ASSESSMENT_COMMENT
+                   , DECODE( '1', '1', HGD.PARTICIPANT_PROFICIENCY1                  
+                              , '2', HGD.PARTICIPANT_PROFICIENCY2
+                              , '3', HGD.PARTICIPANT_PROFICIENCY3)                   AS PARTICIPANT_PROFICIENCY  /* 내신권자 구분 (DEF.PARTICIPANT_FLAG) */
+                   , DECODE( '1', '1', HGD.PARTICIPANT_RATING1
+                              , '2', HGD.PARTICIPANT_RATING2
+                              , '3', HGD.PARTICIPANT_RATING3)                        AS PARTICIPANT_RATING
+                   , DECODE( '1', '1', HGD.PARTICIPANT_SCORE1
+                              , '2', HGD.PARTICIPANT_SCORE2
+                              , '3', HGD.PARTICIPANT_SCORE3)                         AS PARTICIPANT_SCORE           
+                   , DECODE( '1', '1', HGD.PARTICIPANT_COMMENT1
+                              , '2', HGD.PARTICIPANT_COMMENT2
+                              , '3', HGD.PARTICIPANT_COMMENT3)                       AS PARTICIPANT_COMMENT                   
+                   , HGD.OBJECT_VERSION_NUMBER                                       AS OBJECT_VERSION_NUMBER
+                   , HGD.HJSPFM_COMP_GOAL_DETAIL_SEQ                                 AS HJSPFM_COMP_GOAL_DETAIL_SEQ
+                   , HGD.HJSPFM_COMP_GOAL_MASTER_SEQ                                 AS HJSPFM_COMP_GOAL_MASTER_SEQ
+                   , HAM.OBJECT_VERSION_NUMBER                                       AS HJSPFM_APPRAISAL_MASTER_OVN
+                   , HAM.HJSPFM_APPRAISAL_MASTER_SEQ                                 AS HJSPFM_APPRAISAL_MASTER_SEQ
+                   , HAM.APPRAISAL_TYPE                                              AS APPRAISAL_TYPE
+                   , HGD.REQUIRED_LEVEL                                              AS REQUIRED_LEVEL
+                   , HJSPFM_GET_SCALE_NAME_LEVEL_ID(HGD.REQUIRED_LEVEL)              AS REQUIRED_LEVEL_NAME
+                   , HJSPFM_GET_STEP_VALUE_LEVEL_ID(HGD.REQUIRED_LEVEL)              AS REQUIRED_LEVEL_STEP_VALUE
+                   , HJSPFM_GET_STEP_VALUE_LEVEL_ID(HGD.SELF_ASSESSMENT_PROFICIENCY) AS SELF_ASSESSMENT_STEP_VALUE
+                   , HGD.SELF_ASSESSMENT_PROFICIENCY                                 AS SELF_ASSESSMENT_PROFICIENCY
+                   , HGD.SELF_ASSESSMENT_RATING                                      AS SELF_ASSESSMENT_RATING
+                   , HGD.SELF_ASSESSMENT_SCORE                                       AS SELF_ASSESSMENT_SCORE
+                   , HJSPFM_GET_SCALE_NAME_LEVEL_ID(HGD.SELF_ASSESSMENT_RATING)      AS SELF_ASSESSMENT_RATING_NM
+                   , HCM.HJSHR_COMPETENCE_INFO_M_SEQ                                 AS HJSHR_COMPETENCE_INFO_M_SEQ   
+                FROM PER_COMPETENCES                  PCM
+                   , PER_COMPETENCE_ELEMENTS          PCE
+                   , FND_LOOKUP_VALUES                FLV
+                   , HJSHR_COMPETENCE_INFO_MASTER     HCM
+                   , HJSPFM_APPRAISAL_MASTER          HAM
+                   , HJSPFM_COMPETENCE_GOAL_MASTER    HGM
+                   , HJSPFM_COMPETENCE_GOAL_DETAIL    HGD
+               WHERE 1=1
+                 AND HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = HGM.HJSPFM_APPRAISAL_MASTER_SEQ
+                 AND HGM.HJSPFM_COMP_GOAL_MASTER_SEQ  = HGD.HJSPFM_COMP_GOAL_MASTER_SEQ
+                 AND HGD.COMPETENCE_ID                = PCM.COMPETENCE_ID
+                 AND PCM.COMPETENCE_ID                = PCE.COMPETENCE_ID
+                 AND PCM.COMPETENCE_ID                = HCM.COMPETENCE_ID
+                 AND PCE.COMPETENCE_TYPE              = FLV.LOOKUP_CODE
+                 AND FLV.LOOKUP_CODE                  = '20'     /* JOB BEHAVIORAL COMPETENCE */
+                 AND PCE.TYPE                         = 'COMPETENCE_USAGE'
+                 AND FLV.LOOKUP_TYPE                  = 'COMPETENCE_TYPE'
+                 AND FLV.ENABLED_FLAG                 = 'Y'
+                 AND FLV.LANGUAGE                     = 'US'
+                 AND HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = #{HJSPFM_APPRAISAL_MASTER_SEQ}   /* :P_MASTER_SEQ   */
+                 ORDER BY HCM.KR_NAME ASC
+            ) DEF
+
+    </select>
+    <!-- 평가표 상세 조회-->
+    <select id="selectRequirementList" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR20310Dao.selectRequirementList */
+    	SELECT NAME,
+		       KR_FOCUS,
+		       KR_DESCRIPTION,
+		       HJSHR_COMPETENCE_INFO_D_SEQ,
+		       HJSHR_COMPETENCE_INFO_M_SEQ,
+		       KR_LEVEL
+		  FROM HJSHR_COMPETENCE_INFO_DETAIL_V
+		 WHERE (HJSHR_COMPETENCE_INFO_M_SEQ = #{HJSHR_COMPETENCE_INFO_M_SEQ})
+		   AND (KR_LEVEL = #{REQUIRED_LEVEL})
+    </select>
+    <!-- Rating 조회-->
+    <select id="selectRatingList" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR20310Dao.selectRatingList */
+    	SELECT prl.rating_level_id, prl.name, prl.step_value, prl.behavioural_indicator
+         FROM PER_RATING_SCALES   prc
+            , PER_RATING_LEVELS   prl
+        WHERE 1=1
+          AND prl.rating_scale_id = prc.rating_scale_id
+          AND prc.name            = '직무_리더십역량 항목별 등급'
+       ORDER BY prl.rating_level_id
+    </select>
+    <!-- 역량평가-파트장평가 Master 수정 update -->
+	<update id="updateAbilityTableMaster" parameterType="map" >
+		/* smh.apr.dao.APR20310Dao.updateAbilityTableMaster */
+	     UPDATE HJSPFM_COMPETENCE_GOAL_MASTER
+		    SET JOB_PARTICIPANT_COMMENT1 = #{JOB_PARTICIPANT_COMMENT1}
+		          ,LAST_UPDATED_BY = #{PERSONID}
+		          ,LAST_UPDATE_DATE = SYSDATE
+		          ,OBJECT_VERSION_NUMBER = 	(
+				      							SELECT OBJECT_VERSION_NUMBER + 1
+				      							FROM HJSPFM_COMPETENCE_GOAL_MASTER
+				      							WHERE HJSPFM_COMP_GOAL_MASTER_SEQ = #{HJSPFM_COMP_GOAL_MASTER_SEQ}
+			      						 	) 
+		  WHERE 1=1
+		     AND HJSPFM_COMP_GOAL_MASTER_SEQ = #{HJSPFM_COMP_GOAL_MASTER_SEQ}
+	</update>
+	<!-- 역량평가-파트장평가 List 수정 update -->
+	<update id="updateAbilityTableList" parameterType="map" >
+		/* smh.apr.dao.APR20310Dao.updateAbilityTableList */
+		
+	     UPDATE HJSPFM_COMPETENCE_GOAL_DETAIL
+     		SET PARTICIPANT_RATING1 = #{PARTICIPANT_RATING}
+		        ,PARTICIPANT_SCORE1 = #{PARTICIPANT_SCORE}
+		        ,LAST_UPDATED_BY	= #{PERSONID}
+		        ,LAST_UPDATE_DATE = SYSDATE
+		        ,OBJECT_VERSION_NUMBER = (
+			      							SELECT OBJECT_VERSION_NUMBER + 1
+			      							FROM HJSPFM_COMPETENCE_:GOAL_DETAIL
+			      							WHERE HJSPFM_COMP_GOAL_DETAIL_SEQ = #{HJSPFM_COMP_GOAL_DETAIL_SEQ}
+			      						 ) 
+  WHERE 1=1
+     AND HJSPFM_COMP_GOAL_DETAIL_SEQ = #{HJSPFM_COMP_GOAL_DETAIL_SEQ}
+	</update>
+	<!-- 제출 시 Rating 입력여부 확인-->
+    <select id="selectRatingExists" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR20310Dao.selectRatingExists */
+    	SELECT 'PASS'	AS 	PASS_FLAG
+          FROM DUAL
+         WHERE 1=1
+           AND NOT EXISTS (
+                            SELECT 'x'
+                              FROM HJSPFM_APPRAISAL_MASTER          HAM
+                                 , HJSPFM_COMPETENCE_GOAL_MASTER    HGM
+                                 , HJSPFM_COMPETENCE_GOAL_DETAIL    HGD
+                             WHERE HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = HGM.HJSPFM_APPRAISAL_MASTER_SEQ
+                               AND HGM.HJSPFM_COMP_GOAL_MASTER_SEQ  = HGD.HJSPFM_COMP_GOAL_MASTER_SEQ
+                               AND HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = #{HJSPFM_APPRAISAL_MASTER_SEQ}  /* 평가 Master Key */
+                               AND
+                                 (
+                                   ( '1' = '1' AND HGD.PARTICIPANT_RATING1 IS NULL ) OR
+                                   ( '1' = '2' AND HGD.PARTICIPANT_RATING2 IS NULL ) OR
+                                   ( '1' = '3' AND HGD.PARTICIPANT_RATING3 IS NULL )
+                                 )        /*  1차 파트장 평가값 고정처리  */
+                          )
+    </select>
+    <!-- 개인역량 평가표 세부항목 확인-->
+    <select id="selectRatingDetailCount" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR20310Dao.selectRatingDetailCount */
+    	SELECT COUNT(*) ROW_COUNT
+          FROM HJSPFM_APPRAISAL_MASTER          HAM
+             , HJSPFM_COMPETENCE_GOAL_MASTER    HGM
+             , HJSPFM_COMPETENCE_GOAL_DETAIL    HGD
+         WHERE 1=1
+           AND HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = HGM.HJSPFM_APPRAISAL_MASTER_SEQ
+           AND HGM.HJSPFM_COMP_GOAL_MASTER_SEQ  = HGD.HJSPFM_COMP_GOAL_MASTER_SEQ
+           AND HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = #{HJSPFM_APPRAISAL_MASTER_SEQ}    /* 평가 Master Key */
+    </select>
+    
+</mapper>

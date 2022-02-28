@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM05600Dao">
+
+	
+	<select id="selectReasonCodeClassList" parameterType="map" resultType="hashmap">
+	/* "GetReasonCodeClassList" 10001 */
+	--id : selectReasonCodeClassList
+		SELECT	
+				R.REASONCODECLASSID
+			,	CASE 
+					WHEN DIC.DICTIONARYNAME IS NULL		THEN R.REASONCODECLASSID
+					ELSE DIC.DICTIONARYNAME
+				END 					AS REASONCODECLASSNAME
+		FROM	BAS_REASONCODECLASS		R
+		LEFT OUTER JOIN CMD_DICTIONARY	DIC	ON	DIC.DICTIONARYID = R.REASONCODECLASSNAME
+											AND	DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}					
+		WHERE	1 = 1
+		<if test="REASONCODECLASSID != null and REASONCODECLASSID !=''">
+			AND 	REASONCODECLASSID =  #{REASONCODECLASSID}
+		</if>
+		<if test="REASONCODECLASSTYPE != null and REASONCODECLASSTYPE !=''">
+			AND 	REASONCODECLASSTYPE =  #{REASONCODECLASSTYPE}
+		</if>
+		<if test="PARENTREASONCODECLASSID != null and PARENTREASONCODECLASSID !=''">
+			AND 	R.PARENTREASONCODECLASSID =  #{PARENTREASONCODECLASSID}
+		</if>	
+		AND 	R.VALIDSTATE = 'Valid'
+		ORDER BY R.REASONCODECLASSID
+	</select>
+	<select id="selectTypeList" parameterType="map" resultType="hashmap">
+	/* "GetTypeList" 10002 */
+	--id : selectTypeList
+		SELECT 
+				CD.REASONCODEID
+			 , 	CASE
+			 		WHEN DIC.DICTIONARYNAME IS NULL	THEN CD.REASONCODENAME 
+			 		ELSE DIC.DICTIONARYNAME 
+			 	END 						AS REASONCODENAME
+			 ,  CD.DISPLAYSEQUENCE
+		FROM	BAS_REASONCODE				CD
+		LEFT JOIN CMD_DICTIONARY 			DIC	ON DIC.DICTIONARYID = CD.REASONCODENAME
+												AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE 	1 = 1
+		AND		CD.REASONCODECLASSID = #{REASONCODECLASSID}
+		ORDER BY CD.DISPLAYSEQUENCE ASC
+	</select>
+	<select id="selectLockingStatus" parameterType="map" resultType="hashmap">
+	/* "SelectLockingStatus" 10001 */
+	--id : selectLockingStatus
+		SELECT  X.LOCKTYPE
+					,   COALESCE(DC.DICTIONARYNAME, X.STATE)                    AS STATE
+				    ,   COALESCE(RDC.DICTIONARYNAME, RPS.PROCESSSEGMENTNAME)    AS RESERVESEGMENTNAME
+				    ,   COALESCE(DC1.DICTIONARYNAME, MPS.PROCESSSEGMENTCLASSNAME) AS MIDDLEPROCESSSEGMENTNAME
+				    ,   COALESCE(DC2.DICTIONARYNAME, X.PROCESSSEGMENTNAME)      AS PROCESSSEGMENTNAME
+				    ,   COALESCE(DC3.DICTIONARYNAME, X.LOTTYPE)                 AS LOTTYPE
+				    ,   COALESCE(DC4.DICTIONARYNAME, X.PRODUCTDEFTYPE)          AS PRODUCTDEFTYPE
+				    ,   COALESCE(DC5.DICTIONARYNAME, AR.AREANAME)               AS AREANAME
+				    ,   X.PRODUCTDEFID
+				    ,   X.PRODUCTDEFVERSION
+				    ,   X.PRODUCTDEFNAME
+				    ,   X.LOTID
+				    ,   X.PLANTID
+				    ,   COALESCE(DC6.DICTIONARYNAME, AR.OWNTYPE)                AS OWNTYPE
+				    ,   COALESCE(DC9.DICTIONARYNAME, RCC.REASONCODECLASSNAME)   AS LOCKINGGROUP 	--대분류
+				    ,   COALESCE(DC8.DICTIONARYNAME, X.LOCKINGTYPE)             AS LOCKINGTYPE  	--중분류
+				    ,   COALESCE(DC7.DICTIONARYNAME, X.LOCKINGCODE)             AS LOCKINGCODE
+				    ,   TO_CHAR(X.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')         AS CREATEDTIME  	--지정일자
+				    ,   COALESCE(U1.USER_NM, X.CREATOR)                        AS CREATOR      	--LOCKING 지정자
+				    ,   COALESCE(DC0.DICTIONARYNAME, X.UNLOCKINGCODE)           AS UNLOCKINGCODE	--해제사유
+				    ,   TO_CHAR(X.RELEASETIME, 'YYYY-MM-DD HH24:MI:SS')         AS RELEASETIME --해제일시        
+                    ,   COALESCE(U2.USER_NM, X.RELEASEUSER)                    AS RELEASEUSER --LOCKING 해제자
+				    ,   X.UNIT
+				    ,   X.PANELQTY
+				    ,   X.QTY
+				    --,   (DATEDIFF('SS', X.CREATEDTIME, X.RELEASETIME) / 86400 )::numeric	AS FORMALDATE
+				    --,   (EXTRACT(EPOCH FROM COALESCE(X.RELEASETIME::TIMESTAMP, CURRENT_TIMESTAMP) - X.CREATEDTIME::TIMESTAMP)/86400)::NUMERIC(10, 2) AS FORMALDATE
+				    ,	ROUND((X.RELEASETIME - X.CREATEDTIME), 2) AS FORMALDATE
+				    ,	X.COMMENTS 
+				    ,	X.RELEASECOMMENTS 
+				    ,	X.RESERVE_YN
+				FROM 
+				(
+				    SELECT  'Locking'                       AS LOCKTYPE
+				    	,	CASE WHEN COALESCE(L.ISLOCKING, 'N') = 'N' THEN 'Run'
+                            ELSE 'Stop'
+                            END STATE
+				        ,   PS.PROCESSSEGMENTCLASSID
+				        ,   LK.PROCESSSEGMENTID
+				        ,   ''                              AS RESERVESEGMENT
+				        ,   PS.PROCESSSEGMENTNAME
+				        ,   L.LOTTYPE
+				        ,   PD.PRODUCTDEFTYPE
+				        ,   LK.AREAID
+				        ,   LK.PRODUCTDEFID
+				        ,   LK.PRODUCTDEFVERSION
+				        ,   PD.PRODUCTDEFNAME
+				        ,   LK.LOTID
+				        ,   LK.PLANTID
+				        ,   LK.LOCKINGCODE                  --사유
+				        ,   LK.LOCKINGTYPE                  --사유 중분류
+				        ,   LK.UNLOCKINGCODE                --해제 사유 
+				        ,   LK.CREATEDTIME
+				        ,   LK.CREATOR
+				        ,   CASE WHEN LK.LOCKINGSTATUS = 'Y' THEN NULL 
+				        		 ELSE LK.TXNTIME END        AS RELEASETIME
+				        ,   CASE WHEN LK.LOCKINGSTATUS = 'Y' THEN NULL 
+				        		 ELSE LK.TXNUSER END 		AS RELEASEUSER
+				        ,   L.UNIT
+				        ,   L.PANELQTY
+				        ,   L.QTY
+				        ,	LK.COMMENTS 
+				        ,	LK.RELEASECOMMENTS 
+				        ,	DECODE(LRL.LOTID, NULL ,'N','Y' ) AS  RESERVE_YN
+				    FROM    PCM_LOTLOCKING                   LK         
+				    INNER JOIN BAS_PROCESSSEGMENT            PS  ON  LK.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				    INNER JOIN PCM_LOT                       L   ON  LK.LOTID = L.LOTID
+				    INNER JOIN FN_AREA(#{MODIFIER})    		 A   ON  L.AREAID = A.AREAID                                            
+				    INNER JOIN  BAS_PRODUCTDEFINITION        PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                                 AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				    LEFT  JOIN (SELECT DISTINCT LOTID 
+				    			FROM PCM_LOTRESERVELOCKING) LRL  ON  LRL.LOTID = LK.LOTID 
+				    WHERE   1 = 1
+				    AND     LK.CREATEDTIME BETWEEN TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYY-MM-DD HH24:MI:SS')
+				                           AND TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYY-MM-DD HH24:MI:SS')
+				    AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+				    -- 작업장
+			      	<if test="AREANAME != null and AREANAME !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{AREAID}, ',') PMP 
+						        WHERE	LK.AREAID = PMP.VALUE
+					        )
+					</if> 
+														
+	               	--품목코드
+	               	<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',') PMP 
+						        WHERE	LK.PRODUCTDEFID = PMP.VALUE
+					        )
+					</if> 
+	               
+	               	--품목명
+	               	<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFNAME}, ',') PMP 
+						        WHERE	PD.PRODUCTDEFNAME LIKE PMP.VALUE
+					        )
+					</if> 	               
+	               	--생산구분
+	               	<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+	               		AND     L.LOTTYPE = #{PRODUCTIONTYPE}
+	               	</if> 	               	 
+	               	--공정
+	               	<if test="PROCESSSEGMENTNAME != null and PROCESSSEGMENTNAME !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID}, ',') PMP 
+						        WHERE	LK.PROCESSSEGMENTID = PMP.VALUE
+					        )
+					</if>	               	
+			        -- lotid	
+			        <if test="LOTID != null and LOTID !=''"> 
+	               		AND    	LK.LOTID LIKE #{LOTID}
+	               	</if>				                                              		
+					-- SITE
+					<if test="PLANTID != null and PLANTID !=''"> 
+	               		AND     LK.PLANTID = #{PLANTID}
+	               	</if> 					
+			        -- 제품구분
+			        <if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDIVISION}, ',') PMP 
+						        WHERE	PD.PRODUCTDEFTYPE = PMP.VALUE
+					        )
+					</if>										
+			        -- 담당공장
+			        <if test="OWNERFACTORYID != null and OWNERFACTORYID !=''"> 
+	               		AND     PD.OWNERFACTORYID = #{OWNERFACTORYID}
+	               	</if> 				               	
+					-- LOCKING 사유 그룹
+					<if test="REASONCODECLASSID != null and REASONCODECLASSID !=''"> 
+	               		AND     LK.LOCKINGTYPE = #{REASONCODECLASSID}
+	               	</if>					
+					-- LOCKING 사유
+					<if test="REASONCODEID != null and REASONCODEID !=''"> 
+	               		AND     LK.LOCKINGCODE = #{REASONCODEID}
+	               	</if>
+				    UNION
+				    
+				    SELECT  'Reserve Locking'               AS LOCKTYPE
+				    	,   CASE WHEN COALESCE(L.ISLOCKING, 'N') = 'N' THEN 'Run'
+                            ELSE 'Stop'
+                            END STATE
+				        ,   PS.PROCESSSEGMENTCLASSID
+				        ,   L.PROCESSSEGMENTID              --현공정
+				        ,   LRL.PROCESSSEGMENTID            AS RESERVESEGMENT --예약 공정
+				        ,   PS.PROCESSSEGMENTNAME
+				        ,   L.LOTTYPE
+				        ,   PD.PRODUCTDEFTYPE
+				        ,   NULL                            AS AREAID
+				        ,   L.PRODUCTDEFID
+				        ,   L.PRODUCTDEFVERSION
+				        ,   PD.PRODUCTDEFNAME
+				        ,   LRL.LOTID
+				        ,   LRL.PLANTID
+				        ,   LRL.LOCKINGCODE
+				        ,   LRL.LOCKINGTYPE
+				        ,   NULL                            AS UNLOCKINGCODE
+				        ,   LRL.CREATEDTIME
+				        ,   LRL.CREATOR
+				        ,   NULL                            AS RELEASETIME
+				        ,   NULL                            AS RELEASEUSER
+				        ,   L.UNIT
+				        ,   L.PANELQTY
+				        ,   L.QTY
+				        ,	LRL.COMMENTS 
+				        ,	LRL.RELEASECOMMENTS 
+				        ,	'N' 							AS  RESERVE_YN
+				    FROM    PCM_LOTRESERVELOCKING            LRL
+				    INNER JOIN BAS_PROCESSSEGMENT            PS  ON  LRL.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				    INNER JOIN PCM_LOT                       L   ON  LRL.LOTID = L.LOTID
+				    INNER JOIN FN_AREA(#{MODIFIER})    		A   ON  L.AREAID = A.AREAID
+				    INNER JOIN BAS_PRODUCTDEFINITION         PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                                AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				    WHERE   1 = 1
+				    AND     COALESCE(LRL.LOCKINGSTATUS, '') = 'Created'
+				    AND     LRL.CREATEDTIME BETWEEN TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYY-MM-DD HH24:MI:SS')
+				                            AND TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYY-MM-DD HH24:MI:SS')
+				    AND     COALESCE(L.ISDEFECTED, 'N') = 'N'								
+	               	--품목코드
+	               	<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',') PMP 
+						        WHERE	L.PRODUCTDEFID = PMP.VALUE
+					        )
+					</if> 	             
+	               	--품목명
+	               	<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFNAME}, ',') PMP 
+						        WHERE	PD.PRODUCTDEFNAME LIKE PMP.VALUE
+					        )
+					</if> 		               
+	               	--생산구분
+	               	<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+	               		AND     L.LOTTYPE = #{PRODUCTIONTYPE}
+	               	</if>  
+	               	--공정
+	               	<if test="PROCESSSEGMENTNAME != null and PROCESSSEGMENTNAME !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID}, ',') PMP 
+						        WHERE	LRL.PROCESSSEGMENTID = PMP.VALUE
+					        )
+					</if>	               	  
+			        -- lotid
+					<if test="LOTID != null and LOTID !=''"> 
+	               		AND    	LRL.LOTID LIKE #{LOTID}
+	               	</if>					                                             		
+					-- SITE
+					<if test="PLANTID != null and PLANTID !=''"> 
+	               		AND     LRL.PLANTID = #{PLANTID}
+	               	</if> 
+			        -- 제품구분
+			        <if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''"> 
+						AND	EXISTS
+							(
+						        SELECT 1 
+						        FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDIVISION}, ',') PMP 
+						        WHERE	PD.PRODUCTDEFTYPE = PMP.VALUE
+					        )
+					</if>						
+			        -- 담당공장
+			        <if test="OWNERFACTORYID != null and OWNERFACTORYID !=''"> 
+	               		AND     PD.OWNERFACTORYID = #{OWNERFACTORYID}
+	               	</if> 					
+					-- LOCKING 사유 그룹
+					<if test="REASONCODECLASSID != null and REASONCODECLASSID !=''"> 
+	               		AND     LRL.LOCKINGTYPE = #{REASONCODECLASSID}
+	               	</if>					
+					-- LOCKING 사유
+					<if test="REASONCODEID != null and REASONCODEID !=''"> 
+	               		AND     LRL.LOCKINGCODE = #{REASONCODEID}
+	               	</if>									    
+				)X
+				LEFT JOIN BAS_PROCESSSEGMENT             RPS     ON  X.RESERVESEGMENT = RPS.PROCESSSEGMENTID
+				                                                AND RPS.PROCESSSEGMENTVERSION = '*'
+				LEFT JOIN CMD_DICTIONARY                 RDC     ON  RPS.PROCESSSEGMENTNAME = RDC.DICTIONARYID
+				                                                AND RDC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN BAS_PROCESSSEGMENTCLASS        MPS     ON  X.PROCESSSEGMENTCLASSID = MPS.PROCESSSEGMENTCLASSID
+				LEFT JOIN CMD_DICTIONARY                 DC1     ON  MPS.PROCESSSEGMENTCLASSNAME = DC1.DICTIONARYID
+				                                                AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN CMD_DICTIONARY                 DC2     ON  X.PROCESSSEGMENTNAME = DC2.DICTIONARYID
+				                                                AND DC2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN CMD_LOOKUP_VALUES             CD1     ON  X.LOTTYPE = CD1.LOOKUP_CODE
+				                                                AND CD1.LOOKUP_TYPE = 'ProductionType'
+				LEFT JOIN CMD_DICTIONARY                 DC3     ON  CD1.DICTIONARYID = DC3.DICTIONARYID
+				                                                AND DC3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN CMD_LOOKUP_VALUES              CD2     ON  X.PRODUCTDEFTYPE = CD2.LOOKUP_CODE
+				                                                AND CD2.LOOKUP_TYPE = 'ProductDivision2'
+				LEFT JOIN CMD_DICTIONARY                 DC4     ON  CD2.DICTIONARYID = DC4.DICTIONARYID
+				                                                AND DC4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN BAS_AREA                       AR      ON  X.AREAID = AR.AREAID
+				LEFT JOIN CMD_DICTIONARY                 DC5     ON  AR.AREANAME = DC5.DICTIONARYID
+				                                                AND DC5.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN CMD_LOOKUP_VALUES              CD3     ON  AR.OWNTYPE = CD3.LOOKUP_CODE
+				                                                AND CD3.LOOKUP_TYPE = 'OwnType'
+				LEFT JOIN CMD_DICTIONARY                 DC6     ON  CD3.DICTIONARYID = DC6.DICTIONARYID
+				                                                AND DC6.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN BAS_REASONCODE                 RC1     ON  X.LOCKINGCODE = RC1.REASONCODEID
+				LEFT JOIN CMD_DICTIONARY                 DC7     ON  RC1.REASONCODENAME = DC7.DICTIONARYID
+				                                                AND DC7.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN BAS_REASONCODECLASS            RC2     ON  X.LOCKINGTYPE = RC2.REASONCODECLASSID
+				LEFT JOIN CMD_DICTIONARY                 DC8     ON  RC2.REASONCODECLASSNAME = DC8.DICTIONARYID
+				                                                AND DC8.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN BAS_REASONCODECLASS            RCC     ON  RC2.PARENTREASONCODECLASSID = RCC.REASONCODECLASSID
+				LEFT JOIN CMD_DICTIONARY                 DC9     ON  RCC.REASONCODECLASSNAME = DC9.DICTIONARYID
+				                                                AND DC9.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN BAS_REASONCODE                 RC3     ON  X.UNLOCKINGCODE = RC3.REASONCODEID
+				LEFT JOIN CMD_DICTIONARY                 DC0     ON  RC3.REASONCODENAME = DC0.DICTIONARYID
+				                                                AND DC0.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN CMD_USERS                       U1      ON  X.CREATOR = U1.USER_ID
+				LEFT JOIN CMD_USERS                       U2      ON  X.RELEASEUSER = U2.USER_ID
+				LEFT JOIN CMD_LOOKUP_VALUES              CD4     ON  X.STATE = CD4.LOOKUP_CODE
+                                                                AND CD4.LOOKUP_TYPE = 'LotCurrentState'
+                LEFT JOIN CMD_DICTIONARY                 DC      ON  CD4.DICTIONARYID = DC.DICTIONARYID
+                                                                AND DC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE	1 = 1
+				-- LOCKING 대그룹 				
+				<if test="PARENTREASONCODECLASSID != null and PARENTREASONCODECLASSID !=''"> 
+               		AND     RCC.REASONCODECLASSID = #{PARENTREASONCODECLASSID}
+               	</if>
+               	 -- 자사/외주구분
+				 <if test="OWNTYPE != null and OWNTYPE !=''"> 
+               		AND     AR.OWNTYPE = #{OWNTYPE}
+               	</if> 
+               	<if test="CURRENTSTATUS != null and CURRENTSTATUS !=''"> 
+               		AND		X.STATE = #{CURRENTSTATUS}
+               	</if>
+				ORDER BY X.LOTID, X.CREATEDTIME ASC
+	</select>
+</mapper>

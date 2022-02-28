@@ -1,0 +1,415 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM01100Dao">
+	
+	<!--
+	프 로 그 램 명	: 생산관리 > 생산계획 > Tack Time 등록
+	설		명	: 품목, 공정별 Tack Time 조회
+	작	성	자	: 정승원 
+	작	성	일	: 2019-09-18
+	주요 변경 로그	: 2019-11-06 표준 LEAD TIME 추가
+				  2020-05-18 쿼리 속도로 인한 쿼리 수정(김기수)	
+	-->
+	<select id="selectTackTimeList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectTackTimeList
+				-- Version : 10001				
+				WITH CAL_TACTIME AS
+				(
+					SELECT Y.PRODUCTDEFID
+					    ,  Y.PRODUCTDEFVERSION
+						,  Y.PRODUCTDEFNAME
+						,  Y.PROCESSSEGMENTID
+						,  Y.PROCESSSEGMENTVERSION
+						,  Y.PLANTID
+						,  Y.USERSEQUENCE
+						,  Y.TACTIMEMNGTYPE
+						,  ROUND(AVG(RESULT3TACKTIME),2) RESULT3TACKTIME
+						,  ROUND(AVG(RESULT6TACKTIME),2) RESULT6TACKTIME 
+						,	Y.VALIDSTATE
+						,	Y.ISLOADMNG
+						,	Y.PRODUCTIONTYPE
+						,	Y.PRODUCTDEFTYPE
+					FROM
+					(
+						SELECT X.PRODUCTDEFID
+							,  X.PRODUCTDEFVERSION
+							,  X.PRODUCTDEFNAME
+							,  X.PROCESSSEGMENTID
+							,  X.PROCESSSEGMENTVERSION
+							,  X.PLANTID
+							,  X.USERSEQUENCE
+							,  X.TACTIMEMNGTYPE
+							,  CASE WHEN  NVL(X.WORKENDLEADTIME_3,0) = 0 OR NVL(X.WORKENDPANELQTY_3,0) = 0 THEN NULL
+							        ELSE  ROUND(X.WORKENDLEADTIME_3/X.WORKENDPANELQTY_3,2) 
+							        END   RESULT3TACKTIME
+							,  CASE WHEN  NVL(X.WORKENDLEADTIME_6,0) = 0 OR NVL(X.WORKENDPANELQTY_6,0) = 0 THEN NULL
+							        ELSE  ROUND(X.WORKENDLEADTIME_6/X.WORKENDPANELQTY_6,2) 
+							        END   RESULT6TACKTIME	
+							,	X.VALIDSTATE
+							,	X.ISLOADMNG
+							,	X.PRODUCTIONTYPE
+							,	X.PRODUCTDEFTYPE
+							        
+						FROM
+						(
+							SELECT PD.PRODUCTDEFID
+							    ,  PD.PRODUCTDEFVERSION
+							    ,  PD.PRODUCTDEFNAME
+							    ,  PP.PROCESSSEGMENTID
+							    ,  PP.PROCESSSEGMENTVERSION
+							    ,  PP.PLANTID
+							    ,  PP.USERSEQUENCE
+							    ,  PD.TACTIMEMNGTYPE
+							    ,  CASE WHEN LW.WORKENDTIME > ADD_MONTHS(SYSDATE,-3) THEN LW.WORKENDLEADTIME ELSE NULL END WORKENDLEADTIME_3
+							    ,  CASE WHEN LW.WORKENDTIME > ADD_MONTHS(SYSDATE,-3) THEN LW.WORKENDPANELQTY ELSE NULL END WORKENDPANELQTY_3
+							    ,  CASE WHEN LW.WORKENDTIME > ADD_MONTHS(SYSDATE,-6) THEN LW.WORKENDLEADTIME ELSE NULL END WORKENDLEADTIME_6
+							    ,  CASE WHEN LW.WORKENDTIME > ADD_MONTHS(SYSDATE,-6) THEN LW.WORKENDPANELQTY ELSE NULL END WORKENDPANELQTY_6 
+							    ,	NVL(PD.VALIDSTATETAC, 'Valid') AS VALIDSTATE
+							    ,   NVL(PD.ISLOADMNG,'') AS ISLOADMNG
+							    ,   PD.PRODUCTIONTYPE
+							    ,	PD.PRODUCTDEFTYPE
+							FROM BAS_PRODUCTDEFINITION PD
+							INNER JOIN BAS_PRODUCTDEFINITION SPD ON  PD.PRODUCTDEFID = SPD.PRODUCTDEFID
+							                                    AND PD.PRODUCTDEFVERSION = SPD.PRODUCTDEFVERSION		                                    
+							                                    
+							INNER JOIN BAS_PROCESSPATH        PP ON  SPD.PROCESSDEFID = PP.PROCESSDEFID
+							                                    AND SPD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+							LEFT  JOIN PCM_LOTWORKRESULT      LW ON  PD.PRODUCTDEFID = LW.PRODUCTDEFID
+							                                    AND PD.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+							                                    AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+							                                    AND PP.PROCESSSEGMENTVERSION = LW.PROCESSSEGMENTVERSION
+							                                    AND NVL(LW.WORKENDPANELQTY,0) <![CDATA[>]]> 0
+							                                    AND NVL(LW.WORKENDLEADTIME,0) <![CDATA[>]]> 0
+							                                    AND	WORKENDTIME BETWEEN ADD_MONTHS(SYSDATE,-6) AND SYSDATE 
+							WHERE 1=1
+							
+							<if test="P_PRODUCTIONDIVISION != null and P_PRODUCTIONDIVISION !='' ">
+	                            AND PD.PRODUCTIONTYPE = #{P_PRODUCTIONDIVISION} 		--생산구분(2021-07-06)
+	                        </if>
+	                        
+							<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+								AND		EXISTS
+										(
+											SELECT	1
+											FROM	ufn_selectStringToSplit(#{P_PRODUCTDEFID}, ',')		MAP
+											WHERE	PD.PRODUCTDEFID = MAP.VALUE
+										)
+							</if>
+							
+							<if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+								AND		EXISTS
+										(
+											SELECT	1
+											FROM	ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')		MAP
+											WHERE	PP.PROCESSSEGMENTID = MAP.VALUE
+										)
+							</if>
+							  
+							<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' ">
+								AND PD.PRODUCTDEFVERSION = #{P_PRODUCTDEFVERSION}
+							</if>
+						)X
+					)Y
+					GROUP BY Y.PRODUCTDEFID
+					      ,  Y.PRODUCTDEFVERSION
+						  ,  Y.PRODUCTDEFNAME
+						  ,  Y.PROCESSSEGMENTID
+						  ,  Y.PROCESSSEGMENTVERSION
+						  ,  Y.PLANTID
+						  ,  Y.USERSEQUENCE
+						  ,  Y.TACTIMEMNGTYPE
+						  ,	Y.VALIDSTATE
+						  ,	Y.ISLOADMNG
+						  ,	Y.PRODUCTIONTYPE
+						  ,	Y.PRODUCTDEFTYPE
+					ORDER BY Y.PRODUCTDEFID
+					      ,  Y.PRODUCTDEFVERSION
+					      ,  Y.USERSEQUENCE
+				)      
+				SELECT CT.PRODUCTDEFID
+				    ,  CT.PRODUCTDEFVERSION
+				    ,  CT.PRODUCTDEFNAME
+				    ,  CT.PLANTID
+				    ,  CT.USERSEQUENCE
+				    ,  CT.PROCESSSEGMENTID
+				    ,  CT.PROCESSSEGMENTVERSION
+				    ,  NVL(SD.DICTIONARYNAME,CT.PROCESSSEGMENTID) PROCESSSEGMENTNAME
+				    ,  NVL(TT.THEORYTACKTIME, 0) AS THEORYTACKTIME
+				    ,  NVL(CT.RESULT3TACKTIME,0) AS RESULT3TACKTIME
+				    ,  NVL(CT.RESULT6TACKTIME,0) AS RESULT6TACKTIME
+				    ,  NVL(TT.TARGETTACKTIME, 0) AS TARGETTACKTIME
+				    ,  TT.THEORYTACKTIME	AS THEORYTACKTIME2
+				    ,  CT.RESULT3TACKTIME	AS RESULT3TACKTIME2 
+				    ,  CT.RESULT6TACKTIME	AS RESULT6TACKTIME2
+				    ,  TT.TARGETTACKTIME	AS TARGETTACKTIME2
+				    ,  NVL(TT.STDLEADTIME,0) AS STDLEADTIME
+				    ,  TT.STDLEADTIME AS STDLEADTIME2
+				    ,  NVL(TT.VALIDSTATE, 'Valid') VALIDSTATE
+				    ,  NVL(UR1.USER_NM,TT.CREATOR)  CREATOR
+				    ,  NVL(UR2.USER_NM,TT.MODIFIER)  MODIFIER
+				    ,  TO_CHAR(TT.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS')  CREATEDTIME
+				    ,  TO_CHAR(TT.MODIFIEDTIME,'YYYY-MM-DD HH24:MI:SS') MODIFIEDTIME
+				    ,  NVL(CASE WHEN CT.TACTIMEMNGTYPE = 'StandardLeadTime' THEN TT.STDLEADTIME
+				            WHEN CT.TACTIMEMNGTYPE = 'TheoryTackTime'   THEN TT.THEORYTACKTIME
+				            WHEN CT.TACTIMEMNGTYPE = 'TargetTackTime'   THEN TT.TARGETTACKTIME
+				            WHEN CT.TACTIMEMNGTYPE = 'ResultTackTime'   THEN 
+				            		DECODE(NVL(CT.RESULT3TACKTIME,0), 0, NVL(CT.RESULT6TACKTIME,0), NVL(CT.RESULT3TACKTIME,0))
+				            END, 0) APPLICATIONTACKTIME	
+				     ,  NVL(CASE WHEN CT.TACTIMEMNGTYPE = 'StandardLeadTime' THEN TT.STDLEADTIME
+				            WHEN CT.TACTIMEMNGTYPE = 'TheoryTackTime'   THEN TT.THEORYTACKTIME
+				            WHEN CT.TACTIMEMNGTYPE = 'TargetTackTime'   THEN TT.TARGETTACKTIME
+				            WHEN CT.TACTIMEMNGTYPE = 'ResultTackTime'   THEN 
+				            	DECODE(NVL(CT.RESULT3TACKTIME,0), 0, NVL(CT.RESULT6TACKTIME,0), NVL(CT.RESULT3TACKTIME,0))
+				            END, 0) APPLICATIONTACKTIME2
+				     ,	'0' AS CHK
+				     , 	ROWNUM AS NO
+				     ,	CT.PRODUCTIONTYPE
+				     ,	CT.PRODUCTDEFTYPE
+				     ,	CASE WHEN PD.TACTIMEMNGTYPE IS NOT NULL THEN 'Y' ELSE 'N' END AS INPUTCODE    
+				FROM CAL_TACTIME CT 
+				INNER JOIN BAS_PROCESSSEGMENT PS ON  CT.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                AND PS.PROCESSSEGMENTVERSION = '*'
+				LEFT  JOIN CMD_DICTIONARY     SD ON  PS.PROCESSSEGMENTNAME = SD.DICTIONARYID
+				                                AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT  JOIN PCM_TACKTIMEMANAGE TT ON  CT.PRODUCTDEFID = TT.PRODUCTDEFID
+				                                AND CT.PRODUCTDEFVERSION = TT.PRODUCTDEFVERSION
+				                                AND CT.PROCESSSEGMENTID = TT.PROCESSSEGMENTID
+				                                AND TT.PROCESSSEGMENTVERSION = '*'
+				LEFT  JOIN BAS_PRODUCTDEFINITION PD 	ON  PD.PRODUCTDEFID = CT.PRODUCTDEFID
+				                                					AND PD.PRODUCTDEFVERSION = CT.PRODUCTDEFVERSION
+				LEFT  JOIN CMD_USERS          UR1 ON  TT.CREATOR = UR1.USER_ID
+				LEFT  JOIN CMD_USERS          UR2 ON  TT.MODIFIER = UR2.USER_ID
+				WHERE	1 = 1				
+				
+				AND	PD.VALIDSTATELOAD = 'Valid'
+				AND  NVL(PD.ISLOADMNG,'') = 'Y'
+				
+				<if test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' ">
+					AND PD.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE}
+				</if>
+				
+				<if test="P_NOINPUT != null and P_NOINPUT eq 'Y'.toString() ">
+					AND PD.TACTIMEMNGTYPE IS NULL
+				</if>
+				<if test="P_NOINPUT != null and P_NOINPUT eq 'N'.toString() ">
+					AND PD.TACTIMEMNGTYPE IS NOT NULL
+				</if>
+                
+                <if test="P_VALIDSTATE != null and P_VALIDSTATE !='' ">
+					AND     PD.VALIDSTATETAC = #{P_VALIDSTATE}	
+				</if>
+                
+				ORDER BY CT.PRODUCTDEFID, CT.PRODUCTDEFVERSION, TO_CHAR(TO_NUMBER(CT.USERSEQUENCE),'0000'), CT.PROCESSSEGMENTID, CT.PRODUCTDEFID, CT.PRODUCTDEFVERSION, CT.PRODUCTDEFNAME
+	</select>
+	
+	<!--
+	프 로 그 램 명	: 
+	설		명	: 
+	생	성	자	: 
+	생	성	일	:
+	수  정   이  력	: 
+	-->
+	<select id="selectTactimeApplySTD" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectTactimeApplySTD
+				-- Version : 10001				
+				SELECT PD.PRODUCTDEFID
+				    ,  PD.PRODUCTDEFVERSION
+				    ,  PD.PRODUCTDEFNAME
+				    ,  PD.TACTIMEMNGTYPE    APPLICATIONTACKTIME
+				    ,  NVL(PD.VALIDSTATETAC, 'Valid') AS VALIDSTATE
+				    ,  PD.PRODUCTIONTYPE
+				    ,  PD.PRODUCTDEFTYPE
+				    ,  ROWNUM AS NO
+				FROM BAS_PRODUCTDEFINITION PD
+				WHERE 1=1
+				AND	PD.VALIDSTATELOAD = 'Valid'
+				AND   NVL(PD.ISLOADMNG,'') = 'Y'
+				
+				
+				<if test="P_PRODUCTIONDIVISION != null and P_PRODUCTIONDIVISION !='' ">
+	            	AND PD.PRODUCTIONTYPE = #{P_PRODUCTIONDIVISION} 		--생산구분(2021-07-06)
+	            </if>
+	                        
+	                        
+				<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	ufn_selectStringToSplit(#{P_PRODUCTDEFID}, ',')		MAP
+								WHERE	PD.PRODUCTDEFID = MAP.VALUE
+							)
+				</if>
+				<if test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' ">	
+					AND PD.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE}
+				</if>
+				<if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' ">
+					AND PD.PRODUCTDEFVERSION = #{P_PRODUCTDEFVERSION}
+				</if>
+				
+				
+				<if test="P_NOINPUT != null and P_NOINPUT eq 'Y'.toString() ">
+					AND PD.TACTIMEMNGTYPE IS NULL
+				</if>
+				<if test="P_NOINPUT != null and P_NOINPUT eq 'N'.toString() ">
+					AND PD.TACTIMEMNGTYPE IS NOT NULL
+				</if>
+				
+				<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' ">	
+					AND PD.VALIDSTATETAC = #{P_VALIDSTATE}
+				</if>
+	</select>	
+	
+	
+	
+		
+	<select id="selectTacktimemanage" parameterType="map" resultType="hashmap">
+		SELECT TT.PRODUCTDEFID,
+				TT.PRODUCTDEFVERSION,
+				TT.PROCESSSEGMENTID,
+				TT.PROCESSSEGMENTVERSION
+		FROM PCM_TACKTIMEMANAGE TT
+		WHERE TT.PRODUCTDEFID = #{PRODUCTDEFID}
+		AND TT.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+		AND TT.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		AND TT.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	</select>
+	
+	<update id="insertDispatchingItem" parameterType="map">
+		INSERT INTO PCM_TACKTIMEMANAGE
+			(
+				PRODUCTDEFID
+			,	PRODUCTDEFVERSION
+			,	PROCESSSEGMENTID
+			,	PROCESSSEGMENTVERSION
+			
+			,	ENTERPRISEID
+			,	PLANTID
+			,	PROCESSDEFID
+			,	PROCESSDEFVERSION			
+			,	USERSEQUENCE
+			
+			,	THEORYTACKTIME
+			,	TARGETTACKTIME
+			,	STDLEADTIME			
+			,	DESCRIPTION
+			
+			,	CREATOR
+			,	CREATEDTIME
+			,	MODIFIER
+			,	MODIFIEDTIME
+			,	LASTTXNHISTKEY
+			,	LASTTXNID
+			,	LASTTXNUSER
+			,	LASTTXNTIME
+			,	LASTTXNCOMMENT
+			,	VALIDSTATE
+			) VALUES (
+				#{PRODUCTDEFID}
+			,	#{PRODUCTDEFVERSION}		
+			,	#{PROCESSSEGMENTID}
+			,	#{PROCESSSEGMENTVERSION}
+			
+			,	#{ENTERPRISEID}
+			,	#{PLANTID}
+			,	#{PROCESSSEGMENTID}
+			,	#{PROCESSSEGMENTVERSION}
+			,	#{USERSEQUENCE}
+			
+			,	NVL(#{THEORYTACKTIME}, 0)
+			,	NVL(#{TARGETTACKTIME}, 0)
+			,	NVL(#{STDLEADTIME}, 0)
+			,	#{DESCRIPTION}
+			
+			,	#{CREATOR}
+			,	SYSDATE
+			,	#{MODIFIER}
+			,	SYSDATE
+			,	#{LASTTXNHISTKEY}
+			,	#{LASTTXNID}
+			,	#{LASTTXNUSER}
+			,	SYSDATE
+			,	null
+			,	'Valid'
+			)
+	</update>
+	
+	<update id="updateDispatchingItem" parameterType="map">
+		UPDATE PCM_TACKTIMEMANAGE TT
+		SET THEORYTACKTIME = #{THEORYTACKTIME},					--이론값
+			 TARGETTACKTIME = #{TARGETTACKTIME},					--목표값
+			 STDLEADTIME = #{STDLEADTIME},								--표준 lead time			 
+			 
+			 MODIFIER		= #{MODIFIER}, 
+			 MODIFIEDTIME	= SYSDATE, 
+			 LASTTXNHISTKEY	= #{LASTTXNHISTKEY}, 
+			 LASTTXNID		= #{LASTTXNID}, 
+			 LASTTXNUSER		= #{LASTTXNUSER}, 
+			 LASTTXNTIME		= SYSDATE, 
+			 LASTTXNCOMMENT	= null			 
+			 
+		WHERE TT.PRODUCTDEFID = #{PRODUCTDEFID}
+		AND TT.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+		AND TT.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		AND TT.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	</update>
+	
+	
+	
+	<update id="deleteTacktimemanage" parameterType="map">
+		DELETE FROM PCM_TACKTIMEMANAGE TT
+		WHERE TT.PRODUCTDEFID = #{PRODUCTDEFID}
+		AND TT.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+		AND TT.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		AND TT.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	</update>
+	
+	
+	
+	
+	<update id="updateApplicationTacktime" parameterType="map">
+		UPDATE BAS_PRODUCTDEFINITION PD
+		SET  
+			TACTIMEMNGTYPE = #{APPLICATIONTACKTIME},
+			VALIDSTATETAC = #{VALIDSTATE},
+			
+			MODIFIER		= #{MODIFIER}, 
+			MODIFIEDTIME	= SYSDATE, 
+			LASTTXNHISTKEY	= #{LASTTXNHISTKEY}, 
+			LASTTXNID		= #{LASTTXNID}, 
+			LASTTXNUSER		= #{LASTTXNUSER}, 
+			LASTTXNTIME		= SYSDATE, 
+			LASTTXNCOMMENT	= null
+		WHERE PD.PRODUCTDEFID = #{PRODUCTDEFID}
+		AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	</update>
+	
+	<!--
+	<update id="updateApplicationTacktimeUpsert" parameterType="map">
+		MERGE INTO BAS_PRODUCTDEFINITIONEXT
+	    USING DUAL
+	    ON (
+	    	 		PRODUCTDEFID 			= #{PRODUCTDEFID} 
+	    	 AND PRODUCTDEFVERSION	= #{PRODUCTDEFVERSION}
+	         )
+	     WHEN MATCHED THEN
+	     	UPDATE
+            SET	VALIDSTATETAC 		= #{VALIDSTATE}
+	     WHEN NOT MATCHED THEN
+			   INSERT (
+				    PRODUCTDEFID
+				,	PRODUCTDEFVERSION				
+				,	VALIDSTATETAC
+				) 
+		    VALUES ( 
+		         #{PRODUCTDEFID}  
+		        ,#{PRODUCTDEFVERSION}  
+		        ,#{VALIDSTATE}
+				)
+    </update>
+    -->
+	
+</mapper>

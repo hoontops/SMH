@@ -1,0 +1,343 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+  
+<mapper namespace="com.nbdf.cmd.cm.cmbm.dao.CMBM02100Dao">
+
+
+    <!-- 배치프로그램 실행 리스트 조회 -->
+    <select id="selectBatchProgramRunList" resultType="hashmap">
+    SELECT /* com.nbdf.cmd.cm.cmbm.dao.CMBM02100Dao.selectBatchProgramRunList */
+           Z.*
+      FROM
+         (
+           SELECT Y.*
+                , ROWNUM RNUM
+                , LAST_VALUE(ROWNUM) OVER (ORDER BY ROWNUM ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS TOTAL_ROWS
+             FROM
+                (
+                  SELECT ma.BATCH_CD                     AS  BATCH_CD                 /* 뱃치 제어         */
+                       , ma.PROGRAM_NAME                 AS  PROGRAM_NAME             /* 프로그램 이름     */
+                       , ma.CMD_JOB_GUBUNCD              AS  JOB_GUBUN_CD             /* 업무구분코드      */
+                       , ma.CMD_JOB_GUBUNCD              AS  JOB_GUBUN_NM             /* 업무구분명        */
+                       , ma.JOB_NAME                     AS  JOB_NAME                 /* 배치job_name      */
+                       , ma.PARENT_JOB_NAME              AS  PARENT_JOB_NAME          /* Parent Job NAME값 */
+                       , ma.PARAMS                       AS  PARAMS                   /* 파라미터          */
+                       , to_char(ma.START_TIME,'yyyy-mm-dd hh24:mi:ss')                   AS  START_TIME               /* 시작시간          */
+                       , to_char(ma.END_TIME,'yyyy-mm-dd hh24:mi:ss')                      AS  END_TIME                 /* 종료시간          */
+                       , DECODE(SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 1, 1), '+', 
+                                   TO_CHAR(TO_NUMBER(SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 2, 9)) * 24 +       
+                                           TO_NUMBER(SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 12, 2)), 'FM999') || '시간 ' ||         
+                                                     SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 15, 2)            || '분 '   ||
+                                                     SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 18, 2)            || '초' 
+                         , '')                           AS TERM_TIME
+                       , ma.BATCH_STATUS                 AS  BATCH_STATUS             /* 배치상태          */
+                       , ma.BATCH_STATUS_NM              AS  BATCH_STATUS_NM          /* 배치상태명        */
+                       <!--  , NVL(ma.BATCH_RESULT_TYPE, ma.BATCH_STATUS_NM) -->
+                       , ma.BATCH_RESULT_TYPE            AS  BATCH_RESULT_TYPE        /* 배치결과          */
+                       , ma.BATCH_TYPE                   AS  BATCH_TYPE               /* 배치유형          */
+                       , ma.BATCH_TYPE_NM                AS  BATCH_TYPE_NM            /* 배치유형명        */
+                       , ma.BATCH_INTERVAL_TYPE          AS  BATCH_INTERVAL_TYPE      /* 배치간격유형      */
+                       , ma.BATCH_INTERVAL_TYPE_NM       AS  BATCH_INTERVAL_TYPE_NM   /* 배치간격유형명    */
+                       , ma.BATCH_INTERVAL               AS  BATCH_INTERVAL           /* 배치간격          */
+                       , ma.CREATED_BY                   AS  CREATED_BY               /* 생성자            */
+                       , ma.USER_NM                      AS  USER_NM                  /* 생성자명          */
+                       , ma.ENABLED                      AS  ENABLED                  /* 가능여부          */
+                       , to_char(CAST(ma.NEXT_RUN_DATE AS DATE),'yyyy-mm-dd hh24:mi:ss')  AS  NEXT_RUN_DATE            /* 다음실행시간      */
+                       , ma.ADDITIONAL_INFO              AS  ADDITIONAL_INFO          /* 추가정보          */
+                       , ma.ATCH_FILE_ID                 AS  ATCH_FILE_ID
+				       , ma.ATCH_TY_CD	                 AS  ATCH_TY_CD
+					   , ma.ATCH_SRC_KEY                 AS  ATCH_SRC_KEY
+					   , NVL2(ma.ATCH_FILE_ID, 'Y', '')  AS  ATCH_FILE_YN
+					   , (
+					      SELECT COUNT(1)
+						    FROM CMD_ATCH_FILES CAF
+						   WHERE 1=1
+						     AND CAF.ATCH_FILE_ID = ma.ATCH_FILE_ID
+					     )                               AS ATCH_FILE_CNT
+					   , (
+					      SELECT MAX(CAF.ATCH_FILE_GUID)
+						    FROM CMD_ATCH_FILES CAF
+						   WHERE 1=1
+						     AND CAF.ATCH_FILE_ID = ma.ATCH_FILE_ID
+						   GROUP BY CAF.ATCH_FILE_ID  
+						   HAVING COUNT(1)        = 1  
+					     )                               AS ATCH_FILE_GUID  
+                    FROM CMD_BATCH_JOBS_V ma
+                   WHERE 1=1
+                   <!-- 실행시간 -->
+                   <if test="DATE_FROM != null and DATE_FROM != '' and DATE_TO != null and DATE_TO != '' ">
+                     AND ma.START_TIME BETWEEN TO_DATE(substr(#{DATE_FROM},1,12)||'00','YYYYMMDDHH24MISS') AND TO_DATE(substr(#{DATE_TO},1,12)||'59','YYYYMMDDHH24MISS')
+                   </if> 
+
+                   <!-- 업무구분 -->
+                   <if test="JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+                     AND ma.CMD_JOB_GUBUNCD = #{JOB_GUBUN_CD}
+                   </if>
+
+                   <!-- 배치명 -->
+                   <if test="PROGRAM_NAME != null and PROGRAM_NAME != ''">
+                     AND ma.PROGRAM_NAME LIKE '%' ||  #{PROGRAM_NAME} || '%'
+                   </if>
+
+                   <!-- 배치JOB -->
+                   <if test="JOB_NAME != null and JOB_NAME != ''">
+                     AND ma.JOB_NAME LIKE '%' ||  #{JOB_NAME} || '%'
+                   </if>
+
+                   <!-- 배치유형 -->
+                   <if test="BATCH_TYPE != null and BATCH_TYPE != ''">
+                     AND ma.BATCH_TYPE = #{BATCH_TYPE}
+                   </if>
+
+                   <!-- 배치상태 -->
+                   <if test="BATCH_STATUS != null and BATCH_STATUS != ''">
+                     AND ma.BATCH_STATUS = #{BATCH_STATUS}
+                   </if>
+
+                   <!-- 배치결과 -->
+                   <if test="BATCH_RESULT_TYPE != null and BATCH_RESULT_TYPE != ''">
+                     AND ma.BATCH_RESULT_TYPE = ( SELECT xa.MEANING
+                                                    FROM CMD_LOOKUP_VALUES xa
+                                                   WHERE xa.LOOKUP_TYPE = 'CMD_BATCH_RESULT'
+                                                     AND xa.LOOKUP_CODE = #{BATCH_RESULT_TYPE}  
+                                                )
+                   </if>
+
+                   <!-- 생성자 -->
+                   <if test="USER_NM != null and USER_NM != ''">
+                     AND ma.USER_NM  LIKE '%' ||  #{USER_NM} || '%'
+                   </if>
+
+                   <!-- 부모JOB -->
+                   <if test="PARENT_JOB_NAME != null and PARENT_JOB_NAME != ''">
+                     AND ma.PARENT_JOB_NAME  LIKE '%' ||  #{PARENT_JOB_NAME} || '%'
+                   </if>
+
+                  ORDER BY ma.START_TIME DESC 
+                ) Y
+            WHERE 1=1
+         ) Z
+     WHERE 1=1
+
+    <if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+       AND Z.RNUM <![CDATA[>]]> ( #{PAGE_NUMBER} - 1 ) * #{PAGE_SIZE}
+       AND Z.RNUM <![CDATA[<=]]> #{PAGE_NUMBER} * #{PAGE_SIZE}
+    </if>
+
+
+    </select>
+
+    
+    <!-- 배치JOB로그 조회 -->
+    <select id="selectCmbmBatchJobLogs" resultType="hashmap">
+    	/* com.nbdf.cmd.cm.cmbm.dao.CMBM02100Dao.selectCmbmBatchJobLogs */
+	    SELECT ma.JOB_NAME               AS  JOB_NAME           /* 배치JOB_NAME */
+	         , ma.SEQ_NO                 AS  SEQ_NO             /* 일련번호     */
+	         , ma.START_TIME             AS  START_TIME         /* 시작시간     */
+	         , ma.END_TIME               AS  END_TIME           /* 종료시간     */
+	         , DECODE(SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 1, 1), '+', 
+                         TO_CHAR(TO_NUMBER(SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 2, 9)) * 24 +       
+                                 TO_NUMBER(SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 12, 2)), 'FM999') || '시간 ' ||         
+                                           SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 15, 2)            || '분 '   ||
+                                           SUBSTR(NUMTODSINTERVAL(ma.END_TIME - (ma.START_TIME), 'DAY'), 18, 2)            || '초' 
+               , '')                     AS  TERM_TIME 
+	         , ma.DESCRIPTION            AS  DESCRIPTION        /* 설명         */
+	         , ma.TABLE_NAME             AS  TABLE_NAME         /* 테이블명     */
+	         , ma.CRUD_TYPE              AS  CRUD_TYPE          /* 처리유형     */
+	         , ma.PROCESS_CNT            AS  PROCESS_CNT        /* 처리건수     */
+	         , ma.SUCCESS_CNT            AS  SUCCESS_CNT        /* 성공건수     */
+	         , ma.ERROR_CNT              AS  ERROR_CNT          /* 에러건수     */
+	         , CASE WHEN ma.STATUS_CODE = 'S' THEN 'S' 
+	                ELSE                           'E'
+	           END                       AS  STATUS_CODE        /* 상태(S:성공, E:에러)*/
+	         , CASE WHEN ma.STATUS_CODE = 'S' THEN 'Success' 
+	                ELSE                           'Error'
+	           END                       AS  STATUS_NAME        /* 상태(S:성공, E:에러)*/  
+	         , ma.ERR_CONTENTS           AS  ERR_CONTENTS       /* 에러내용     */
+	         , ma.CREATED_BY             AS  CREATED_BY         /* 최초생성자   */
+	         , ma.CREATION_DATE          AS  CREATION_DATE      /* 최초생성일   */
+	         , ma.LAST_UPDATED_BY        AS  LAST_UPDATED_BY    /* 최종수정자   */
+	         , ma.LAST_UPDATE_DATE       AS  LAST_UPDATE_DATE   /* 최종수정일   */
+	         , 1                         AS  CNT	                 
+	      FROM CMD_BATCH_JOB_LOGS ma
+	     WHERE 1=1
+	       AND ma.JOB_NAME = #{JOB_NAME}
+	     ORDER BY ma.SEQ_NO DESC
+
+    </select>
+    
+
+    <!-- 배치실행 취소...Procedure Call -->
+    <select id="executeBatchRunCancel" statementType="CALLABLE"  parameterType="map" >
+    {
+        call CMD_BATCH_PKG.Batch_Cancel (
+                 #{JOB_NAME             ,mode=IN  ,jdbcType=VARCHAR ,javaType=string}
+               , #{LAST_UPDATED_BY      ,mode=IN  ,jdbcType=VARCHAR ,javaType=string}
+               )
+    }
+    </select>
+    
+    <!-- 배치실행 일시정지...Procedure Call -->
+    <select id="executeBatchDisable" statementType="CALLABLE"  parameterType="map" >
+    {
+        call CMD_BATCH_PKG.batch_disable_job (
+                 #{JOB_NAME             ,mode=IN  ,jdbcType=VARCHAR ,javaType=string}
+                 )
+    }
+    </select>
+    <!-- 배치실행 스케쥴 삭제...Procedure Call -->
+    <select id="executeBatchDrop" statementType="CALLABLE"  parameterType="map" >
+    {
+        call CMD_BATCH_PKG.batch_drop_job (
+                 #{JOB_NAME             ,mode=IN  ,jdbcType=VARCHAR ,javaType=string}
+               )
+    }
+    </select>
+
+    <!-- 배치실행 스케쥴 복구...Procedure Call -->
+    <select id="executeBatchEnable" statementType="CALLABLE"  parameterType="map" >
+    {
+        call CMD_BATCH_PKG.batch_enable_job (
+                 #{JOB_NAME             ,mode=IN  ,jdbcType=VARCHAR ,javaType=string}
+               )
+    }
+    </select>
+    
+    <!-- 배치 프로그램 리스트 조회 -->
+    <select id="selectBatchProgramList" resultType="hashmap">
+    SELECT /* com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.selectBatchProgramList */
+           DBC.CMD_JOB_GUBUNCD  AS JOB_GUBUNCD      /* 업무구분     */
+         , DBC.BAT_PGM_GUBUN    AS BAT_PGM_GUBUN    /* 프로그램구분 */
+         , DBC.BATCH_CD         AS BATCH_CD         /* 배치코드     */
+         , DBC.BATCH_PROGRAM    AS BATCH_PROGRAM    /* 배치프로그램 */
+         , DBC.BATCH_CD||'.'||DBC.DESCRIPTION      AS DESCRIPTION      /* 설명         */
+      FROM CMD_BATCH_CTRLS DBC
+     WHERE 1=1
+     
+     <if test="JOB_GUBUNCD != null and JOB_GUBUNCD != '' ">
+       AND DBC.CMD_JOB_GUBUNCD = #{JOB_GUBUNCD}
+     </if>
+       
+       AND EXISTS                (SELECT 1
+                                    FROM CMD_BATCH_CTRL_AUTH DBCA
+                                       , CMD_USER_AUTH_MPNG   CUAM  
+                                   WHERE 1=1
+                                     AND DBCA.PLATFORM_TYPE   = 'W'
+                                     AND DBCA.JOB_AUTH_ID     = CUAM.JOB_AUTH_ID
+                                     AND CUAM.USER_ID         = #{SRH_GET_USER_ID}
+                                     AND DBCA.BATCH_CD        = DBC.BATCH_CD
+                                     AND DBCA.USE_YN          = 'Y'
+                                 ) 
+     ORDER BY DBC.CMD_JOB_GUBUNCD
+            , DBC.BATCH_CD
+    </select>
+    
+        
+    <!-- 배치 파라미터 리스트 조회 -->
+    <select id="selectBatchParamsList" resultType="hashmap">
+    SELECT /* com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.selectBatchParamsList */
+           DBP.BATCH_CD           AS BATCH_CD           /* 배치코드         */
+         , DBP.PARAM_SEQ          AS PARAM_SEQ          /* 파라미터일련번호 */
+         , DBP.PARAM_COLUMN_TYPE  AS PARAM_COLUMN_TYPE  /* 파라미터컬럼유형 */
+         , DBP.PARAM_PROMPT       AS PARAM_PROMPT       /* 파라미터프럼프트 */
+         , DBP.REQUIRED_YN        AS REQUIRED_YN        /* 필수여부         */
+         , DBP.DEFAULT_VALUE      AS DEFAULT_VALUE      /* 디폴트값         */
+         , DBP.LIST_QUERY         AS LIST_QUERY         /* 리스트쿼리       */
+         , DBP.HIDE_YN            AS HIDE_YN            /* 숨김여부         */
+         , CASE WHEN DBP.DEFAULT_VALUE IS NULL THEN
+                    CASE WHEN DBP.PARAM_COLUMN_TYPE = 'YMD'    THEN TO_CHAR(SYSDATE, 'YYYYMMDD')
+                         WHEN DBP.PARAM_COLUMN_TYPE = 'YM'     THEN TO_CHAR(SYSDATE, 'YYYYMM')
+                         WHEN DBP.PARAM_COLUMN_TYPE = 'YEAR'   THEN TO_CHAR(SYSDATE, 'YYYY')    
+                         WHEN DBP.PARAM_COLUMN_TYPE = 'USERID' THEN #{LAST_UPDATED_BY}
+                    END 
+                ELSE DBP.DEFAULT_VALUE
+           END                    AS DIS_DEFAULT_VALUE 
+         , ( SELECT LISTAGG('SELECT ' || XBP.PARAM_SEQ || ' LOOKUP_TYPE, LOOKUP_CODE, MEANING FROM ( ' || XBP.LIST_QUERY || ' ) WHERE 1=1 ' , ' UNION ALL ') WITHIN GROUP (ORDER BY XBP.PARAM_SEQ) AS ALL_QUERY
+               FROM CMD_BATCH_PARAMS XBP
+              WHERE 1=1
+                AND XBP.BATCH_CD    = DBP.BATCH_CD
+                AND XBP.LIST_QUERY IS NOT NULL
+           )    AS  ALL_QUERY
+      FROM CMD_BATCH_PARAMS DBP  
+     WHERE 1=1
+       AND DBP.BATCH_CD = #{BATCH_CD} 
+     ORDER BY DBP.PARAM_SEQ 
+    </select>
+    
+    
+    <!-- 배치실행...Procedure Call -->
+    <select id="executeBatchJobRun" statementType="CALLABLE"  parameterType="map" >
+    /* com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.executeBatchJobRun */
+    {
+        call CMD_BATCH_PKG.Execute_Batch_Job (
+                 #{JOB_NAME             ,mode=INOUT  ,jdbcType=VARCHAR ,javaType=string}      <!-- 배치JOB_ID     -->
+               , #{BATCH_CD             ,mode=IN     ,jdbcType=VARCHAR ,javaType=string}      <!-- 배치코드       -->
+               , #{PARAMS               ,mode=IN     ,jdbcType=VARCHAR ,javaType=string}      <!-- 파라미터리스트 -->
+               , #{BATCH_TYPE           ,mode=IN     ,jdbcType=VARCHAR ,javaType=string}      <!-- 배치유형       -->
+               , #{BATCH_INTERVAL_TYPE  ,mode=IN     ,jdbcType=VARCHAR ,javaType=string}      <!-- 배치간격유형   -->
+               , #{BATCH_INTERVAL       ,mode=IN     ,jdbcType=INTEGER ,javaType=BigDecimal}  <!-- 배치간격       -->
+               , #{RESERVED_DATE        ,mode=IN     ,jdbcType=VARCHAR ,javaType=string}        <!-- 예약시간       -->
+               , #{CREATOR 			    ,mode=IN     ,jdbcType=VARCHAR ,javaType=string}      <!-- 최초생성자     -->
+               , #{ERROR_CODE           ,mode=INOUT  ,jdbcType=VARCHAR ,javaType=string}
+               , #{ERROR_DESC           ,mode=INOUT  ,jdbcType=VARCHAR ,javaType=string}
+               )
+    }
+    </select>
+    <!-- 배치실행...Procedure Call -->
+    <select id="executeBatchModifyJob" statementType="CALLABLE"  parameterType="map" >
+    /* com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.executeBatchModifyJob */
+    {
+        call CMD_BATCH_PKG.batch_modify_job (
+                 #{JOB_NAME             ,mode=INOUT  ,jdbcType=VARCHAR ,javaType=string}      <!-- 배치JOB_ID     -->
+               , #{BATCH_INTERVAL_TYPE  ,mode=IN     ,jdbcType=VARCHAR ,javaType=string}      <!-- 배치간격유형   -->
+               , #{BATCH_INTERVAL       ,mode=IN     ,jdbcType=INTEGER ,javaType=BigDecimal}  <!-- 배치간격       -->
+               , #{RESERVED_DATE        ,mode=IN     ,jdbcType=VARCHAR ,javaType=string}        <!-- 예약시간       -->
+               , #{LAST_UPDATED_BY      ,mode=IN     ,jdbcType=VARCHAR ,javaType=string}
+               , #{ERROR_CODE           ,mode=INOUT  ,jdbcType=VARCHAR ,javaType=string}
+               , #{ERROR_DESC           ,mode=INOUT  ,jdbcType=VARCHAR ,javaType=string}
+               )
+    }
+    </select>
+    
+    <!-- 배치스케쥴 제어 조회 -->
+    <select id="selectBatchScheduleList" resultType="hashmap">
+    	/* com.nbdf.cmd.cm.cmbm.dao.CMBM02100Dao.selectBatchScheduleList */
+		SELECT BC.CMD_JOB_GUBUNCD AS JOB_GUBUNCD
+		      ,BAT_PGM_GUBUN
+		      ,BC.BATCH_CD
+		      ,BATCH_PROGRAM
+		      ,DESCRIPTION
+		      ,BJ.JOB_NAME as JOB_NAME
+		      ,to_char(NEXT_RUN_DATE,'yyyymmddhh24miss') as NEXT_RUN_DATE
+          ,decode(REPLACE(SUBSTR(upper(USJ.REPEAT_INTERVAL),1,INSTR(USJ.REPEAT_INTERVAL,';')-1),'FREQ=',''),'DAILY','DAY','HOURLY','HOUR','YEARLY','YEAR','MONTHLY','MON','MINUTELY','MIN') BATCH_INTERVAL_TYPE
+          ,REPLACE(SUBSTR(upper(USJ.REPEAT_INTERVAL),INSTR(USJ.REPEAT_INTERVAL,';')+1,LENGTH(USJ.REPEAT_INTERVAL)),'INTERVAL=','') BATCH_INTERVAL
+          ,DECODE(ENABLED,'TRUE','N','Y') AS DISABLE_YN
+          ,ENABLED
+          ,REPEAT_INTERVAL
+	    FROM USER_SCHEDULER_JOBS USJ
+	         INNER JOIN (SELECT T.JOB_NAME, T.BATCH_CD
+	          FROM CMD_BATCH_JOBS T  
+	          WHERE T.JOB_NAME like 'SC%'
+	          ) BJ ON BJ.JOB_NAME =  USJ.JOB_NAME
+	         INNER JOIN CMD_BATCH_CTRLS BC ON BC.BATCH_CD =  BJ.BATCH_CD AND BATCH_PROGRAM IS NOT NULL
+	    WHERE USJ.REPEAT_INTERVAL IS NOT NULL  
+	    
+      <choose>
+      	<when test="JOB_NAME != null and JOB_NAME != ''">
+        AND USJ.JOB_NAME  = #{JOB_NAME}
+      	</when>
+      	<otherwise>
+	      <if test="JOB_GUBUNCD != null and JOB_GUBUNCD != ''">
+	        AND BC.CMD_JOB_GUBUNCD  =  #{JOB_GUBUNCD}
+	      </if>
+	      <if test="PROGRAM_NAME != null and PROGRAM_NAME != ''">
+	        AND DESCRIPTION  LIKE '%' ||  #{PROGRAM_NAME} || '%'
+	      </if>
+      	</otherwise>
+      </choose>
+		order by BC.CMD_JOB_GUBUNCD, BC.BATCH_CD   
+    </select>
+</mapper>
+

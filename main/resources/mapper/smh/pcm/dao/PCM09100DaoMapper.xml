@@ -1,0 +1,529 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM09100Dao">
+ 
+    <!-- 프 로 그 램 명 : 공정 관리 > 자재관리 > 자재인수 설 명 : 불출요청 자재별 자재 LOT정보 조회 작 성 자 : 
+        배선용 작 성 일 : 2019-09-02 주요 변경 로그 : 2019-09-30 정승원 조회조건 불출상태(P_CONSUMERELEASESTATE) 
+        추가 -->
+    <select id="selectConsumableRequestStateList" parameterType="map" resultType="hashmap">
+                --
+                -- Id : SelectConsumableRequestState
+                -- Version : 10002                 
+                WITH CT_REQUSET AS
+                (
+                    SELECT   CR.REQUESTNO
+                          ,  CRD.CONSUMABLEDEFID										--자재ID
+                          ,  CRD.CONSUMABLEDEFVERSION								--자재명
+                          ,  CD.ITEMNAME						AS CONSUMABLEDEFNAME
+                          ,  CR.PLANTID
+                          ,  CR.WAREHOUSEID
+                          ,  MAX(CR.REQUESTDATE)          AS REQUESTDATE		--청구일자
+                          ,  SUM(CRD.REQUESTQTY)          AS REQUESTQTY			--청구수량
+                          ,  CR.REQUESTUSER
+                    FROM     MTM_CONSUMABLEREQUEST         		CR
+                    INNER JOIN MTM_CONSUMABLEREQUESTDETAIL 	CRD 	ON CR.PLANTID = CRD.PLANTID
+                                                              								AND CR.REQUESTNO = CRD.REQUESTNO
+                    --INNER JOIN BAS_CONSUMABLEDEFINITION     		CD 	ON CRD.CONSUMABLEDEFID = CD.CONSUMABLEDEFID    
+                    INNER JOIN BAS_ITEMMASTER     		CD 	ON CRD.CONSUMABLEDEFID = CD.ITEMID
+                    WHERE 1=1
+                    
+                    <if test = "(P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='') and (P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='') ">
+                        AND CR.REQUESTDATE BETWEEN #{P_PERIOD_PERIODFR} AND #{P_PERIOD_PERIODTO}
+                    </if>
+                    <if test = "P_WARESHOUSE != null and P_WARESHOUSE !='' ">
+                        AND CR.WAREHOUSEID = #{P_WARESHOUSE}
+                    </if>
+                    <if test = "P_CONSUMABLEDEFID != null and P_CONSUMABLEDEFID !='' ">
+                        AND CRD.CONSUMABLEDEFID = #{P_CONSUMABLEDEFID}
+                    </if>
+                    <if test = "P_REQUESTNO != null and P_REQUESTNO !='' ">
+                        AND UPPER(CR.REQUESTNO) LIKE '%' || #{P_REQUESTNO} || '%'
+                    </if>
+                    <if test = "P_LOTID != null and P_LOTID !='' ">
+                        AND UPPER(CRD.LOTID) LIKE '%' || UPPER(#{P_LOTID}) || '%'
+                    </if>     
+                    
+                    
+                    --AND EXISTS (
+                    --				SELECT 1
+                    --                FROM    PCM_LOT                  	L
+					--				INNER JOIN BAS_BILLOFMATERIAL    	BOM 	ON  L.PRODUCTDEFID = BOM.PRODUCTDEFID
+					--								                                    	AND L.PRODUCTDEFVERSION = BOM.PRODUCTDEFVERSION
+					--								                                    	AND L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+					--								                                    	AND L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+					--								                                    	AND BOM.MATERIALTYPE = 'Consumable'
+					--				LEFT JOIN BAS_CONSUMABLEDEFINITION   CD  ON  BOM.MATERIALDEFID = CD.CONSUMABLEDEFID
+					--                                                       					AND BOM.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION      
+					--				WHERE L.LOTID = CRD.LOTID		--반제품표시제외				                                                        					
+                    --           	)
+                             
+                    GROUP BY   CR.REQUESTNO
+                            ,  CRD.CONSUMABLEDEFID  
+                            ,  CRD.CONSUMABLEDEFVERSION
+                            ,  CD.ITEMNAME
+                            ,  CR.REQUESTUSER
+                            ,  CR.WAREHOUSEID
+                            ,  CR.PLANTID
+                )
+                SELECT    
+                		  X.REQUESTNO                              AS REQUESTID
+                       ,  X.REQUESTNO                              AS INBOUNDNO             
+                       ,  X.CONSUMABLEDEFID     																						--자재ID
+                       ,  X.CONSUMABLEDEFVERSION                   																	--자재Ver
+                       ,  X.CONSUMABLEDEFNAME				AS CONSUMABLEDEFNAME										--자재명
+                       ,  X.PLANTID
+                       ,  X.WAREHOUSEID																									--창고ID
+                       ,  WH.WAREHOUSENAME					--창고명                     
+                       ,  REQUESTQTY                               	AS CHARGEQTY													--청구수량
+                       ,  QTY                                 				AS ISSUEQTY														--인수수량
+                       ,  REQUESTQTY - QTY                         	AS LEFTQTY														--잔량
+                       --,  SU.USER_ID                              AS REQUESTUSERID													
+                       ,  SU.USER_NM                              AS REQUESTUSER													--요청자명
+                       ,  TO_CHAR(X.REQUESTDATE,'YYYY-MM-DD HH24:MI:SS')                            AS REQDATE          --요청일자
+                       ,	  '0' AS CHK
+                       ,  X.ISSUENUM 								AS ISSUENUM														--불출번호
+                       ,	 X.RECEIPTDATE								AS RECEIPTDATE													--입고일
+                FROM
+                (
+                    SELECT   
+                    		CR.REQUESTNO
+                          ,  CR.CONSUMABLEDEFID											--자재ID
+                          ,  CR.CONSUMABLEDEFVERSION									--자재Ver
+                          ,  CR.CONSUMABLEDEFNAME										--자재명
+                          ,  CR.PLANTID     
+                          ,  CR.WAREHOUSEID                                       
+                          ,  NVL((SELECT SUM(DEMAND_QTY)
+                                 FROM IFC_MES_S_MATERIAL_TRX_V@ERPPROD A
+                                 WHERE A.PLANTID = CR.PLANTID
+                                 AND A.DEMAND_NUM = CR.REQUESTNO
+                                 AND A.ITEM_CODE = CR.CONSUMABLEDEFID	--자재ID
+                                 AND A.TO_SUBINVENTORY_CODE = CR.WAREHOUSEID		--창고ID
+                                ),0)         REQUESTQTY						--청구 수량
+                          ,  NVL((SELECT SUM(B.LOTQTY)
+                                 FROM IFC_MES_S_MATERIAL_TRX_V@ERPPROD A,
+                                 		 MTM_CONSUMABLERECEIPT B
+                                 WHERE A.PLANTID = CR.PLANTID
+                                 AND A.DEMAND_NUM = CR.REQUESTNO
+                                 AND A.ITEM_CODE = CR.CONSUMABLEDEFID	--자재ID
+                                 AND A.TO_SUBINVENTORY_CODE = CR.WAREHOUSEID		--창고ID
+                                 
+                                 AND A.DEMAND_NUM = B.REQUESTNO
+                                 AND A.ITEM_CODE = B.CONSUMABLEDEFID
+                                 AND A.TO_SUBINVENTORY_CODE = B.WAREHOUSEID
+                                 
+                                ),0) AS QTY															--인수 수량
+                          ,  MAX(CR.REQUESTDATE)        REQUESTDATE
+                          ,  MAX(CR.REQUESTUSER)        REQUESTUSER
+                          ,  NVL((SELECT MAX(ISSUE_NUM)
+                                 FROM IFC_MES_S_MATERIAL_TRX_V@ERPPROD A
+                                 WHERE A.PLANTID = CR.PLANTID
+                                 AND A.DEMAND_NUM = CR.REQUESTNO
+                                 AND A.ITEM_CODE = CR.CONSUMABLEDEFID	--자재ID
+                                 AND A.TO_SUBINVENTORY_CODE = CR.WAREHOUSEID
+                                ),'') AS ISSUENUM													--불출번호                          
+                          ,  NVL((SELECT TO_CHAR(MAX(ISSUE_DATE),'YYYY-MM-DD HH24:MI:SS')
+                                 FROM IFC_MES_S_MATERIAL_TRX_V@ERPPROD A
+                                 WHERE A.PLANTID = CR.PLANTID
+                                 AND A.DEMAND_NUM = CR.REQUESTNO
+                                 AND A.ITEM_CODE = CR.CONSUMABLEDEFID	--자재ID
+                                 AND A.TO_SUBINVENTORY_CODE = CR.WAREHOUSEID
+                                ),'') AS RECEIPTDATE												--입고일      
+                    FROM CT_REQUSET                     		CR		--WITH문장쿼리사용                    
+                    
+                    --LEFT JOIN MTM_CONSUMABLETXNLINE	CT  	ON  CR.PLANTID = CT.PLANTID
+					--                                                            AND CR.REQUESTNO = CT.TRANSACTIONNO
+					--                                                            AND CR.CONSUMABLEDEFID = CT.CONSUMABLEDEFID
+					--                                                            AND CT.TRANSACTIONCODE = 'TRANSFER_RECEIPT'
+					--                                                            AND CT.CONSUMABLELOTID <![CDATA[<>]]> '*'
+                    --LEFT JOIN MTM_CONSUMABLELOT          CL  	ON CT.CONSUMABLELOTID = CL.CONSUMABLELOTID                    
+                    
+                    GROUP BY CR.REQUESTNO
+                          ,  CR.CONSUMABLEDEFID
+                          ,  CR.CONSUMABLEDEFVERSION
+                          ,  CR.REQUESTDATE
+                          ,  CR.CONSUMABLEDEFNAME
+                          ,  CR.WAREHOUSEID
+                          ,  CR.PLANTID                       
+                ) X
+                INNER JOIN CMD_USERS          SU 	ON X.REQUESTUSER = SU.USER_ID
+                INNER JOIN BAS_WAREHOUSE   WH 	ON  X.WAREHOUSEID = WH.WAREHOUSEID
+                                               					AND X.PLANTID = WH.PLANTID                   
+                WHERE 1=1
+                <if test = "P_CONSUMERELEASESTATE != null and P_CONSUMERELEASESTATE !='' ">
+                    <if test="P_CONSUMERELEASESTATE eq 'ALL'.toString() ">
+                        AND     REQUESTQTY - QTY <![CDATA[<=]]> 0
+                    </if>
+                    <if test="P_CONSUMERELEASESTATE neq 'ALL'.toString() ">
+                        AND     REQUESTQTY - QTY <![CDATA[>=]]> 1
+                    </if>
+                </if>
+    </select>
+
+	<!-- 프 로 그 램 명 : 공정 관리 > 자재관리 > 자재인수 설 명 : 불출요청 자재별 자재 LOT정보 조회 작 성 자 : 
+        정승원 작 성 일 : 2019-07-03 주요 변경 로그 : -->
+    <select id="selectConsumableLotByInboundNoList" parameterType="map" resultType="hashmap">
+                -- Id : SelectConsumableLotByInboundNo
+                -- Version : 10001
+                SELECT	CL.ENTERPRISEID
+                		,	CL.PLANTID 	
+                		,	CL.REQUESTNO								--청구번호
+                		,	CL.INBOUNDNO								--불출번호
+                		,	CL.CONSUMABLEDEFID						--자재ID
+                		,	CL.CONSUMABLEDEFVERSION				--자재Ver
+                		,	CD.ITEMNAME AS CONSUMABLEDEFNAME				--자재명
+                		,	CL.CONSUMABLELOTID						--자재Lot ID
+                		,	CL.WAREHOUSEID							--창고ID
+                		,	WH.WAREHOUSENAME
+                		,	CL.TRANSACTIONSEQUENCE															--불출순번
+                		,	CD.UOMDEFID AS UNIT																					--단위
+                		,	CL.INQTY																					--인수수량
+                		,  	'0' AS CHK
+                		,  	NVL(NVL(SU.USER_NM, CL.CREATOR), '')						AS RECEIVEUSER	--인수자
+                        ,  	TO_CHAR(CL.RECEIPTDATE, 'YYYY-MM-DD HH24:MI:SS')	AS RECEIVEDATE	--인수일자
+                        ,  	'Y' ISHALFPRODUCT	--고정값
+                FROM
+	                (
+	                SELECT
+	                				ERP.ENTERPRISEID					AS ENTERPRISEID
+	                			,	ERP.PLANTID							AS PLANTID
+	                			,	ERP.DEMAND_NUM					AS REQUESTNO						--청구번호
+	                			,	ERP.ISSUE_NUM						AS INBOUNDNO					--불출번호
+	                			,	ERP.ISSUE_NUM_SEQ 				AS TRANSACTIONSEQUENCE		--불출순번
+	                			,	ERP.TO_SUBINVENTORY_CODE	AS WAREHOUSEID					--창고ID
+	                			,	ERP.ITEM_CODE 					AS CONSUMABLEDEFID			--자재ID
+	                			,	'*' 										AS CONSUMABLEDEFVERSION
+	                			,	ERP.LOT_NUMBER					AS CONSUMABLELOTID			--자재Lot ID
+	                			,	ERP.LOT_QTY							AS INQTY
+	                			,	CR.RECEIPTUSER						AS CREATOR					--인수자(없으면 공백)
+	                			,	CR.RECEIPTDATE 					AS RECEIPTDATE			--인수일(없으면 공백)
+	                FROM (
+	                		SELECT 
+	                			  		TRXV.ENTERPRISEID											
+			                        ,	TRXV.PLANTID												
+			                        ,	TRXV.DEMAND_NUM										--청구번호
+			                        ,	TRXV.ISSUE_NUM											--불출번호
+			                        ,	TRXLOTV.ISSUE_NUM_SEQ									--불출번호 순번
+			                        ,	TRXV.TO_SUBINVENTORY_CODE							--창고ID
+			                        ,	TRXV.ITEM_CODE											--자재번호
+			                        ,	TRXLOTV.LOT_NUMBER									--ERP LOT번호
+			                        ,	TRXLOTV.LOT_QTY											--인수수량
+			                FROM IFC_MES_S_MATERIAL_TRX_V@ERPPROD TRXV,
+			                        IFC_MES_S_MATERIAL_TRX_LOT_V@ERPPROD TRXLOTV
+			                WHERE 1=1
+			                
+			                AND	EXISTS (
+											 SELECT	1
+											 FROM	UFN_SELECTSTRINGTOSPLIT3(#{P_PRODUCTDEFID}, ',', '|')	M
+										 	 WHERE	TRXV.DEMAND_NUM = M.VALUE
+											 AND		TRXV.ITEM_CODE = M.VALUE2
+											 AND TRXV.TO_SUBINVENTORY_CODE = M.VALUE3
+											 )			                
+			                    
+			                AND TRXV.ENTERPRISEID = TRXLOTV.ENTERPRISEID
+			                AND TRXV.PLANTID = TRXLOTV.PLANTID
+			                AND TRXV.ISSUE_NUM = TRXLOTV.ISSUE_NUM	--불출번호
+			                AND TRXV.ITEM_CODE = TRXLOTV.ITEM_CODE	--자재번호
+	                    	) ERP,
+	                    	MTM_CONSUMABLERECEIPT CR
+	                WHERE ERP.ENTERPRISEID = CR.ENTERPRISEID(+)
+	                AND ERP.PLANTID = CR.PLANTID(+)
+	                AND ERP.DEMAND_NUM = CR.REQUESTNO(+)
+	                AND ERP.ISSUE_NUM = CR.ISSUENUM(+)
+	                AND ERP.TO_SUBINVENTORY_CODE = CR.WAREHOUSEID(+)
+	                AND ERP.ITEM_CODE = CR.CONSUMABLEDEFID(+)
+	                AND NVL(ERP.LOT_NUMBER,' ') = CR.CONSUMABLELOTID(+)
+                    ) CL
+                    INNER JOIN BAS_ITEMMASTER 	CD 	ON  CL.CONSUMABLEDEFID = CD.ITEMID
+                                                          							AND CL.CONSUMABLEDEFVERSION = CD.ITEMVERSION
+                    INNER JOIN BAS_WAREHOUSE            		WH 	ON  CL.WAREHOUSEID = WH.WAREHOUSEID
+                                                          							AND CL.PLANTID = WH.PLANTID
+                    LEFT JOIN CMD_USERS                  			SU 	ON  CL.CREATOR = SU.USER_ID
+                ORDER BY CL.TRANSACTIONSEQUENCE
+    </select>	 
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    <!--
+	설		명	: 불출요청별 자재 LOT 리스트 수량
+	생	성	자	: 정승원
+	생	성	일	: 2019-07-04
+	수  정   이  력	: 
+	-->
+	<!--
+	<select id="selectConsumableLotListByInBoundNoList" parameterType="map" resultType="hashmap">
+				
+				Id : GetConsumableLotListByInBoundNo
+				Version : 10002
+				
+				SELECT  	CTL.TRANSACTIONNO       AS INBOUNDNO
+				    	,   CTL.ENTERPRISEID
+				    	,   CTL.PLANTID
+				    	,   COUNT(CTL.TRANSACTIONSEQUENCE) AS ROW_COUNT
+				FROM    MTM_CONSUMABLETXNHEADER  	CTH
+				INNER JOIN MTM_CONSUMABLETXNLINE 		CTL 	ON CTH.ENTERPRISEID = CTL.ENTERPRISEID
+				                                    							AND CTH.PLANTID = CTL.PLANTID
+				                                    							AND CTH.TRANSACTIONNO = CTL.TRANSACTIONNO
+				INNER JOIN MTM_CONSUMABLELOT     		CL  	ON  CTL.CONSUMABLEDEFID = CL.CONSUMABLEDEFID
+				                                    							AND CTL.CONSUMABLELOTID = CL.CONSUMABLELOTID
+				WHERE   1 = 1
+				AND     CTL.TRANSACTIONNO = #{INBOUNDNO}
+				GROUP BY CTL.ENTERPRISEID
+				    	,    CTL.PLANTID
+				    	,    CTL.TRANSACTIONNO
+	</select>
+	-->
+	  
+	<!--
+	<select id="selectConsumableTxnHeaderList" parameterType="map" resultType="hashmap">
+		SELECT
+				ENTERPRISEID,
+				PLANTID,
+				TRANSACTIONNO,
+				TRANSACTIONDATE,
+				TRANSACTIONTYPE,
+				USERID,
+				DEPARTMENT,
+				DESCRIPTION,
+				CREATOR,
+				CREATEDTIME,
+				MODIFIER,
+				MODIFIEDTIME,
+				LASTTXNHISTKEY,
+				LASTTXNID,
+				LASTTXNUSER,
+				LASTTXNTIME,
+				LASTTXNCOMMENT,
+				VALIDSTATE
+		FROM MTM_CONSUMABLETXNHEADER
+		WHERE ENTERPRISEID = #{ENTERPRISEID}
+		AND PLANTID = #{PLANTID}
+		AND TRANSACTIONNO = #{TRANSACTIONNO}
+	</select>
+	-->
+	
+	<!--
+	<select id="selectConsumableTxnLineList" parameterType="map" resultType="hashmap">
+		SELECT
+				ENTERPRISEID,
+				PLANTID,
+				TRANSACTIONNO,
+				TRANSACTIONSEQUENCE,
+				CONSUMABLEDEFID,
+				CONSUMABLEDEFVERSION,
+				CONSUMABLELOTID,
+				FROMAREAID,
+				TOAREAID,
+				TRANSACTIONCODE,
+				TRANSACTIONREASONCODE,
+				TXNADDEDCODE,
+				RELKEYNO,
+				UNIT,
+				QTY,
+				REQUESTNO,
+				REQUESTSEQUENCE,
+				EXPIREDDATE,
+				VENDORLOTID,
+				SOURCETRNNO,
+				SOURCETRNID,
+				DESCRIPTION,
+				CREATOR,
+				CREATEDTIME,
+				MODIFIER,
+				MODIFIEDTIME,
+				LASTTXNHISTKEY,
+				LASTTXNID,
+				LASTTXNUSER,
+				LASTTXNTIME,
+				LASTTXNCOMMENT,
+				VALIDSTATE
+		FROM MTM_CONSUMABLETXNLINE
+		WHERE ENTERPRISEID = #{ENTERPRISEID}
+		AND PLANTID = #{PLANTID}
+		AND TRANSACTIONNO = #{TRANSACTIONNO}
+		AND TRANSACTIONSEQUENCE = #{TRANSACTIONSEQUENCE}
+	</select>
+	-->
+	
+	<select id="selectConsumableLoList" parameterType="map" resultType="hashmap">
+		SELECT 
+				CONSUMABLELOTID,
+				CONSUMABLELOTGROUPID,
+				CONSUMABLEDEFID,
+				CONSUMABLEDEFVERSION,
+				CONSUMABLELOTNAME,
+				ENTERPRISEID,
+				PLANTID,
+				AREAID,
+				EQUIPMENTID,
+				LOCATIONID,
+				CONSUMABLESTATE,
+				CREATEDQTY,					--최초생성수량
+				CONSUMABLELOTQTY,			--현재수량
+				EXPIREDDATE,
+				ISHOLD,
+				VENDORLOTID,
+				DESCRIPTION,
+				CREATOR,
+				CREATEDTIME,
+				MODIFIER,
+				MODIFIEDTIME,
+				LASTTXNHISTKEY,
+				LASTTXNID,
+				LASTTXNUSER,
+				LASTTXNTIME,
+				LASTTXNCOMMENT,
+				LASTTXNGROUPHISTKEY,
+				WAREHOUSEID,
+				WAITFORRECEIPTQTY,			--인수대기수량
+				CONSUMEDQTY,
+				PRODUCTDEFID,
+				PRODUCTDEFVERSION,
+				PROCESSDEFID,
+				PROCESSDEFVERSION,
+				PROCESSPATHID,
+				USERSEQUENCE,
+				PROCESSSEGMENTID,
+				PROCESSSEGMENTVERSION,
+				TXNGROUPHISTKEY,
+				TXNUSER,
+				TXNTIME,
+				TXNREASONCODECLASS,
+				TXNREASONCODE,
+				TXNCOMMENT,
+				WORKCOUNT,
+				TRANSACTIONREASONCODE
+		FROM MTM_CONSUMABLELOT
+		WHERE CONSUMABLELOTID = #{CONSUMABLELOTID}
+		AND WAREHOUSEID = #{WAREHOUSEID}
+	</select>
+	
+	
+	<!--
+	<update id="updateConsumableTxnHeader" parameterType="map" >
+		UPDATE MTM_CONSUMABLETXNHEADER
+		SET	MODIFIER				= #{CREATOR},
+				MODIFIEDTIME			= SYSDATE,
+				LASTTXNHISTKEY		= #{LASTTXNHISTKEY},
+				LASTTXNID				= #{LASTTXNID},
+				LASTTXNUSER			= #{LASTTXNUSER},
+				LASTTXNTIME			= SYSDATE
+		WHERE ENTERPRISEID = #{ENTERPRISEID}
+		AND PLANTID = #{PLANTID}
+		AND TRANSACTIONNO = #{TRANSACTIONNO}
+	</update>
+	-->
+	
+	<!--
+	<update id="updateConsumableTxnLine" parameterType="map" >
+		UPDATE MTM_CONSUMABLETXNLINE
+		SET	MODIFIER				= #{CREATOR},
+				MODIFIEDTIME			= SYSDATE,
+				LASTTXNHISTKEY		= #{LASTTXNHISTKEY},
+				LASTTXNID				= #{LASTTXNID},
+				LASTTXNUSER			= #{LASTTXNUSER},
+				LASTTXNTIME			= SYSDATE
+		WHERE ENTERPRISEID 				= #{ENTERPRISEID}
+		AND PLANTID 						= #{PLANTID}
+		AND TRANSACTIONNO 			= #{TRANSACTIONNO}
+		AND TRANSACTIONSEQUENCE 	= #{TRANSACTIONSEQUENCE}
+	</update>
+	-->
+	
+	<update id="updateConsumableLot" parameterType="map" >
+		UPDATE MTM_CONSUMABLELOT
+		SET	WAITFORRECEIPTQTY 	= #{WAITFORRECEIPTQTY},		--인수대기수량
+				CREATEDQTY 			= #{CREATEDQTY},					--최초생성수량
+				CONSUMABLELOTQTY 	= #{CONSUMABLELOTQTY},		--현재수량
+				
+				MODIFIER				= #{CREATOR},
+				MODIFIEDTIME			= SYSDATE,
+				LASTTXNHISTKEY		= #{LASTTXNHISTKEY},
+				LASTTXNID				= #{LASTTXNID},
+				LASTTXNUSER			= #{LASTTXNUSER},
+				LASTTXNTIME			= SYSDATE				
+		WHERE CONSUMABLELOTID 		= #{CONSUMABLELOTID}
+		AND WAREHOUSEID 				= #{WAREHOUSEID}
+	</update>
+	
+	
+	
+	
+	
+	
+	
+	<select id="selectConsumableLoList2" parameterType="map" resultType="hashmap">
+		SELECT 
+				CONSUMABLELOTID,
+				WAREHOUSEID
+		FROM MTM_CONSUMABLERECEIPT
+		WHERE CONSUMABLELOTID = #{CONSUMABLELOTID}
+		AND WAREHOUSEID = #{WAREHOUSEID}
+	</select>
+	
+	<update id="insertConsumableLot" parameterType="map" >
+		INSERT INTO MTM_CONSUMABLERECEIPT
+				(
+				ENTERPRISEID,
+				PLANTID,
+				REQUESTNO,
+				ISSUENUM,
+				CONSUMABLEDEFID,
+				CONSUMABLEDEFVER,
+				CONSUMABLELOTID,
+				WAREHOUSEID,
+				DESCRIPTION,
+				
+				LOTQTY,
+				RECEIPTDATE,
+				RECEIPTUSER,
+				
+				CREATOR,
+				CREATEDTIME,
+				MODIFIER,
+				MODIFIEDTIME,
+				LASTTXNHISTKEY,
+				LASTTXNID,
+				LASTTXNUSER,
+				LASTTXNTIME,
+				LASTTXNCOMMENT,
+				VALIDSTATE
+				
+				) VALUES (
+				
+				#{ENTERPRISEID},
+				#{PLANTID},
+				#{REQUESTNO},
+				#{INBOUNDNO},
+				#{CONSUMABLEDEFID},
+				#{CONSUMABLEDEFVERSION},
+				NVL(#{CONSUMABLELOTID}, ' '),
+				#{WAREHOUSEID},
+				'',
+				
+				#{INQTY},
+				SYSDATE,
+				#{CREATOR},
+				
+				#{CREATOR},
+				SYSDATE,
+				#{MODIFIER},
+				SYSDATE,
+				#{LASTTXNHISTKEY},
+				#{LASTTXNID},
+				#{LASTTXNUSER},
+				SYSDATE,
+				null,
+				'Valid'
+				)
+	</update>
+	
+</mapper>

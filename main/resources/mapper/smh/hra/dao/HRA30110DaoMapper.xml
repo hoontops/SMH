@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.hra.dao.HRA30110Dao">
+
+
+<!--신청내역 -->
+	<select id="selectCounselingList" parameterType="map" resultType="hashmap">    
+	    /*smh.hra.dao.hra30110dao.selectCounselingList*/
+	    SELECT 0                                  AS CHECK_YN  /*CheckBox*/
+		      ,IN_A.HJSHR_COUNSELING_SEQ                       /* 고충상담 테이블 PK  */ 
+		      ,IN_A.COUNSEL_TYPE                               /* 문의구분 : 10= 인사 20= 고충 */
+		      ,IN_A.REQUEST_DATE                               /* 신청일자               */ 
+		      ,IN_A.SUBJECT                                    /* 제목                 */     
+		      ,IN_A.WRITER_ID                                  /* 작성자 PERSONID       */
+		      ,IN_A.COUNSELOR_NAME                             /* 상담자                */
+		      ,IN_A.STATUS                         /* 상태CODE             */
+		      ,IN_A.STATUS_NAME                                /* 상태명               */  
+        FROM (
+            SELECT 
+                HC.HJSHR_COUNSELING_SEQ                       /* 고충상담 테이블 PK   */    
+               ,TO_CHAR(HC.REQUEST_DATE,'YYYY-MM-DD') AS REQUEST_DATE /* 신청일자     */ 
+               ,HC.COUNSEL_TYPE
+               ,HC.SUBJECT                                  /* 제목         */  
+               ,HC.WRITER_ID                                /* 작성자 PERSONID */
+               ,HSE2.NAME AS COUNSELOR_NAME                 /* 작성자 */
+               ,HC.STATUS                                   /* 상태CODE        */
+               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_HRA_COUNSEL_STATUS', HC.STATUS) AS STATUS_NAME                                                              
+            FROM HJSHR_COUNSELING HC, 
+                 HJSHR_SSHR_EMPLOYEE_LOV_V HSE,
+                 HJSHR_SSHR_EMPLOYEE_LOV_V HSE2
+           WHERE HC.COUNSEL_TYPE = 20                   /*20 = 고충상담*/
+             AND HC.WRITER_ID = HSE.PERSON_ID
+             AND HC.WRITER_ID = #{WRITER_ID}                   /*PARM1: 로그인 사원 PERSON ID*/
+             AND HC.COUNSELOR_ID = HSE2.PERSON_ID(+)           
+        ) IN_A
+    WHERE 1=1 
+     ORDER BY HJSHR_COUNSELING_SEQ DESC
+	</select>
+	
+ <!-- 신청내역 상세 -->
+	<select id="selectCounselingDetail" parameterType="map" resultType="hashmap">
+		/*smh.hra.dao.hra30110dao.selectcounselingdetail*/
+		SELECT  HJSHR_COUNSELING_SEQ,								/*고충상담 및 인사문의 PK*/
+		        TO_CHAR(REQUEST_DATE,'YYYY-MM-DD') AS REQUEST_DATE, /*등록일*/
+		        COUNSELOR_ID,										/*상담자*/
+		        WRITER_ID,											/*작성자*/
+		        STATUS,												/*상태*/
+		        COUNSEL_TYPE,										/*구분*/
+		        SUBJECT,											/*제목*/
+		        REQUEST_CONTEXT	,									/*상담/문의내용*/
+		        OBJECT_VERSION_NUMBER,								/*버전관리*/
+		        COUNSEL_CONTEXT										/*내용*/
+         FROM  HJSHR_COUNSELING
+      	WHERE  HJSHR_COUNSELING_SEQ = #{HJSHR_COUNSELING_SEQ}
+   	</select>
+
+ <!--신청등록 -->		
+	<insert id="insertCounseling" parameterType="map" >
+		/*smh.hra.dao.HRA30110Dao.insertCounseling*/ 
+		INSERT INTO HJSHR_COUNSELING
+        (
+                 HJSHR_COUNSELING_SEQ           /*고충상담 및 인사문의 PK*/
+                 ,REQUEST_DATE                  /*등록일*/
+                 ,WRITER_ID                     /*작성자*/
+                 ,COUNSELOR_ID                  /*상담자*/
+                 ,COUNSEL_TYPE                  /*구분*/
+                 ,COUNSEL_AREA                  /*업무영역*/
+                 ,OPEN_FLAG                     /*공개여부*/
+                 ,NAMED_FLAG                    /*실명여부*/
+                 ,SUBJECT                       /*제목*/
+                 ,REQUEST_CONTEXT               /*상담/문의내용*/
+                 ,COUNSEL_CONTEXT               /*답변내용*/
+                 ,STATUS                        /*상태*/
+                 ,ANSWER_DATE                   /*답변일자*/
+                 ,ATTRIBUTE1                    /**/
+                 ,ATTRIBUTE2                    /**/
+                 ,ATTRIBUTE3                    /**/
+                 ,ATTRIBUTE4                    /**/
+                 ,ATTRIBUTE5                    /**/
+                 ,ATTRIBUTE6                    /**/
+                 ,ATTRIBUTE7                    /**/
+                 ,ATTRIBUTE8                    /**/
+                 ,ATTRIBUTE9                    /**/
+                 ,ATTRIBUTE10                   /**/
+                 ,ATTRIBUTE11                   /**/
+                 ,ATTRIBUTE12                   /**/
+                 ,ATTRIBUTE13                   /**/
+                 ,ATTRIBUTE14                   /**/
+                 ,ATTRIBUTE15                   /**/
+                 ,ATTRIBUTE16                   /**/
+                 ,CREATED_BY                    /*자료 생성자*/
+                 ,CREATION_DATE                 /*자료 생성일*/
+                 ,LAST_UPDATED_BY               /*최종 수정자*/
+                 ,LAST_UPDATE_DATE              /*최종 수정일*/
+                 ,LAST_UPDATE_LOGIN             /*로그인 유저*/
+                 ,OBJECT_VERSION_NUMBER         /**/
+        ) VALUES(
+                   HJSHR_COUNSELING_SEQ.nextval     /*고충상담 및 인사문의 PK*/
+                 , #{REQUEST_DATE}                 /*등록일*/
+                 , #{WRITER_ID}                    /*작성자*/
+                 , HJS_HR_COMMON_PKG.GET_PERSON_ID(#{COUNSELOR_ID}) /*상담자*/
+                 , #{COUNSEL_TYPE}                 /*구분*/
+                 , #{COUNSEL_AREA}                 /*업무영역*/
+                 , #{OPEN_FLAG}                    /*공개여부*/
+                 , #{NAMED_FLAG}                   /*실명여부*/
+                 , #{SUBJECT}                      /*제목*/
+                 , #{REQUEST_CONTEXT}              /*상담/문의내용*/
+                 , #{COUNSEL_CONTEXT}              /*답변내용*/
+                 , #{STATUS}                       /*상태*/
+                 , #{ANSWER_DATE}                  /*답변일자*/
+                 , #{ATTRIBUTE1}                   /**/
+                 , #{ATTRIBUTE2}                   /**/
+                 , #{ATTRIBUTE3}                   /**/
+                 , #{ATTRIBUTE4}                   /**/
+                 , #{ATTRIBUTE5}                   /**/
+                 , #{ATTRIBUTE6}                   /**/
+                 , #{ATTRIBUTE7}                   /**/
+                 , #{ATTRIBUTE8}                   /**/
+                 , #{ATTRIBUTE9}                   /**/
+                 , #{ATTRIBUTE10}                  /**/
+                 , #{ATTRIBUTE11}                  /**/
+                 , #{ATTRIBUTE12}                  /**/
+                 , #{ATTRIBUTE13}                  /**/
+                 , #{ATTRIBUTE14}                  /**/
+                 , #{ATTRIBUTE15}                  /**/
+                 , #{ATTRIBUTE16}                  /**/
+                 , #{PERSONID}                     /* SESSION PERSONID */
+                 , SYSDATE                         /*자료 생성일*/
+                 , #{PERSONID}             		   /*최종 수정자*/
+                 , SYSDATE                         /*최종 수정일*/
+                 , #{PERSONID}            /*로그인 유저*/
+                 , #{OBJECT_VERSION_NUMBER}        /**/
+        )
+	</insert>
+
+<!-- 중복 확인 -->
+
+   <select id="selectDuplicateChk" parameterType="map" resultType="String">
+	   /* smh.hra.dao.HRA30110Dao.selectDuplicateChk */
+	   SELECT 'Y'
+	   FROM HJSHR_COUNSELING HC
+	   WHERE HC.HJSHR_COUNSELING_SEQ       = #{HJSHR_COUNSELING_SEQ}    /*PK 일련번호*/
+	       AND HC.OBJECT_VERSION_NUMBER         = #{OBJECT_VERSION_NUMBER}    
+   </select>
+
+
+ <!--상담 신청내역 수정 -->	
+    <update id="updateCounseling" parameterType="map">	
+		  /*smh.hra.dao.HRA30110Dao.updateCounseling*/
+		  UPDATE HJSHR_COUNSELING
+	   		 SET
+	           COUNSELOR_ID         /*상담자*/                        = HJS_HR_COMMON_PKG.GET_PERSON_ID(#{COUNSELOR_ID}),   
+	           SUBJECT              /*제목*/                          = #{SUBJECT} ,
+	           REQUEST_CONTEXT      /*상담/문의내용*/                   = #{REQUEST_CONTEXT} ,
+	           OBJECT_VERSION_NUMBER /*버전체크*/                      = #{OBJECT_VERSION_NUMBER}+1 ,
+	           LAST_UPDATED_BY       /*최종수정자*/                    = #{PERSONID} ,
+	           LAST_UPDATE_DATE      /*최종수정일*/                    =  SYSDATE	  ,
+	           LAST_UPDATE_LOGIN	 /*로그인 유저*/					= #{PERSONID} 
+	  	  WHERE  HJSHR_COUNSELING_SEQ  /*PK 일련번호*/                = #{HJSHR_COUNSELING_SEQ}
+	</update>
+	
+	
+	
+ <!--상담 신청내역 삭제 -->
+    <delete id="deleteCounseling" parameterType="map">
+        /* smh.hra.dao.HRA30110Dao.deleteCounseling */
+        DELETE FROM HJSHR_COUNSELING
+         WHERE HJSHR_COUNSELING_SEQ       = #{HJSHR_COUNSELING_SEQ}    /*PK 일련번호*/
+           AND STATUS                    != 02
+    </delete>
+</mapper>

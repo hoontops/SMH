@@ -1,0 +1,645 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM06200Dao">
+	<select id="selectWorkIncommingResultByDate" parameterType="map" resultType="hashmap">
+	/* SelectWorkIncommingResultByDate 10001 */
+	--id : selectWorkIncommingResultByDate
+		SELECT SENDTIME                           				RESULTDATE
+			,  COALESCE(D.DICTIONARYNAME, X.EXPORTPACKINGTYPE)  EXPORTPACKINGTYPE
+		    ,  TO_NUMBER(SUM(QTY))                 				RESULTPCSQTY
+		    ,  TO_NUMBER(SUM(PNLQTY))	        				RESULTPNLQTY
+		    ,  ROUND(SUM(MM), 2)           		 				RESULTMM
+	    	,  ROUND(SUM(PRICE)) 		 		 				RESULTPRICE 
+		    ,  SUM(SUM(QTY))         OVER (ORDER BY SENDTIME)       CUMPCSQTY
+		    ,  SUM(SUM(PNLQTY))		 OVER (ORDER BY SENDTIME)       CUMPNLQTY
+		    ,  ROUND(SUM(SUM(MM))    OVER (ORDER BY SENDTIME), 2) 	CUMMM
+		    ,  ROUND(SUM(SUM(PRICE)) OVER (ORDER BY SENDTIME) )	   	CUMPRICE
+		FROM
+		(
+			SELECT BP.LOTID
+			    ,  TO_CHAR(CASE WHEN TO_CHAR(LW.SENDTIME, 'HH24:MI:SS') <![CDATA[<]]> PLT.WORKTIME THEN LW.SENDTIME - (INTERVAL '1' DAY) ELSE LW.SENDTIME END, 'YYYY-MM-DD') AS SENDTIME
+			    ,  PS.PROCESSSEGMENTCLASSID
+			    ,  CASE WHEN PS.PROCESSSEGMENTCLASSID = '8012' THEN 'Packing'
+	                    WHEN PS.PROCESSSEGMENTCLASSID = '8014' THEN 'ExportPacking'
+	               END EXPORTPACKINGTYPE
+			    ,  BP.QTY
+			    ,  CEIL(BP.QTY / L.PANELPERQTY) 		AS PNLQTY
+			    ,  ROUND((BP.QTY/PD.PCSMM), 2) 			AS MM
+			    --,  PO.SALESPRICE * BP.QTY *COALESCE(ECM.EXCHANGEVALUE)	AS PRICE  
+			    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, BP.QTY * PO.SALESPRICE),0) AS PRICE
+			    --,  PP.PATHTYPE
+			FROM PCM_BOXPACKING BP
+			INNER JOIN PCM_LOT                L ON BP.LOTID = L.LOTID
+			INNER JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+			                                   AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+			INNER JOIN PCM_LOTWORKRESULT     LW ON  BP.LOTID = LW.LOTID
+			                                   AND BP.PROCESSDEFID = LW.PROCESSDEFID
+			                                   AND BP.PROCESSDEFVERSION = LW.PROCESSDEFVERSION
+			                                   AND BP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+			                                   AND LW.PROCESSSEGMENTVERSION = '*'  
+			INNER JOIN MFM_PRODUCTIONORDER   PO ON  LW.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+			                                   AND LW.LINENO = PO.LINENO
+			INNER JOIN BAS_SALEORDERAPPROVAL SO ON  PO.PRODUCTIONORDERID = SO.SALESORDERID
+			                                   AND PO.LINENO = SO.LINENO
+			                                   AND PO.LINENO = SO.LINENO
+            LEFT JOIN BAS_UNITPRICEFORMES   UP 	ON UP.PRODUCTDEFID = L.PRODUCTDEFID 
+												AND UP.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION 
+												AND SYSDATE  BETWEEN APPLY_START_DATE 
+												AND NVL(APPLY_END_DATE,TO_TIMESTAMP('9999-12-31 23:59:59','yyyy-MM-dd HH24:MI:SS'))				
+			INNER JOIN BAS_PROCESSPATH       PP ON  LW.PROCESSDEFID = PP.PROCESSDEFID
+			                                   AND LW.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+			                                   AND LW.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+			                                   AND LW.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+			INNER JOIN BAS_PROCESSSEGMENT    PS ON  BP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+	                                           AND PS.PROCESSSEGMENTVERSION = '*'
+	        INNER JOIN BAS_PLANT				PLT	ON	PLT.PLANTID = LW.PLANTID                                   
+			WHERE 1=1
+			AND   LW.SENDTIME IS NOT NULL
+		    --조회일자
+			<if test="PERIOD_PERIODFR !='' and PERIOD_PERIODTO !=''"> 
+				AND     LW.SENDTIME >= TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYY-MM-DD HH24:MI:SS') 
+	            AND     LW.SENDTIME <![CDATA[<]]>  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYY-MM-DD HH24:MI:SS')
+			</if>
+	       	--작업장
+			<if test="AREAID != null and AREAID !=''"> 
+				AND EXISTS
+	                    (
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT(#{P_AREAID}, ',')        LMP
+	                        WHERE   LW.AREAID = LMP.VALUE
+	                    )
+			</if>	      
+	       	--품목코드
+			<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+				AND EXISTS
+	                     (
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')      LMP
+	                        WHERE   L.PRODUCTDEFID = LMP.VALUE
+	                    )
+			</if>	
+			<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+				AND EXISTS
+	                     (
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFVERSION}, ',')      LMP
+	                        WHERE   L.PRODUCTDEFVERSION = LMP.VALUE
+	                    )
+			</if>       
+	       	--품목명
+			<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 
+				AND EXISTS
+	                     (
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT('%' || #{PRODUCTDEFNAME} || '%', ',')      LMP
+	                        WHERE   PD.PRODUCTDEFNAME LIKE LMP.VALUE
+	                    )
+			</if>		       	
+	       	--구분
+			<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">
+				AND     L.LOTTYPE = #{PRODUCTIONTYPE}
+			</if>
+	       	--작업구분
+			<if test="WORKTYPE != null and WORKTYPE !=''">
+				<if test='WORKTYPE == "IsRework"'>
+					AND      LW.ISREWORK = 'Y'
+				</if>	
+				<if test='WORKTYPE != "IsRework"'>
+					AND      COALESCE(LW.ISREWORK, 'N') = 'N'
+					<if test='WORKTYPE == "Normal"'>	
+						AND      L.LOTCREATEDTYPE IN ('Normal', 'SplitRoll', 'FinalInspect')
+					</if>
+					<if test='WORKTYPE != "Normal"'>
+						AND      L.LOTCREATEDTYPE = #{WORKTYPE}
+					</if>
+				</if>	
+			</if>	      
+	       	--공정
+			<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''">
+				AND EXISTS
+	                    (
+	                        SELECT  1
+	                        FROM    ufn_selectStringToSplit(#{PROCESSSEGMENTID}, ',')      LMP
+	                        WHERE   LW.PROCESSSEGMENTID = LMP.VALUE
+	                    )
+			</if>	       	
+	       	--SITE
+			<if test="PLANTID != null and PLANTID !=''">
+				AND     LW.PLANTID = #{PLANTID}
+			</if>	       	
+			-- 담당공장
+			<if test="OWNERFACTORYID != null and OWNERFACTORYID !=''">
+				AND     PD.OWNERFACTORYID = #{OWNERFACTORYID}
+			</if>	       	
+					
+			<if test="PACKINGTYPE != null and PACKINGTYPE !=''">
+				AND  ((#{PACKINGTYPE} = 'Product' AND pp.PATHTYPE = 'End') or(#{PACKINGTYPE} = 'SubProduct' AND pp.PATHTYPE <![CDATA[<>]]> 'End'))
+			</if>			
+		)X
+		LEFT JOIN CMD_LOOKUP_VALUES		C  	ON  X.EXPORTPACKINGTYPE = C.LOOKUP_CODE
+									AND C.LOOKUP_TYPE = 'ExportPackingType'
+		LEFT JOIN CMD_DICTIONARY D	ON	C.DICTIONARYID = D.DICTIONARYID
+									AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE 1 = 1
+		--실적구분
+		<if test="RESULTTYPE != null and RESULTTYPE !=''">
+			AND X.EXPORTPACKINGTYPE =  #{RESULTTYPE}
+		</if>														
+		GROUP BY X.SENDTIME
+			,	 COALESCE(D.DICTIONARYNAME, X.EXPORTPACKINGTYPE)	
+	</select>
+	<select id="selectWorkIncommingResultByProduct" parameterType="map" resultType="hashmap">
+	/* SelectWorkIncommingResultByProduct 10001 */
+	--id : selectWorkIncommingResultByProduct
+		WITH TP_BASE AS
+	(
+		SELECT *
+		FROM
+		(
+			SELECT BP.LOTID
+			    ,  BP.PROCESSDEFID
+			    ,  BP.PROCESSDEFVERSION
+			    ,  PS.PROCESSSEGMENTCLASSID
+                ,  CASE WHEN PS.PROCESSSEGMENTCLASSID = '8012' THEN 'Packing'
+                        WHEN PS.PROCESSSEGMENTCLASSID = '8014' THEN 'ExportPacking'
+                   END EXPORTPACKINGTYPE
+			    ,  BP.PROCESSSEGMENTID
+			    ,  BP.PROCESSSEGMENTVERSION
+			    ,  BP.AREAID
+			    ,  L.PRODUCTDEFID
+			    ,  L.PRODUCTDEFVERSION
+			    ,  PD.PRODUCTDEFNAME
+			    ,  PD.LAYER
+			    ,  PD.PRODUCTIONTYPE
+			    ,  LW.PRODUCTIONORDERID
+			    ,  LW.LINENO
+			    ,  LW.PLANTID
+			    ,  TO_CHAR(L.ROOTLOTSTARTDATE,'YYYY-MM-DD HH24:MI:SS') ROOTLOTSTARTDATE
+			    ,  TO_CHAR(CASE WHEN TO_CHAR(LW.SENDTIME, 'HH24:MI:SS') <![CDATA[<]]> PLT.WORKTIME THEN LW.SENDTIME - (INTERVAL '1' DAY) ELSE LW.SENDTIME END, 'YYYY-MM-DD') AS SENDTIME
+		--	    ,  ROW_NUMBER() OVER (PARTITION BY BP.LOTID,BP.AREAID ORDER BY BP.LOTID) RN 
+			    ,  BP.QTY
+			    ,  CEIL(BP.QTY/L.PANELPERQTY) PNLQTY
+			    ,  ROUND((BP.QTY/PD.PCSMM), 2)	MM
+			    ,  PO.CUSTOMERID
+			    --,  PO.SALESPRICE * BP.QTY * ECM.EXCHANGEVALUE RESULTPRICE  
+			    --,  (PO.SALESPRICE - (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0))) * ECM.EXCHANGEVALUE  FPCBUNITPRICE	
+			    --,  (PO.SALESPRICE -(COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0))) * BP.QTY * ECM.EXCHANGEVALUE 	AS FPCBPRICE  
+			    --,  (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0)) * ECM.EXCHANGEVALUE SMTUNITPRICE
+			    --,  (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0)) * BP.QTY * ECM.EXCHANGEVALUE SMTPRICE						    
+			    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, BP.QTY * PO.SALESPRICE),0) AS RESULTPRICE
+			    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, 1 * (PO.SALESPRICE - (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0)))),0) AS FPCBUNITPRICE
+			    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, BP.QTY * (PO.SALESPRICE -(COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0)))),0) AS FPCBPRICE
+			    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, 1 * (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0))),0) AS SMTUNITPRICE
+			    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, BP.QTY * (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0))),0) AS SMTPRICE
+			    ,  PP.PATHSEQUENCE
+			    ,  PP.PATHTYPE
+			    ,  LW.PREVSENDLOTHISTKEY
+			    ,  PD.PCSPNL
+			    ,  PD.PCSMM
+			    ,  PD.PRODUCTDEFTYPE
+			FROM PCM_BOXPACKING BP
+			INNER JOIN PCM_LOT                L ON BP.LOTID = L.LOTID
+			INNER JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+			                                   AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+			INNER JOIN PCM_LOTWORKRESULT     LW ON  BP.LOTID = LW.LOTID
+			                                   AND BP.PROCESSDEFID = LW.PROCESSDEFID
+			                                   AND BP.PROCESSDEFVERSION = LW.PROCESSDEFVERSION
+			                                   AND BP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+			                                   AND LW.PROCESSSEGMENTVERSION = '*'  
+			INNER JOIN MFM_PRODUCTIONORDER   PO ON  LW.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+			                                   AND LW.LINENO = PO.LINENO
+			INNER JOIN BAS_SALEORDERAPPROVAL SO ON  PO.PRODUCTIONORDERID = SO.SALESORDERID
+			                                   AND PO.LINENO = SO.LINENO
+			LEFT JOIN BAS_UNITPRICEFORMES   UP 	ON UP.PRODUCTDEFID = L.PRODUCTDEFID 
+												AND UP.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION 
+												AND SYSDATE  BETWEEN APPLY_START_DATE 
+												AND NVL(APPLY_END_DATE,TO_TIMESTAMP('9999-12-31 23:59:59','yyyy-MM-dd HH24:MI:SS'))
+			INNER JOIN BAS_PROCESSPATH       PP ON  LW.PROCESSDEFID = PP.PROCESSDEFID
+			                                   AND LW.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+			                                   AND LW.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+			                                   AND LW.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+			INNER JOIN BAS_PROCESSSEGMENT    PS ON  BP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                               AND PS.PROCESSSEGMENTVERSION = '*'
+            INNER JOIN BAS_PLANT				PLT ON PLT.PLANTID = LW.PLANTID                                   
+			WHERE 1=1
+			AND   LW.SENDTIME IS NOT NULL
+		    --조회일자
+			<if test="PERIOD_PERIODFR !='' and PERIOD_PERIODTO !=''"> 
+				AND     LW.SENDTIME >= TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYY-MM-DD HH24:MI:SS') 
+	            AND     LW.SENDTIME <![CDATA[<]]>  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYY-MM-DD HH24:MI:SS')
+			</if>
+           	--작업장
+			<if test="AREAID != null and AREAID !=''"> 
+				AND EXISTS
+	                    (
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT(#{P_AREAID}, ',')        LMP
+	                        WHERE   LW.AREAID = LMP.VALUE
+	                    )
+			</if>	          
+           	--품목코드
+			<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+				AND EXISTS
+	                     (
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')      LMP
+	                        WHERE   L.PRODUCTDEFID = LMP.VALUE
+	                    )
+			</if>	
+			<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+				AND EXISTS
+	                     (
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFVERSION}, ',')      LMP
+	                        WHERE   L.PRODUCTDEFVERSION = LMP.VALUE
+	                    )
+			</if>             
+           	--품목명
+			<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 
+				AND EXISTS
+	                     (
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT( #{PRODUCTDEFNAME} , ',')      LMP
+	                        WHERE   PD.PRODUCTDEFNAME LIKE '%' || LMP.VALUE|| '%'
+	                    )
+			</if>	          
+           	--구분
+			<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">
+				AND     L.LOTTYPE = #{PRODUCTIONTYPE}
+			</if>           	
+           	--작업구분
+			<if test="WORKTYPE != null and WORKTYPE !=''">
+				<if test='WORKTYPE == "IsRework"'>
+					AND      LW.ISREWORK = 'Y'
+				</if>	
+				<if test='WORKTYPE != "IsRework"'>
+					AND      COALESCE(LW.ISREWORK, 'N') = 'N'
+					<if test='WORKTYPE == "Normal"'>	
+						AND      L.LOTCREATEDTYPE IN ('Normal', 'SplitRoll', 'FinalInspect')
+					</if>
+					<if test='WORKTYPE != "Normal"'>
+						AND      L.LOTCREATEDTYPE = #{WORKTYPE}
+					</if>
+				</if>	
+			</if>	           
+           	--공정
+			<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''">
+				AND EXISTS
+	                    (
+	                        SELECT  1
+	                        FROM    ufn_selectStringToSplit(#{PROCESSSEGMENTID}, ',')      LMP
+	                        WHERE   LW.PROCESSSEGMENTID = LMP.VALUE
+	                    )
+			</if>	             
+           	--SITE
+			<if test="PLANTID != null and PLANTID !=''">
+				AND     LW.PLANTID = #{PLANTID}
+			</if>	            
+			-- 담당공장
+			<if test="OWNERFACTORYID != null and OWNERFACTORYID !=''">
+				AND     PD.OWNERFACTORYID = #{OWNERFACTORYID}
+			</if>	       	
+					
+			<if test="PACKINGTYPE != null and PACKINGTYPE !=''">
+				AND  ((#{PACKINGTYPE} = 'Product' AND pp.PATHTYPE = 'End') or(#{PACKINGTYPE} = 'SubProduct' AND pp.PATHTYPE <![CDATA[<>]]> 'End'))
+			</if>			
+		)X
+	--	WHERE RN=1
+	)
+	SELECT X.INBOUNDDATE
+        ,  X.CUSTOMERNAME
+        ,  X.PRODUCTDEFID
+        ,  X.PRODUCTDEFVERSION
+        ,  X.PRODUCTDEFNAME
+        ,  X.PLANTID
+        ,  X.LOTPRODUCTTYPE
+        ,  X.PACKINGTYPE
+        ,  X.EXPORTPACKINGTYPE
+	    ,  MAX(X.LAYER)         					LAYER
+	    ,  MAX(X.PCSPNL)        					PCSPNL
+	    ,  MAX(X.PCSMM)         					CALVALUE
+	    ,  SUM(RESULTPCSQTY)    					RESULTPCSQTY
+	    ,  SUM(RESULTPNLQTY)						RESULTPNLQTY
+	    ,  SUM(RESULTMM)        					RESULTMM
+	    ,  ROUND(SUM(RESULTPRICE))					RESULTPRICE
+	    ,  ROUND(SUM(FPCBPRICE)) 			 		FPCBPRICE
+	    ,  ROUND(SUM(SMTPRICE)) 		 			SMTPRICE 
+	FROM
+	(
+		SELECT SUBSTR(TB.SENDTIME, 1, 10)        INBOUNDDATE
+            ,  COALESCE(MC.CUSTOMERNAME,MC.CUSTOMERNAME) CUSTOMERNAME
+            ,  TB.PRODUCTDEFID
+            ,  TB.PRODUCTDEFVERSION
+            ,  TB.PRODUCTDEFNAME
+            ,  COALESCE(SD1.DICTIONARYNAME,TB.LAYER) LAYER
+            ,  TB.PLANTID
+            ,  TB.PROCESSSEGMENTCLASSID
+            ,  COALESCE(SD2.DICTIONARYNAME, TB.PROCESSSEGMENTCLASSID) EXPORTPACKINGTYPE
+            ,  TB.PRODUCTIONTYPE
+            ,  COALESCE(SD3.DICTIONARYNAME, TB.PRODUCTIONTYPE) LOTPRODUCTTYPE
+            ,  TB.PRODUCTDEFTYPE
+            ,  COALESCE(SD4.DICTIONARYNAME, TB.PRODUCTDEFTYPE) PACKINGTYPE
+            ,  TB.PCSPNL
+            ,  TB.PCSMM                 
+            ,  TB.LOTID
+            ,  TB.QTY                                              RESULTPCSQTY
+            ,  TB.PNLQTY                                           RESULTPNLQTY  
+            ,  TB.MM                                               RESULTMM
+            ,  TB.RESULTPRICE
+            ,  TB.FPCBPRICE
+            ,  TB.SMTPRICE
+		FROM TP_BASE TB
+		LEFT JOIN BAS_CUSTOMER          MC ON  TB.PLANTID = MC.PLANTID
+		                                  AND TB.CUSTOMERID = MC.CUSTOMERID
+		LEFT JOIN CMD_LOOKUP_VALUES    SC1 ON  TB.LAYER = SC1.LOOKUP_CODE
+		                                  AND SC1.LOOKUP_TYPE = 'Layer'
+		LEFT JOIN CMD_DICTIONARY       SD1 ON  SC1.DICTIONARYID = SD1.DICTIONARYID
+		                                  AND SD1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT JOIN CMD_LOOKUP_VALUES    SC2 ON  TB.EXPORTPACKINGTYPE = SC2.LOOKUP_CODE
+                                          AND SC2.LOOKUP_TYPE = 'ExportPackingType'
+        LEFT JOIN CMD_DICTIONARY       SD2 ON  SC2.DICTIONARYID = SD2.DICTIONARYID
+                                          AND SD2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN CMD_LOOKUP_VALUES    SC3 ON  TB.PRODUCTIONTYPE = SC3.LOOKUP_CODE
+                                          AND SC3.LOOKUP_TYPE = 'ProductionType'
+        LEFT JOIN CMD_DICTIONARY       SD3 ON  SC3.DICTIONARYID = SD3.DICTIONARYID
+                                          AND SD3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN CMD_LOOKUP_VALUES    SC4 ON  TB.PRODUCTDEFTYPE = SC4.LOOKUP_CODE
+                                          AND SC4.LOOKUP_TYPE = 'PackingType'
+        LEFT JOIN CMD_DICTIONARY       SD4 ON  SC4.DICTIONARYID = SD4.DICTIONARYID
+                                          AND SD4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        WHERE 1 = 1
+        --수출포장여부
+        <if test="RESULTTYPE != null and RESULTTYPE !=''">
+			AND TB.EXPORTPACKINGTYPE =  #{RESULTTYPE}
+		</if>        
+  	)X
+  	GROUP BY   X.INBOUNDDATE
+            ,  X.CUSTOMERNAME
+            ,  X.PRODUCTDEFID
+            ,  X.PRODUCTDEFVERSION
+            ,  X.PRODUCTDEFNAME
+            ,  X.PLANTID
+            ,  X.LOTPRODUCTTYPE
+            ,  X.PACKINGTYPE
+            ,  X.EXPORTPACKINGTYPE		
+	</select>
+	<select id="selectWorkIncommingResultByLot" parameterType="map" resultType="hashmap">
+	/* SelectWorkIncommingResultByLot 10001 */
+	--id : selectWorkIncommingResultByLot
+		WITH TP_BASE AS
+		(
+			SELECT *
+			FROM
+			(
+				SELECT BP.LOTID
+				    ,  BP.PROCESSDEFID
+				    ,  BP.PROCESSDEFVERSION
+				    ,  PS.PROCESSSEGMENTCLASSID
+                    ,  CASE WHEN PS.PROCESSSEGMENTCLASSID = '8012' THEN 'Packing'
+                            WHEN PS.PROCESSSEGMENTCLASSID = '8014' THEN 'ExportPacking'
+                       END EXPORTPACKINGTYPE
+				    ,  BP.PROCESSSEGMENTID
+				    ,  BP.PROCESSSEGMENTVERSION
+				    ,  BP.AREAID
+				    ,  L.PRODUCTDEFID
+				    ,  L.PRODUCTDEFVERSION
+				    ,  PD.PRODUCTDEFNAME
+				    ,  PD.LAYER
+				    ,  PD.PRODUCTIONTYPE
+				    ,  LW.PRODUCTIONORDERID
+				    ,  LW.LINENO
+				    ,  LW.PLANTID
+				    ,  TO_CHAR(L.ROOTLOTSTARTDATE, 'YYYY-MM-DD HH24:MI:SS') ROOTLOTSTARTDATE
+				    ,  TO_CHAR(LW.SENDTIME, 'YYYY-MM-DD HH24:MI:SS') SENDTIME
+				--    ,  ROW_NUMBER() OVER (PARTITION BY BP.LOTID, BP.AREAID ORDER BY BP.LOTID) RN 
+				    ,  BP.QTY
+				    ,  CEIL(BP.QTY / L.PANELPERQTY) PNLQTY
+				    ,  ROUND((BP.QTY / PD.PCSMM), 2)	MM
+				    ,  PO.CUSTOMERID
+				    --,  (PO.SALESPRICE * BP.QTY) * ECM.EXCHANGEVALUE AS RESULTPRICE
+				    --,  (PO.SALESPRICE - (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0))) * ECM.EXCHANGEVALUE	AS FPCBUNITPRICE	
+				    --,  (PO.SALESPRICE - (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0))) * BP.QTY * ECM.EXCHANGEVALUE 	AS FPCBPRICE  
+				    --,  (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0)) * ECM.EXCHANGEVALUE SMTUNITPRICE
+				    --,  (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0)) * BP.QTY *ECM.EXCHANGEVALUE  SMTPRICE				    
+				    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, BP.QTY * PO.SALESPRICE),0) AS RESULTPRICE
+				    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, 1 * (PO.SALESPRICE - (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0)))),0) AS FPCBUNITPRICE
+				    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, BP.QTY * (PO.SALESPRICE -(COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0)))),0) AS FPCBPRICE
+				    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, 1 * (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0))),0) AS SMTUNITPRICE
+				    ,   NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, BP.QTY * (COALESCE(SO.ASSYPRICE, 0) + COALESCE(SO.ETCPRICE, 0))),0) AS SMTPRICE
+				    ,  PP.PATHSEQUENCE
+				    ,  PP.PATHTYPE
+				    ,  LW.PREVSENDLOTHISTKEY
+				FROM PCM_BOXPACKING BP
+				INNER JOIN PCM_LOT                L ON BP.LOTID = L.LOTID
+				INNER JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                   AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION 
+				INNER JOIN PCM_LOTWORKRESULT     LW ON  BP.LOTID = LW.LOTID
+				                                   AND BP.PROCESSDEFID = LW.PROCESSDEFID
+				                                   AND BP.PROCESSDEFVERSION = LW.PROCESSDEFVERSION
+				                                   AND BP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+				                                   AND LW.PROCESSSEGMENTVERSION = '*'  
+				INNER JOIN MFM_PRODUCTIONORDER   PO ON  LW.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+				                                   AND LW.LINENO = PO.LINENO
+				INNER JOIN BAS_SALEORDERAPPROVAL SO ON  PO.PRODUCTIONORDERID = SO.SALESORDERID
+				                                   AND PO.LINENO = SO.LINENO
+				LEFT JOIN BAS_UNITPRICEFORMES   UP 	ON UP.PRODUCTDEFID = L.PRODUCTDEFID 
+													AND UP.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION 
+													AND SYSDATE  BETWEEN APPLY_START_DATE 
+													AND NVL(APPLY_END_DATE,TO_TIMESTAMP('9999-12-31 23:59:59','yyyy-MM-dd HH24:MI:SS'))
+				INNER JOIN BAS_PROCESSPATH       PP ON  LW.PROCESSDEFID = PP.PROCESSDEFID
+				                                   AND LW.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+				                                   AND LW.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+				                                   AND LW.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+				INNER JOIN BAS_PROCESSSEGMENT    PS ON  BP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                                   AND PS.PROCESSSEGMENTVERSION = '*'                                   
+				WHERE 1=1
+				AND   LW.SENDTIME IS NOT NULL
+			    --조회일자
+				<if test="PERIOD_PERIODFR !='' and PERIOD_PERIODTO !=''"> 
+					AND     LW.SENDTIME >= TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYY-MM-DD HH24:MI:SS') 
+		            AND     LW.SENDTIME <![CDATA[<]]>  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYY-MM-DD HH24:MI:SS')
+				</if>               	
+               	--작업장
+				<if test="AREAID != null and AREAID !=''"> 
+					AND EXISTS
+	                    	(
+		                        SELECT  1
+		                        FROM    UFN_SELECTSTRINGTOSPLIT(#{P_AREAID}, ',')        LMP
+		                        WHERE   LW.AREAID = LMP.VALUE
+		                    )
+				</if>	                	
+				--품목코드
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+					AND EXISTS
+		                     (
+		                        SELECT  1
+		                        FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')      LMP
+		                        WHERE   L.PRODUCTDEFID = LMP.VALUE
+		                    )
+				</if>	
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+					AND EXISTS
+		                     (
+		                        SELECT  1
+		                        FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFVERSION}, ',')      LMP
+		                        WHERE   L.PRODUCTDEFVERSION = LMP.VALUE
+		                    )
+				</if>	                  	
+               	--품목명
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 
+				AND EXISTS
+                     	(
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT('%' || #{PRODUCTDEFNAME} || '%', ',')      LMP
+	                        WHERE   PD.PRODUCTDEFNAME LIKE LMP.VALUE
+                    	)
+				</if>	              
+               	--구분
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">
+					AND     L.LOTTYPE = #{PRODUCTIONTYPE}
+				</if> 
+               	--작업구분
+				<if test="WORKTYPE != null and WORKTYPE !=''">
+					<if test='WORKTYPE == "IsRework"'>
+						AND      LW.ISREWORK = 'Y'
+					</if>	
+					<if test='WORKTYPE != "IsRework"'>
+						AND      COALESCE(LW.ISREWORK, 'N') = 'N'
+						<if test='WORKTYPE == "Normal"'>	
+							AND      L.LOTCREATEDTYPE IN ('Normal', 'SplitRoll', 'FinalInspect')
+						</if>
+						<if test='WORKTYPE != "Normal"'>
+							AND      L.LOTCREATEDTYPE = #{WORKTYPE}
+						</if>
+					</if>	
+				</if>	                 	
+               	--공정
+				<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''">
+				AND EXISTS
+	                    (
+	                        SELECT  1
+	                        FROM    UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID}, ',')      LMP
+	                        WHERE   LW.PROCESSSEGMENTID = LMP.VALUE
+	                    )
+				</if>	               
+               	--SITE
+				<if test="PLANTID != null and PLANTID !=''">
+					AND     LW.PLANTID = #{PLANTID}
+				</if>	               	
+				-- 담당공장
+				<if test="OWNERFACTORYID != null and OWNERFACTORYID !=''">
+					AND     PD.OWNERFACTORYID = #{OWNERFACTORYID}
+				</if>	       	
+						
+				<if test="PACKINGTYPE != null and PACKINGTYPE !=''">
+					AND  ((#{PACKINGTYPE} = 'Product' AND pp.PATHTYPE = 'End') or(#{PACKINGTYPE} = 'SubProduct' AND pp.PATHTYPE <![CDATA[<>]]> 'End'))
+				</if>																	
+			)X                                   
+			--WHERE RN=1
+		)
+		,SMT_SHIP_AREA AS
+		(
+			SELECT  LOTID
+			     ,  MAX(SMTAREAID) SMTAREAID
+			     ,  MAX(SHPAREAID)  SHPAREAID
+			FROM 
+				(
+				SELECT ROW_NUMBER() OVER(PARTITION BY X.LOTID ORDER BY CASE WHEN X.SMTSENDTIME IS NOT NULL THEN 1 ELSE 100 END,  X.SMTSENDTIME DESC)SMTRN
+				     , ROW_NUMBER() OVER(PARTITION BY X.LOTID ORDER BY CASE WHEN X.SHPSENDTIME IS NOT NULL THEN 1 ELSE 100 END, X.SHPSENDTIME DESC)SHRN
+				     , X.SENDTIME
+				     , X.*
+				FROM
+					(
+					SELECT CASE WHEN PS.PROCESSSEGMENTCLASSID NOT IN ('7030') THEN LW.AREAID ELSE NULL END SMTAREAID
+                        ,  CASE WHEN PS.PROCESSSEGMENTCLASSID NOT IN ('7030') THEN LW.SENDTIME ELSE NULL END SMTSENDTIME
+                        ,  CASE WHEN PS.PROCESSSEGMENTCLASSID = '7030' THEN LW.AREAID ELSE NULL END SHPAREAID
+                        ,  CASE WHEN PS.PROCESSSEGMENTCLASSID = '7030' THEN LW.SENDTIME ELSE NULL END SHPSENDTIME
+                        ,  LW.*
+                    FROM TP_BASE TB
+                    INNER JOIN PCM_LOTWORKRESULT LW ON TB.LOTID = LW.LOTID
+                    INNER JOIN BAS_PROCESSSEGMENT PS ON  LW.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                                    AND LW.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+                                                    AND (PS.PROCESSSEGMENTTYPE = 'SMT' OR PS.PROCESSSEGMENTCLASSID = '7030')
+					WHERE 1=1
+				)X
+			)Y
+			WHERE SMTRN =1
+			OR    SHRN = 1
+			GROUP BY LOTID
+		)
+		SELECT TB.PATHSEQUENCE
+		    ,  TB.PATHTYPE
+		    ,  COALESCE(MC.CUSTOMERNAME,MC.CUSTOMERNAME) CUSTOMERNAME
+		    ,  TB.PRODUCTDEFID
+            ,  TB.PRODUCTDEFVERSION
+            ,  TB.PRODUCTDEFNAME
+            ,  TB.PROCESSSEGMENTCLASSID
+            ,  COALESCE(SD7.DICTIONARYNAME, TB.PROCESSSEGMENTCLASSID) AS EXPORTPACKINGTYPE
+            ,  COALESCE(SD1.DICTIONARYNAME,TB.LAYER) LAYER
+            ,  CASE WHEN SA2.AREAID IS NOT NULL THEN 'Y' ELSE 'N' END AS ISSMT
+            ,  TB.LOTID
+            ,  COALESCE(WH.WAREHOUSENAME,MR.WAREHOUSEID) WAREHOUSENAME
+            ,  COALESCE(SD2.DICTIONARYNAME,TB.PRODUCTIONTYPE)      LOTTYPE
+            ,  TB.ROOTLOTSTARTDATE                                 STARTEDDATE
+            ,  TB.SENDTIME
+            ,  TB.QTY                                              RESULTPCSQTY
+            ,  TB.PNLQTY                                           RESULTPNLQTY
+            ,  TB.MM                                               RESULTMM
+            ,  ROUND(TB.RESULTPRICE)							AS	RESULTPRICE
+            ,  TB.FPCBUNITPRICE
+            ,  ROUND(TB.FPCBPRICE)								AS FPCBPRICE
+            ,  TB.SMTUNITPRICE
+            ,  ROUND(TB.SMTPRICE) 								AS SMTPRICE
+            ,  COALESCE(SD3.DICTIONARYNAME,TB.AREAID) AREANAME
+            ,  COALESCE(SD4.DICTIONARYNAME,LH.PREVPROCESSSEGMENTID) PREVPROCESSSEGMENTNAME
+            ,  TB.PLANTID
+            ,  COALESCE(SD5.DICTIONARYNAME,SA2.AREAID) SMTAREANAME
+            ,  COALESCE(SD6.DICTIONARYNAME,SA3.AREAID) SHIPMENTAREANAME
+		FROM TP_BASE TB
+		LEFT JOIN BAS_CUSTOMER          MC ON  TB.PLANTID = MC.PLANTID
+		                                  AND TB.CUSTOMERID = MC.CUSTOMERID
+		LEFT JOIN CMD_LOOKUP_VALUES    SC1 ON  TB.LAYER = SC1.LOOKUP_CODE
+		                                  AND SC1.LOOKUP_TYPE = 'Layer'
+		LEFT JOIN CMD_DICTIONARY       SD1 ON  SC1.DICTIONARYID = SD1.DICTIONARYID
+		                                  AND SD1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		INNER JOIN BAS_PRODUCTITEMSPEC MPD ON  TB.PRODUCTDEFID = MPD.ITEMID
+		                                  AND TB.PRODUCTDEFVERSION = MPD.ITEMVERSION
+        INNER JOIN BAS_ITEMWAREHOUSE   MR ON  TB.PRODUCTDEFID = MR.ITEMID
+                                          AND TB.PRODUCTDEFVERSION = MR.ITEMVERSION
+        LEFT  JOIN BAS_WAREHOUSE        WH ON  MR.PLANTID = WH.PLANTID
+                                          AND MR.WAREHOUSEID = WH.WAREHOUSEID
+		LEFT  JOIN CMD_LOOKUP_VALUES   SC2 ON  TB.PRODUCTIONTYPE = SC2.LOOKUP_CODE
+		                                  AND SC2.LOOKUP_TYPE = 'ProductionType'
+		LEFT  JOIN CMD_DICTIONARY      SD2 ON  SC2.DICTIONARYID = SD2.DICTIONARYID
+		                                  AND SD2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		INNER JOIN BAS_AREA             SA ON  TB.AREAID = SA.AREAID
+		LEFT  JOIN CMD_DICTIONARY      SD3 ON  SA.AREANAME = SD3.DICTIONARYID
+		                                  AND SD3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT  JOIN PCM_LOTHISTORY       LH ON  TB.PREVSENDLOTHISTKEY = LH.TXNHISTKEY
+		                                  AND TB.LOTID = LH.LOTID
+		LEFT  JOIN BAS_PROCESSSEGMENT   PS ON  LH.PREVPROCESSSEGMENTID = PS.PROCESSSEGMENTID
+		                                  AND LH.PREVPROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+		LEFT  JOIN CMD_DICTIONARY      SD4 ON  PS.PROCESSSEGMENTNAME = SD4.DICTIONARYID
+		                                  AND SD4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT  JOIN SMT_SHIP_AREA      SHA ON  TB.LOTID = SHA.LOTID
+		LEFT  JOIN BAS_AREA            SA2 ON  SHA.SMTAREAID = SA2.AREAID
+		LEFT  JOIN BAS_AREA            SA3 ON  SHA.SHPAREAID = SA3.AREAID
+		LEFT  JOIN CMD_DICTIONARY      SD5 ON  SA2.AREANAME = SD5.DICTIONARYID
+		                                  AND SD5.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT  JOIN CMD_DICTIONARY      SD6 ON  SA3.AREANAME = SD6.DICTIONARYID
+		                                  AND SD6.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		LEFT JOIN CMD_LOOKUP_VALUES    SC3 ON  TB.EXPORTPACKINGTYPE = SC3.LOOKUP_CODE
+                                          AND SC3.LOOKUP_TYPE = 'ExportPackingType'
+        LEFT JOIN CMD_DICTIONARY       SD7 ON  SC3.DICTIONARYID = SD7.DICTIONARYID
+                                          AND SD7.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        WHERE 1 = 1
+        --수출포장여부
+        <if test="RESULTTYPE != null and RESULTTYPE !=''">
+			AND TB.EXPORTPACKINGTYPE =  #{RESULTTYPE}
+		</if>     
+             
+	</select>
+	
+</mapper>

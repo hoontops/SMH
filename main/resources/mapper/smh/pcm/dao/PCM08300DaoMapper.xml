@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM08300Dao">
+      
+    
+    
+	<!--
+		설		명	: 재포장 등록 List 조회 
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-15 
+		수  정   이  력	:
+	-->
+	<select id="selectRePackList" parameterType="map" resultType="hashmap">
+				-- 재포장 등록 List 조회 selectRePackList
+				
+				
+				
+				-- [등록일시에 해당하는 포장NO]
+				WITH T_BASE_REPACKINGNO AS (
+				        SELECT REPACKINGNO
+				          FROM PCM_REPACKINGPRODUCT  PC
+				         WHERE 1 = 1
+				           AND TO_CHAR(PC.INPUT_DATE,'YYYYMMDDHH24MISS') <![CDATA[<=]]> TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS') 		--IFRECEIVEDDATE}      --  등록일시_ERP가 전송한 등록일시  (현재 시간으로 수정)
+				           
+				           AND TO_CHAR(PC.INPUT_DATE,'YYYYMMDDHH24MISS')  <![CDATA[>]]> TO_CHAR((ADD_MONTHS(TO_DATE(#{IFRECEIVEDDATE}, 'YYYYMMDDHH24MISS'),-12)), 'YYYYMMDDHH24MISS')		-- [1년 기준 으로 설정]
+				           
+				                 
+				          GROUP BY REPACKINGNO
+				  )
+				  
+				  -- (21.06.08) 이미 등록된 수량 합계
+                  ,  MINUS_QTY AS (
+                        SELECT  DT.REPACKINGNO  
+                                , DT.ENTERPRISEID 
+                                , DT.PLANTID  
+                                , SUM(NVL(DT.PACKEDQTY,0))  AS  REPACK_QTY
+                          FROM PCM_REPACKINGPRODUCTDONE DT
+                          GROUP BY DT.REPACKINGNO
+                                 , DT.ENTERPRISEID 
+                                 , DT.PLANTID  
+                  )
+				  
+				    ,  MAIN_REPACKINGPRODUCT AS (
+					        SELECT P.ENTERPRISEID
+					                     , P.PLANTID
+			                             , P.REPACKINGNO							-- 재포장 번호
+			                             , P.PRODUCTDEFID							-- 품목코드
+			                             , P.PRODUCTDEFVERSION		        -- 품목버전
+			                             , P.PRODUCTDEFNAME         	    	-- 품목명(추가)
+			                             , P.AREAID									-- 작업장코드
+			                             --, P.WAREHOUSEFROM          	    	-- 출처 창고(추가) FROM창고ID	(재포장 등록 / 최소인 경우 FROM 창고ID가 다르게 넘어 온다.) (21.07.28) 주석 처리
+			                             , P.OWNERWAREHOUSEID		        -- 출처 창고명   FROM창고 ID
+			                             , MAX(P.USERIDOFORDER)		AS USERIDOFORDER    	-- 발주담당자ID
+			                             , MAX(P.DEPTCD)					AS DEPTCD		    		-- 부서       (값없음)
+			                             , MAX(P.INPUT_DATE)                AS INPUT_DATE       	-- 등록일시_ERP가 전송한 등록일시
+			                             , SUM(P.REPACKINGREQUESTQTY)       AS REPACKINGREQUESTQTY      	-- 재포장수량
+			                             , MAX(NVL(DT.REPACK_QTY,0))         AS SUM_PACKEDQTY            		-- 이미 포장한 수량  (21.06.08) 위에서 따로 합계 후 계산
+			                             , SUM(P.REPACKINGREQUESTQTY) - MAX(NVL(DT.REPACK_QTY,0)) AS R_REPACKINGREQUESTQTY		-- 재포장 수량 제외 남은 수량 (재포장수량 - 완료수량) (21.06.08)
+					        FROM PCM_REPACKINGPRODUCT P             							-- 제품 재포장
+					        
+					        -- [21.06.07] 추가 화면에서넘어온 날짜 이전의 포장번호로 조회
+			                INNER JOIN T_BASE_REPACKINGNO RE
+			                ON RE.REPACKINGNO = P.REPACKINGNO
+					        
+					        LEFT JOIN MINUS_QTY DT								-- (21.06.08) 수정 따로 합계 후 계산
+					            ON  DT.REPACKINGNO  	= P.REPACKINGNO
+					            AND DT.ENTERPRISEID 	= P.ENTERPRISEID
+					            AND DT.PLANTID      		= P.PLANTID
+					         GROUP BY P.ENTERPRISEID
+				                         , P.PLANTID
+				                         , P.REPACKINGNO						-- 재포장 번호
+				                         , P.PRODUCTDEFID						-- 품목코드
+				                         , P.PRODUCTDEFVERSION		    -- 품목버전
+				                         , P.PRODUCTDEFNAME         	    -- 품목명(추가)
+				                         , P.AREAID								-- 작업장코드
+				                         --, P.WAREHOUSEFROM          	    -- 출처 창고(추가) FROM창고ID  (재포장 등록 / 최소인 경우 FROM 창고ID가 다르게 넘어 온다.) (21.07.28) 주석 처리
+				                         , P.OWNERWAREHOUSEID		    -- 출처 창고명   FROM창고 ID
+					)
+					
+					SELECT 
+					      '0' AS CHK
+					     , P.ENTERPRISEID
+					     , P.PLANTID            
+					     , P.REPACKINGNO            		-- 재포장번호
+					     , P.PRODUCTDEFID           		-- 품목코드
+					     
+					     --, IT.ITEMNAME              			AS PRODUCTDEFNAME-- 품목명
+					     , P.PRODUCTDEFNAME              	AS PRODUCTDEFNAME-- 품목명    (수정 직접 받은 내용)
+					     , P.PRODUCTDEFVERSION      	-- 버전
+					     , P.AREAID                 			-- 자원코드
+					     , R.DESCRIPTION            			AS AREANAME -- 자원(명)
+					     , P.OWNERWAREHOUSEID       -- 출처창고ID
+					     --, D1.DICTIONARYNAME        	AS OWNERWAREHOUSENAME       -- 출처창고명
+					     , P.OWNERWAREHOUSEID        	AS OWNERWAREHOUSENAME       -- 출처창고명 (수정 직접 받은 내용)
+					     , P.USERIDOFORDER          		-- 발주담당자ID     
+					     , P.DEPTCD                 			-- 발주담당부서ID
+					   
+					     , NVL(A.USER_NM,P.USERIDOFORDER) ||
+                                    CASE WHEN A.DEPT_NM IS NOT NULL
+                                         THEN ' - '|| A.DEPT_NM 
+                                         ELSE ''
+                                         END 
+                                         AS ORDERNAME          -- 발주담당자/부서명  (수정 - 발주자 명없는 경우)            
+					     
+					     
+					     , TO_CHAR(P.INPUT_DATE, 'YYYY-MM-DD HH24:MI:SS')         			AS IFRECEIVEDDATE    -- IF수신일시 (수정)
+					     , P.R_REPACKINGREQUESTQTY      --입력 가능 수량
+					     , '' AS ENDQTY		-- 완료수량
+					   
+					    FROM MAIN_REPACKINGPRODUCT P             	-- 제품 재포장
+					    LEFT JOIN BAS_RESOURCE         R        			-- 자원
+					    ON   R.RESOURCEID = P.AREAID
+					    AND R.VALIDSTATE = 'Valid'
+					    LEFT OUTER JOIN BAS_AREA       AR        
+					    ON  AR.AREAID = R.AREAID
+					    
+					    LEFT JOIN (SELECT U1.USER_ID            	-- 사용자명
+											      ,U1.USER_NM
+											      --, U1.DEPT_NM      	-- 부서명   (추가)
+											      , B.DEPT_NM      		-- 부서명   (추가) (21.06.10) 수정
+                                                  , U1.DEPT_CD      	-- 부서코드 (추가)
+										FROM   CMD_USERS U1
+										-- (21.06.10)부서명 조회 추가
+										LEFT JOIN CMD_DEPTS B
+                                        ON U1.DEPT_CD = B.DEPT_CD
+										WHERE  NOT EXISTS (SELECT 1
+															        FROM   BAS_USERGROUPUSER BU
+															        WHERE  BU.USERID = U1.USER_ID
+															        AND    BU.USERGROUPID = 'CAMOWNER' ) ) A
+					    ON A.USER_ID = P.USERIDOFORDER
+					    
+					  
+					    WHERE 1 = 1
+					     
+					      <if test="REPACKINGNO != null and REPACKINGNO !='' and !(REPACKINGNO eq '*'.toString()) ">
+					      AND UPPER(P.REPACKINGNO) LIKE  '%' || UPPER(#{REPACKINGNO})|| '%'
+					      </if>
+					      <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and !(PRODUCTDEFID eq '*'.toString()) ">
+					      AND UPPER(P.PRODUCTDEFID) LIKE  '%' || UPPER(#{PRODUCTDEFID})|| '%'
+					      </if>
+					      
+					      AND P.R_REPACKINGREQUESTQTY != 0 -- 완료되지 않은 경우        (완료 수량 = 재포장수량 이면 -> 조회 안되도록 조건 필요)
+					      
+					      
+					      AND P.ENTERPRISEID 	= #{ENTERPRISEID}
+						  AND P.PLANTID 			= #{PLANTID}
+					      
+					      ORDER BY P.INPUT_DATE
+			
+		
+	</select>
+	
+	
+	<!--
+		설		명	: 재포장 등록 List 저장전 수량 체크
+		생	성	자	: 김진현
+		생	성	일	: 2021-06-07 
+		수  정   이  력	:
+	-->
+	<select id="selectRePackChk" parameterType="map" resultType="hashmap">
+				-- 재포장 등록 List 저장전 수량 체크 selectRePackChk
+				
+				-- (21.06.08) 합게 수량 따로 계산 후 진행
+				WITH  MINUS_QTY AS (
+                        SELECT  DT.REPACKINGNO  
+                                , DT.ENTERPRISEID 
+                                , DT.PLANTID  
+                                , SUM(NVL(DT.PACKEDQTY,0))  AS  REPACK_QTY
+                          FROM PCM_REPACKINGPRODUCTDONE DT
+                          GROUP BY DT.REPACKINGNO
+                                 , DT.ENTERPRISEID 
+                                 , DT.PLANTID  
+                  )
+				
+								
+				SELECT A.ENTERPRISEID
+                             , A.PLANTID
+                             , A.REPACKINGNO
+                             , A.REPACKINGREQUESTQTY
+                             , A.SUM_PACKEDQTY
+                             , A.R_REPACKINGREQUESTQTY
+                             , CASE WHEN A.R_REPACKINGREQUESTQTY <![CDATA[<]]> 0
+                                    THEN 'N'
+                                    ELSE 'Y'
+                                    END
+                                    AS  CHK_YN                                      -- 수량 체크 
+                                
+                          FROM (  
+                                SELECT P.ENTERPRISEID
+					                     , P.PLANTID
+			                             , P.REPACKINGNO							-- 재포장 번호
+			                             , P.PRODUCTDEFID							-- 품목코드
+			                             , P.PRODUCTDEFVERSION		        -- 품목버전
+			                             , SUM(P.REPACKINGREQUESTQTY)       	AS REPACKINGREQUESTQTY      	-- 재포장수량
+			                             , MAX(NVL(DT.REPACK_QTY,0))         		AS SUM_PACKEDQTY            		-- 이미 포장한 수량
+			                             , SUM(P.REPACKINGREQUESTQTY) - MAX(NVL(DT.REPACK_QTY,0)) - TO_NUMBER(#{ENDQTY}) AS R_REPACKINGREQUESTQTY		-- 재포장 수량 제외 남은 수량 (재포장수량 - 완료수량)
+					        FROM PCM_REPACKINGPRODUCT P             							-- 제품 재포장					        
+					    
+					        LEFT JOIN MINUS_QTY DT										-- (21.06.08)
+					            ON  DT.REPACKINGNO  	= P.REPACKINGNO
+					            AND DT.ENTERPRISEID 	= P.ENTERPRISEID
+					            AND DT.PLANTID      		= P.PLANTID
+                                
+                            WHERE 1 = 1
+                              AND P.REPACKINGNO     	= #{REPACKINGNO}
+                              AND P.ENTERPRISEID    		= #{ENTERPRISEID}
+                              AND P.PLANTID        		= #{PLANTID}
+					         GROUP BY P.ENTERPRISEID
+				                         , P.PLANTID
+				                         , P.REPACKINGNO						-- 재포장 번호
+				                         , P.PRODUCTDEFID						-- 품목코드
+				                         , P.PRODUCTDEFVERSION		    -- 품목버전
+				                         , P.PRODUCTDEFNAME         	    -- 품목명(추가)
+				                         , P.AREAID								-- 작업장코드
+				                         , P.WAREHOUSEFROM          	    -- 출처 창고(추가) FROM창고ID
+				                         , P.OWNERWAREHOUSEID		    -- 출처 창고명   FROM창고 ID
+                              )  A 
+		
+	</select>
+	
+	
+	<!--
+		설		명	: 재포장 등록 List 재포장완료
+		생	성	자	: 김진현 
+		생	성	일	: 2020-04-15 
+		수  정   이  력	: 
+	-->
+	<insert id="insertRePack" parameterType="map">
+	    INSERT INTO PCM_REPACKINGPRODUCTDONE( 
+	        ENTERPRISEID
+			, PLANTID
+			, REPACKINGNO
+			, ENROLLEDATE
+			, PACKEDQTY
+			, IFSENDDATE
+			, REMARK
+			, CREATOR
+			, CREATEDTIME
+			, MODIFIER
+			, MODIFIEDTIME			
+			, LASTTXNHISTKEY 
+			, VALIDSTATE
+			, STOCKWAREHOUSEID		-- 재고보유창고
+			) 
+	    VALUES( 
+	         #{ENTERPRISEID}  
+	        ,#{PLANTID}  
+	        ,#{REPACKINGNO}  
+	        ,SYSDATE  
+	        ,#{ENDQTY}  
+	        ,SYSDATE  -- 송신일시 
+	        ,''	        
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{LASTTXNHISTKEY}    
+	        ,'valid'
+	        , 'FGI11'
+	          )
+    </insert>
+    
+    
+    
+    <!--
+		설		명	: 재포장 erp seq 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-06-07 
+		수  정   이  력	:
+	-->
+	<select id="getERPSeqNextVal" parameterType="map" resultType="hashmap">
+    	SELECT IFC_PCM_REPACKINGPRODUCT.NEXTVAL||'' AS SEQNEXTVAL 		-- 재포장 seq
+    	FROM DUAL
+    </select>
+    
+    
+    <!--
+		설		명	: 재포장 등록 - erp 정보 전달
+		생	성	자	: 김진현
+		생	성	일	: 2021-06-07
+		수  정   이  력	:
+	-->
+	<update id="insertERPIFDataRePack" parameterType="map" >
+		/* insertERPIFDataRePack -  재포장 등록 - erp 정보 전달 */
+		INSERT INTO IFC_MES_R_REPACKING_TRX@ERPPROD(
+					ENTERPRISEID             
+				  , ORGANIZATION_CODE                  
+				  , REPACKING_NUMBER         
+				  , ITEM_CODE                
+				  , ITEM_DESC                
+				  , RESOURCE_CODE                 
+				  , FROM_INV_LOCATION        
+				  , CREATION_DATE               
+				  , APPLY_USER_DESC          
+				  , TRANSACTION_QTY            
+				  , CREATOR                  
+				  , CREATEDTIME              
+				  , MODIFIER                 
+				  , MODIFIEDTIME             
+				  , IF_CRUD                  
+				  , IF_DATE                  
+				  , IF_PROCESS_TYPE          
+				  , IF_SEQUENCE              
+				)
+				SELECT P.ENTERPRISEID
+					 , P.PLANTID
+					 , P.REPACKINGNO							-- 재포장 번호
+					 , P.PRODUCTDEFID							-- 품목코드
+					 , MAX(P.PRODUCTDEFNAME)  AS PRODUCTDEFNAME     -- ITEM_DESC
+					 , P.AREAID
+					 , P.OWNERWAREHOUSEID
+					 , MAX(P.INPUT_DATE)    AS INPUT_DATE
+					 , MAX(P.USERIDOFORDER) KEEP(DENSE_RANK FIRST ORDER BY P.INPUT_DATE DESC)  		AS USERIDOFORDER
+					 , #{ENDQTY}              					-- 재포장 완료 수량 넘겨받은
+					 , MAX(DT.CREATOR) KEEP(DENSE_RANK FIRST ORDER BY DT.CREATEDTIME DESC)  			AS CREATOR
+					 , MAX(DT.CREATEDTIME) KEEP(DENSE_RANK FIRST ORDER BY DT.CREATEDTIME DESC)  	AS CREATEDTIME
+					 , MAX(DT.MODIFIER) KEEP(DENSE_RANK FIRST ORDER BY DT.CREATEDTIME DESC)  			AS MODIFIER
+					 , MAX(DT.MODIFIEDTIME) KEEP(DENSE_RANK FIRST ORDER BY DT.CREATEDTIME DESC)		AS MODIFIEDTIME
+					 , 'C'
+					 , SYSDATE
+					 , 'N'
+					 , #{SERIALID} 				-- 키값
+				   
+				FROM PCM_REPACKINGPRODUCT P             							-- 제품 재포장					        
+			
+				LEFT JOIN PCM_REPACKINGPRODUCTDONE DT
+					ON  DT.REPACKINGNO  	= P.REPACKINGNO
+					AND DT.ENTERPRISEID 	= P.ENTERPRISEID
+					AND DT.PLANTID      		= P.PLANTID
+					
+				WHERE 1 = 1
+				  AND P.REPACKINGNO     	= #{REPACKINGNO}
+				  AND P.ENTERPRISEID    		= #{ENTERPRISEID}
+				  AND P.PLANTID         		= #{PLANTID}
+				 GROUP BY P.ENTERPRISEID
+							 , P.PLANTID
+							 , P.REPACKINGNO				-- 재포장 번호
+							 , P.PRODUCTDEFID				-- 품목코드
+							 , P.PRODUCTDEFVERSION	-- 품목버전
+							 , P.PRODUCTDEFNAME       -- 품목명(추가)
+							 , P.AREAID						-- 작업장코드
+							 , P.WAREHOUSEFROM        -- 출처 창고(추가) FROM창고ID
+							 , P.OWNERWAREHOUSEID	-- 출처 창고명   FROM창고 ID
+	</update>
+	
+	
+	
+	
+	 
+
+</mapper>

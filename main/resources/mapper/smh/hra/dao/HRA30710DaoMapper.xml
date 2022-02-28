@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.hra.dao.HRA30710Dao">
+<!-- My Desk::F.A.Q -->
+    
+    <!-- FAQ 내역 조회 -->
+    <select id="selectFAQList" parameterType="map" resultType="hashmap">
+        /* smh.hra.dao.HRA30710Dao.selectFAQList */
+        SELECT HBI.HJSHR_BOARD_ITEM_SEQ                AS HJSHR_BOARD_ITEM_SEQ
+             , CLV.MEANING                             AS ITEM_GROUP_NAME      /*분류명*/
+             , HBI.TITLE                               AS TITLE                /*제목*/
+             , TO_CHAR(HBI.CREATION_DATE,'YYYY-MM-DD') AS CREATION_DATE        /*날짜*/
+             , HBI.VIEW_COUNT                          AS VIEW_COUNT           /*조회*/
+             , ATTACH_FILE                             AS ATTACH_FILE          /*첨부파일*/
+             , CAFM.ATCH_SRC_KEY                       AS ATCH_SRC_KEY         /*첨부 소스 key내용*/
+             , CAFM.ATCH_TY_CD                         AS ATCH_TY_CD           /*첨부유형코드*/
+          FROM HJSHR_BOARD_ITEMS     HBI
+             , PER_ALL_PEOPLE_F      PPF
+             , CMD_LOOKUP_VALUES     CLV
+             , CMD_ATCH_FILES_MPNGS  CAFM
+         WHERE 1=1 
+           AND HBI.BOARD_ID    = '1'    /*FAQ*/
+           AND HBI.USER_ID     = PPF.PERSON_ID
+           AND TRUNC(HBI.CREATION_DATE) BETWEEN PPF.EFFECTIVE_START_DATE AND PPF.EFFECTIVE_END_DATE
+           AND CLV.LOOKUP_TYPE = 'SM_BOARD_ITEM_GROUP'
+           AND CLV.LOOKUP_CODE = HBI.ITEM_GROUP_ID
+           AND HBI.ATTACH_FILE = CAFM.ATCH_FILE_ID(+)
+        <if test="ITEM_GROUP_ID != null and ITEM_GROUP_ID !='' ">
+           AND HRI.ITEM_GROUP_ID = #{ITEM_GROUP_ID}
+        </if>
+        <if test="TITLE != null and TITLE !='' ">
+           AND HBI.TITLE LIKE '%'||#{TITLE}||'%'
+        </if>
+        ORDER BY HJSHR_BOARD_ITEM_SEQ DESC
+    </select>
+
+    <!-- FAQ 상세내역 조회 -->
+    <select id="selectFAQInfo" parameterType="map" resultType="hashmap">
+        /* smh.hra.dao.HRA30710Dao.selectFAQInfo */ 
+        SELECT HBI.HJSHR_BOARD_ITEM_SEQ
+             , HBI.TITLE                             AS TITLE    /*제목*/
+             , TO_CHAR(SUBSTR(HBI.CONTENT, 1, 4000)) AS CONTENT  /*내용*/ 
+          FROM HJSHR_BOARD_ITEMS     HBI
+         WHERE 1=1 
+           AND HBI.HJSHR_BOARD_ITEM_SEQ = #{HJSHR_BOARD_ITEM_SEQ}
+    </select>
+
+    <!-- 조회횟수증가 -->
+    <update id="updateViewCount" parameterType="map">
+        /* smh.hra.dao.HRA30710Dao.updateViewCount */
+        UPDATE HJSHR_BOARD_ITEMS
+           SET VIEW_COUNT                    = NVL(VIEW_COUNT, 0) + 1 /*조회횟수*/
+             , LAST_READ_BY                  = #{PERSONID}            /*최종 읽은 유저 아이디 */
+<!--              , LAST_UPDATED_BY               = #{PERSONID}            /*최종수정자*/
+             , LAST_UPDATE_DATE              = SYSDATE                /*최종수정일*/
+             , LAST_UPDATE_LOGIN             = #{PERSONID}            /*로그인유저*/
+             , OBJECT_VERSION_NUMBER         = OBJECT_VERSION_NUMBER + 1  /**/ -->
+         WHERE HJSHR_BOARD_ITEM_SEQ          = #{HJSHR_BOARD_ITEM_SEQ}    /*PK 일련번호*/
+    </update>
+    
+</mapper>

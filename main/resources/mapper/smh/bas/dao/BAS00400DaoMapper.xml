@@ -1,0 +1,515 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS00400Dao">
+	<sql id="insertDictionary">
+	BAS_COMMON_PKG.GENERATE_DICTIONARY
+	</sql>
+	
+    <select id="selectResourceList" parameterType="map" resultType="hashmap">
+    <![CDATA[
+    	/* smh.bas.dao.BAS00400Dao.selectResourceList */
+        SELECT R.RESOURCEID
+			            ,R.ENTERPRISEID
+			            ,R.PLANTID
+			            ,R.AREAID
+			            ,CASE
+			                 WHEN DA.DICTIONARYNAME IS NULL THEN
+			                  R.AREAID
+			                 ELSE
+			                  DA.DICTIONARYNAME
+			             END AS AREANAME
+			            ,R.RESOURCECLASSID
+			            ,CASE
+			                 WHEN DT.DICTIONARYNAME IS NULL THEN
+			                  R.RESOURCETYPE
+			                 ELSE
+			                  DT.DICTIONARYNAME
+			             END AS RESOURCETYPE_NM
+			            ,R.EQUIPMENTCLASSID
+			            ,CASE
+			                 WHEN DR.DICTIONARYNAME IS NULL THEN
+			                  R.EQUIPMENTCLASSID
+			                 ELSE
+			                  DR.DICTIONARYNAME
+			             END AS EQUIPMENTCLASSNAME
+			            ,R.DESCRIPTION
+			            ,COALESCE(U1.USER_NM, R.CREATOR) AS CREATOR
+			            , TO_CHAR(R.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+			            ,COALESCE(U2.USER_NM, R.MODIFIER) AS MODIFIER
+			            , TO_CHAR(R.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+			            ,CASE
+			                 WHEN DV.DICTIONARYNAME IS NULL THEN
+			                  R.VALIDSTATE
+			                 ELSE
+			                  DV.DICTIONARYNAME
+			             END AS VALIDSTATE_NM
+			            ,R.STEPCLASS
+			            ,(SELECT			              
+			               LISTAGG(B.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY A.DISPLAYSEQUENCE)
+			              FROM   CMD_LOOKUP_VALUES A
+			              LEFT   JOIN CMD_DICTIONARY B
+			              ON     A.DICTIONARYID = B.DICTIONARYID
+			              AND    B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			              WHERE  A.LOOKUP_TYPE = R.STEPCLASS
+			              AND A.ENABLED_FLAG ='Y'
+			              ) STEPTYPE
+						 ,(SELECT Q.DESCRIPTION
+						        FROM   (SELECT LISTAGG(A.LOOKUP_CODE, ',') WITHIN GROUP(ORDER BY A.DISPLAYSEQUENCE) AS DESCRIPTION
+						                      ,A.LOOKUP_TYPE
+						                FROM   CMD_LOOKUP_VALUES A
+						                LEFT   JOIN CMD_DICTIONARY B
+						                ON     A.DICTIONARYID = B.DICTIONARYID
+						                AND    B.LANGUAGETYPE = 'ko-KR'
+						                WHERE  A.LOOKUP_TYPE IN
+						                       (SELECT Q.LOOKUP_CODE
+						                        FROM   CMD_LOOKUP_VALUES Q
+						                        WHERE  Q.LOOKUP_TYPE = 'StepType'
+						                        AND Q.ENABLED_FLAG ='Y')
+										AND A.ENABLED_FLAG ='Y'
+						                GROUP  BY A.LOOKUP_TYPE) Q
+						        WHERE  R.STEPCLASS = Q.LOOKUP_TYPE) AS STEPTYPEKEY
+			            ,R.ISOSPINSPCONTROL
+          				, NULL AS CHK
+          				,R.VALIDSTATE
+          				,R.RESOURCETYPE
+			        FROM  BAS_RESOURCE         R
+			        LEFT OUTER JOIN BAS_AREA        A  ON  A.AREAID = R.AREAID
+			        LEFT OUTER JOIN BAS_EQUIPMENTCLASS   EQ  ON  EQ.EQUIPMENTCLASSID = R.EQUIPMENTCLASSID
+			        LEFT OUTER JOIN CMD_DICTIONARY     DR  ON  DR.DICTIONARYID = EQ.EQUIPMENTCLASSNAME
+			                            AND  DR.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			        LEFT OUTER JOIN CMD_DICTIONARY     DA  ON  DA.DICTIONARYID = A.AREANAME
+			                            AND  DA.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+			        LEFT OUTER JOIN CMD_LOOKUP_VALUES             RTC ON RTC.LOOKUP_CODE = R.RESOURCETYPE
+			                                               AND RTC.LOOKUP_TYPE = 'EquipmentType'
+			        LEFT OUTER JOIN CMD_DICTIONARY     DT  ON  DT.DICTIONARYID = RTC.DICTIONARYID
+			                            AND  DT.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  
+			        LEFT OUTER JOIN CMD_LOOKUP_VALUES             VSC ON VSC.LOOKUP_CODE = R.VALIDSTATE
+			                                               AND VSC.LOOKUP_TYPE = 'ValidState'
+			        LEFT OUTER JOIN CMD_DICTIONARY     DV  ON  DV.DICTIONARYID = VSC.DICTIONARYID
+			                            AND  DV.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}          
+			        LEFT OUTER JOIN CMD_USERS       U1  ON  R.CREATOR = U1.USER_ID
+			        LEFT OUTER JOIN CMD_USERS       U2  ON  R.MODIFIER = U2.USER_ID
+        WHERE 	1 = 1        
+ 		]]>
+	    <choose>
+          	<when test="RESOURCEID != null and RESOURCEID !='' "> 
+          		AND R.RESOURCEID = #{RESOURCEID}	      
+          	</when>
+          	<otherwise>
+          		<if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+			        AND R.VALIDSTATE = #{VALIDSTATE}
+			    </if>
+          	</otherwise>
+		</choose>
+		
+	    <if test="PLANTID != null and PLANTID !='' "> 
+	        AND R.PLANTID = #{PLANTID}
+	    </if>
+	    <if test="AREAID != null and AREAID !='' "> 
+	        AND R.AREAID = #{AREAID}
+	    </if>        
+		<choose>
+	          <when test="SEARCHTYPE eq 'ALLVIEWS'.toString()">
+	          	AND (UPPER(R.DESCRIPTION)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+	          	  OR  UPPER(R.RESOURCEID)  LIKE UPPER('%' || #{SEARCHVALUE} || '%') )
+	          </when>
+	          <otherwise>
+	          	    <choose>
+			          	<when test="SEARCHTYPE eq 'RESOURCENAME'.toString()">	          		
+			          		AND	UPPER(R.DESCRIPTION) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+			          	</when>
+			          	<when test="SEARCHTYPE != null and SEARCHTYPE !='' ">
+			          		AND	UPPER(R.RESOURCEID) LIKE UPPER('%' || #{SEARCHVALUE} || '%')  
+			          	</when>			          	
+			         </choose>
+	          </otherwise>
+          </choose>
+    </select>    
+
+    <select id="selectAreaList" parameterType="map" resultType="hashmap">
+	    <![CDATA[
+	    	/* smh.bas.dao.BAS00400Dao.selectAreaList */
+   	          SELECT  AR.AREAID
+          ,  D1.DICTIONARYNAME    AS AREANAME_KR
+          ,  D2.DICTIONARYNAME    AS AREANAME_US
+          ,  D3.DICTIONARYNAME    AS AREANAME_CN
+          ,  D4.DICTIONARYNAME    AS AREANAME_VN
+          ,  AR.DESCRIPTION
+          ,  AR.AREATYPE
+          ,  AR.VENDORID
+          ,  AR.WAREHOUSEID
+          ,  AR.OWNTYPE
+          ,  AR.FACTORYID
+          ,  AR.PARENTAREAID
+          ,  AR.ENTERPRISEID  
+          ,  W.WAREHOUSENAME
+          ,  U4.VENDORNAME        
+          ,  AR.PLANTID
+          ,  U1.USER_NM        AS CREATOR
+          , TO_CHAR(AR.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+          ,  U2.USER_NM        AS MODIFIER          
+          , TO_CHAR(AR.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+          ,  AR.VALIDSTATE
+          ,  AR.ISSUBCONTRACT
+          ,  AR.AREANAME
+          , NULL AS CHK
+        FROM  BAS_AREA         AR
+        LEFT OUTER JOIN CMD_DICTIONARY  D1  ON AR.AREANAME = D1.DICTIONARYID
+                          AND D1.LANGUAGETYPE = 'ko-KR'
+                          
+        LEFT OUTER JOIN CMD_DICTIONARY  D2  ON AR.AREANAME = D2.DICTIONARYID
+                          AND D2.LANGUAGETYPE = 'en-US'
+                          
+        LEFT OUTER JOIN CMD_DICTIONARY  D3  ON  AR.AREANAME = D3.DICTIONARYID
+                          AND D3.LANGUAGETYPE = 'zh-CN'
+                          
+        LEFT OUTER JOIN CMD_DICTIONARY  D4  ON  AR.AREANAME = D4.DICTIONARYID
+                          AND D4.LANGUAGETYPE = 'vi-VN'
+                          
+        LEFT OUTER JOIN CMD_USERS      U1  ON  AR.CREATOR       = U1.USER_ID
+        LEFT OUTER JOIN CMD_USERS      U2  ON  AR.MODIFIER      = U2.USER_ID
+          LEFT OUTER JOIN BAS_WAREHOUSE   W    ON  W.WAREHOUSEID    = AR.WAREHOUSEID
+                            AND W.ENTERPRISEID   = AR.ENTERPRISEID   
+                                              AND W.PLANTID        = AR.PLANTID
+          LEFT OUTER JOIN BAS_VENDOR     U4  ON  U4.VENDORID      = AR.VENDORID
+                              AND U4.ENTERPRISEID   = AR.ENTERPRISEID
+                              AND U4.PLANTID        = AR.PLANTID
+        LEFT OUTER JOIN CMD_DICTIONARY  DIS  ON  AR.AREANAME      = DIS.DICTIONARYID
+                          AND DIS.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}          
+        LEFT OUTER JOIN CMD_LOOKUP_VALUES             RTC ON RTC.LOOKUP_CODE = AR.AREATYPE
+                                               AND RTC.LOOKUP_TYPE = 'AreaType'
+        LEFT OUTER JOIN CMD_DICTIONARY     DT  ON  DT.DICTIONARYID = RTC.DICTIONARYID
+                          AND DT.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}          
+        WHERE  1 = 1
+	 		]]>
+		<if test="PLANTID != null and PLANTID !='' "> 
+	        AND AR.PLANTID = #{PLANTID}
+	    </if>
+	    <choose>
+          	<when test="AREAID != null and AREAID !='' "> 
+          		AND AR.AREAID = #{AREAID}	      
+          	</when>
+          	<otherwise>
+          		<if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+			        AND AR.VALIDSTATE = #{VALIDSTATE}
+			    </if>
+          	</otherwise>
+		</choose>			
+	    <if test="PARENTAREAID != null and PARENTAREAID !='' ">
+	     	<choose>
+			          	<when test="PARENTAREAID eq '*'.toString()">
+			          		AND AR.PARENTAREAID IS NULL	      
+			          	</when>
+			          	<otherwise>
+			          		AND AR.PARENTAREAID = #{PARENTAREAID}
+			          	</otherwise>
+			</choose> 
+	    </if>
+ 		<if test="SEARCHKEY != null and SEARCHKEY !='' ">
+	          		 AND (UPPER(D1.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHKEY} || '%')
+								OR	 UPPER(D2.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHKEY} || '%')
+								OR UPPER(D3.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHKEY} || '%')
+								OR	 UPPER(D4.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHKEY} || '%')
+								OR	 UPPER(AR.DESCRIPTION)  LIKE UPPER('%' || #{SEARCHKEY} || '%') 	)
+	    </if>
+	    <!-- <if test="AREATYPE != null and AREATYPE !='' "> 
+	        AND AR.AREATYPE = #{AREATYPE}
+	    </if>
+	     -->
+	    <choose>
+	          <when test="SEARCHTYPE eq 'ALLVIEWS'.toString()">
+	          		 AND (UPPER(AR.AREAID) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR UPPER(D1.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR	 UPPER(D2.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR UPPER(D3.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR	 UPPER(D4.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+								OR	 UPPER(AR.DESCRIPTION)  LIKE UPPER('%' || #{SEARCHVALUE} || '%') 	)
+	          </when>
+	          <otherwise>
+	          	    <choose>
+			          	<when test="SEARCHTYPE eq 'AREANAME'.toString()">	          		
+			          		AND	UPPER(DIS.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+			          	</when>
+			          	<otherwise>
+			          		<if test="SEARCHTYPE != null and SEARCHTYPE !='' "> 
+			          			AND	UPPER(AR.${SEARCHTYPE}) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+			          		</if> 
+			          	</otherwise>
+			         </choose>
+	          </otherwise>
+          </choose>
+	    ORDER BY AR.AREAID ASC
+    </select>    
+    
+    <!-- 작업장 트리 조회 -->
+   <select id="selectAreaTreeList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS00400Dao.selectAreaTreeList */
+	    	
+	SELECT AREAID
+	      ,AREANM
+	      ,LEVEL AS AREALVL
+	      ,AREATYPE
+	      ,PARENTAREAID
+	FROM   (SELECT '*' AS AREAID
+			              ,'Root' AS AREANM
+			              ,NULL AS PARENTAREAID
+			              ,NULL AS AREATYPE
+			        FROM   DUAL
+			        UNION ALL
+			        
+			        SELECT BA.AREAID
+			              ,D1.DICTIONARYNAME AS AREANM
+			              ,NVL(BA.PARENTAREAID, '*') AS PARENTAREAID
+			              ,BA.AREATYPE
+			        FROM   BAS_AREA BA
+					LEFT   OUTER JOIN CMD_DICTIONARY D1 ON     BA.AREANAME = D1.DICTIONARYID
+					                                    AND    D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}          
+					LEFT   OUTER JOIN CMD_DICTIONARY D2 ON     BA.AREATYPE = D1.DICTIONARYID
+					                                    AND    D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}    
+					WHERE  BA.ENTERPRISEID = #{SESSION_ENTERPRISEID}          
+					AND    BA.PLANTID = #{SESSION_SITETYPE}
+		    <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+		        <!-- AND BA.VALIDSTATE = #{VALIDSTATE} -->
+		    </if>
+		    <if test="SEARCHKEY != null and SEARCHKEY !='' "> 
+		        AND UPPER(D1.DICTIONARYNAME) LIKE  '%' ||  UPPER(#{SEARCHKEY}) || '%'
+		    </if>
+	        AND    BA.AREATYPE IN ('Factory', 'Floor')	        
+	        ) TR
+			START  WITH PARENTAREAID IS NULL
+			CONNECT BY NOCYCLE PRIOR TR.AREAID = TR.PARENTAREAID			
+    </select>    
+    
+    
+  <insert id="insertArea" parameterType="map">
+  DECLARE
+  BEGIN
+    INSERT /* smh.bas.dao.BAS00400Dao.insertArea */	INTO BAS_AREA
+        (AREAID
+		,ENTERPRISEID
+		,PLANTID
+		,FACTORYID
+		,AREANAME
+		,AREATYPE
+		,WAREHOUSEID
+		,VENDORID
+		,OWNTYPE
+		,PARENTAREAID
+		,DESCRIPTION
+		,CREATOR
+		,CREATEDTIME
+		,MODIFIER
+		,MODIFIEDTIME
+		,LASTTXNHISTKEY
+		,LASTTXNID
+		,LASTTXNUSER
+		,LASTTXNTIME
+		,LASTTXNCOMMENT
+		,VALIDSTATE
+		,ISSUBCONTRACT)
+		VALUES
+		(
+		 BAS_AREA_SEQ.NEXTVAL
+		,#{ENTERPRISEID}
+		,#{PLANTID}
+		,NVL(#{FACTORYID}, BAS_AREA_SEQ.CURRVAL)
+		,#{AREANAME}
+		,#{AREATYPE}
+		,#{WAREHOUSEID}
+		,#{VENDORID}
+		,#{OWNTYPE}
+		,DECODE(#{PARENTAREAID}, '*', NULL,#{PARENTAREAID})
+		,#{DESCRIPTION}
+		,#{CREATOR}
+		,SYSDATE
+		,#{MODIFIER}
+		,SYSDATE
+		,#{LASTTXNHISTKEY}
+		,#{LASTTXNID}
+		,#{CREATOR}
+		,SYSDATE
+		,#{LASTTXNCOMMENT}
+		,#{VALIDSTATE}
+		,#{ISSUBCONTRACT}
+		);
+		    	
+		<!-- 다국어 테이블 저장용 -->							
+				IF #{AREANAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('SF_AREA','ko-KR',#{AREANAME}, #{CREATOR}, #{AREANAME_KR}); END IF;
+				IF #{AREANAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('SF_AREA','en-US',#{AREANAME}, #{CREATOR}, #{AREANAME_US}); END IF;
+				IF #{AREANAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('SF_AREA','zh-CN',#{AREANAME}, #{CREATOR}, #{AREANAME_CN}); END IF;
+				IF #{AREANAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('SF_AREA','vi-VN',#{AREANAME}, #{CREATOR}, #{AREANAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		END;
+    </insert>
+       
+ <update id="updateArea" parameterType="map">
+  DECLARE
+  BEGIN
+     /* smh.bas.dao.BAS00400Dao.updateArea */	
+     UPDATE  BAS_AREA SET  
+		        AREANAME 			=#{AREANAME}
+				,AREATYPE			=#{AREATYPE}
+				,WAREHOUSEID		=#{WAREHOUSEID}
+				,VENDORID			=#{VENDORID}
+				,OWNTYPE			=#{OWNTYPE}
+				,VALIDSTATE			=#{VALIDSTATE}
+				,ISSUBCONTRACT	=#{ISSUBCONTRACT}	
+				,MODIFIER			=#{MODIFIER}
+				,MODIFIEDTIME		=SYSDATE
+				,LASTTXNHISTKEY	=#{LASTTXNHISTKEY}
+				,LASTTXNID			=#{LASTTXNID}
+				,LASTTXNUSER		=#{MODIFIER}
+				,LASTTXNTIME		=SYSDATE
+	WHERE 	AREAID = #{AREAID};
+		    	
+		<!-- 다국어 테이블 저장용 -->							
+				IF #{AREANAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('SF_AREA','ko-KR',#{AREANAME}, #{CREATOR}, #{AREANAME_KR}); END IF;
+				IF #{AREANAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('SF_AREA','en-US',#{AREANAME}, #{CREATOR}, #{AREANAME_US}); END IF;
+				IF #{AREANAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('SF_AREA','zh-CN',#{AREANAME}, #{CREATOR}, #{AREANAME_CN}); END IF;
+				IF #{AREANAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('SF_AREA','vi-VN',#{AREANAME}, #{CREATOR}, #{AREANAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		END;
+    </update>
+    
+    <delete id="deleteArea" parameterType="map" >
+     /* smh.bas.dao.BAS00400Dao.deleteArea */  
+    DECLARE 
+    BEGIN
+    	DELETE  FROM BAS_AREA	WHERE AREAID = #{AREAID};
+    	
+    	DELETE FROM CMD_DICTIONARY WHERE DICTIONARYID = #{AREANAME};
+    END;
+    </delete>
+    
+	<insert id="insertResource" parameterType="map">
+    INSERT /* smh.bas.dao.BAS00400Dao.insertResource */	INTO BAS_RESOURCE
+			        (RESOURCEID
+					,ENTERPRISEID
+					,PLANTID
+					,RESOURCECLASSID
+					,RESOURCETYPE
+					,AREAID
+					,EQUIPMENTCLASSID
+					,STEPCLASS
+					,STEPTYPE
+					,ISOSPINSPCONTROL
+					,DESCRIPTION
+					,CREATOR
+					,CREATEDTIME
+					,MODIFIER
+					,MODIFIEDTIME
+					,LASTTXNHISTKEY
+					,LASTTXNID
+					,LASTTXNUSER
+					,LASTTXNTIME
+					,LASTTXNCOMMENT
+					,VALIDSTATE
+					)
+					VALUES
+					(
+					#{RESOURCEID}
+					,#{ENTERPRISEID}
+					,#{PLANTID}
+					,#{RESOURCECLASSID}
+					,#{RESOURCETYPE}
+					,#{AREAID}
+					,#{EQUIPMENTCLASSID}
+					,#{STEPCLASS}
+					,#{STEPTYPEKEY}
+					,#{ISOSPINSPCONTROL}
+					,#{DESCRIPTION}
+					,#{CREATOR}
+					,SYSDATE
+					,#{MODIFIER}
+					,SYSDATE
+					,#{LASTTXNHISTKEY}
+					,#{LASTTXNID}
+					,#{CREATOR}
+					,SYSDATE
+					,#{LASTTXNCOMMENT}
+					,#{VALIDSTATE}
+		)
+    </insert>
+    
+     <update id="updateResource" parameterType="map">
+     /* smh.bas.dao.BAS00400Dao.updateResource */	
+     	UPDATE  BAS_RESOURCE SET  
+			        ISOSPINSPCONTROL 			=#{ISOSPINSPCONTROL}
+					,STEPCLASS			=#{STEPCLASS}
+					,STEPTYPE		=#{STEPTYPEKEY}
+					,VALIDSTATE			=#{VALIDSTATE}
+					,MODIFIER			=#{MODIFIER}
+					,MODIFIEDTIME		=SYSDATE
+					,LASTTXNHISTKEY	=#{LASTTXNHISTKEY}
+					,LASTTXNID			=#{LASTTXNID}
+					,LASTTXNUSER		=#{MODIFIER}
+					,LASTTXNTIME		=SYSDATE
+	    WHERE 	RESOURCEID = #{RESOURCEID}
+    	   AND 	ENTERPRISEID = #{SESSION_ENTERPRISEID}    	
+    </update>
+    
+    <delete id="deleteResource" parameterType="map" >
+     /* smh.bas.dao.BAS00400Dao.deleteResource */
+    	DELETE  
+    	 FROM 	BAS_RESOURCE	
+    	WHERE 	RESOURCEID = #{RESOURCEID}
+    	   AND 	ENTERPRISEID = #{SESSION_ENTERPRISEID}    	
+    </delete>
+    
+    <!-- 마스터품목(사양) 신규채번 -->
+	<select id="selectNewItemID"  statementType="CALLABLE" parameterType="map">
+		/* smh.bas.dao.BAS00400Dao.selectNewItemID */
+		{#{O_NEWID,mode=OUT,jdbcType=VARCHAR ,javaType=string} = call BAS_COMMON_PKG.FN_GET_ID(
+										   #{CLASSID}
+										  ,#{PREFIX}
+				 						  ,#{CREATOR}
+										)
+	     }
+    </select>
+    
+     <!-- 1. lot  등록여부 체크 -->
+   <select id="selectAreaUpdateChk" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS00400Dao.selectAreaUpdateChk */
+			SELECT AREAID
+			FROM   PCM_LOTWORKRESULT
+			WHERE  ENTERPRISEID = #{SESSION_ENTERPRISEID}
+			AND    AREAID = #{AREAID}
+			AND    ROWNUM = 1
+
+    </select>
+     <!-- 2. 자원 등록여부 체크 -->
+   <select id="selectRoutingAreaUpdateChk" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS00400Dao.selectRoutingAreaUpdateChk */
+			SELECT AREAID
+			FROM   BAS_RESOURCE RES
+			INNER  JOIN BAS_BILLOFRESOURCE BSE
+			ON     RES.ENTERPRISEID = BSE.ENTERPRISEID
+			AND    RES.RESOURCEID = BSE.RESOURCEID
+			WHERE  RES.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+			AND    RES.AREAID = #{AREAID} 
+			AND    ROWNUM = 1
+    </select>    
+     <!-- 3. 설비 등록여부 체크 -->
+   <select id="selectEquipmentChk" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS00400Dao.selectEquipmentChk */
+			SELECT AREAID
+			FROM   BAS_EQUIPMENT RES			
+			WHERE  RES.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+			AND    RES.AREAID = #{AREAID} 
+			AND    ROWNUM = 1
+    </select>
+
+<!-- Routing 미사용처리 가능여부 조회 (현재공 있는지 체크)-->
+    <select id="selectCheckLot" parameterType="map" resultType="hashmap">
+    	/* smh.bas.dao.BAS00400Dao.selectCheckLot */
+				SELECT PL.LOTID
+				FROM   PCM_LOT PL
+		 		 WHERE  1=1
+		 		    AND	PL.AREAID = #{AREAID}				    	
+					AND	PL.LOTSTATE IN ('InTransit', 'InProduction')
+					AND	PL.LOTCREATEDTYPE NOT IN ('Defect')
+					AND	PL.ISDEFECTED = 'N'
+	</select>    
+</mapper>

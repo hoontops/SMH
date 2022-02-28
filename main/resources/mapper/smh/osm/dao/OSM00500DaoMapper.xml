@@ -1,0 +1,693 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : Claim 마감 현황
+    설명          : Claim 마감 현황
+    작성자       : 진성하
+    최초작성일 : 2021.04.10
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.04.10      진성하     최초  생성
+-->
+
+<mapper namespace="smh.osm.dao.OSM00500Dao">
+    <select id="GetOutsourcedClaimPeriod" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00500Dao.GetOutsourcedClaimPeriod"  */
+	SELECT
+			CPR.PERIODID
+		,	CPR.PERIODNAME
+		,	CPR.PERIODTYPE
+		,	CPR.ENTERPRISEID
+		,	CPR.PLANTID
+		,	CPR.FACTORYID
+		,	CPR.STARTDATE
+		,	CPR.ENDDATE
+		,	CPR.STARTTIME
+		,	CPR.ENDTIME
+		,	CPR.DESCRIPTION
+		,	CPR.PERIODSTATE
+		,	TO_CHAR(CPR.STARTDATE,'YYYY-MM-DD') ||' ~ ' ||TO_CHAR(CPR.ENDDATE,'YYYY-MM-DD') || ' '|| CPR.PERIODSTATE  AS  PERIODDESCRIPTION
+		,	SPL.WORKTIME
+		,	CPR.PERIODSTATE
+	FROM	BAS_PERIOD	                   CPR                              --재고 실사기간등록
+	INNER  JOIN BAS_PLANT                   SPL  ON  SPL.PLANTID = CPR.PLANTID
+	WHERE	CPR.VALIDSTATE     =  'Valid'
+	AND		CPR.PERIODTYPE     = #{PERIODTYPE} 
+	AND		CPR.PLANTID        = #{PLANTID}
+	AND		CPR.PERIODNAME     = #{PERIODNAME}
+    </select>   
+
+    <!-- 외주Claim 상세조회-->
+    <select id="GetOutsourcedClaimClosureStatus" parameterType="map" resultType="hashmap">
+        /* "smh.osm.dao.OSM00500Dao.GetOutsourcedClaimClosureStatus"  */
+		SELECT 
+				CSM.ENTERPRISEID
+			,	CSM.PLANTID
+			,	CSM.PERIODID
+			,	CSM.AREAID
+			,	CSM.AREANAME               AS AREANAME
+			,	CSM.VENDORID               AS VENDORID 
+			,	CSM.OSPVENDORNAME          AS OSPVENDORNAME
+			,	SUM(CSM.CLAIMAMOUNT)       AS PRODEFECTAMOUNT
+			,	SUM(CSM.SELAMOUNT)         AS SELAMOUNT
+			,	SUM(CSM.MATERLOSTAMOUNT)   AS MATERLOSTAMOUNT
+			,	SUM(CSM.ETCAMOUNT)         AS ETCAMOUNT
+			,	SUM(CSM.CLAIMAMOUNT)         +  SUM(CSM.SELAMOUNT) 
+				+ SUM(CSM.MATERLOSTAMOUNT)	 +  SUM(CSM.ETCAMOUNT) AS  TOTAMOUNT
+				
+			-- (21.06.23)    
+            , CSM.OCCUR_YM--(21.08.02) 주석 처리 불필요 해보임	 (21.08.03) 다시 주석 제거
+		FROM 
+		(
+			SELECT 
+					OCL.ENTERPRISEID
+				,	OCL.PLANTID
+				,	OCL.PERIODID
+				,	OCL.REASONAREAID     AS AREAID
+				,	DAC.DICTIONARYNAME   AS AREANAME            -- 
+				,	SAR.VENDORID         AS VENDORID 
+				,	MVD.VENDORNAME       AS OSPVENDORNAME
+				,	SUM(OCL.CLAIMAMOUNT) AS CLAIMAMOUNT
+				,	0  AS SELAMOUNT
+				,	0  AS MATERLOSTAMOUNT
+				,	0  AS ETCAMOUNT
+				,	0  AS TOTAMOUNT
+				
+				-- (21.06.23) 추가 [발생년월]
+                , TO_CHAR(OCL.OCCURTIME,'YYYY-MM') AS OCCUR_YM--(21.08.02) 주석 처리 불필요 해보임 (21.08.03) 다시 주석 제거
+				
+			FROM            OSM_OSPCLAIM                 OCL
+			INNER      JOIN FN_AREA(#{SESSION_USER_ID})       SAR     ON  SAR.AREAID             = OCL.REASONAREAID  
+			LEFT OUTER JOIN BAS_VENDOR	                MVD     ON  MVD.VENDORID           = SAR.VENDORID
+			                                                    AND MVD.PLANTID            = SAR.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY	            DAC     ON  DAC.DICTIONARYID       = SAR.AREANAME
+		                                                        AND DAC.LANGUAGETYPE       =#{SESSION_LANGUAGETYPE}  
+		                                                                                                          
+			WHERE	OCL.PERIODID    = #{PERIODID}
+			AND		OCL.PLANTID     = #{PLANTID}
+		<if test="AREAID != null and AREAID !=''"> 
+			AND 	 OCL.REASONAREAID  = #{AREAID}
+		</if>
+		<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+			AND 	 SAR.VENDORID   = #{OSPVENDORID}
+		</if>
+		<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+			AND 	 MVD.VENDORNAME    LIKE '%'||#{OSPVENDORNAME}||'%'
+		</if>
+			AND		OCL.VALIDSTATE  = 'Valid'
+			GROUP BY    OCL.ENTERPRISEID
+				, OCL.PLANTID
+				, OCL.PERIODID 
+				, OCL.REASONAREAID,	DAC.DICTIONARYNAME
+				, SAR.VENDORID ,MVD.VENDORNAME
+				
+				-- (21.06.23) 추가 [발생년월]
+                , TO_CHAR(OCL.OCCURTIME,'YYYY-MM')--(21.08.02) 주석 처리 불필요 해보임 (21.08.03) 다시 주석 제거
+				
+			UNION ALL 
+			SELECT 
+					OEA.ENTERPRISEID
+				,	OEA.PLANTID
+				,	OEA.PERIODID
+				,	OEA.AREAID
+				,	DAC.DICTIONARYNAME   AS AREANAME            -- 
+				,	OEA.VENDORID 
+				,	MVD.VENDORNAME      AS OSPVENDORNAME
+				,	0                                 AS CLAIMAMOUNT
+				,	SUM(CASE WHEN OEA.CLAIMTYPE  ='Selection' THEN AMOUNT 
+					         ELSE 0 END)              AS SELAMOUNT
+				,	SUM(CASE WHEN OEA.CLAIMTYPE  ='MaterialLoss' THEN AMOUNT 
+					         ELSE 0 END)              AS MATERLOSTAMOUNT
+				,	SUM(CASE WHEN OEA.CLAIMTYPE  ='Etc' THEN AMOUNT 
+					         ELSE 0 END)              AS ETCAMOUNT
+				,	0                               AS TOTAMOUNT
+				
+				, TO_CHAR(OEA.CLAIMDATE,'YYYY-MM') 	AS OCCUR_YM --(21.08.02) 주석 처리 불필요 해보임 (21.08.03) 다시 주석 제거
+				
+			FROM            OSM_OSPETCCLAIMAMOUNT        OEA 	
+			INNER      JOIN FN_AREA(#{SESSION_USER_ID})       SAR    ON  SAR.AREAID             = OEA.AREAID  
+			LEFT OUTER JOIN BAS_VENDOR	                MVD    ON  MVD.VENDORID           = OEA.VENDORID
+			                                                   AND MVD.PLANTID            = OEA.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY	            DAC    ON  DAC.DICTIONARYID       = SAR.AREANAME
+		                                                       AND DAC.LANGUAGETYPE       =#{SESSION_LANGUAGETYPE}                                                          
+			WHERE	OEA.PERIODID    = #{PERIODID}
+			AND		OEA.PLANTID     = #{PLANTID}
+			
+			AND		OEA.VALIDSTATE  ='Valid'
+		<if test="AREAID != null and AREAID !=''"> 
+			AND 	 OEA.AREAID  = #{AREAID}
+		</if>
+		<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+			AND 	 OEA.VENDORID   = #{OSPVENDORID}
+		</if>
+		<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+			AND 	 MVD.VENDORNAME    LIKE '%'||#{OSPVENDORNAME}||'%'
+		</if>
+			GROUP BY	OEA.ENTERPRISEID
+					,	OEA.PLANTID
+					,	OEA.PERIODID
+					,	OEA.AREAID
+					,	DAC.DICTIONARYNAME
+					,	OEA.VENDORID 
+					,	MVD.VENDORNAME
+					-- (21.06.23) 추가 발생년월 - 확정시 사용
+					, TO_CHAR(OEA.CLAIMDATE,'YYYY-MM') --(21.08.02) 주석 처리 불필요 해보임 (21.08.03) 다시 주석 제거
+		)  CSM
+		GROUP BY	CSM.ENTERPRISEID
+				,	CSM.PLANTID
+				,	CSM.PERIODID
+				,	CSM.AREAID
+				,	CSM.AREANAME  
+				,	CSM.VENDORID 
+				,	CSM.OSPVENDORNAME
+				-- [발생 년월 확정시 사용]
+				 , CSM.OCCUR_YM  --(21.08.02) 주석 처리 불필요 해보임 (21.08.03) 다시 주석 제거
+    </select>
+
+    <!-- 외주Claim 상세조회-->
+    <select id="GetOutsourcedClaimClosureStatusDetail" parameterType="map" resultType="hashmap">
+        /* "smh.osm.dao.OSM00500Dao.GetOutsourcedClaimClosureStatusDetail"  */
+		SELECT 
+				CASE WHEN OCL.LOTID  IS NULL THEN 'N' 
+				     ELSE 'Y' END                   AS CLAIMYN                  -- 마감포함
+			,	'LOTCLAIMDEFECT'                    AS WORKGUBUN
+			,	'DefectScrap'                       AS CLAIMTYPE                -- Claim유형
+			,	QDR.TXNHISTKEY                      AS LOTHISTKEY
+			,	QDR.DEFINETIME                                                  -- 확정일
+			,	SLD.CREATEDTIME                     AS OCCURTIME                 --발생일
+			,	0                                   AS CLAIMSEQUENCE
+			,	DPS.DICTIONARYNAME                  AS PROCESSSEGMENTNAME        --대공정
+			,	DPC.DICTIONARYNAME                  AS PROCESSSEGMENTCLASSNAME   --공정명
+			,	DAR.DICTIONARYNAME                  AS REASONAREANAME             --작업장
+			,	MVD.VENDORNAME                      AS OSPVENDORNAME              --업체명
+			,	SLD.PRODUCTDEFID                                                  --품목코드
+			,	SLD.PRODUCTDEFVERSION 
+			,	SPD.PRODUCTDEFNAME                                                --품목명
+			,	QDR.LOTID                                                         -- LOT NO
+			,	SLD.DEFECTCODE                                                    --불량코드
+			,	DRC.DICTIONARYNAME                  AS  DEFECTNAME                --불량명
+			,	CASE WHEN OCL.LOTID  IS NULL THEN SLD.DEFECTQTY  
+			         ELSE OCL.DEFECTQTY    END      AS  DEFECTQTY                 --불량수
+			,	CASE WHEN OCL.LOTID  IS NULL THEN PQS.PCSAMOUNT   
+			         ELSE OCL.CLAIMPRICE   END      AS CLAIMPRICE                 --불량단가
+			,	CASE WHEN OCL.LOTID  IS NULL THEN SLD.DEFECTQTY * PQS.PCSAMOUNT
+			         ELSE OCL.DEFECTAMOUNT END      AS  DEFECTAMOUNT              --불량금액
+			,	OCL.REDUCEQTY                       AS  OSPREDUCEQTY              --감면수
+			,	OCL.REDUCEQTYAMOUNT                                               --수량감면액
+			,	OCL.REDUCERATE                      AS  OSPREDUCERATE             --감면율
+			,	OCL.REDUCERATEAMOUNT                                              --비율감면액
+			,	OCL.CLAIMAMOUNT                                                   --CLAIM금액
+			,	OCL.PROCESSSEGMENTID                                              --발견공정
+			,	DPP.DICTIONARYNAME                  AS  FINDPROCESSSEGMENTNAME    --발견공정
+			,	URC.USERNAME                        AS  CREATORNAME               --입력자
+			,	URC.USERNAME                        AS  DEFINEUSERNAME            --확정자
+			,	OCL.DESCRIPTION
+			,	SLD.ENTERPRISEID
+			,	SLD.PLANTID
+			,	SLD.PROCESSPATHID
+			,	SLD.PROCESSSEGMENTID
+			,	SLD.AREAID
+			,	SLD.REASONSEGMENTID
+			,	SLD.REASONAREAID
+			,	SLD.REASONCONSUMABLELOTID
+			,	''                  AS PERIODID
+		FROM         OSM_OSPCLAIM                    OCL
+		INNER JOIN   QAM_QCLOTDEFECTRESULT           QDR  ON  QDR.TXNHISTKEY              = OCL.LOTHISTKEY
+		                                                 AND QDR.LOTID                   = OCL.LOTID
+		INNER JOIN PCM_LOTDEFECT                     SLD  ON  SLD.TXNHISTKEY              = QDR.TXNHISTKEY
+		                                                 AND SLD.LOTID                   = QDR.LOTID
+		LEFT OUTER JOIN PCM_LOTWORKRESULT            SLH  ON  SLH.LOTID                   = SLD.LOTID  
+		                                                 AND SLH.TXNHISTKEY              = SLD.TXNHISTKEY 
+		LEFT OUTER JOIN PCM_LOT                      SLT  ON  SLT.LOTID                   = SLD.LOTID
+		                                                   
+		INNER JOIN BAS_PRODUCTDEFINITION             SPD  ON  SPD.PRODUCTDEFID            = SLD.PRODUCTDEFID
+		                                                 AND SPD.PRODUCTDEFVERSION       = SLD.PRODUCTDEFVERSION 
+		INNER JOIN FN_AREA(#{SESSION_USER_ID})            SAR  ON  SAR.AREAID                  = SLD.REASONAREAID  
+		LEFT OUTER JOIN CMD_DICTIONARY	            DAR	 ON	 DAR.DICTIONARYID            = SAR.AREANAME
+		                                                 AND DAR.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}    
+		LEFT OUTER JOIN BAS_VENDOR	                MVD  ON  MVD.VENDORID                = SAR.VENDORID
+		                                                 AND MVD.PLANTID                 = SAR.PLANTID
+		LEFT OUTER JOIN BAS_PROCESSSEGMENT           SPS  ON  SPS.PROCESSSEGMENTID        = SLD.REASONSEGMENTID 
+		                                                 AND SPS.PROCESSSEGMENTVERSION   = SLD.PROCESSSEGMENTVERSION
+		LEFT OUTER JOIN CMD_DICTIONARY	            DPS	 ON	 DPS.DICTIONARYID            = SPS.PROCESSSEGMENTNAME
+						                                 AND DPS.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}  
+		LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS      SPC  ON  SPC.PROCESSSEGMENTCLASSID   = SPS.PROCESSSEGMENTCLASSID 
+		LEFT OUTER JOIN CMD_DICTIONARY	            DPC	 ON	 DPC.DICTIONARYID            = SPC.PROCESSSEGMENTCLASSNAME
+						                                 AND DPC.LANGUAGETYPE            =  #{SESSION_LANGUAGETYPE}  
+		LEFT OUTER JOIN BAS_PROCESSSEGMENT           SPP  ON  SPP.PROCESSSEGMENTID        = SLD.PROCESSSEGMENTID 
+		                                                 AND SPP.PROCESSSEGMENTVERSION   = SLD.PROCESSSEGMENTVERSION
+		LEFT OUTER JOIN CMD_DICTIONARY	            DPP	 ON	 DPP.DICTIONARYID            = SPP.PROCESSSEGMENTNAME
+						                                 AND DPP.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}                                              
+		LEFT OUTER JOIN BAS_PROCESSSEGMENT           SPR  ON  SPR.PROCESSSEGMENTID        = SLD.PROCESSSEGMENTID 
+		                                                 AND SPR.PROCESSSEGMENTVERSION   = SLD.PROCESSSEGMENTVERSION				                             
+		LEFT OUTER JOIN BAS_PRODUCTQUOTATIONSEGMENT  PQS  ON  PQS.PRODUCTDEFID            = SLD.PRODUCTDEFID
+		                                                 AND PQS.PRODUCTDEFVERSION       = SLD.PRODUCTDEFVERSION
+		                                                 AND PQS.PROCESSDEFID            = SPD.PROCESSDEFID
+		                                                 AND PQS.PROCESSDEFVERSION       = SPD.PROCESSDEFVERSION
+		                                                 AND PQS.PROCESSSEGMENTID        = SLD.REASONSEGMENTID 
+		                                                 AND PQS.PROCESSSEGMENTVERSION   = SLD.PROCESSSEGMENTVERSION
+		                                                 AND PQS.VALIDSTATE              = 'Valid'   
+		LEFT OUTER JOIN BAS_DEFECTCODE               SDC  ON  SDC.DEFECTCODE              = SLD.DEFECTCODE
+		LEFT OUTER JOIN CMD_DICTIONARY	            DRC	 ON	 DRC.DICTIONARYID            = SDC.DICTIONARYID
+		                                                 AND DRC.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}  
+		LEFT OUTER JOIN CMD_USER_V                     URC  ON  URC.USERID                  = SLD.CREATOR 
+		LEFT OUTER JOIN CMD_USER_V                     URD  ON  URD.USERID                  = QDR.DEFINEUSER 
+		WHERE	1=1 
+		AND		OCL.PERIODID    = #{PERIODID}
+		AND		OCL.PLANTID     = #{PLANTID}
+		AND		OCL.VALIDSTATE  = 'Valid'
+		<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+			AND 	SLD.REASONSEGMENTID  = #{PROCESSSEGMENTID}
+		</if>
+		<if test="CLAIMTYPE != null and CLAIMTYPE !='' and !'DefectScrap'.equals(CLAIMTYPE)"> 
+			AND 	SLD.REASONAREAID  = #{CLAIMTYPE}
+		</if>
+		<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+			AND 	SAR.VENDORID  = #{OSPVENDORID}
+		</if>
+		<if test="AREAID != null and AREAID !=''"> 
+			AND 	SLD.REASONAREAID = #{AREAID}
+		</if>
+		UNION ALL
+		SELECT 
+				CASE WHEN OEA.PERIODID IS NULL THEN 'N'
+				     ELSE 'Y' END  AS CLAIMYN--마감포함
+			,	'ETCCLAIMAMOUNT'   AS WORKGUBUN
+			,	OEA.CLAIMTYPE      AS CLAIMTYPE -- Claim유형
+			,	''                 AS TXNHISTKEY
+			,	OEA.CLAIMDATE      AS DEFINETIME      -- 확정일
+			,	null	           AS OCCURTIME --발생일
+			,	OEA.CLAIMSEQUENCE  AS CLAIMSEQUENCE
+			,	''                 AS REASONPROCESSSEGMENTNAME       --대공정
+			,	''                 AS REASONPROCESSSEGMENTCLASSNAME --공정명
+			,	''                 AS REASONAREANAME                --작업장
+			,	MVD.VENDORNAME     AS VENDORNAME--업체명
+			,	OEA.PRODUCTDEFID                      --품목코드
+			,	OEA.PRODUCTDEFVERSION 
+			,	SPD.PRODUCTDEFNAME  --품목명
+			,	OEA.ETCLOTID       AS LOTID 
+			,	''                 AS DEFECTCODE--불량코드
+			,	''                 AS DEFECTNAME               --불량명
+			,	NULL               AS DEFECTQTY--불량수
+			,	NULL               AS CLAIMPRICE--불량단가
+			,	NULL               AS DEFECTAMOUNT --불량금액
+			,	NULL               AS REDUCEQTY  --감면수
+			,	NULL               AS REDUCEQTYAMOUNT --수량감면액
+			,	NULL               AS REDUCERATE --감면율
+			,	NULL               AS REDUCERATEAMOUNT --비율감면액
+			,	OEA.AMOUNT         AS CLAIMAMOUNT    --CLAIM금액
+			,	NULL               AS PROCESSSEGMENTID --발견공정
+			,	NULL               AS PROCESSSEGMENTNAME 
+			,	URR.USERNAME       AS CLAIMUSERNAME  --입력자
+			,	NULL               AS DEFINEUSERNAME --확정자
+			,	NULL               AS DESCRIPTION
+			,	OEA.ENTERPRISEID
+			,	OEA.PLANTID
+			,	NULL               AS PROCESSPATHID
+			,	NULL               AS PROCESSSEGMENTID
+			,	NULL               AS AREAID
+			,	NULL               AS REASONSEGMENTID
+			,	NULL               AS REASONAREAID
+			,	NULL               AS REASONCONSUMABLELOTID
+			,	#{PERIODID}   AS PERIODID
+		FROM            OSM_OSPETCCLAIMAMOUNT        OEA 
+		INNER JOIN FN_AREA(#{SESSION_USER_ID})            SAR  ON  SAR.AREAID                 = OEA.AREAID  
+		
+		LEFT OUTER JOIN BAS_PRODUCTDEFINITION        SPD  ON  SPD.PRODUCTDEFID           = OEA.PRODUCTDEFID
+		                                                 AND SPD.PRODUCTDEFVERSION      = OEA.PRODUCTDEFVERSION 
+		LEFT OUTER JOIN BAS_VENDOR	                MVD  ON  MVD.VENDORID               = OEA.VENDORID
+		                                                 AND MVD.PLANTID                = OEA.PLANTID
+		LEFT OUTER JOIN CMD_USER_V                     URR  ON  URR.USERID                 = OEA.CLAIMUSER
+		WHERE	1=1   
+		AND 	OEA.PERIODID    = #{PERIODID}
+		AND		OEA.PLANTID     = #{PLANTID}
+		AND		OEA.VALIDSTATE  ='Valid'
+		<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+			AND 	 OEA.VENDORID   = #{OSPVENDORID}
+		</if>
+		<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+			AND 	OEA.PERIODID IS  NULL
+		</if>
+		<if test="CLAIMTYPE != null and CLAIMTYPE !=''"> 
+			AND 	OEA.CLAIMTYPE   = #{CLAIMTYPE}
+		</if>
+		<if test="AREAID != null and AREAID !=''"> 
+			AND 	OEA.AREAID     = #{AREAID}
+		</if>
+    </select>
+    
+    <!--
+		설		명	: Claim 마감 현황 - 확정전 확정 가능한지 체크 [Close 여부 확인](21.06.23)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-23 
+		수  정   이  력	:
+	-->
+	<select id="selectPeriodCloseCheck" parameterType="map" resultType="hashmap">
+			
+			/* selectPeriodCloseCheck -  Claim 마감 현황 - 확정전 확정 가능한지 체크 [Close / Open 여부 확인] */
+			 SELECT  MAX(CPR.PERIODSTATE) AS PERIODSTATE
+			   FROM  BAS_PERIOD CPR
+			  WHERE  1 = 1
+				AND     CPR.VALIDSTATE     	= 'Valid'
+				AND		CPR.PERIODTYPE     	= 'Claim'			-- 일단 고정
+				AND		CPR.PLANTID        	= #{PLANTID}
+				AND		CPR.ENTERPRISEID   	= #{SESSION_ENTERPRISEID}
+				--AND		CPR.PERIODNAME  = PERIODNAME
+				AND		CPR.PERIODID     		= #{PERIODID}
+	</select>
+	
+	<!--
+		설		명	: Claim 마감 현황 - 확정전 확정 가능한지 체크 [감면,분할 내용중 전송된 내용 있는지 판단](21.06.23)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-23 
+		수  정   이  력	:
+	-->
+	<select id="selectOspCloseCheck" parameterType="map" resultType="hashmap">
+			
+			/* selectOspCloseCheck -  Claim 마감 현황 - 확정전 확정 가능한지 체크 [감면,분할 내용중 전송된 내용 있는지 판단] */
+			SELECT  COUNT(OSM.PERIODID) AS IF_CNT
+			  FROM  OSM_OSPCLOSE  OSM
+			 WHERE  1 = 1
+				AND OSM.ENTERPRISEID   	= #{SESSION_ENTERPRISEID}
+				AND OSM.PLANTID         	= #{PLANTID}
+				--AND OSM.OCCUR_YM      	=
+				--AND OSM.AREAID          	=
+				AND OSM.PERIODID        	= #{PERIODID}
+				--AND OSM.VENDORID        = 
+				--AND OSM.INTERFACEDATE IS NOT NULL       -- 인터페이스 일시 (있는 경우 인터페이스 된것)  (인터페이스 된것 확정 취소의 경우만 체크) 
+	</select>
+	
+	
+	<!--
+		설		명	: Claim 마감 현황 - 확정전 확정 가능한지 체크 [전체 조회 되어있는지 판단](21.06.23)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-23 
+		수  정   이  력	:
+	-->
+	<select id="GetOutsourcedClaimClosureStatusAllCnt" parameterType="map" resultType="hashmap">
+			
+			/* GetOutsourcedClaimClosureStatusAllCnt -  Claim 마감 현황 - 확정전 확정 가능한지 체크 [전체 조회 되어있는지 판단] */
+			SELECT 
+				CSM.ENTERPRISEID
+			,	CSM.PLANTID
+			,	CSM.PERIODID
+			,	CSM.AREAID
+			,	CSM.AREANAME               AS AREANAME
+			,	CSM.VENDORID               AS VENDORID 
+			,	CSM.OSPVENDORNAME          AS OSPVENDORNAME
+			,	SUM(CSM.CLAIMAMOUNT)       AS PRODEFECTAMOUNT
+			,	SUM(CSM.SELAMOUNT)         AS SELAMOUNT
+			,	SUM(CSM.MATERLOSTAMOUNT)   AS MATERLOSTAMOUNT
+			,	SUM(CSM.ETCAMOUNT)         AS ETCAMOUNT
+			,	SUM(CSM.CLAIMAMOUNT)         +  SUM(CSM.SELAMOUNT) 
+				+ SUM(CSM.MATERLOSTAMOUNT)	 +  SUM(CSM.ETCAMOUNT) AS  TOTAMOUNT
+		FROM 
+		(
+			SELECT 
+					OCL.ENTERPRISEID
+				,	OCL.PLANTID
+				,	OCL.PERIODID
+				,	OCL.REASONAREAID     AS AREAID
+				,	DAC.DICTIONARYNAME   AS AREANAME            -- 
+				,	SAR.VENDORID         AS VENDORID 
+				,	MVD.VENDORNAME       AS OSPVENDORNAME
+				,	SUM(OCL.CLAIMAMOUNT) AS CLAIMAMOUNT
+				,	0  AS SELAMOUNT
+				,	0  AS MATERLOSTAMOUNT
+				,	0  AS ETCAMOUNT
+				,	0  AS TOTAMOUNT
+				
+				, TO_CHAR(OCL.OCCURTIME,'YYYY-MM') AS OCCUR_YM--(21.08.03)
+			FROM            OSM_OSPCLAIM                 OCL
+			INNER      JOIN FN_AREA(#{SESSION_USER_ID})       SAR     ON  SAR.AREAID             = OCL.REASONAREAID  
+			LEFT OUTER JOIN BAS_VENDOR	                MVD     ON  MVD.VENDORID           = SAR.VENDORID
+			                                                    AND MVD.PLANTID            = SAR.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY	            DAC     ON  DAC.DICTIONARYID       = SAR.AREANAME
+		                                                        AND DAC.LANGUAGETYPE       =#{SESSION_LANGUAGETYPE}  
+		                                                                                                          
+			WHERE	OCL.PERIODID    = #{PERIODID}
+			AND		OCL.PLANTID     = #{PLANTID}
+	
+			AND		OCL.VALIDSTATE  = 'Valid'
+			GROUP BY    OCL.ENTERPRISEID
+				, OCL.PLANTID
+				, OCL.PERIODID 
+				, OCL.REASONAREAID,	DAC.DICTIONARYNAME
+				, SAR.VENDORID ,MVD.VENDORNAME
+				
+				, TO_CHAR(OCL.OCCURTIME,'YYYY-MM')--(21.08.03)
+				
+			UNION ALL 
+			SELECT 
+					OEA.ENTERPRISEID
+				,	OEA.PLANTID
+				,	OEA.PERIODID
+				,	OEA.AREAID
+				,	DAC.DICTIONARYNAME   AS AREANAME            -- 
+				,	OEA.VENDORID 
+				,	MVD.VENDORNAME      AS OSPVENDORNAME
+				,	0                                 AS CLAIMAMOUNT
+				,	SUM(CASE WHEN OEA.CLAIMTYPE  ='Selection' THEN AMOUNT 
+					         ELSE 0 END)              AS SELAMOUNT
+				,	SUM(CASE WHEN OEA.CLAIMTYPE  ='MaterialLoss' THEN AMOUNT 
+					         ELSE 0 END)              AS MATERLOSTAMOUNT
+				,	SUM(CASE WHEN OEA.CLAIMTYPE  ='Etc' THEN AMOUNT 
+					         ELSE 0 END)              AS ETCAMOUNT
+				,	0                               AS TOTAMOUNT
+				
+				, TO_CHAR(OEA.CLAIMDATE,'YYYY-MM') 	AS OCCUR_YM --(21.08.03)
+				
+			FROM            OSM_OSPETCCLAIMAMOUNT        OEA 	
+			INNER      JOIN FN_AREA(#{SESSION_USER_ID})       SAR    ON  SAR.AREAID             = OEA.AREAID  
+			LEFT OUTER JOIN BAS_VENDOR	                MVD    ON  MVD.VENDORID           = OEA.VENDORID
+			                                                   AND MVD.PLANTID            = OEA.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY	            DAC    ON  DAC.DICTIONARYID       = SAR.AREANAME
+		                                                       AND DAC.LANGUAGETYPE       =#{SESSION_LANGUAGETYPE}                                                          
+			WHERE	OEA.PERIODID    = #{PERIODID}
+			AND		OEA.PLANTID     = #{PLANTID}
+			
+			AND		OEA.VALIDSTATE  ='Valid'
+		
+			GROUP BY	OEA.ENTERPRISEID
+					,	OEA.PLANTID
+					,	OEA.PERIODID
+					,	OEA.AREAID
+					,	DAC.DICTIONARYNAME
+					,	OEA.VENDORID 
+					,	MVD.VENDORNAME
+					,  TO_CHAR(OEA.CLAIMDATE,'YYYY-MM') --(21.08.03)
+		)  CSM
+		GROUP BY	CSM.ENTERPRISEID
+				,	CSM.PLANTID
+				,	CSM.PERIODID
+				,	CSM.AREAID
+				,	CSM.AREANAME  
+				,	CSM.VENDORID 
+				,	CSM.OSPVENDORNAME
+				,   CSM.OCCUR_YM  --(21.08.03)
+	</select>
+	
+	
+	<!--
+		설		명	: Claim 마감 현황 - 확정 전 이미 등록된 내용 있는지 한번더 확인
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-23 
+		수  정   이  력	:
+	-->
+	<select id="selectOspCloseCheck2" parameterType="map" resultType="hashmap">
+			
+			/* selectOspCloseChec2 -  Claim 마감 현황 - 확전 전 이미 등록된 내용 있는지 한번더 확인 */
+			SELECT   CASE WHEN COUNT(OSM.PERIODID) = 0
+				                THEN 'Y'
+				                ELSE 	'N'
+				                END
+				                AS IF_CNT
+			  FROM  OSM_OSPCLOSE  OSM
+			 WHERE  1 = 1
+				AND OSM.ENTERPRISEID   		= #{SESSION_ENTERPRISEID}
+				AND OSM.PLANTID         	= #{PLANTID}
+				AND OSM.OCCUR_YM      		= #{OCCUR_YM}
+				AND OSM.AREAID          	= #{AREAID}	
+				AND OSM.PERIODID        	= #{PERIODID}
+				AND OSM.VENDORID        	= #{VENDORID}
+	</select>
+	
+	
+	<!--
+		설		명	: Claim 마감 현황 - 확정 저장
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-23 
+		수  정   이  력	:
+	-->
+	
+    <insert id="insertOspClose" parameterType="map">
+	
+	<!-- insertOspClose - Claim 확정 -->
+    INSERT INTO OSM_OSPCLOSE( 
+        ENTERPRISEID
+		, PLANTID
+		, OCCUR_YM
+		, PERIODID
+		, INTERFACE_YM			-- Interface년월
+		, AREAID
+		, VENDORID
+		, CLAIMAMOUNT		
+		, CREATOR
+		, CREATEDTIME
+		, MODIFIER
+		, MODIFIEDTIME
+		, LASTTXNHISTKEY
+		, LASTTXNID
+		, LASTTXNUSER
+		, LASTTXNTIME
+		, LASTTXNCOMMENT
+		, VALIDSTATE        ) 
+    VALUES 
+        ( 
+			#{SESSION_ENTERPRISEID}
+		, #{PLANTID}
+		, #{OCCUR_YM}
+		, #{PERIODID}
+		
+		,  (
+				SELECT    -- (마감년월)
+				        	PERIODNAME           
+				  FROM 	BAS_PERIOD
+				 WHERE 1 = 1
+				 	AND ENTERPRISEID   	= #{SESSION_ENTERPRISEID}
+					AND PLANTID         	= #{PLANTID}
+					AND PERIODID        	= #{PERIODID}   
+		)
+		, #{AREAID}
+		, #{VENDORID}
+		, TO_NUMBER(#{TOTAMOUNT})		
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{MODIFIER}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,'Valid'    )
+    </insert>
+    
+    <!--
+		설		명	: Claim 마감 현황 - 확정 후 기간정보 상태 변경
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-23 
+		수  정   이  력	:
+	-->
+    <update id="updatePeriodClose" parameterType="map" >
+	<!-- updatePeriodClose - 확정 후 기간정보 상태 변경 -->
+    UPDATE BAS_PERIOD 
+    SET 
+        PERIODSTATE 			= #{PERIODSTATE}
+        ,MODIFIER 				= #{MODIFIER}     
+        ,MODIFIEDTIME 			= SYSDATE     
+        ,LASTTXNHISTKEY 		= #{LASTTXNHISTKEY}     
+        ,LASTTXNID 				= #{LASTTXNID}     
+        ,LASTTXNUSER 			= #{LASTTXNUSER}     
+        ,LASTTXNTIME 			= SYSDATE     
+        ,LASTTXNCOMMENT 	= #{LASTTXNCOMMENT}
+    WHERE PERIODID 			= #{PERIODID}
+	  AND PERIODTYPE     	= 'Claim'			-- 일단 고정
+	  AND PLANTID        		= #{PLANTID}
+	  AND ENTERPRISEID   	= #{SESSION_ENTERPRISEID}
+   
+    </update>
+    
+    
+    <!--
+		설		명	: Claim 마감 현황 - 확정전 확정 가능한지 체크 [감면,분할 내용중 전송된 내용 있는지 판단](21.06.24)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-24 
+		수  정   이  력	:
+	-->
+	<select id="selectOspCloseIfCheck" parameterType="map" resultType="hashmap">
+			
+			/* selectOspCloseIfCheck -  Claim 마감 현황 - 확정전 확정 가능한지 체크 [감면,분할 내용중 전송된 내용 있는지 판단] */
+			SELECT  COUNT(OSM.PERIODID) AS IF_CNT
+			  FROM  OSM_OSPCLOSE  OSM
+			 WHERE  1 = 1
+				AND OSM.ENTERPRISEID   	= #{SESSION_ENTERPRISEID}
+				AND OSM.PLANTID         	= #{PLANTID}
+				AND OSM.PERIODID        	= #{PERIODID}
+				--AND OSM.INTERFACEDATE IS NOT NULL       -- 인터페이스 일시 (있는 경우 인터페이스 된것)  (인터페이스 된것 확정 취소의 경우만 체크) 
+	</select>
+	
+	<!--
+		설		명	: Claim 마감 현황 - 확정취소전 확정취소 가능한지 체크 [감면,분할 그룹한 개수 == 그리드 조회 내용 개수 체크](21.06.24)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-24 
+		수  정   이  력	:
+	-->
+	<select id="GetOutsourcedClaimClosureStatusGroupCnt" parameterType="map" resultType="hashmap">
+			/* GetOutsourcedClaimClosureStatusGroupCnt -  Claim 마감 현황 - 확정취소전 확정취소 가능한지 체크 [감면,분할 그룹한 개수 == 그리드 조회 내용 개수 체크]*/
+			SELECT  ENTERPRISEID
+                    , PLANTID
+                    , OCCUR_YM
+                    , PERIODID
+                    , AREAID
+                    , VENDORID
+			  FROM  OSM_OSPCLOSE  OSM
+			 WHERE  1 = 1
+				AND OSM.ENTERPRISEID   	= #{SESSION_ENTERPRISEID}
+				AND OSM.PLANTID         	= #{PLANTID}
+				AND OSM.PERIODID        	= #{PERIODID}
+            GROUP BY ENTERPRISEID
+                    , PLANTID
+                    , OCCUR_YM
+                    , PERIODID
+                    , AREAID
+                    , VENDORID		
+	</select>
+	
+	<!--
+		설		명	: Claim 마감 현황 - 확정전 확정 가능한지 체크 [감면,분할 내용중 전송된 내용 있는지 판단](21.06.24)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-24 
+		수  정   이  력	:
+	-->
+	<select id="selectOspCloseIfYnCheck" parameterType="map" resultType="hashmap">
+			
+			/* selectOspCloseIfYnCheck -  Claim 마감 현황 - 확정전 확정 가능한지 체크 [감면,분할 내용중 전송된 내용 있는지 판단] */
+			SELECT  CASE WHEN COUNT(OSM.PERIODID) = 0
+			             THEN 'N'
+						 ELSE 'Y'
+						 END
+					AS IF_YN
+			  FROM  OSM_OSPCLOSE  OSM
+			 WHERE  1 = 1
+				AND OSM.ENTERPRISEID   	= #{SESSION_ENTERPRISEID}
+				AND OSM.PLANTID         	= #{PLANTID}
+				AND OSM.PERIODID        	= #{PERIODID}
+				AND OSM.INTERFACEDATE IS NOT NULL       -- 인터페이스 일시 (있는 경우 인터페이스 된것)  (인터페이스 된것 확정 취소의 경우만 체크) 
+	</select>
+	
+	
+	<!--
+		설		명	: Claim 비용 마감 - 확정 취소
+		생	성	자	: 김진현
+		생	성	일	: 2021-06-24 
+		수  정   이  력	:
+	-->
+    <delete id="deleteOspClose" parameterType="map" >
+     /* smh.osm.dao.OSM00500Dao.deleteOspClose */
+    	DELETE  
+    	 FROM 	OSM_OSPCLOSE	
+    	WHERE 	ENTERPRISEID    = #{ENTERPRISEID}
+			AND PLANTID			= #{PLANTID}
+			AND OCCUR_YM		= #{OCCUR_YM}
+			AND PERIODID		= #{PERIODID}
+			AND AREAID			= #{AREAID}
+			AND VENDORID		= #{VENDORID}
+    </delete>   
+    
+    
+    
+</mapper>

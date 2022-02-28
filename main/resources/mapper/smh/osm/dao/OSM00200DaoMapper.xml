@@ -1,0 +1,357 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : Claim공정별 기준금액
+    설명          : Claim공정별 기준금액
+    작성자       : 진성하
+    최초작성일 : 2021.04.10
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.04.10      진성하     최초  생성
+-->
+
+<mapper namespace="smh.osm.dao.OSM00200Dao">
+    <select id="GetOtherOutsourcedClaimCostRegistration" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00200Dao.GetOtherOutsourcedClaimCostRegistration"  */
+	SELECT
+		 	OBE.ENTERPRISEID
+		,	OBE.PLANTID
+		,	TO_CHAR(OBE.CLAIMDATE,'YYYYMMDD')  CLAIMDATE                                              --Claim일자
+		,	OBE.CLAIMSEQUENCE                                            --순번
+		,	OBE.CLAIMTYPE                                                
+		,	OBE.CLAIMDEPARTMENT                                          --부서ID
+		,	URR.DEPARTMENT		                                         --부서명
+		,	OBE.CLAIMUSER              AS       CLAIMUSER                -- 등록자id
+		,	URR.USERNAME               AS       CLAIMUSERNAME            -- 등록자명
+		,	OBE.AREAID                 AS       AREAID              -- 
+		,	DAC.DICTIONARYNAME         AS       AREANAME            -- 
+		,	OBE.VENDORID               AS       OSPVENDORID              -- 협력사id
+		,	VEN.VENDORNAME             AS       OSPVENDORNAME            -- 협력사명
+		,	OBE.PRODUCTDEFID
+		,	OBE.PRODUCTDEFVERSION
+		,	PRD.PRODUCTDEFNAME 
+		,	OBE.ETCLOTID                                                  -- 관련lotno            
+		,	OBE.AMOUNT                 AS       CLAIMAMOUNT               --claim금액
+		,	OBE.DESCRIPTION
+		,	CASE WHEN OBE.PERIODID  IS NOT NULL THEN 'Close'
+			     ELSE 'Open'                
+			END  AS  PERIODSTATE
+		,	CPD.PERIODNAME
+		,	OBE.RELKEYNO
+		,	OBE.PERIODID
+	FROM	OSM_OSPETCCLAIMAMOUNT	            OBE                          -- 
+	INNER      JOIN BAS_AREA                     SAR   ON    SAR.AREAID             = OBE.AREAID  
+	LEFT OUTER JOIN CMD_DICTIONARY	            DAC   ON    DAC.DICTIONARYID       = SAR.AREANAME
+	                                                  AND   DAC.LANGUAGETYPE       = #{SESSION_LANGUAGETYPE} 
+	LEFT OUTER JOIN CMD_USER_V                     URR   ON    URR.USERID             = OBE.CLAIMUSER      -- 
+	LEFT OUTER JOIN BAS_VENDOR                   VEN	  ON    VEN.VENDORID           = OBE.VENDORID  -- 협력사
+	                                                  AND   VEN.PLANTID            = OBE.PLANTID
+	LEFT OUTER JOIN BAS_PRODUCTDEFINITION	    PRD	  ON    PRD.PRODUCTDEFID       = OBE.PRODUCTDEFID          --제품
+	                                                  AND   PRD.PRODUCTDEFVERSION  = OBE.PRODUCTDEFVERSION
+	LEFT OUTER JOIN BAS_PERIOD                   CPD   ON    CPD.PLANTID            = OBE.PLANTID          
+	                                                  AND   CPD.PERIODTYPE         = 'Claim'
+	                                                  AND   CPD.PERIODID           = OBE.PERIODID
+	                                                  AND   CPD.VALIDSTATE         = 'Valid'
+	WHERE	OBE.VALIDSTATE = 'Valid'
+	AND 	OBE.PLANTID    = #{PLANTID}
+	<if test="AREAID != null and AREAID !=''"> 
+	AND 	 OBE.AREAID = #{AREAID}
+	</if>
+	<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+	AND 	 OBE.VENDORID = #{OSPVENDORID}
+	</if>
+	<if test="CLAIMDATE_PERIODFR != null and CLAIMDATE_PERIODFR !=''"> 
+	AND 	OBE.CLAIMDATE <![CDATA[>=]]> TO_DATE( #{CLAIMDATE_PERIODFR},'YYYYMMDD') 
+	</if>
+	<if test="CLAIMDATE_PERIODTO != null and CLAIMDATE_PERIODTO !=''"> 
+	AND 	OBE.CLAIMDATE <![CDATA[<=]]>  TO_DATE( #{CLAIMDATE_PERIODTO},'YYYYMMDD') 
+	</if>
+	<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+	AND 	VEN.VENDORNAME LIKE #{OSPVENDORNAME}||'%'
+	</if>
+	<if test="CLOSEYESNO != null and CLOSEYESNO !='' ">
+		<choose>
+		<when test="CLOSEYESNO eq 'Y'.toString()">
+			AND 	OBE.PERIODID  IS NOT NULL
+		</when>
+		<when test="CLOSEYESNO eq 'N'.toString()">
+			AND 	OBE.PERIODID  IS  NULL
+		</when>
+	</choose>
+	</if>
+    </select>   
+
+    <select id="GetAreaidPopupListByOsp" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00200Dao.GetAreaidPopupListByOsp"  */
+     SELECT	Z.*	  
+      FROM	  
+        (	  
+          SELECT Y.*	  
+               , ROWNUM RNUM	  
+               , LAST_VALUE(ROWNUM) OVER (ORDER BY ROWNUM ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS TOTAL_ROWS	  
+            FROM	  
+               (	  
+					SELECT 
+							SAR.AREAID		      AS	AREAID
+						,	DIC.DICTIONARYNAME    AS	AREANAME
+						,	SAR.VENDORID                       AS OSPVENDORID               -- 협력사 ID
+						,	VEN.VENDORNAME                     AS OSPVENDORNAME             -- 협력사 명
+					FROM            BAS_AREA                 SAR
+					INNER      JOIN BAS_VENDOR               VEN  ON  VEN.VENDORID                = SAR.VENDORID  
+					                                             AND VEN.PLANTID                 = SAR.PLANTID
+					LEFT OUTER JOIN CMD_DICTIONARY	        DIC  ON  DIC.DICTIONARYID            = SAR.AREANAME
+					                                             AND DIC.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+					WHERE 	SAR.VALIDSTATE = 'Valid'
+				
+					<if test="!'Y'.equals(OWNTYPE)"> 
+						AND		SAR.OWNTYPE    IN ('InHouseOSP','OutsideOSP','MajorSuppliers')
+					</if>
+					AND		SAR.PLANTID    = #{PLANTID}
+					<if test="AREANAME != null and AREANAME !=''"> 
+						AND		(SAR.AREAID         LIKE #{AREANAME}||'%' 
+					 	OR		 DIC.DICTIONARYNAME LIKE #{AREANAME}||'%')
+					</if>
+	             ) Y	  
+	          WHERE 1=1	  
+	          ) Z	  
+	 WHERE 1=1	
+	   AND Z.RNUM <![CDATA[ > ]]>  ( #{PAGE_NUMBER} - 1) *  #{PAGE_SIZE}   
+	   AND Z.RNUM <![CDATA[ <= ]]>  #{PAGE_NUMBER} *  #{PAGE_SIZE}	          
+
+    </select>       
+    
+    <select id="GetVendorListByOsp" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00200Dao.GetVendorListByOsp"  */
+     SELECT	Z.*	  
+      FROM	  
+        (	  
+          SELECT Y.*	  
+               , ROWNUM RNUM	  
+               , LAST_VALUE(ROWNUM) OVER (ORDER BY ROWNUM ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS TOTAL_ROWS	  
+            FROM	  
+               (	  
+					SELECT
+							DISTINCT
+							VEN.VENDORID    AS  OSPVENDORID
+						,	VEN.VENDORNAME  AS  OSPVENDORNAME
+					FROM 	BAS_AREA SAR 
+					INNER JOIN BAS_VENDOR	VEN ON  VEN.VENDORID = SAR.VENDORID
+											    AND VEN.PLANTID  = SAR.PLANTID 
+					WHERE 	1 = 1
+					<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+						AND		(VEN.VENDORID   LIKE #{OSPVENDORNAME}||'%' 
+					 	OR		 VEN.VENDORNAME LIKE #{OSPVENDORNAME}||'%')
+					</if>
+						AND		VEN.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+					<if test="PLANTID != null and PLANTID !='' and !'*'.equals(PLANTID)"> 
+						AND		VEN.PLANTID = #{PLANTID}
+					</if>
+					<if test="AREAID != null and AREAID !='' and !'*'.equals(AREAID)"> 
+						AND		SAR.AREAID = #{AREAID}
+					</if>
+					AND		VEN.VALIDSTATE = 'Valid'
+	             ) Y	  
+	          WHERE 1=1	  
+	          ) Z	  
+	 WHERE 1=1	
+	   AND Z.RNUM <![CDATA[ > ]]>  ( #{PAGE_NUMBER} - 1) *  #{PAGE_SIZE}   
+	   AND Z.RNUM <![CDATA[ <= ]]>  #{PAGE_NUMBER} *  #{PAGE_SIZE}	          
+    </select>       
+<!-- 외주기타Claim비용-->
+
+    <!-- 외주기타Claim비용 등록 -->
+    <insert id="insertOsmOspetcclaimamount" parameterType="map">
+    INSERT INTO OSM_OSPETCCLAIMAMOUNT( 
+        ENTERPRISEID  
+        ,PLANTID  
+        ,CLAIMDATE  
+        ,CLAIMSEQUENCE  
+        ,CLAIMTYPE  
+        ,CLAIMDEPARTMENT  
+        ,CLAIMUSER  
+        ,AREAID  
+        ,VENDORID  
+        ,PRODUCTDEFID  
+        ,PRODUCTDEFVERSION  
+        ,ETCLOTID  
+        ,AMOUNT  
+        ,PERIODID  
+        ,RELKEYNO  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,MODIFIER  
+        ,MODIFIEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE        ) 
+    VALUES( 
+        #{SESSION_ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,TO_DATE(#{CLAIMDATE},'YYYYMMDD')
+        ,(SELECT NVL(MAX(CLAIMSEQUENCE),0)+1 
+        	FROM OSM_OSPETCCLAIMAMOUNT
+        	WHERE ENTERPRISEID = #{SESSION_ENTERPRISEID}
+        	AND PLANTID = #{PLANTID}
+        	AND CLAIMDATE = #{CLAIMDATE}) 
+        ,#{CLAIMTYPE}  
+        ,#{CLAIMDEPARTMENT}  
+        ,#{CLAIMUSER}  
+        ,#{AREAID}  
+        ,#{OSPVENDORID}  
+        ,#{PRODUCTDEFID}  
+        ,#{PRODUCTDEFVERSION}  
+        ,#{ETCLOTID}  
+        ,#{CLAIMAMOUNT}  
+        ,#{PERIODID}  
+        ,#{RELKEYNO}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{MODIFIER}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}    )
+    </insert>
+
+    <!-- 외주기타Claim비용 변경 -->
+    <update id="updateOsmOspetcclaimamount" parameterType="map" >
+    UPDATE OSM_OSPETCCLAIMAMOUNT 
+    SET 
+        CLAIMTYPE = #{CLAIMTYPE}     
+        ,CLAIMDEPARTMENT = #{CLAIMDEPARTMENT}     
+        ,CLAIMUSER = #{CLAIMUSER}     
+        ,AREAID = #{AREAID}     
+        ,VENDORID = #{OSPVENDORID}     
+        ,PRODUCTDEFID = #{PRODUCTDEFID}     
+        ,PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}     
+        ,ETCLOTID = #{ETCLOTID}     
+        ,AMOUNT = #{CLAIMAMOUNT}     
+        ,PERIODID = #{PERIODID}     
+        ,RELKEYNO = #{RELKEYNO}     
+        ,DESCRIPTION = #{DESCRIPTION}             
+        ,CREATEDTIME = #{CREATEDTIME}     
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+        ,VALIDSTATE = #{VALIDSTATE}
+    WHERE CLAIMDATE = TO_DATE(#{CLAIMDATE},'YYYYMMDD')
+    AND CLAIMSEQUENCE = #{CLAIMSEQUENCE}
+    AND ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    </update>
+
+    <!-- 외주기타Claim비용 삭제 -->
+    <update id="deleteOsmOspetcclaimamount" parameterType="map" > 
+    UPDATE OSM_OSPETCCLAIMAMOUNT 
+    SET VALIDSTATE = 'Invalid'
+    WHERE CLAIMDATE = TO_DATE(#{CLAIMDATE},'YYYYMMDD')
+    AND CLAIMSEQUENCE = #{CLAIMSEQUENCE}
+    AND ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    </update>  
+    
+    <!-- 외주기타Claim비용 상세조회-->
+    <select id="selectOsmOspetcclaimamount" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.ENTERPRISEID	 
+        ,A.PLANTID	 
+        ,A.CLAIMDATE	 
+        ,A.CLAIMSEQUENCE	 
+        ,A.CLAIMTYPE	 
+        ,A.CLAIMDEPARTMENT	 
+        ,A.CLAIMUSER	 
+        ,A.AREAID	 
+        ,A.VENDORID	 
+        ,A.PRODUCTDEFID	 
+        ,A.PRODUCTDEFVERSION	 
+        ,A.ETCLOTID	 
+        ,A.AMOUNT	 
+        ,A.PERIODID	 
+        ,A.RELKEYNO	 
+        ,A.DESCRIPTION	 
+        ,A.CREATOR	 
+        ,A.CREATEDTIME	 
+        ,A.MODIFIER	 
+        ,A.MODIFIEDTIME	 
+        ,A.LASTTXNHISTKEY	 
+        ,A.LASTTXNID	 
+        ,A.LASTTXNUSER	 
+        ,A.LASTTXNTIME	 
+        ,A.LASTTXNCOMMENT	 
+        ,A.VALIDSTATE	 
+    FROM	OSM_OSPETCCLAIMAMOUNT A 
+    WHERE A.CLAIMDATE = #{CLAIMDATE}
+    AND	A.CLAIMSEQUENCE = #{CLAIMSEQUENCE}
+    AND	A.ENTERPRISEID = #{ENTERPRISEID}
+    AND	A.PLANTID = #{PLANTID}
+    </select>   
+    
+    <!--
+		설		명	: 기타 Claim 등록 - 저장시 BAS_PERIOD 의 type 확인 Close 인 경우 저장 불가 / PERIODID 가 존재 하는 것만
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-24 
+		수  정   이  력	:
+	-->
+	<select id="selectPeriodTypeCheck" parameterType="map" resultType="hashmap">
+			/* selectPeriodTypeCheck -  기타 Claim 등록 - 저장시 BAS_PERIOD 의 type 확인 Close 인 경우 저장 불가 / PERIODID 가 존재 하는 것만 */
+			 SELECT  MAX(CPR.PERIODSTATE) AS PERIODSTATE
+			   FROM  BAS_PERIOD CPR
+			  WHERE  1 = 1
+				AND     CPR.VALIDSTATE     	= 'Valid'
+				AND		CPR.PERIODTYPE     	= 'Claim'			-- 일단 고정
+				AND		CPR.PLANTID        	= #{PLANTID}
+				AND		CPR.ENTERPRISEID   	= #{ENTERPRISEID}
+				AND		CPR.PERIODID     		= #{PERIODID}
+	</select>
+	
+	
+	<!--
+		설		명	: 기타 Claim 등록 - 저장전 마감월 정보 있는지 확인/ 상태가 Close인지 판단
+		생	성	자	: 김진현 
+		생	성	일	: 2020-07-01
+		수  정   이  력	:
+	-->
+	<select id="GetOutsourcedClaimPeriodChk" parameterType="map" resultType="hashmap">
+				/*GetOutsourcedClaimPeriodChk - 기타 Claim 등록 - 저장전 마감월 정보 있는지 확인/ 상태가 Close인지 판단*/
+				SELECT
+						CPR.PERIODID
+					,	CPR.PERIODNAME
+					,	CPR.PERIODTYPE
+					,	CPR.ENTERPRISEID
+					,	CPR.PLANTID
+					,	CPR.FACTORYID
+					,	CPR.STARTDATE
+					,	CPR.ENDDATE
+					,	CPR.STARTTIME
+					,	CPR.ENDTIME
+					,	CPR.DESCRIPTION
+					,	CPR.PERIODSTATE
+					,	TO_CHAR(CPR.STARTDATE,'YYYY-MM-DD') ||' ~ ' ||TO_CHAR(CPR.ENDDATE,'YYYY-MM-DD') || ' '|| CPR.PERIODSTATE  AS  PERIODDESCRIPTION
+					,	SPL.WORKTIME
+				FROM	BAS_PERIOD	                 CPR                              --재고 실사기간등록
+				INNER  JOIN BAS_PLANT          SPL  ON  SPL.PLANTID = CPR.PLANTID
+				WHERE	CPR.VALIDSTATE     	=  'Valid'
+				AND		CPR.PERIODTYPE     	=  'Claim'
+				AND		CPR.PLANTID        	= #{PLANTID}
+				AND		CPR.PERIODNAME     	= SUBSTR(#{CLAIMDATE},0,4)||'-'||SUBSTR(#{CLAIMDATE},5,2)
+				AND    	ROWNUM 				= 1
+    </select>
+	
+	
+       				    
+</mapper>

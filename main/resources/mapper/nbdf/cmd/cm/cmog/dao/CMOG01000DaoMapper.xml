@@ -1,0 +1,1872 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 조직마스터
+    설명          : 조직 마스터 테이블 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2017.03.16
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.03.16     진성하     최초  생성
+     2017.04.01     진성하    화일명 일련번호변경(01100 to 01000)
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao">
+
+    <sql id="whoCol" >
+         , CREATED_BY
+         , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD') as CREATION_DATE
+         , LAST_UPDATED_BY, TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DATE
+    </sql>
+
+    <!-- 조직TREE 전체 카운트 조회 -->
+    <select id="selectOrgTotalCnt" resultType="Integer">
+	    SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgTotalCnt  */
+		    COUNT(*) CNT
+		FROM (
+		    SELECT
+		        OFFICE_ID                                   /* 관서ID (SEQNUM) */
+		    FROM CMD_ORGS A
+		    WHERE 1=1
+		    AND USE_YN = 'Y'
+		    START WITH UPPER_OFFICE_CODE IN ('0200000H', '0100000J')      /* 최상의코드 = 부모의 시작 조건(우정사업본부:0200000H) */
+		    CONNECT BY PRIOR OFFICE_CODE = UPPER_OFFICE_CODE
+		) ORG
+    </select>
+
+    <!-- 조직기본 팝업 -->
+    <select id="selectOrgListPop" resultType="hashmap">
+    SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgListPop */
+			  ORG.OFFICE_ID as OFC_ID                 /* 관서ID(SEQNUM) */
+			, ORG.OFFICE_CODE as OFC_CD           /* 관서코드(조직코드) */
+			, ORG.PAST_OFFICE_CODE as PAST_OFC_CD   /* 과거관서코드(ERP코드) */
+			, ORG.OFFICE_NAME as OFC_NM          /* 관서명 */
+			, ORG.ORG_GUBUN_NM     /* 조직구분명 */
+			, ORG.UPPER_OFFICE_CODE as UPPER_OFC_CD   /* 상위관서코드 */
+			, ORG.DEPTH_CD            /* 전체 경로CD*/
+			, ORG.DEPTH_NAME        /* 전체 경로명 */
+			, ORG.ORG_GUBUN_CD
+			, ORG.USE_YN
+			, ORG.AGFC_GUBUN_CD   /* 청구분코드 */
+			, ORG.AGFC_GUBUN_NM
+			, ORG.LVL
+			, ORG.ISLEAF
+	FROM (
+	        SELECT
+	            OFFICE_ID,                             /* 관서ID (SEQNUM) */
+	            OFFICE_CODE,                         /* 관서코드 */
+	            PAST_OFFICE_CODE,                /* 과거관서코드(ERP코드) */
+	            OFFICE_NAME,                         /* 관서명 */
+	            ORG_GUBUN_CD,
+	            USE_YN,
+	            GET_CODE_F('CMD_ORG_SEC', ORG_GUBUN_CD) as ORG_GUBUN_NM, /*  통합조직구분명 */
+	            UPPER_OFFICE_CODE,               /* 상위관서코드 */
+	            AGFC_GUBUN_CD,
+	            AGFC_GUBUN_NM,
+                LTRIM (SYS_CONNECT_BY_PATH (OFFICE_CODE, ' > '), ' > ') AS DEPTH_CD,  /* 전체DEPTH 경로코드 */
+                LTRIM (SYS_CONNECT_BY_PATH (OFFICE_NAME, ' > '), ' > ') AS DEPTH_NAME,  /* 전체DEPTH 경로명 */
+                LEVEL as LVL,                             /* TREE DEPTH 레벨 */
+	            CONNECT_BY_ISLEAF AS ISLEAF   /* 자식노드가 없으면 1, 있으면 0 */
+	        FROM CMD_ORGS A
+	        WHERE 1=1
+	        <if test='USE_YN != null and USE_YN == "Y" '>
+	        AND USE_YN = 'Y'
+	        </if>
+	        START WITH UPPER_OFFICE_CODE in ('0200000H', '0100000J')   /* 최상의코드 = 부모의 시작 조건(우정사업본부:0200000H) */
+	        CONNECT BY PRIOR OFFICE_CODE = UPPER_OFFICE_CODE   /* 자신과 부모키를 비교 */
+	        ORDER SIBLINGS BY                          /* 계층내에서 정렬할수 있는 SIBLINGS BY */
+	        UPPER_OFFICE_CODE ASC, ORDR ASC, OFFICE_CODE ASC
+	    ) ORG
+	     WHERE 1=1
+       <if test="CND != '' and CND !=null ">
+             <if test="CND.equals('OFC_CD') and TEXT != null ">
+                    AND OFFICE_CODE = #{TEXT}
+            </if>
+             <if test="CND.equals('OFC_NM') and TEXT != null ">
+                    AND OFFICE_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+             </if>
+             <if test="CND.equals('PAST_OFC_CD') and TEXT != null ">
+                    AND PAST_OFFICE_CODE = #{TEXT}
+             </if>
+       </if>
+    </select>
+
+    <!-- 조직상세 팝업 or API (New) : API용(빠른 1건 추출용도), 2017.10.12, CMD_ORGS_SPCS 테이블 사용 -->
+    <select id="selectOrgListDtlPop" resultType="hashmap">
+     SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgListDtlPop  */
+              OFC_ID              /* 관서ID(SEQNUM) */
+            , OFC_CD             /* 관서코드(조직코드) */
+            , OFC_NM             /* 관서명 */
+            , ORG_GUBUN_CD   /* 조직구분 코드 */
+            , ORG_GUBUN_NM   /* 조직구분명 */
+            , DEPT_GUBUN_CD   /* 부서구분코드 */
+            , DEPT_GUBUN_NM  /* 부서구분명 */
+            , ACCT_START_DATEC /* 회계시작일 */
+            , ACCT_END_DATEC     /* 회계시작일 */
+            , START_DATEC          /* 업무시작일 */
+            , END_DATEC             /* 업무종료일 */
+            , UPPER_OFC_CD   /* 상위관서코드 */
+            , UPPER_OFC_NM   /* 상위관서명 */
+            , UPPER_OFC_YN   /*  상위관서여부 */
+            , DEPTH_CD         /* 전체 경로CD*/
+            , DEPTH_NAME     /* 전체 경로명 */
+            , LVL1_CD           /* 레벨1 조직코드*/
+            , LVL1_NM           /* 레벨1 조직코드명(청) */
+            , LVL2_CD           /* 레벨2 조직코드*/
+            , LVL2_NM           /* 레벨2 조직코드명(총괄국) */
+            , LVL3_CD           /* 레벨3 조직코드 */
+            , LVL3_NM           /* 레벨3 조직코드명(관내국,취급소,출장소,자국분) */
+            , LVL4_CD           /* 레벨4 조직코드 */
+            , LVL4_NM           /* 레벨4 조직코드명 (부서) */
+            , LVL                  /* 레벨(1~4) */
+            , ISLEAF             /* 하위존재여부 */
+            , AGFC_GUBUN_CD  /* 청구분코드 */
+            , AGFC_GUBUN_NM  /* 청구분코드명 */
+            , PAST_OFC_CD     /* 과거관서코드(ERP코드) */
+            , CM_OFC_CD        /* DB에 들어있는 공통관서코드 */
+            , GET_CM_OFFICE_CODE  /* 로직으로 추출된 공통관서코드(로그인 세션정보) */
+            , GET_DEPT_CM_CODE     /* 로직으로 추출된 부서공통코드(로그인 세션정보)-재정경영-공통에서 사용 */
+            , TRNSFER_OFC_CD         /* 이관관서코드 */
+            , OFC_CLASS_CD            /* 관서급수 */
+            , ORDR                         /* 순서 */
+            , ADDR                         /* 주소 */
+            , TEL_NO                      /* 전화번호 */
+            , USE_YN                      /* 사용여부 */
+            , ZIP_CODE                   /* 우편번호 */
+        FROM CMD_ORGS_SPCS
+        WHERE 1=1
+        <if test='USE_YN != null and USE_YN == "Y" '>
+        AND USE_YN = 'Y'
+        </if>
+        <if test="LVL != null and LVL > 0 ">
+                AND LEVEL <![CDATA[ <= ]]> #{LVL}     /* 레벨()1~4) 이하만 */
+        </if>
+        <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+                AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}      /* 레벨1의(청단위)부터..: 2자리  */
+        </if>
+        <if test="PRM_OFC_CD != null and PRM_OFC_CD != ''">
+                AND OFC_CD = #{PRM_OFC_CD}      /* 특정관서1개만 */
+        </if>
+        <if test="ORG_GUBUN_CD != null and ORG_GUBUN_CD != ''">
+                AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}      /* 통합조직 구분코드  */
+        </if>
+        <if test="DEPT_GUBUN_CD != null and DEPT_GUBUN_CD != ''">
+                AND DEPT_GUBUN_CD = #{DEPT_GUBUN_CD}   /* 부서 구분코드  */
+        </if>
+        <if test="CND != '' and CND !=null ">
+	          <if test="CND.equals('OFC_CD') and TEXT != null ">
+	                 AND OFC_CD = #{TEXT}
+	          </if>
+	          <if test="CND.equals('OFC_NM') and TEXT != null ">
+	                 AND OFC_NM LIKE UPPER('%' ||  #{TEXT} || '%')
+	          </if>
+	          <if test="CND.equals('PAST_OFC_CD') and TEXT != null ">
+	                 AND PAST_OFC_CD = #{TEXT}
+	          </if>
+        </if>
+       ORDER BY UPPER_OFC_CD ASC, ORDR ASC, OFC_CD ASC
+    </select>
+
+    <!-- 조직상세 팝업 or API (OLD) : 공통상세팝업 TREE용 -->
+    <select id="selectOrgListDtlPopTree" resultType="hashmap">
+     SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgListDtlPopTree  */
+		      ORG.OFFICE_ID as OFC_ID              /* 관서ID(SEQNUM) */
+		    , ORG.OFFICE_CODE as OFC_CD         /* 관서코드(조직코드) */
+		    , ORG.OFFICE_NAME as OFC_NM         /* 관서명 */
+		    , ORG.ORG_GUBUN_CD   /* 조직구분코드 */
+		    , ORG.ORG_GUBUN_NM   /* 조직구분명 */
+		    , ORG.DEPT_GUBUN_NM  /* 부서구분명 */
+		    , ORG.ACCT_START_DATEC
+		    , ORG.ACCT_END_DATEC
+		    , ORG.START_DATEC
+		    , ORG.END_DATEC
+		    , ORG.UPPER_OFFICE_CODE as UPPER_OFC_CD   /* 상위관서코드 */
+		    , ORG.UPPER_OFC_NM   /* 상위관서명 */
+		    , ORG.UPPER_OFFICE_YN as UPPER_OFC_YN     /*  상위관서여부 */
+		    , ORG.DEPTH_CD       /* 전체 경로CD*/
+		    , ORG.DEPTH_NAME     /* 전체 경로명 */
+		    , GET_TREE_STR_F(ORG.DEPTH_CD,   ' > ', 1, ORG.LVL) as LVL1_CD      /* 레벨1 조직코드*/
+		    , GET_TREE_STR_F(ORG.DEPTH_NAME, ' > ', 1, ORG.LVL) as LVL1_NM    /* 레벨1 조직코드명(청) */
+		    , GET_TREE_STR_F(ORG.DEPTH_CD,   ' > ', 2, ORG.LVL) as LVL2_CD      /* 레벨2 조직코드*/
+		    , GET_TREE_STR_F(ORG.DEPTH_NAME, ' > ', 2, ORG.LVL) as LVL2_NM    /* 레벨2 조직코드명(총괄국) */
+		    , GET_TREE_STR_F(ORG.DEPTH_CD,   ' > ', 3, ORG.LVL) as LVL3_CD      /* 레벨3 조직코드 */
+		    , GET_TREE_STR_F(ORG.DEPTH_NAME, ' > ', 3, ORG.LVL) as LVL3_NM    /* 레벨3 조직코드명(관내국,취급소,출장소,자국분) */
+		    , GET_TREE_STR_F(ORG.DEPTH_CD,   ' > ', 4, ORG.LVL) as LVL4_CD      /* 레벨4 조직코드 */
+		    , GET_TREE_STR_F(ORG.DEPTH_NAME, ' > ', 4, ORG.LVL) as LVL4_NM    /* 레벨4 조직코드명 (부서) */
+		    , ORG.LVL
+		    , ORG.ISLEAF
+		    , ORG.AGFC_GUBUN_CD
+		    , ORG.AGFC_GUBUN_NM
+		    , ORG.PAST_OFFICE_CODE as PAST_OFC_CD
+		    , ORG.CM_OFFICE_CODE as CM_OFC_CD   /* DB에 들어있는 공통관서코드 */
+		    <if test="PRM_OFC_CD != null and PRM_OFC_CD != ''">
+		    , CMD_GET_CM_OFFICE_CODE_F(ORG.OFFICE_CODE) as GET_CM_OFFICE_CODE  /* 로직으로 추출된 공통관서코드(로그인 세션정보) */
+		    , CMD_GET_DEPT_CM_CODE_F(ORG.OFFICE_CODE) as GET_DEPT_CM_CODE        /* 로직으로 추출된 부서공통코드(로그인 세션정보)-재정경영-공통에서 사용 */
+		    </if>
+		    , ORG.TRNSFER_OFFICE_CODE as TRNSFER_OFC_CD
+		    , ORG.CM_OFFICE_GUBUN_CD as OFC_CLASS_CD
+		    , ORG.ORDR
+		    , ORG.ADDR
+		    , ORG.TEL_NO
+		    , ORG.USE_YN
+		    , ORG.ZIP_CODE
+		FROM (
+		    SELECT
+		        OFFICE_ID,                               /* 관서ID (SEQNUM) */
+		        UPPER_OFFICE_CODE,                         /* 상위관서코드 */
+		        (SELECT OFFICE_NAME FROM CMD_ORGS A1 WHERE A1.OFFICE_CODE = A.UPPER_OFFICE_CODE  AND USE_YN = 'Y') as UPPER_OFC_NM, /* 상위관서명 */
+		        UPPER_OFFICE_YN,
+		        OFFICE_CODE,                                  /* 관서코드 */
+		        OFFICE_NAME,                                  /* 관서명 */
+		        CONNECT_BY_ISLEAF AS ISLEAF,   /* 자식노드가 없으면 1, 있으면 0 */
+		        LEVEL as LVL,                                      /*  TREE DEPTH 레벨 */
+		        LTRIM (SYS_CONNECT_BY_PATH (OFFICE_CODE, ' > '), ' > ') AS DEPTH_CD,  /* 전체DEPTH 경로코드 */
+		        LTRIM (SYS_CONNECT_BY_PATH (OFFICE_NAME, ' > '), ' > ') AS DEPTH_NAME,  /* 전체DEPTH 경로명 */
+		        AGFC_GUBUN_CD,                          /* 청구분코드 */
+		        AGFC_GUBUN_NM,
+		        PAST_OFFICE_CODE,    /* 과거관서코드 */
+		        CM_OFFICE_GUBUN_CD,   /* 관서급수 */
+		        CM_OFFICE_CODE,      /* 공통관서코드 */
+		        TRNSFER_OFFICE_CODE, /* 이관관서코드 */
+		        ORDR,           /* 정렬순서 */
+		        ORG_GUBUN_CD,                           /* 통합조직구분 코드 */
+		        GET_CODE_F('CMD_ORG_SEC', ORG_GUBUN_CD) as ORG_GUBUN_NM, /*  통합조직구분명 */
+		        GET_CODE_F('CMD_DEPT_SEC', DEPT_GUBUN_CD) as DEPT_GUBUN_NM, /*   부서구분명 */
+		        TO_CHAR(TO_DATE(ACCT_START_DATEC, 'YYYYMMDD'),'YYYY-MM-DD') as ACCT_START_DATEC,
+		        TO_CHAR(TO_DATE(ACCT_END_DATEC, 'YYYYMMDD'),'YYYY-MM-DD') as ACCT_END_DATEC,
+		        TO_CHAR(TO_DATE(START_DATEC, 'YYYYMMDD'),'YYYY-MM-DD') as START_DATEC,
+		        TO_CHAR(TO_DATE(END_DATEC, 'YYYYMMDD'),'YYYY-MM-DD') as END_DATEC,
+		        OFFICE_SEQ_NO,                       /* 관서일련번호 */
+		        VTL_GUBUN_CD,                       /* 가상조직구분코드 */
+		        GET_CODE_F('CMD_VIRTL_SEC', VTL_GUBUN_CD) as VIRTL_GUBUN_NM, /* 가상조직구분명 */
+		        ADDR,
+		        TEL_NO,
+		        ZIP_CODE,
+		        USE_YN,
+		        CREATED_BY,
+		        TO_CHAR(CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') as CREATION_DATE
+		    FROM CMD_ORGS A
+		    WHERE 1=1
+		    <if test='USE_YN != null and USE_YN == "Y" '>
+            AND USE_YN = 'Y'
+            </if>
+		    <if test="LVL != null and LVL > 0 ">
+                    AND LEVEL <![CDATA[ <= ]]> #{LVL}     /* 레벨()1~4) 이하만 */
+            </if>
+            <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+                    AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}      /* 레벨1의(청단위)부터..: 2자리  */
+            </if>
+            <if test="PRM_OFC_CD != null and PRM_OFC_CD != ''">
+                    AND OFFICE_CODE = #{PRM_OFC_CD}      /* 특정관서1개만 */
+            </if>
+            <if test="ORG_GUBUN_CD != null and ORG_GUBUN_CD != ''">
+                    AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}         /* 통합조직 구분코드  */
+            </if>
+            <if test="DEPT_GUBUN_CD != null and DEPT_GUBUN_CD != ''">
+                    AND DEPT_GUBUN_CD = #{DEPT_GUBUN_CD}      /* 부서 구분코드  */
+            </if>
+		    <if test="UPPER_OFC_CD == null or UPPER_OFC_CD == ''">
+            START WITH UPPER_OFFICE_CODE IN ('0200000H', '0100000J') /* 최상위코드-생략시 (미래창조과학부 포함) */
+            </if>
+            <if test="UPPER_OFC_CD != null and UPPER_OFC_CD != ''">
+            START WITH UPPER_OFFICE_CODE = #{UPPER_OFC_CD}       /* 최상위코드-있을경우 = 부모의 시작 조건(우정사업본부:0200000H) */
+            </if>
+		    CONNECT BY PRIOR OFFICE_CODE = UPPER_OFFICE_CODE   /* 자신과 부모키를 비교 */
+		    ORDER SIBLINGS BY                          /* 계층내에서 정렬할수 있는 SIBLINGS BY */
+		    UPPER_OFFICE_CODE ASC, ORDR ASC, OFFICE_CODE ASC
+		) ORG
+		WHERE 1=1
+       <if test="CND != '' and CND !=null ">
+             <if test="CND.equals('OFC_CD') and TEXT != null ">
+                    AND OFFICE_CODE = #{TEXT}
+            </if>
+             <if test="CND.equals('OFC_NM') and TEXT != null ">
+                    AND OFFICE_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+             </if>
+             <if test="CND.equals('PAST_OFC_CD') and TEXT != null ">
+                    AND PAST_OFFICE_CODE = #{TEXT}
+             </if>
+       </if>
+    </select>
+
+    <!-- 조직정보 코드 조회(엑셀 import시 사용)  -->
+    <select id="selectOfcPkInfo" resultType="hashmap">
+            SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOfcPkInfo  */
+                  OFFICE_ID as OFC_ID
+                , OFFICE_CODE as OFC_CD
+                , OFFICE_NAME as OFC_NM
+                , #{GRID_NUM} as GRID_NUM
+            FROM CMD_ORGS A
+            WHERE 1=1
+            AND USE_YN = 'Y'
+            <if test="OFC_ID != null and OFC_ID > 0 ">
+                    AND OFFICE_ID = #{OFC_ID}
+            </if>
+            <if test="OFC_CD != null and OFC_CD != ''">
+                    AND OFFICE_CODE = #{OFC_CD}
+            </if>
+    </select>
+
+    <!-- 조직마스터 관리 목록 조회(심플) -->
+    <select id="selectOrgSimpleList" resultType="hashmap">
+     SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgSimpleList  */
+              ORG.OFFICE_ID as OFC_ID         /* 관서ID(SEQNUM) */
+            , ORG.OFFICE_CODE as OFC_CD    /* 관서코드(조직코드) */
+            , ORG.OFFICE_NAME as OFC_NM    /* 관서명 */
+            , ORG.ORG_GUBUN_CD         /* 조직구분코드 */
+            , ORG.UPPER_OFFICE_CODE as UPPER_OFC_CD   /* 상위관서코드 */
+            , ORG.UPPER_OFC_NM         /* 상위관서명    */
+            , ORG.PAST_OFFICE_CODE   /* 과거관서코드 */
+            <if test='CHECK_ALT_RESVE_DATEC == "Y" '>
+            , ORG.ALT_RESVE_DATEC   /* 조직변경예약일자(옵션) */
+            </if>
+            , ORG.UPPER_OFFICE_YN as UPPER_OFC_YN    /*  상위관서여부 */
+            , ORG.LVL
+            , ORG.ISLEAF
+            , ORG.ORDR
+            , ORG.USE_YN
+        FROM (
+            SELECT
+                OFFICE_ID,                               /* 관서ID (SEQNUM) */
+                OFFICE_CODE,                            /* 관서코드 */
+                OFFICE_NAME,                            /* 관서명 */
+                ORG_GUBUN_CD,                         /* 통합조직구분 코드 */
+                UPPER_OFFICE_CODE,                 /* 상위관서코드 */
+                (SELECT OFFICE_NAME FROM CMD_ORGS A1
+                WHERE A1.OFFICE_CODE = A.UPPER_OFFICE_CODE
+                ) as UPPER_OFC_NM,           /* 상위관서명 */
+                PAST_OFFICE_CODE,          /* 과거관서코드 */
+                <if test='CHECK_ALT_RESVE_DATEC == "Y" '>
+                (SELECT ALT_RESVE_DATEC FROM CMD_ORGS_ALT_RESVES
+                 WHERE OFFICE_ID = #{OFFICE_ID}
+                 AND ROWNUM = 1
+                 AND LAST_UPDATE_DATE IS  NULL
+                ) as ALT_RESVE_DATEC,      /* 조직변경예약일자(옵션) */
+                </if>
+                UPPER_OFFICE_YN,
+                LEVEL as LVL,                             /*  TREE DEPTH 레벨 */
+                CONNECT_BY_ISLEAF AS ISLEAF,   /* 자식노드가 없으면 1, 있으면 0 */
+                ORDR,                                       /* 정렬순서 */
+                USE_YN
+        <if test="STD_YM != null and STD_YM != '' ">
+            FROM CMD_ORGS_MM_HST A    /* 조직월이력 테이블 */
+        </if>
+        <if test="STD_YM == null or STD_YM == '' ">
+            FROM CMD_ORGS A                /* 조직 마스터 테이블 */
+        </if>
+            WHERE 1=1
+            <if test='USE_YN != null and USE_YN == "Y" '>
+                    AND USE_YN = 'Y'
+            </if>
+            <if test='USE_YN != null and USE_YN == "N" '>
+                    AND USE_YN = 'N'
+            </if>
+            <if test="LVL != null and LVL > 0 ">
+                    AND LEVEL <![CDATA[ <= ]]> #{LVL}     /* 레벨()1~4) 이하만 */
+            </if>
+            <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+                    AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}      /* 레벨1의(청단위)부터..: 2자리  */
+            </if>
+            <if test="PRM_OFC_CD != null and PRM_OFC_CD != ''">
+                    AND OFFICE_CODE = #{PRM_OFC_CD}      /* 특정관서1개만1(코드로) */
+            </if>
+            <if test="OFFICE_ID != null and OFFICE_ID > 0 ">
+                    AND OFFICE_ID = #{OFFICE_ID}              /* 특정관서1개만2 (PK ID로) */
+            </if>
+            <if test="ORG_GUBUN_CD != null and ORG_GUBUN_CD != ''">
+                    AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}         /* 통합조직 구분코드  */
+            </if>
+            <if test="DEPT_GUBUN_CD != null and DEPT_GUBUN_CD != ''">
+                    AND DEPT_GUBUN_CD = #{DEPT_GUBUN_CD}      /* 부서 구분코드  */
+            </if>
+            <if test="STD_YM != null and STD_YM != ''">
+                    AND STD_YM = #{STD_YM}      /* 기준년월  */
+            </if>
+            <if test="UPPER_OFC_CD == null or UPPER_OFC_CD == ''">
+            START WITH UPPER_OFFICE_CODE IN ('0200000H', '0100000J') /* 최상위코드-생략시 (미래창조과학부 포함) */
+            </if>
+            <if test="UPPER_OFC_CD != null and UPPER_OFC_CD != ''">
+            START WITH UPPER_OFFICE_CODE = #{UPPER_OFC_CD}       /* 최상위코드-있을경우 = 부모의 시작 조건(우정사업본부:0200000H) */
+            </if>
+            <if test="STD_YM != null and STD_YM != ''">
+                    AND STD_YM = #{STD_YM}      /* 기준년월  */
+            </if>
+            CONNECT BY PRIOR OFFICE_CODE = UPPER_OFFICE_CODE   /* 자신과 부모키를 비교 */
+            <if test="STD_YM != null and STD_YM != ''">
+                    AND STD_YM = #{STD_YM}      /* 기준년월  */
+            </if>
+            ORDER SIBLINGS BY                          /* 계층내에서 정렬할수 있는 SIBLINGS BY */
+            UPPER_OFFICE_CODE ASC, ORDR ASC, OFFICE_CODE ASC
+        ) ORG
+        WHERE 1=1
+       <if test="CND != '' and CND !=null ">
+             <if test="CND.equals('OFC_CD') and TEXT != null ">
+                    AND OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+            </if>
+             <if test="CND.equals('OFC_NM') and TEXT != null ">
+                    AND OFFICE_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+             </if>
+             <if test="CND.equals('PAST_OFC_CD') and TEXT != null ">
+                    AND PAST_OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+             </if>
+       </if>
+    </select>
+
+    <!-- 조직마스터 관리 목록 조회(or 마스터 상세정보/수정정보 조회) -->
+    <select id="selectOrgList" resultType="hashmap">
+     SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgList  */
+              ORG.OFFICE_ID as OFC_ID         /* 관서ID(SEQNUM) */
+            , ORG.OFFICE_CODE as OFC_CD    /* 관서코드(조직코드) */
+            , ORG.OFFICE_NAME as OFC_NM    /* 관서명 */
+            , ORG.ORG_GUBUN_CD   /* 조직구분코드 */
+            , ORG.ORG_GUBUN_NM   /* 조직구분명  */
+            , ORG.DEPT_GUBUN_CD  /* 부서구분코드 */
+            , ORG.DEPT_GUBUN_NM  /* 부서구분명 */
+            , ORG.ACCT_START_DATEC
+            , ORG.ACCT_END_DATEC
+            , ORG.START_DATEC
+            , ORG.END_DATEC
+            , ORG.OFFICE_SEQ_NO
+            , ORG.VTL_GUBUN_CD      /* 가상조직구분코드 */
+            , ORG.UPPER_OFFICE_CODE as UPPER_OFC_CD   /* 상위관서코드 */
+            , ORG.UPPER_OFC_NM   /* 상위관서명 */
+            <if test='CHECK_ALT_RESVE_DATEC == "Y" '>
+            , ORG.ALT_RESVE_DATEC                  /* 조직변경 예약 일자(옵션) */
+            , ORG.ALT_RESVE_NCR_ALT_RSN_NM   /* 조직변경 예약 구분(옵션) */
+            </if>
+            , ORG.UPPER_OFFICE_YN as UPPER_OFC_YN    /*  상위관서여부 */
+            , ORG.DEPTH_CD            /* 전체 경로CD*/
+            , ORG.DEPTH_NAME        /* 전체 경로명 */
+            , GET_TREE_STR_F(ORG.DEPTH_CD,   ' > ', 1, ORG.LVL) as LVL1_CD      /* 레벨1 조직코드*/
+            , GET_TREE_STR_F(ORG.DEPTH_NAME, ' > ', 1, ORG.LVL) as LVL1_NM    /* 레벨1 조직코드명(청) */
+            , GET_TREE_STR_F(ORG.DEPTH_CD,   ' > ', 2, ORG.LVL) as LVL2_CD      /* 레벨2 조직코드*/
+            , GET_TREE_STR_F(ORG.DEPTH_NAME, ' > ', 2, ORG.LVL) as LVL2_NM    /* 레벨2 조직코드명(총괄국) */
+            , GET_TREE_STR_F(ORG.DEPTH_CD,   ' > ', 3, ORG.LVL) as LVL3_CD      /* 레벨3 조직코드 */
+            , GET_TREE_STR_F(ORG.DEPTH_NAME, ' > ', 3, ORG.LVL) as LVL3_NM    /* 레벨3 조직코드명(관내국,취급소,출장소,자국분) */
+            , GET_TREE_STR_F(ORG.DEPTH_CD,   ' > ', 4, ORG.LVL) as LVL4_CD      /* 레벨4 조직코드 */
+            , GET_TREE_STR_F(ORG.DEPTH_NAME, ' > ', 4, ORG.LVL) as LVL4_NM    /* 레벨4 조직코드명 (부서) */
+            , ORG.LVL
+            , ORG.ISLEAF
+            , ORG.AGFC_GUBUN_CD
+            , ORG.AGFC_GUBUN_NM
+            , ORG.PAST_OFFICE_CODE as PAST_OFC_CD
+            , ORG.CM_OFFICE_CODE as CM_OFC_CD
+            , ORG.TRNSFER_OFFICE_CODE as TRNSFER_OFC_CD
+            , ORG.CM_OFFICE_GUBUN_CD as OFC_CLASS_CD
+            , ORG.ORDR
+            , ORG.ADDR
+            , ORG.USE_YN
+            <if test="STD_YM == null or STD_YM == '' ">
+            , ORG.UPDATED_DATEC
+            </if>
+            , ORG.TEL_NO
+            , ORG.ZIP_CODE
+            , ORG.NCR_ALT_RSN_CD
+            , ORG.NCR_ALT_RSN_NM
+            , ORG.NCR_ALT_RSN_RM
+        FROM (
+            SELECT
+                OFFICE_ID,                               /* 관서ID (SEQNUM) */
+                UPPER_OFFICE_CODE,                 /* 상위관서코드 */
+                (SELECT OFFICE_NAME FROM CMD_ORGS A1
+                WHERE A1.OFFICE_CODE = A.UPPER_OFFICE_CODE
+                ) as UPPER_OFC_NM,           /* 상위관서명 */
+                <if test='CHECK_ALT_RESVE_DATEC == "Y" '>
+                (SELECT ALT_RESVE_DATEC FROM CMD_ORGS_ALT_RESVES
+		        WHERE OFFICE_ID = #{OFFICE_ID}
+		        AND LAST_UPDATE_DATE IS  NULL
+		        AND ROWNUM = 1
+		        ) as ALT_RESVE_DATEC,                /* 조직변경 예약 일자(옵션) */
+		        (SELECT GET_CODE_F('CMD_NAR_CD', NCR_ALT_RSN_CD) as NCR_ALT_RSN_NM FROM CMD_ORGS_ALT_RESVES
+                WHERE OFFICE_ID = #{OFFICE_ID}
+                AND LAST_UPDATE_DATE IS  NULL
+                AND ROWNUM = 1
+                ) as ALT_RESVE_NCR_ALT_RSN_NM, /* 조직변경 예약 구분(옵션) */
+		        </if>
+                UPPER_OFFICE_YN,
+                OFFICE_CODE,                            /* 관서코드 */
+                OFFICE_NAME,                            /* 관서명 */
+                CONNECT_BY_ISLEAF AS ISLEAF,   /* 자식노드가 없으면 1, 있으면 0 */
+                LEVEL as LVL,                             /*  TREE DEPTH 레벨 */
+                LTRIM (SYS_CONNECT_BY_PATH (OFFICE_CODE, ' > '), ' > ') AS DEPTH_CD,      /* 전체DEPTH 경로코드 */
+                LTRIM (SYS_CONNECT_BY_PATH (OFFICE_NAME, ' > '), ' > ') AS DEPTH_NAME,  /* 전체DEPTH 경로명 */
+                AGFC_GUBUN_CD,                        /* 청구분코드 */
+                AGFC_GUBUN_NM,
+                PAST_OFFICE_CODE,       /* 과거관서코드 */
+                CM_OFFICE_GUBUN_CD,   /* 관서급수 */
+                CM_OFFICE_CODE,          /* 공통관서코드 */
+                TRNSFER_OFFICE_CODE,  /* 이관관서코드 */
+                ORDR,                          /* 정렬순서 */
+                ORG_GUBUN_CD,            /* 통합조직구분 코드 */
+                GET_CODE_F('CMD_ORG_SEC', ORG_GUBUN_CD) as ORG_GUBUN_NM, /*  통합조직구분명 */
+                DEPT_GUBUN_CD,      /* 부서구분코드 */
+                GET_CODE_F('CMD_DEPT_SEC', DEPT_GUBUN_CD) as DEPT_GUBUN_NM, /*   부서구분명 */
+                ACCT_START_DATEC,
+                ACCT_END_DATEC,
+                START_DATEC,
+                END_DATEC,
+                OFFICE_SEQ_NO,                      /* 관서일련번호 */
+                VTL_GUBUN_CD,                       /* 가상조직구분코드 */
+                GET_CODE_F('CMD_VIRTL_SEC', VTL_GUBUN_CD) as VIRTL_GUBUN_NM, /* 가상조직구분명 */
+                ADDR,
+                TEL_NO,
+                ZIP_CODE,
+                NCR_ALT_RSN_CD,
+                GET_CODE_F('CMD_NAR_CD', NCR_ALT_RSN_CD) as NCR_ALT_RSN_NM, /* 신설/변경사유 코드명 */
+                NCR_ALT_RSN_RM,
+                USE_YN,
+                <if test="STD_YM == null or STD_YM == '' ">
+                UPDATED_DATEC,   /* 신설/변경일자 */
+                </if>
+                CREATED_BY,
+                TO_CHAR(CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') as CREATION_DATE
+        <if test="STD_YM != null and STD_YM != '' ">
+            FROM CMD_ORGS_MM_HST A    /* 조직월이력 테이블 */
+        </if>
+        <if test="STD_YM == null or STD_YM == '' ">
+            FROM CMD_ORGS A                /* 조직 마스터 테이블 */
+        </if>
+            WHERE 1=1
+            <if test='USE_YN != null and USE_YN == "Y" '>
+                    AND USE_YN = 'Y'
+            </if>
+            <if test='USE_YN != null and USE_YN == "N" '>
+                    AND USE_YN = 'N'
+            </if>
+            <if test="LVL != null and LVL > 0 ">
+                    AND LEVEL <![CDATA[ <= ]]> #{LVL}     /* 레벨()1~4) 이하만 */
+            </if>
+            <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+                    AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}      /* 레벨1의(청단위)부터..: 2자리  */
+            </if>
+            <if test="PRM_OFC_CD != null and PRM_OFC_CD != ''">
+                    AND OFFICE_CODE = #{PRM_OFC_CD}      /* 특정관서1개만1(코드로) */
+            </if>
+            <if test="OFFICE_ID != null and OFFICE_ID > 0 ">
+                    AND OFFICE_ID = #{OFFICE_ID}              /* 특정관서1개만2 (PK ID로) */
+            </if>
+            <if test="ORG_GUBUN_CD != null and ORG_GUBUN_CD != ''">
+                    AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}         /* 통합조직 구분코드  */
+            </if>
+            <if test="DEPT_GUBUN_CD != null and DEPT_GUBUN_CD != ''">
+                    AND DEPT_GUBUN_CD = #{DEPT_GUBUN_CD}      /* 부서 구분코드  */
+            </if>
+            <if test="STD_YM != null and STD_YM != ''">
+                    AND STD_YM = #{STD_YM}      /* 기준년월  */
+            </if>
+            <if test="UPPER_OFC_CD == null or UPPER_OFC_CD == ''">
+            START WITH UPPER_OFFICE_CODE IN ('0200000H', '0100000J') /* 최상위코드-생략시 (미래창조과학부 포함) */
+            </if>
+            <if test="UPPER_OFC_CD != null and UPPER_OFC_CD != ''">
+            START WITH UPPER_OFFICE_CODE = #{UPPER_OFC_CD}       /* 최상위코드-있을경우 = 부모의 시작 조건(우정사업본부:0200000H) */
+            </if>
+            <if test="STD_YM != null and STD_YM != ''">
+                    AND STD_YM = #{STD_YM}      /* 기준년월  */
+            </if>
+            CONNECT BY PRIOR OFFICE_CODE = UPPER_OFFICE_CODE   /* 자신과 부모키를 비교 */
+            <if test="STD_YM != null and STD_YM != ''">
+                    AND STD_YM = #{STD_YM}      /* 기준년월  */
+            </if>
+            ORDER SIBLINGS BY                          /* 계층내에서 정렬할수 있는 SIBLINGS BY */
+            UPPER_OFFICE_CODE ASC, ORDR ASC, OFFICE_CODE ASC
+        ) ORG
+        WHERE 1=1
+       <if test="CND != '' and CND !=null ">
+             <if test="CND.equals('OFC_CD') and TEXT != null ">
+                    AND OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+            </if>
+             <if test="CND.equals('OFC_NM') and TEXT != null ">
+                    AND OFFICE_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+             </if>
+             <if test="CND.equals('PAST_OFC_CD') and TEXT != null ">
+                    AND PAST_OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+             </if>
+       </if>
+    </select>
+
+    <!-- 해당 조직의 조직매핑 정보 리스트  조회  -->
+    <select id="selectOrgMpngList" resultType="hashmap">
+            SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgMpngList  */
+                  A.AGFC_GUBUN_NM
+			    , A.OFFICE_CODE as OFC_CD
+			    , A.OFFICE_NAME as OFC_NM
+			    , B.MPNG_SYS_CD
+			    , B.MPNG_OFFICE_CODE as MPNG_OFC_CD
+			    , B.MPNG_OFFICE_NAME as MPNG_OFC_NM
+			    , B.SEQ_NO
+			    , B.START_DATEC
+			    , B.END_DATEC
+			FROM CMD_ORGS A, CMD_ORGS_MPNGS B
+			WHERE 1=1
+			AND A.OFFICE_ID = B.OFFICE_ID
+			AND A.USE_YN = B.USE_YN
+			-- AND A.USE_YN = 'Y'
+            AND A.OFFICE_ID = #{OFC_ID}
+    </select>
+
+    <!-- 현재 사용중인 조직구분코드 리스트 -->
+    <select id="selectOrgGubunCdList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgGubunCdList"  */
+                0 as ORDR
+                , '' as CM_CD
+                , '선택' as CD_NM
+         FROM DUAL
+         UNION ALL
+         SELECT
+                 ORDR
+               , CM_CD
+               , CD_NM
+         FROM CMD_CM_CDS
+         WHERE 1=1
+         AND GRP_CD = 'CMD_ORG_SEC'
+         AND USE_YN = 'Y'
+         AND CM_CD NOT IN ('ORG100', 'ORG311', 'ORG312', 'ORG313', 'ORG314') /* MIC본부하고 폐국된 과거 조직은 제외함 */
+        ORDER BY ORDR
+    </select>
+
+    <!-- 생성될 조직코드 중복체크 조회 -->
+    <select id="selectExistOrgCnt" resultType="hashmap">
+        SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectExistOrgCnt  */
+            COUNT(*) as CNT
+        FROM CMD_ORGS
+        WHERE 1=1
+        AND USE_YN = 'Y'
+        <if test="OFFICE_NAME != null and OFFICE_NAME != ''">
+        AND OFFICE_NAME = #{OFFICE_NAME}
+        </if>
+        <if test="OFFICE_CODE != null and OFFICE_CODE != ''">
+        AND OFFICE_CODE = #{OFFICE_CODE}
+        </if>
+        <if test="PAST_OFFICE_CODE != null and PAST_OFFICE_CODE != ''">
+        AND PAST_OFFICE_CODE = #{PAST_OFFICE_CODE}
+        </if>
+    </select>
+
+    <!-- 생성될 조직코드 조회 -->
+    <select id="selectNextOrgCode" resultType="hashmap">
+     SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectNextOrgCode"  */
+         T.*
+         FROM (
+	        SELECT
+	               <if test='VTL_GUBUN_CD == "H" '>
+	                  NVL(MAX(OFFICE_SEQ_NO),0)+0 AS MAX_OFFICE_SEQ_NO  /* 생성될 조직코드 (H)  */
+	               </if>
+	               <if test='VTL_GUBUN_CD != "H" '>
+	                  NVL(MAX(OFFICE_SEQ_NO),0)+1 AS MAX_OFFICE_SEQ_NO  /* 생성될 조직코드(H외) */
+	               </if>
+			   , MAX(OFFICE_ID)  AS MAX_OFFICE_ID
+			   , MAX(OFFICE_CODE) AS MAX_OFFICE_CODE
+			      <if test='VTL_GUBUN_CD == "H" '>
+			      , #{AGFC_GUBUN_CD} || LPAD(NVL(MAX(OFFICE_SEQ_NO), 0)+0, 5, '0') || #{VTL_GUBUN_CD} AS NEXT_OFFICE_CODE /* 생성될 조직코드 (H)*/
+			       </if>
+	               <if test='VTL_GUBUN_CD != "H" '>
+			      , #{AGFC_GUBUN_CD} || LPAD(NVL(MAX(OFFICE_SEQ_NO), 0)+1, 5, '0') || #{VTL_GUBUN_CD} AS NEXT_OFFICE_CODE /* 생성될 조직코드(H외) */
+			      </if>
+			      , #{VTL_GUBUN_CD} as VTL_GUBUN_CD
+	        FROM CMD_ORGS
+			WHERE 1=1
+			AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD} /* 청구분코드   */
+			UNION ALL
+			SELECT
+                   <if test='VTL_GUBUN_CD == "H" '>
+                      NVL(MAX(OFFICE_SEQ_NO),0)+0 AS MAX_OFFICE_SEQ_NO  /* 생성될 조직코드 (H)  */
+                   </if>
+                   <if test='VTL_GUBUN_CD != "H" '>
+                      NVL(MAX(OFFICE_SEQ_NO),0)+1 AS MAX_OFFICE_SEQ_NO  /* 생성될 조직코드(H외) */
+                   </if>
+               , MAX(OFFICE_ID)  AS MAX_OFFICE_ID
+               , MAX(OFFICE_CODE) AS MAX_OFFICE_CODE
+                  <if test='VTL_GUBUN_CD == "H" '>
+                  , #{AGFC_GUBUN_CD} || LPAD(NVL(MAX(OFFICE_SEQ_NO), 0)+0, 5, '0') || #{VTL_GUBUN_CD} AS NEXT_OFFICE_CODE /* 생성될 조직코드 (H)*/
+                   </if>
+                   <if test='VTL_GUBUN_CD != "H" '>
+                  , #{AGFC_GUBUN_CD} || LPAD(NVL(MAX(OFFICE_SEQ_NO), 0)+1, 5, '0') || #{VTL_GUBUN_CD} AS NEXT_OFFICE_CODE /* 생성될 조직코드(H외) */
+                  </if>
+                  , #{VTL_GUBUN_CD} as VTL_GUBUN_CD
+            FROM CMD_ORGS_ALT_RESVES -- 변경예약테이블에서 앞으로 생성될거 포함
+            WHERE NCR_ALT_RSN_CD != 'NAR200' -- 폐국이 아닌거
+            AND LAST_UPDATE_DATE IS NULL -- 아직 처리 안한거
+            AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD} /* 청구분코드   */
+       ) T
+       WHERE 1=1
+       ORDER BY T.MAX_OFFICE_SEQ_NO DESC
+    </select>
+
+    <!-- 조직 등록 -->
+    <insert id="insertOrgs" parameterType="hashmap">
+        <selectKey keyProperty="OFFICE_ID" resultType="Integer" order="BEFORE">
+          SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgs" */
+                      CMD_ORGS_S.NEXTVAL
+          FROM     DUAL
+        </selectKey>
+        INSERT
+        INTO      CMD_ORGS
+                    ( OFFICE_ID
+			  	    , OFFICE_CODE
+				    , OFFICE_NAME
+					, AGFC_GUBUN_CD
+					, AGFC_GUBUN_NM
+					, PAST_OFFICE_CODE
+					, OFFICE_SEQ_NO
+					, VTL_GUBUN_CD
+					, NCR_ALT_RSN_CD
+					, NCR_ALT_RSN_RM
+					, ACCT_END_DATEC
+					, ACCT_START_DATEC
+					, START_DATEC
+					, END_DATEC
+					, UPPER_OFFICE_CODE
+					, UPPER_OFFICE_YN
+					, ORG_GUBUN_CD
+					, DEPT_GUBUN_CD
+					, CM_OFFICE_CODE
+					, TRNSFER_OFFICE_CODE
+					, CM_OFFICE_GUBUN_CD
+					, ORDR
+					, ADDR
+					, TEL_NO
+				    , ZIP_CODE
+					, USE_YN
+					, UPDATED_DATEC
+					, CREATED_BY
+					, CREATION_DATE
+                   )
+        VALUES (
+                      #{OFFICE_ID}
+                    , #{OFFICE_CODE}
+                    , #{OFFICE_NAME}
+                    , #{AGFC_GUBUN_CD}
+                    , #{AGFC_GUBUN_NM}
+                    , #{PAST_OFFICE_CODE}
+                    , #{OFFICE_SEQ_NO}
+                    , #{VTL_GUBUN_CD}
+                    , #{NCR_ALT_RSN_CD}
+                    , #{NCR_ALT_RSN_RM}
+                    , #{ACCT_END_DATEC}
+                    , #{ACCT_START_DATEC}
+                    , #{START_DATEC}
+                    , #{END_DATEC}
+                    , #{UPPER_OFFICE_CODE}
+                    , #{UPPER_OFFICE_YN}
+                    , #{ORG_GUBUN_CD}
+                    , #{DEPT_GUBUN_CD}
+                    , #{CM_OFFICE_CODE}
+                    , #{TRNSFER_OFFICE_CODE}
+                    , #{CM_OFFICE_GUBUN_CD}
+                    , #{ORDR}
+                    , #{ADDR}
+                    , #{TEL_NO}
+                    , #{ZIP_CODE}
+                    , #{USE_YN}
+                    , TO_CHAR(SYSDATE, 'YYYYMMDD')
+                    , #{CREATED_BY}
+                    , SYSDATE
+                )
+    </insert>
+
+   <!-- 조직마스터 IF삭제 (to전략경영) X -->
+   <update id="deleteOrgsIfs"  parameterType="hashmap">
+        DELETE /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.deleteOrgsIfs" */
+        FROM CMD_ORGS_IFS
+        WHERE 1=1
+        AND OFFICE_ID = #{OFFICE_ID}
+        AND LINK_STAT_CD = 'S'   /* 연계성공건만 삭제 */
+   </update>
+
+   <!-- 조직마스터 IF삭제 (to ITRMS) X -->
+   <update id="deleteOrgsItrIfs"  parameterType="hashmap">
+        DELETE /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.deleteOrgsItrIfs" */
+        FROM CMD_ORGS_ITR_IFS
+        WHERE 1=1
+        AND OFFICE_ID = #{OFFICE_ID}
+        AND LINK_STAT_CD = 'S'   /* 연계성공건만 삭제 */
+   </update>
+
+    <!-- 조직 송신 인터페이스 등록(to 전략경영) - 신규등록용:CUD_KEY='C'-->
+    <insert id="insertOrgsIfs" parameterType="hashmap">
+        INSERT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgsIfs" */
+        INTO    CMD_ORGS_IFS
+                    ( OFFICE_ID
+                    , OFFICE_CODE
+                    , OFFICE_NAME
+                    , AGFC_GUBUN_CD
+                    , AGFC_GUBUN_NM
+                    , PAST_OFFICE_CODE
+                    , OFFICE_SEQ_NO
+                    , VTL_GUBUN_CD
+                    , NCR_ALT_RSN_CD
+                    , NCR_ALT_RSN_RM
+                    , ACCT_END_DATEC
+                    , ACCT_START_DATEC
+                    , START_DATEC
+                    , END_DATEC
+                    , UPPER_OFFICE_CODE
+                    , UPPER_OFFICE_YN
+                    , ORG_GUBUN_CD
+                    , DEPT_GUBUN_CD
+                    , CM_OFFICE_CODE
+                    , TRNSFER_OFFICE_CODE
+                    , CM_OFFICE_GUBUN_CD
+                    , ORDR
+                    , ADDR
+                    , TEL_NO
+                    , ZIP_CODE
+                    , USE_YN
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , TRAN_ID
+                    , LINK_DEAL_DTM
+                    , LINK_STAT_CD
+                    , CUD_KEY
+                   )
+        VALUES (
+                      #{OFFICE_ID}
+                    , #{OFFICE_CODE}
+                    , #{OFFICE_NAME}
+                    , #{AGFC_GUBUN_CD}
+                    , #{AGFC_GUBUN_NM}
+                    , #{PAST_OFFICE_CODE}
+                    , #{OFFICE_SEQ_NO}
+                    , #{VTL_GUBUN_CD}
+                    , #{NCR_ALT_RSN_CD}
+                    , #{NCR_ALT_RSN_RM}
+                    , #{ACCT_END_DATEC}
+                    , #{ACCT_START_DATEC}
+                    , #{START_DATEC}
+                    , #{END_DATEC}
+                    , #{UPPER_OFFICE_CODE}
+                    , #{UPPER_OFFICE_YN}
+                    , #{ORG_GUBUN_CD}
+                    , #{DEPT_GUBUN_CD}
+                    , #{CM_OFFICE_CODE}
+                    , #{TRNSFER_OFFICE_CODE}
+                    , #{CM_OFFICE_GUBUN_CD}
+                    , #{ORDR}
+                    , #{ADDR}
+                    , #{TEL_NO}
+                    , #{ZIP_CODE}
+                    , #{USE_YN}
+                    , #{CREATED_BY}
+                    , SYSDATE
+                    , CMD_GET_TRAN_ID_F('CMD')
+                    ,  NULL
+                    , #{LINK_STAT_CD}
+                    , #{CUD_KEY}
+                )
+    </insert>
+
+    <!-- 조직 송신 인터페이스  등록(to ITRMS)  - 신규등록용:CUD_KEY='C' -->
+    <insert id="insertOrgsItrIfs" parameterType="hashmap">
+        INSERT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgsItrIfs" */
+        INTO    CMD_ORGS_ITR_IFS
+                    ( OFFICE_ID
+                    , OFFICE_CODE
+                    , OFFICE_NAME
+                    , AGFC_GUBUN_CD
+                    , AGFC_GUBUN_NM
+                    , PAST_OFFICE_CODE
+                    , OFFICE_SEQ_NO
+                    , VTL_GUBUN_CD
+                    , NCR_ALT_RSN_CD
+                    , NCR_ALT_RSN_RM
+                    , ACCT_END_DATEC
+                    , ACCT_START_DATEC
+                    , START_DATEC
+                    , END_DATEC
+                    , UPPER_OFFICE_CODE
+                    , UPPER_OFFICE_YN
+                    , ORG_GUBUN_CD
+                    , DEPT_GUBUN_CD
+                    , CM_OFFICE_CODE
+                    , TRNSFER_OFFICE_CODE
+                    , CM_OFFICE_GUBUN_CD
+                    , ORDR
+                    , ADDR
+                    , TEL_NO
+                    , ZIP_CODE
+                    , USE_YN
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , TRAN_ID
+                    , LINK_DEAL_DTM
+                    , LINK_STAT_CD
+                    , CUD_KEY
+                   )
+        VALUES (
+                      #{OFFICE_ID}
+                    , #{OFFICE_CODE}
+                    , #{OFFICE_NAME}
+                    , #{AGFC_GUBUN_CD}
+                    , #{AGFC_GUBUN_NM}
+                    , #{PAST_OFFICE_CODE}
+                    , #{OFFICE_SEQ_NO}
+                    , #{VTL_GUBUN_CD}
+                    , #{NCR_ALT_RSN_CD}
+                    , #{NCR_ALT_RSN_RM}
+                    , #{ACCT_END_DATEC}
+                    , #{ACCT_START_DATEC}
+                    , #{START_DATEC}
+                    , #{END_DATEC}
+                    , #{UPPER_OFFICE_CODE}
+                    , #{UPPER_OFFICE_YN}
+                    , #{ORG_GUBUN_CD}
+                    , #{DEPT_GUBUN_CD}
+                    , #{CM_OFFICE_CODE}
+                    , #{TRNSFER_OFFICE_CODE}
+                    , #{CM_OFFICE_GUBUN_CD}
+                    , #{ORDR}
+                    , #{ADDR}
+                    , #{TEL_NO}
+                    , #{ZIP_CODE}
+                    , #{USE_YN}
+                    , #{CREATED_BY}
+                    , SYSDATE
+                    , CMD_GET_TRAN_ID_F('CMD')
+                    ,  NULL
+                    , #{LINK_STAT_CD}
+                    , #{CUD_KEY}
+                )
+    </insert>
+
+    <!-- 조직(마스터) 수정 -->
+    <update id="updateOrgs" parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.updateOrgs" */  CMD_ORGS
+        SET
+                  OFFICE_NAME = #{OFFICE_NAME}
+                <if test="OFFICE_CODE != null and OFFICE_CODE != 'undefined' ">
+                , OFFICE_CODE = #{OFFICE_CODE}
+                </if>
+                , AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}
+                , AGFC_GUBUN_NM = #{AGFC_GUBUN_NM}
+                , PAST_OFFICE_CODE = #{PAST_OFFICE_CODE}
+                , OFFICE_SEQ_NO = #{OFFICE_SEQ_NO}
+
+                , ORG_GUBUN_CD = #{ORG_GUBUN_CD}
+                , DEPT_GUBUN_CD = #{DEPT_GUBUN_CD}
+                , VTL_GUBUN_CD = #{VTL_GUBUN_CD}
+                , NCR_ALT_RSN_CD = #{NCR_ALT_RSN_CD}
+                , NCR_ALT_RSN_RM = #{NCR_ALT_RSN_RM}
+
+                , START_DATEC = #{START_DATEC}
+                , END_DATEC = #{END_DATEC}
+                , ACCT_START_DATEC = #{ACCT_START_DATEC}
+                , ACCT_END_DATEC = #{ACCT_END_DATEC}
+                , UPDATED_DATEC = #{UPDATED_DATEC}
+
+                , UPPER_OFFICE_CODE = #{UPPER_OFFICE_CODE}
+                , UPPER_OFFICE_YN = #{UPPER_OFFICE_YN}
+                , CM_OFFICE_CODE = #{CM_OFFICE_CODE}
+                , TRNSFER_OFFICE_CODE = #{TRNSFER_OFFICE_CODE}
+                , CM_OFFICE_GUBUN_CD = #{CM_OFFICE_GUBUN_CD}
+                <if test="ORDR != null and ORDR >= 0 ">
+                , ORDR = #{ORDR}
+                </if>
+                , ADDR = #{ADDR}
+                , TEL_NO = #{TEL_NO}
+                , ZIP_CODE = #{ZIP_CODE}
+                , USE_YN = #{USE_YN}
+                , LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+                , LAST_UPDATE_DATE = SYSDATE
+        WHERE  OFFICE_ID = #{OFFICE_ID}
+    </update>
+
+    <!-- 조직 송신 인터페이스 등록(to 전략경영) - 수정용:CUD_KEY='U'-->
+    <insert id="insertOrgsIfsMod" parameterType="hashmap">
+        INSERT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgsIfsMod" */
+        INTO    CMD_ORGS_IFS
+                    ( OFFICE_ID
+                    , OFFICE_CODE
+                    , OFFICE_NAME
+                    , AGFC_GUBUN_CD
+                    , AGFC_GUBUN_NM
+                    , PAST_OFFICE_CODE
+                    , OFFICE_SEQ_NO
+                    , VTL_GUBUN_CD
+                    , NCR_ALT_RSN_CD
+                    , NCR_ALT_RSN_RM
+                    , ACCT_END_DATEC
+                    , ACCT_START_DATEC
+                    , START_DATEC
+                    , END_DATEC
+                    , UPPER_OFFICE_CODE
+                    , UPPER_OFFICE_YN
+                    , ORG_GUBUN_CD
+                    , DEPT_GUBUN_CD
+                    , CM_OFFICE_CODE
+                    , TRNSFER_OFFICE_CODE
+                    , CM_OFFICE_GUBUN_CD
+                    , ORDR
+                    , ADDR
+                    , TEL_NO
+                    , ZIP_CODE
+                    , USE_YN
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , LAST_UPDATED_BY
+                    , LAST_UPDATE_DATE
+                    , TRAN_ID
+                    , LINK_DEAL_DTM
+                    , LINK_STAT_CD
+                    , CUD_KEY
+                   )
+        SELECT
+                      OFFICE_ID
+                    , OFFICE_CODE
+                    , OFFICE_NAME
+                    , AGFC_GUBUN_CD
+                    , AGFC_GUBUN_NM
+                    , PAST_OFFICE_CODE
+                    , OFFICE_SEQ_NO
+                    , VTL_GUBUN_CD
+                    , NCR_ALT_RSN_CD
+                    , NCR_ALT_RSN_RM
+                    , ACCT_END_DATEC
+                    , ACCT_START_DATEC
+                    , START_DATEC
+                    , END_DATEC
+                    , UPPER_OFFICE_CODE
+                    , UPPER_OFFICE_YN
+                    , ORG_GUBUN_CD
+                    , DEPT_GUBUN_CD
+                    , CM_OFFICE_CODE
+                    , TRNSFER_OFFICE_CODE
+                    , CM_OFFICE_GUBUN_CD
+                    , ORDR
+                    , ADDR
+                    , TEL_NO
+                    , ZIP_CODE
+                    , USE_YN
+                    , CREATED_BY
+                    , SYSDATE
+                    , LAST_UPDATED_BY
+                    , LAST_UPDATE_DATE
+                    , CMD_GET_TRAN_ID_F('CMD')
+                    ,  NULL
+                    , #{LINK_STAT_CD}
+                    , #{CUD_KEY}
+        FROM   CMD_ORGS
+        WHERE OFFICE_ID = #{OFFICE_ID}
+    </insert>
+
+    <!-- 조직 송신 인터페이스  등록(to ITRMS)  - 수정용:CUD_KEY='U' -->
+    <insert id="insertOrgsItrIfsMod" parameterType="hashmap">
+        INSERT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgsItrIfsMod" */
+        INTO    CMD_ORGS_ITR_IFS
+                    ( OFFICE_ID
+                    , OFFICE_CODE
+                    , OFFICE_NAME
+                    , AGFC_GUBUN_CD
+                    , AGFC_GUBUN_NM
+                    , PAST_OFFICE_CODE
+                    , OFFICE_SEQ_NO
+                    , VTL_GUBUN_CD
+                    , NCR_ALT_RSN_CD
+                    , NCR_ALT_RSN_RM
+                    , ACCT_END_DATEC
+                    , ACCT_START_DATEC
+                    , START_DATEC
+                    , END_DATEC
+                    , UPPER_OFFICE_CODE
+                    , UPPER_OFFICE_YN
+                    , ORG_GUBUN_CD
+                    , DEPT_GUBUN_CD
+                    , CM_OFFICE_CODE
+                    , TRNSFER_OFFICE_CODE
+                    , CM_OFFICE_GUBUN_CD
+                    , ORDR
+                    , ADDR
+                    , TEL_NO
+                    , ZIP_CODE
+                    , USE_YN
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , LAST_UPDATED_BY
+                    , LAST_UPDATE_DATE
+                    , TRAN_ID
+                    , LINK_DEAL_DTM
+                    , LINK_STAT_CD
+                    , CUD_KEY
+                   )
+        SELECT
+                      OFFICE_ID
+                    , OFFICE_CODE
+                    , OFFICE_NAME
+                    , AGFC_GUBUN_CD
+                    , AGFC_GUBUN_NM
+                    , PAST_OFFICE_CODE
+                    , OFFICE_SEQ_NO
+                    , VTL_GUBUN_CD
+                    , NCR_ALT_RSN_CD
+                    , NCR_ALT_RSN_RM
+                    , ACCT_END_DATEC
+                    , ACCT_START_DATEC
+                    , START_DATEC
+                    , END_DATEC
+                    , UPPER_OFFICE_CODE
+                    , UPPER_OFFICE_YN
+                    , ORG_GUBUN_CD
+                    , DEPT_GUBUN_CD
+                    , CM_OFFICE_CODE
+                    , TRNSFER_OFFICE_CODE
+                    , CM_OFFICE_GUBUN_CD
+                    , ORDR
+                    , ADDR
+                    , TEL_NO
+                    , ZIP_CODE
+                    , USE_YN
+                    , CREATED_BY
+                    , SYSDATE
+                    , LAST_UPDATED_BY
+                    , LAST_UPDATE_DATE
+                    , CMD_GET_TRAN_ID_F('CMD')
+                    ,  NULL
+                    , #{LINK_STAT_CD}
+                    , #{CUD_KEY}
+        FROM   CMD_ORGS
+        WHERE OFFICE_ID = #{OFFICE_ID}
+    </insert>
+
+    <!-- 조직 이력등록(조직마스터 수정시 호출)-->
+    <insert id="insertOrgsHst" parameterType="hashmap">
+        INSERT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgsHst" */  INTO CMD_ORGS_HST
+                    ( OFFICE_ID
+                    , HST_SEQ_NO
+                    , OFFICE_CODE
+                    , OFFICE_NAME
+                    , AGFC_GUBUN_CD
+                    , AGFC_GUBUN_NM
+                    , PAST_OFFICE_CODE
+                    , OFFICE_SEQ_NO
+                    , VTL_GUBUN_CD
+                    , NCR_ALT_RSN_CD
+                    , NCR_ALT_RSN_RM
+                    , ACCT_END_DATEC
+                    , ACCT_START_DATEC
+                    , START_DATEC
+                    , END_DATEC
+                    , UPPER_OFFICE_CODE
+                    , UPPER_OFFICE_YN
+                    , ORG_GUBUN_CD
+                    , DEPT_GUBUN_CD
+                    , CM_OFFICE_CODE
+                    , TRNSFER_OFFICE_CODE
+                    , CM_OFFICE_GUBUN_CD
+                    , ORDR
+                    , ADDR
+                    , TEL_NO
+                    , ZIP_CODE
+                    , USE_YN
+                    , UPDATED_DATEC
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , LAST_UPDATED_BY
+                    , LAST_UPDATE_DATE
+                   )
+        SELECT
+                      OFFICE_ID
+                    , (SELECT NVL(MAX(HST_SEQ_NO), 0) +1 FROM CMD_ORGS_HST WHERE OFFICE_ID = #{OFFICE_ID})
+                    , OFFICE_CODE
+                    , OFFICE_NAME
+                    , AGFC_GUBUN_CD
+                    , AGFC_GUBUN_NM
+                    , PAST_OFFICE_CODE
+                    , OFFICE_SEQ_NO
+                    , VTL_GUBUN_CD
+                    , NCR_ALT_RSN_CD
+                    , NCR_ALT_RSN_RM
+                    , ACCT_END_DATEC
+                    , ACCT_START_DATEC
+                    , START_DATEC
+                    , END_DATEC
+                    , UPPER_OFFICE_CODE
+                    , UPPER_OFFICE_YN
+                    , ORG_GUBUN_CD
+                    , DEPT_GUBUN_CD
+                    , CM_OFFICE_CODE
+                    , TRNSFER_OFFICE_CODE
+                    , CM_OFFICE_GUBUN_CD
+                    , ORDR
+                    , ADDR
+                    , TEL_NO
+                    , ZIP_CODE
+                    , USE_YN
+                    , UPDATED_DATEC
+                    , CREATED_BY
+                    , SYSDATE
+                    , #{LAST_UPDATED_BY}
+                    , SYSDATE
+        FROM CMD_ORGS
+        WHERE OFFICE_ID = #{OFFICE_ID}
+    </insert>
+
+    <!-- 조직 예약등록(조직마스터 수정 또는 등록시 예약일자 있을경우에 호출)-->
+    <insert id="insertOrgsAltResves" parameterType="hashmap">
+        INSERT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgsAltResves" */  INTO CMD_ORGS_ALT_RESVES
+                    ( OFFICE_ID
+                    , ALT_RESVE_DATEC
+                    , OFFICE_CODE
+                    , OFFICE_NAME
+                    , AGFC_GUBUN_CD
+                    , AGFC_GUBUN_NM
+                    , PAST_OFFICE_CODE
+                    , OFFICE_SEQ_NO
+                    , VTL_GUBUN_CD
+                    , NCR_ALT_RSN_CD
+                    , NCR_ALT_RSN_RM
+                    , ACCT_END_DATEC
+                    , ACCT_START_DATEC
+                    , START_DATEC
+                    , END_DATEC
+                    , UPPER_OFFICE_CODE
+                    , UPPER_OFFICE_YN
+                    , ORG_GUBUN_CD
+                    , DEPT_GUBUN_CD
+                    , CM_OFFICE_CODE
+                    , TRNSFER_OFFICE_CODE
+                    , CM_OFFICE_GUBUN_CD
+                    , ORDR
+                    , ADDR
+                    , TEL_NO
+                    , ZIP_CODE
+                    , USE_YN
+                    , CREATED_BY
+                    , CREATION_DATE
+                   )
+        VALUES (
+                    <if test= "OFFICE_ID != null and OFFICE_ID != ''">
+                      #{OFFICE_ID}
+                    </if>
+                    <if test= "OFFICE_ID == null or OFFICE_ID == ''">
+                      CMD_ORGS_S.NEXTVAL
+                    </if>
+                    , #{ALT_RESVE_DATEC}
+                    , #{OFFICE_CODE}
+                    , #{OFFICE_NAME}
+                    , #{AGFC_GUBUN_CD}
+                    , #{AGFC_GUBUN_NM}
+                    , #{PAST_OFFICE_CODE}
+                    , #{OFFICE_SEQ_NO}
+                    , #{VTL_GUBUN_CD}
+                    , #{NCR_ALT_RSN_CD}
+                    , #{NCR_ALT_RSN_RM}
+                    , #{ACCT_END_DATEC}
+                    , #{ACCT_START_DATEC}
+                    , #{START_DATEC}
+                    , #{END_DATEC}
+                    , #{UPPER_OFFICE_CODE}
+                    , #{UPPER_OFFICE_YN}
+                    , #{ORG_GUBUN_CD}
+                    , #{DEPT_GUBUN_CD}
+                    , #{CM_OFFICE_CODE}
+                    , #{TRNSFER_OFFICE_CODE}
+                    , #{CM_OFFICE_GUBUN_CD}
+                    , #{ORDR}
+                    , #{ADDR}
+                    , #{TEL_NO}
+                    , #{ZIP_CODE}
+                    , #{USE_YN}
+                    , #{CREATED_BY}
+                    , SYSDATE
+                )
+    </insert>
+
+    <!-- 조직변경 예약정보 조회(변경예약일순으로 1건만 조회)  -->
+    <select id="selectOrgsAltResves" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgsAltResves"  */
+             ALT_RESVE_DATEC
+        FROM CMD_ORGS_ALT_RESVES
+        WHERE OFFICE_ID = #{OFFICE_ID}
+        AND ROWNUM = 1
+        ORDER BY ALT_RESVE_DATEC
+    </select>
+
+    <!-- 조직변경 예약정보 조회(변경예약일순으로 1건만 조회)  -->
+    <select id="selectOfficeIdNextValue" resultType="Integer">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOfficeIdNextValue"  */
+                   CMD_ORGS_S.NEXTVAL AS OFFICE_ID
+          FROM DUAL
+    </select>
+
+    <!-- 조직변경 예약정보  삭제(해당날짜의 조직변경 예약정보)PK -->
+    <delete id="deleteOrgsAltResves" parameterType="hashmap">
+        DELETE  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.deleteOrgsAltResves"  */
+        FROM    CMD_ORGS_ALT_RESVES
+        WHERE  OFFICE_ID = #{OFFICE_ID}                          /* 관서ID - PK1*/
+        AND      ALT_RESVE_DATEC = #{ALT_RESVE_DATEC}  /* 예약변경일 - PK2 */
+    </delete>
+
+    <!-- 조직구분값에 따른 부서구분 허용 리스트 조회  -->
+    <select id="selectOrgVsDeptList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgVsDeptList"  */
+		    DEPT_GUBUN_CD,                     /* 부서구분코드 */
+		    GET_CODE_F('CMD_DEPT_SEC', DEPT_GUBUN_CD) as DEPT_GUBUN_NM  /* 부서구분 코드명 */
+		FROM CMD_ORGS
+		WHERE 1=1
+		AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}  /* 조직구분코드 */
+		AND USE_YN = 'Y'
+		GROUP BY DEPT_GUBUN_CD
+    </select>
+
+    <!-- 상위관서의 조직구분코드 조회 (2개 비교)  -->
+    <select id="selectOrgGubunVsUpperList" resultType="hashmap">
+        SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgGubunVsUpperList"  */
+		   (SELECT
+		    ORG_GUBUN_CD FROM CMD_ORGS
+		    WHERE OFFICE_CODE = (SELECT UPPER_OFFICE_CODE FROM CMD_ORGS WHERE OFFICE_CODE = #{OFFICE_CODE})
+		    ) AS ORG_GUBUN_CD           /* 현재 조직의 상위관서 조직구분코드 */
+		  , (SELECT
+		    ORG_GUBUN_CD FROM CMD_ORGS
+		    WHERE OFFICE_CODE =  #{UPPER_OFFICE_CODE}
+		    ) AS UPPER_ORG_GUBUN_CD,  /* 지정 조직의 조직구분코드 */
+		    GET_CODE_F('CMD_ORG_SEC', (SELECT ORG_GUBUN_CD FROM CMD_ORGS WHERE OFFICE_CODE = #{UPPER_OFFICE_CODE})) as UPPER_ORG_GUBUN_NM /* 조직구분명 */
+		FROM DUAL
+    </select>
+
+    <!-- 조직마스터 순서관리 목록 조회-->
+    <select id="selectOrgOrdrList" resultType="hashmap">
+        SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgOrdrList  */
+		      ORG.OFFICE_ID
+		    , ORG.OFFICE_CODE as OFC_CD    /* 관서코드(조직코드) */
+		    , ORG.OFFICE_NAME as OFC_NM    /* 관서명 */
+		    , ORG.LVL
+		    , ORG.ORDR
+		    , ORG.ORDR_NEW
+		    , ORG.ORG_GUBUN_CD             /* 조직구분코드 */
+		    , ORG.ORG_GUBUN_NM             /* 조직구분명  */
+		    , ORG.UPPER_OFFICE_CODE
+		    , ORG.UPPER_OFC_NM
+		    , ORG.MPNG_OFFICE_CODE
+		    , ORG.MPNG_OFFICE_NAME
+		FROM (
+		    SELECT
+		        A.OFFICE_ID,                            /* 관서ID (SEQNUM) */
+		        A.OFFICE_CODE,                        /* 관서코드 */
+		        A.OFFICE_NAME,                        /* 관서명 */
+		        CONNECT_BY_ISLEAF AS ISLEAF,  /* 자식노드가 없으면 1, 있으면 0 */
+		        LEVEL as LVL,                            /*  TREE DEPTH 레벨 */
+		        A.ORDR,                                    /* 정렬순서 */
+		        '' as ORDR_NEW,                /* 변경후 정렬순서 */
+		        A.ORG_GUBUN_CD,                      /* 통합조직구분 코드 */
+		        GET_CODE_F('CMD_ORG_SEC', ORG_GUBUN_CD) as ORG_GUBUN_NM, /*  통합조직구분명 */
+		        UPPER_OFFICE_CODE,                  /* 상위관서코드 */
+		        (SELECT OFFICE_NAME FROM CMD_ORGS A1
+		         WHERE A1.OFFICE_CODE = A.UPPER_OFFICE_CODE
+		        ) as UPPER_OFC_NM,                  /* 상위관서명 */
+		        B.MPNG_OFFICE_CODE,               /* 등기용국기호 관서코드 */
+		        B.MPNG_OFFICE_NAME                /* 등기용국기호 관서명 */
+		    FROM CMD_ORGS A
+		    LEFT OUTER JOIN CMD_ORGS_MPNGS B
+		    ON A.OFFICE_ID = B.OFFICE_ID
+		    AND B.MPNG_SYS_CD = 'POST'         /* 매핑시스템=등기용국기호 코드 */
+		    AND B.USE_YN = 'Y'
+		    WHERE 1=1
+		    AND A.USE_YN = 'Y'
+		    <if test="LVL != null and LVL > 0 ">
+		      AND LEVEL = #{LVL}   /* 레벨(1~4) */
+		    </if>
+		    <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+		      AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}  /* 청 구분코드  */
+		    </if>
+		    <if test="ORG_GUBUN_CD != null and ORG_GUBUN_CD != ''">
+		      AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}    /* 통합조직 구분코드  */
+		    </if>
+		    START WITH UPPER_OFFICE_CODE = #{UPPER_OFC_CD}  /* 최상의코드 = 부모의 시작 조건(우정사업본부:0200000H) */
+		    CONNECT BY PRIOR A.OFFICE_CODE = A.UPPER_OFFICE_CODE
+		    ORDER SIBLINGS BY
+		    A.UPPER_OFFICE_CODE ASC, A.ORDR ASC, A.OFFICE_CODE ASC
+		) ORG
+		WHERE 1=1
+        <if test="CND != '' and CND !=null ">
+             <if test="CND.equals('OFC_CD') and TEXT != null ">
+                    AND OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+            </if>
+             <if test="CND.equals('OFC_NM') and TEXT != null ">
+                    AND OFFICE_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+             </if>
+             <if test="CND.equals('MPNG_OFFICE_CODE') and TEXT != null ">
+                    AND MPNG_OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+             </if>
+       </if>
+    </select>
+
+    <!-- 조직(마스터) 수정 - 조직순서 저장용 -->
+    <update id="updateOrgsOrdr" parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.updateOrgsOrdr" */  CMD_ORGS
+		SET
+		      ORDR = #{ORDR_NEW}
+		    , LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+		    , LAST_UPDATE_DATE = SYSDATE
+		WHERE  1=1
+		AND UPPER_OFFICE_CODE = #{ UPPER_OFFICE_CODE}
+		AND OFFICE_CODE = #{OFC_CD}
+    </update>
+
+    <!-- 조직변경 알림 전송 트리(조직+사용자) 조회-->
+    <select id="selectOrgAlimList" resultType="hashmap">
+        SELECT /* com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgAlimList  */
+              ORG.OFFICE_ID
+            , ORG.AGFC_GUBUN_CD
+            , ORG.AGFC_GUBUN_NM
+		    , ORG.OFFICE_CODE
+		    , ORG.OFFICE_NAME
+		    , ORG.LVL
+		    , ORG.ORG_GUBUN_CD
+		    , ORG.ORG_GUBUN_NM
+		    , ORG.UPPER_OFFICE_CODE
+		    , ORG.UPPER_OFFICE_NAME
+		    , ORG.PORTAL_USER_ID
+		    , ORG.USER_ACNT
+		    , ORG.USER_NM
+		    , ORG.EMAIL_ADDR
+		    , ORG.MBPH_NO
+		    , ORG.USER_GUBUN_CD
+		    , ORG.USER_GUBUN_NM
+        FROM (
+            SELECT
+                A.OFFICE_ID,                            /* 관서ID (SEQNUM) */
+                A.AGFC_GUBUN_CD,
+                A.AGFC_GUBUN_NM,
+		        A.OFFICE_CODE,                        /* 관서코드 */
+		        A.OFFICE_NAME,                        /* 관서명 */
+		        CONNECT_BY_ISLEAF AS ISLEAF,  /* 자식노드가 없으면 1, 있으면 0 */
+		        LEVEL as LVL,                            /*  TREE DEPTH 레벨 */
+		        A.ORG_GUBUN_CD,                      /* 통합조직구분 코드 */
+		        GET_CODE_F('CMD_ORG_SEC', ORG_GUBUN_CD) as ORG_GUBUN_NM, /*  통합조직구분명 */
+		        UPPER_OFFICE_CODE,                  /* 상위관서코드 */
+		        (SELECT OFFICE_NAME FROM CMD_ORGS A1
+		         WHERE A1.OFFICE_CODE = A.UPPER_OFFICE_CODE
+		        ) as UPPER_OFFICE_NAME,                  /* 상위관서명 */
+		        B.PORTAL_USER_ID,
+		        B.USER_ACNT,
+		        B.USER_NM,
+		        B.EMAIL_ADDR,
+		        B.MBPH_NO,
+		        B.USER_GUBUN_CD,
+		        DECODE(B.USER_GUBUN_CD, 'admin', '통합시스템관리자', 'user_admin', '통합사용자관리자', 'part_admin', '분임사용자관리자', 'work_user', '업무사용자', '') as USER_GUBUN_NM
+            FROM CMD_ORGS A
+            LEFT OUTER JOIN PES_PORTAL_USERS B
+            ON A.OFFICE_CODE = B.OFFICE_CODE
+		    AND B.PORTAL_USER_ID > 0
+            <if test= "USER_GUBUN_ARR != null and USER_GUBUN_ARR != ''">
+            AND B.USER_GUBUN_CD IN
+                 <foreach item="item" index="index" collection="USER_GUBUN_LIST" open="(" separator="," close=")" >
+                     #{item}
+                 </foreach>
+            </if>
+		    <if test="PORTAL_USER_ID != null and PORTAL_USER_ID != ''">
+		    AND B.PORTAL_USER_ID = #{PORTAL_USER_ID}
+		    </if>
+		    <if test="USER_ACNT != null and USER_ACNT != ''">
+		    AND B.USER_ACNT = #{USER_ACNT}
+		    </if>
+		    <if test="USER_NM != null and USER_NM != ''">
+            AND B.USER_NM LIKE '%' ||  #{USER_NM} || '%'
+            </if>
+		    AND B.USE_YN = 'Y'
+            WHERE 1=1
+            AND A.OFFICE_CODE = B.OFFICE_CODE
+            AND A.USE_YN = 'Y'
+            <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+            AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}  /* 청 구분코드 (2자리) */
+            </if>
+            START WITH UPPER_OFFICE_CODE = #{UPPER_OFC_CD}  /* 최상의코드 = 부모의 시작 조건(우정사업본부:0200000H) */
+            CONNECT BY PRIOR A.OFFICE_CODE = A.UPPER_OFFICE_CODE
+            ORDER SIBLINGS BY
+            A.UPPER_OFFICE_CODE ASC, A.ORDR ASC, A.OFFICE_CODE ASC
+        ) ORG
+        WHERE 1=1
+    </select>
+
+    <!-- 조직변경 알림 전송 최근 이력 조회(10개)  -->
+    <select id="selectOrgAlimHstList" resultType="hashmap">
+       SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgAlimHstList"  */
+           *
+       FROM (
+	            SELECT
+	              SNDNG_LOG_ID
+			    , RCVER_INFO
+			    , DBMS_LOB.SUBSTR(COMMENTS,4000,1) as COMMENTS
+			    , SUBJECT_TEXT
+			    , CC
+			    , RM
+			    , CREATED_BY
+			    , CREATION_DATE
+			 FROM CMD_SNDNG_LOGS
+			WHERE 1=1
+			AND SNDNG_KND_CD = 'EMAIL'
+			AND SENDER_INFO IN (#{ADMIN_SENDER_EMAIL}, #{LOGIN_SENDER_EMAIL})   /* FIX(관리자 이메일), 로그인 사용자  */
+			ORDER BY SNDNG_LOG_ID DESC
+       ) DUAL
+       WHERE ROWNUM <![CDATA[ <= 10 ]]>
+    </select>
+
+    <!--조직  [기본/등급] 변경 이력 전체  카운트  -->
+    <select id="selectOrgsAltResveCount" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgsAltResveCount"  */
+                   COUNT(*) as CNT
+        FROM CMD_ORGS_HST
+        WHERE 1=1
+        <if test="USE_YN != null and USE_YN != ''">
+        AND USE_YN = #{USE_YN}
+        </if>
+        <if test="NCR_ALT_RSN_CD != null and NCR_ALT_RSN_CD != ''">
+         AND NCR_ALT_RSN_CD = #{NCR_ALT_RSN_CD}    /* 신설/변경 사유 코드 */
+        </if>
+        <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+        AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}
+        </if>
+        <if test="ORG_GUBUN_CD != null and ORG_GUBUN_CD != ''">
+        AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}
+        </if>
+        <if test="START_DATEC != null and START_DATEC != ''">
+            AND TO_CHAR(LAST_UPDATE_DATE, 'YYYYMMDD')  BETWEEN #{START_DATEC} AND #{END_DATEC}
+        </if>
+        <if test="CND != '' and CND !=null ">
+            <if test="CND.equals('OFFICE_CODE') and TEXT != '' ">
+            AND OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+            </if>
+            <if test="CND.equals('OFFICE_NAME') and TEXT != '' ">
+            AND OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+            </if>
+            <if test="CND.equals('PAST_OFFICE_CODE') and TEXT != '' ">
+            AND PAST_OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+            </if>
+        </if>
+    </select>
+
+    <!-- 조직 변경 조회  -->
+    <select id="selectOrgsAltResveList" resultType="hashmap">
+	    SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgsAltResveList" */
+			*
+	    FROM (
+			    SELECT
+			    ROWNUM AS RNUM,
+			    T.* FROM (
+			        SELECT
+					      OFFICE_ID
+					    , HST_SEQ_NO
+					    , AGFC_GUBUN_CD
+					    , AGFC_GUBUN_NM
+					    , OFFICE_CODE
+					    , OFFICE_NAME
+					    , ORG_GUBUN_CD
+					    , GET_CODE_F('CMD_ORG_SEC', ORG_GUBUN_CD) as ORG_GUBUN_NM
+					    , DEPT_GUBUN_CD
+                        , GET_CODE_F('CMD_DEPT_SEC', DEPT_GUBUN_CD) as DEPT_GUBUN_NM
+                        , (SELECT OFFICE_NAME FROM CMD_ORGS A1 WHERE A1.OFFICE_CODE = UPPER_OFFICE_CODE  AND USE_YN = 'Y') as UPPER_OFFICE_NAME   /* 상위관서명 */
+					    , UPPER_OFFICE_CODE
+					    , TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DAY
+					    , GET_CODE_F('CMD_NAR_CD', NCR_ALT_RSN_CD) as NCR_ALT_RSN_NM
+					    , NCR_ALT_RSN_RM
+					    , ORDR
+					    , ZIP_CODE
+					    , ADDR
+					    , TEL_NO
+					    , START_DATEC
+					    , END_DATEC
+					    , ACCT_START_DATEC
+					    , ACCT_END_DATEC
+					    , CM_OFFICE_GUBUN_CD as OFFICE_CLASS_CODE
+					    , TRNSFER_OFFICE_CODE
+					    , CM_OFFICE_CODE
+					    , USE_YN
+					    , TO_CHAR(TO_DATE(UPDATED_DATEC, 'YYYYMMDD'), 'YYYY-MM-DD') as UPDATED_DATEC
+					    , LAST_UPDATED_BY
+					    , TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD HH24:MI:SS') as LAST_UPDATE_TIME
+					    , (SELECT USER_NM FROM PES_PORTAL_USERS WHERE PORTAL_USER_ID = CMD_ORGS_HST.LAST_UPDATED_BY and ROWNUM = 1) as UPDATE_USER_NM    /* 최종수정자명 */
+					FROM CMD_ORGS_HST
+					WHERE 1=1
+					<if test="NCR_ALT_RSN_CD != null and NCR_ALT_RSN_CD != ''">
+					   AND NCR_ALT_RSN_CD = #{NCR_ALT_RSN_CD}    /* 신설/변경 사유 코드 */
+					</if>
+					<if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+	                AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}
+	                </if>
+	                <if test="ORG_GUBUN_CD != null and ORG_GUBUN_CD != ''">
+	                AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}
+	                </if>
+					/* AND LAST_UPDATE_DATE IS NOT NULL */
+					<if test="START_DATEC != null and START_DATEC != ''">
+	                     AND TO_CHAR(LAST_UPDATE_DATE, 'YYYYMMDD') BETWEEN #{START_DATEC} AND #{END_DATEC}
+	                </if>
+	                <if test="CND != '' and CND !=null ">
+	                    <if test="CND.equals('OFFICE_CODE') and TEXT != '' ">
+	                    AND OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+	                    </if>
+	                    <if test="CND.equals('OFFICE_NAME') and TEXT != '' ">
+	                    AND OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+	                    </if>
+	                    <if test="CND.equals('PAST_OFFICE_CODE') and TEXT != '' ">
+	                    AND PAST_OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+	                    </if>
+	                </if>
+					ORDER BY LAST_UPDATE_DATE DESC, OFFICE_ID, HST_SEQ_NO
+			   ) T WHERE 1=1
+               <if test= "P_END != null and P_END != ''">
+                AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+               </if>
+	     ) WHERE 1=1
+	     <if test= "P_START != null and P_START != ''">
+	     AND  RNUM >= #{P_START}
+	     </if>
+    </select>
+
+    <!--조직변경 예약 전체  카운트  -->
+    <select id="selectOrgsChgResveCount" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgsChgResveCount"  */
+                   COUNT(*) as CNT
+        FROM CMD_ORGS_ALT_RESVES
+        WHERE 1=1
+        AND USE_YN = 'Y'
+        <if test="NCR_ALT_RSN_CD != null and NCR_ALT_RSN_CD != ''">
+          AND NCR_ALT_RSN_CD = #{NCR_ALT_RSN_CD}    /* 신설/변경 사유 코드 */
+        </if>
+        <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+         AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}
+        </if>
+        <if test="ORG_GUBUN_CD != null and ORG_GUBUN_CD != ''">
+         AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}
+        </if>
+        <if test="START_DATEC != null and START_DATEC != ''">
+            AND ALT_RESVE_DATEC  BETWEEN #{START_DATEC} AND #{END_DATEC}
+        </if>
+        <if test="CND != '' and CND !=null ">
+            <if test="CND.equals('OFFICE_CODE') and TEXT != '' ">
+            AND OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+            </if>
+            <if test="CND.equals('OFFICE_NAME') and TEXT != '' ">
+            AND OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+            </if>
+            <if test="CND.equals('PAST_OFFICE_CODE') and TEXT != '' ">
+            AND PAST_OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+            </if>
+        </if>
+    </select>
+
+    <!-- 조직변경 예약  조회  -->
+    <select id="selectOrgsChgResveList" resultType="hashmap">
+        SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.selectOrgsChgResveList" */
+            *
+        FROM (
+                SELECT
+                ROWNUM AS RNUM,
+                T.* FROM (
+                    SELECT
+                          OFFICE_ID
+                        , ALT_RESVE_DATEC  /* 예약일자 */
+                        , AGFC_GUBUN_CD
+                        , AGFC_GUBUN_NM
+                        , OFFICE_CODE
+                        , OFFICE_NAME
+                        , ORG_GUBUN_CD
+                        , GET_CODE_F('CMD_ORG_SEC', ORG_GUBUN_CD) as ORG_GUBUN_NM
+                        , DEPT_GUBUN_CD
+                        , GET_CODE_F('CMD_DEPT_SEC', DEPT_GUBUN_CD) as DEPT_GUBUN_NM
+                        , UPPER_OFFICE_CODE
+                        , (SELECT OFFICE_NAME FROM CMD_ORGS A1 WHERE A1.OFFICE_CODE = UPPER_OFFICE_CODE  AND USE_YN = 'Y') as UPPER_OFFICE_NAME   /* 상위관서명 */
+                        , GET_CODE_F('CMD_NAR_CD', NCR_ALT_RSN_CD) as NCR_ALT_RSN_NM
+                        , NCR_ALT_RSN_CD
+                        , NCR_ALT_RSN_RM
+                        , ORDR
+                        , ZIP_CODE
+                        , ADDR
+                        , TEL_NO
+                        , START_DATEC
+                        , END_DATEC
+                        , ACCT_START_DATEC
+                        , ACCT_END_DATEC
+                        , CM_OFFICE_GUBUN_CD as OFFICE_CLASS_CODE
+                        , TRNSFER_OFFICE_CODE
+                        , CM_OFFICE_CODE
+                        , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD') as CREATION_DAY
+                        , TO_CHAR(CREATION_DATE, 'HH24:MI:SS') as CREATION_TIME
+                        , LAST_UPDATED_BY
+                        , TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD HH24:MI:SS') as LAST_UPDATE_DATE    /* 예약반영일시 */
+                    FROM CMD_ORGS_ALT_RESVES
+                    WHERE 1=1
+                    AND USE_YN = 'Y'
+                    <if test="NCR_ALT_RSN_CD != null and NCR_ALT_RSN_CD != ''">
+                       AND NCR_ALT_RSN_CD = #{NCR_ALT_RSN_CD}    /* 신설/변경 사유 코드 */
+                    </if>
+                    <if test="AGFC_GUBUN_CD != null and AGFC_GUBUN_CD != ''">
+                    AND AGFC_GUBUN_CD = #{AGFC_GUBUN_CD}
+                    </if>
+                    <if test="ORG_GUBUN_CD != null and ORG_GUBUN_CD != ''">
+                    AND ORG_GUBUN_CD = #{ORG_GUBUN_CD}
+                    </if>
+                    <if test="START_DATEC != null and START_DATEC != ''">
+                        AND ALT_RESVE_DATEC  BETWEEN #{START_DATEC} AND #{END_DATEC}
+                    </if>
+                    <if test="CND != '' and CND !=null ">
+                        <if test="CND.equals('OFFICE_CODE') and TEXT != '' ">
+                        AND OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+                        </if>
+                        <if test="CND.equals('OFFICE_NAME') and TEXT != '' ">
+                        AND OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+                        </if>
+                        <if test="CND.equals('PAST_OFFICE_CODE') and TEXT != '' ">
+                        AND PAST_OFFICE_CODE LIKE '%' ||  #{TEXT} || '%'
+                        </if>
+                    </if>
+                    ORDER BY DECODE(LAST_UPDATE_DATE, NULL, 1, 2), ALT_RESVE_DATEC DESC, CREATION_DATE, OFFICE_ID
+               ) T WHERE 1=1
+               <if test= "P_END != null and P_END != ''">
+                AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+               </if>
+         ) WHERE 1=1
+         <if test= "P_START != null and P_START != ''">
+         AND  RNUM >= #{P_START}
+         </if>
+    </select>
+
+       <!-- 조직변경예약 수정 - 예약일자 변경 저장용 -->
+    <update id="updateOrgsAltResve" parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.updateOrgsAltResve" */  CMD_ORGS_ALT_RESVES
+        SET
+              ALT_RESVE_DATEC = #{ALT_RESVE_DATEC}
+            , LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+        WHERE 1=1
+        AND OFFICE_CODE = #{OFFICE_CODE}
+        AND ALT_RESVE_DATEC = #{ORG_ALT_RESVE_DATEC}
+    </update>
+
+    <!-- 조직부가정보  등록(신규조직이 신설될 경우에만) -->
+    <insert id="insertOrgAddInfoNewOrg" parameterType="hashmap">
+        INSERT   /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgAddInfoNewOrg" */
+        INTO      CMD_ORGS_ADD_INFOS
+            (
+               OFFICE_ID
+            ,  JOB_SYS_CD
+            ,  ADD_INFO_GRP_CD
+            ,  RM
+            ,  USE_YN
+            ,  CREATED_BY
+            ,  CREATION_DATE
+            )
+            SELECT
+               #{OFFICE_ID}
+            ,  JOB_SYS_CD
+            ,  ADD_INFO_GRP_CD
+            ,  (#{OFFICE_CODE} || ' ' || #{OFFICE_NAME}) AS RM
+            ,  'Y'
+            , #{CREATED_BY}
+            ,  SYSDATE
+            FROM CMD_ORGS_ADD_INFOS_ATBS
+            GROUP BY JOB_SYS_CD, ADD_INFO_GRP_CD
+    </insert>
+
+    <!-- ERP FlexValue 연계 셋업 프로시져 Call을 위한 파라미터 설정   -->
+    <parameterMap id="spParamMap"  type="hashmap">
+        <parameter property="P_INS_CNT" javaType="java.lang.Integer" jdbcType="INTEGER" mode="OUT" />   <!-- 필수1(등록 건수)  -->
+        <parameter property="P_MOD_CNT" javaType="java.lang.Integer" jdbcType="INTEGER" mode="OUT" />  <!-- 필수2(수정 건수)  -->
+        <parameter property="P_ERR_DESC" javaType="java.lang.String" jdbcType="VARCHAR" mode="OUT" />   <!-- 필수3(오류메시지)  -->
+    </parameterMap>
+
+   <!-- ERP FlexValue 연계 셋업 프로시져 Call  -->
+   <select id="saveErpFlexValueSet" statementType="CALLABLE"  parameterMap="spParamMap">
+        {call ECM_DEPT_CODE_CREATE_P(?, ? ,?)}
+   </select>
+
+    <!-- 조직매핑 수정(즉시 반영-조직마스터에서 변경 했을 경우에 호출 -->
+   <update id="updateOrgMpngsM"  parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.updateOrgMpngsM" */  CMD_ORGS_MPNGS
+        SET
+              OFFICE_NAME = #{OFFICE_NAME}
+            , START_DATEC = #{START_DATEC}
+            , END_DATEC = #{ACCT_END_DATEC}
+            , USE_YN = #{MPNG_USE_YN}
+            , LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+            , LAST_UPDATE_DATE = SYSDATE
+        WHERE  1=1
+        AND OFFICE_ID = #{OFFICE_ID}
+        AND SEQ_NO = 1
+   </update>
+
+    <!-- 조직매핑 연계 등록1(즉시 반영-폐국포함, to 전력경영 EAI 전송) -->
+    <insert id="insertOrgsMpngsIfsM" parameterType="hashmap">
+	    INSERT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgsMpngsIfsM" */
+	    INTO CMD_ORGS_MPNGS_IFS
+	            (
+	                 TRAN_ID
+	               , OFFICE_ID
+	               , MPNG_SYS_CD
+	               , MPNG_OFFICE_CODE
+	               , SEQ_NO
+	               , OFFICE_NAME
+	               , MPNG_OFFICE_NAME
+	               , START_DATEC
+	               , END_DATEC
+	               , USE_YN
+	               , CREATED_BY
+	               , CREATION_DATE
+	               , LINK_DEAL_DTM
+	               , LINK_STAT_CD
+	               , CUD_KEY
+	            )
+	    SELECT
+		             CMD_GET_TRAN_ID_F('CMD')
+		           , OFFICE_ID
+		           , MPNG_SYS_CD
+		           , MPNG_OFFICE_CODE
+		           , SEQ_NO
+		           , #{OFFICE_NAME}
+		           , MPNG_OFFICE_NAME
+		           , #{START_DATEC}
+		           , #{END_DATEC}
+		           , #{USE_YN}           /* 사용여부 */
+		           , CREATED_BY
+		           , SYSDATE
+		           ,  NULL
+		           , #{LINK_STAT_CD}  /* N:신규,  P:진행,  S:성공,  F:실패  */
+	               , #{CUD_KEY}          /* C:Create, U:Delete 후 Insert, D:Delete */
+	    FROM CMD_ORGS_MPNGS
+	    WHERE OFFICE_ID = #{OFFICE_ID}
+	    AND SEQ_NO = 1
+    </insert>
+
+    <!-- 조직매핑 연계 등록2(즉시 반영-폐국포함, to ITRMS EAI 전송) -->
+    <insert id="insertOrgsMpngsItrIfsM" parameterType="hashmap">
+        INSERT /* "com.nbdf.cmd.cm.cmog.dao.CMOG01000Dao.insertOrgsMpngsItrIfsM" */
+        INTO CMD_ORGS_MPNGS_ITR_IFS
+                (
+                     TRAN_ID
+                   , OFFICE_ID
+                   , MPNG_SYS_CD
+                   , MPNG_OFFICE_CODE
+                   , SEQ_NO
+                   , OFFICE_NAME
+                   , MPNG_OFFICE_NAME
+                   , START_DATEC
+                   , END_DATEC
+                   , USE_YN
+                   , CREATED_BY
+                   , CREATION_DATE
+                   , LINK_DEAL_DTM
+                   , LINK_STAT_CD
+                   , CUD_KEY
+                )
+        SELECT
+                     CMD_GET_TRAN_ID_F('CMD')
+                   , OFFICE_ID
+                   , MPNG_SYS_CD
+                   , MPNG_OFFICE_CODE
+                   , SEQ_NO
+                   , #{OFFICE_NAME}
+                   , MPNG_OFFICE_NAME
+                   , #{START_DATEC}
+                   , #{END_DATEC}
+                   , #{USE_YN}           /* 사용여부 */
+                   , CREATED_BY
+                   , SYSDATE
+                   ,  NULL
+                   , #{LINK_STAT_CD} /* N:신규,  P:진행,  S:성공,  F:실패  */
+                   , #{CUD_KEY}         /* C:Create, U:Delete 후 Insert, D:Delete */
+        FROM CMD_ORGS_MPNGS
+        WHERE OFFICE_ID = #{OFFICE_ID}
+        AND SEQ_NO = 1
+    </insert>
+
+ </mapper>

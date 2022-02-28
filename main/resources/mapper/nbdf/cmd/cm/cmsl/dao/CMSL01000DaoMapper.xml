@@ -1,0 +1,375 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : CMSL01000DaoMapper.xml
+    설명          : 다양한SQL(Dynamic SQL)쿼리 관련 정의
+    작성자       : 진성하
+    최초작성일 : 2017.02.06
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.02.06     진성하     최초  생성
+     2017.05.02     진성하    테이블 변경분 적용 및  재수정
+-->
+<mapper namespace="com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao">
+    <!--  공통Who컬럼 정의 -->
+    <sql id="whoCol" >
+	    ,  CREATED_BY
+	    ,  TO_CHAR(CREATION_DATE, 'YYYY-MM-DD') as CREATION_DATE
+	    ,  LAST_UPDATED_BY
+	    ,  TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DATE
+    </sql>
+
+    <!--다양한  SQL(Dynamic SQL) 전체  카운트  -->
+    <select id="selectSqlListCount" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.selectSqlListCount"  */
+                   COUNT(*) as CNT
+        FROM   CMD_SQLS
+        WHERE 1=1
+        <if test= "JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+        AND  JOB_GUBUN_CD = #{JOB_GUBUN_CD}
+        </if>
+        <if test= "SQL_GUBUN_CD != null and SQL_GUBUN_CD != ''">
+        AND  SQL_GUBUN_CD = #{SQL_GUBUN_CD}
+        </if>
+        <if test= "SQL_GRP_CD != null and SQL_GRP_CD != ''">
+        AND  SQL_GRP_CD = #{SQL_GRP_CD}
+        </if>
+        <if test= "NOT_ADMIN != null and NOT_ADMIN != ''">
+        AND SQL_GRP_CD NOT IN ('ADMIN')  /* 관리자 권한이 아닌경우 */
+        </if>
+        <if test= "USE_YN != null and USE_YN != ''">
+        AND  USE_YN = #{USE_YN}
+        </if>
+        <if test="CND != '' and CND !=null ">
+            <if test="CND.equals('SQL_NM') and TEXT != null ">
+                   AND SQL_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+           </if>
+            <if test="CND.equals('SQL_DESC') and TEXT != null ">
+                   AND SQL_DESC LIKE UPPER('%' ||  #{TEXT} || '%')
+            </if>
+            <if test="CND.equals('SELECT_SNTENC') and TEXT != null ">
+                   AND SELECT_SNTENC LIKE UPPER('%' ||  #{TEXT} || '%')
+            </if>
+       </if>
+    </select>
+
+    <!--다양한  SQL(Dynamic SQL) 전체 조회 -->
+    <select id="selectSqlList" resultType="hashmap">
+	    SELECT  /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.selectSqlList" */
+	        *
+	        FROM (
+	            SELECT ROWNUM AS RNUM, T.* FROM (
+			        SELECT
+			                    ROWNUM AS NUM
+			                 ,  SQL_ID                                                                                     /* SQL_ID(PK) */
+			                 ,  GET_CODE_F('CMD_SQL_SEC', SQL_GUBUN_CD) AS SQL_GUBUN_NM     /* SQL 종류(한글)*/
+			                 ,  SQL_GUBUN_CD                                                                          /* SQL 종류(영문)*/
+			                 ,  SQL_GRP_CD                                                                          /* SQL 그룹*/
+			                 ,  GET_CODE_F('CMD_SQL_GRP', SQL_GRP_CD) AS SQL_GRP_NM      /* 업무시스템 명(한글)*/
+			                 ,  GET_CODE_F('CMD_JOB_GUBUNCD', JOB_GUBUN_CD) AS JOB_GUBUN_NM      /* 업무시스템 명(한글)*/
+			                 ,  JOB_GUBUN_CD                                                                          /* 업무시스템 명(영문)*/
+			                 ,  USE_YN                                                                                 /* 사용여부(Y,N) */
+			                 ,  SQL_NAME                                                                             /* SQL 이름 */
+			                 ,  SQL_DESC                                                                             /* SQL 설명 */
+			                 ,  SELECT_SNTENC                                                                    /* SELECE 문장 */
+			                 ,  FROM_SNTENC                                                                       /* FROM 문장 */
+			                 ,  WHERE_SNTENC                                                                     /* WHERE 문장 */
+			                 ,  ORDER_BY_SNTENC                                                                /* ORDER BY 문장 */
+			                 <include refid="whoCol" />
+			          FROM   CMD_SQLS
+			          WHERE 1=1
+			          <if test="SQL_ID != null and SQL_ID > 0 ">
+	                  AND SQL_ID = #{SQL_ID}
+	                 </if>
+	                 <if test= "SQL_GUBUN_CD != null and SQL_GUBUN_CD != ''">
+	                 AND  SQL_GUBUN_CD = #{SQL_GUBUN_CD}
+	                 </if>
+			        <if test= "SQL_GRP_CD != null and SQL_GRP_CD != ''">
+			        AND  SQL_GRP_CD = #{SQL_GRP_CD}
+			        </if>
+	                 <if test= "NOT_ADMIN != null and NOT_ADMIN != ''">
+	                 AND SQL_GRP_CD NOT IN ('ADMIN')    /* 로그인 사용자가 관리자 권한이 아닌 경우 */
+	                 </if>
+	                 <if test= "JOB_AUTH_CHK != null and JOB_AUTH_CHK != ''"> /* 로그인 사용자의 사용가능한 업무시스템코드] */
+	                      <if test= "USE_JOB_ARR != null and USE_JOB_ARR != ''">
+			                 AND (JOB_GUBUN_CD IN (SELECT JOB_GUBUN_CD FROM CMD_SQLS WHERE JOB_GUBUN_CD IN
+	                                    <foreach item="item" index="index" collection="JOB_LIST" open="(" separator="," close=")" >
+				                            #{item}
+				                        </foreach>
+	                                     )
+		                       OR JOB_GUBUN_CD IN (SELECT JOB_GUBUN_CD FROM CMD_SQL_AUTHS WHERE JOB_GUBUN_CD IN
+	                                    <foreach item="item" index="index" collection="JOB_LIST" open="(" separator="," close=")" >
+	                                        #{item}
+	                                    </foreach>
+	                                     )
+		                      )
+		                    </if>
+                      </if>
+	                 <if test= "JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+	                 AND  JOB_GUBUN_CD = #{JOB_GUBUN_CD}
+	                 </if>
+	                 <if test= "USE_YN != null and USE_YN != ''">
+	                 AND  USE_YN = #{USE_YN}
+	                 </if>
+	                 <if test="CND != '' and CND !=null ">
+			             <if test="CND.equals('SQL_NM') and TEXT != null ">
+			                    AND SQL_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+			            </if>
+			             <if test="CND.equals('SQL_DESC') and TEXT != null ">
+			                    AND SQL_DESC LIKE UPPER('%' ||  #{TEXT} || '%')
+			             </if>
+			             <if test="CND.equals('SELECT_SNTENC') and TEXT != null ">
+			                    AND SELECT_SNTENC LIKE UPPER('%' ||  #{TEXT} || '%')
+			             </if>
+	                </if>
+	                ORDER BY SQL_NAME, SQL_ID DESC
+				)T WHERE 1=1
+	            <if test= "P_END != null and P_END != ''">
+	             AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+	            </if>
+			) WHERE 1=1
+        <if test= "P_START != null and P_START != ''">
+	    AND  RNUM >= #{P_START}
+	    </if>
+    </select>
+
+    <!--다양한  SQL(Dynamic SQL) 파라미터 조회(단건)    -->
+    <select id="selectSqlParamList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.selectSqlParamList"  */
+                   SEQ_NO
+			     , PARAMTR as PARAMTR_NM      /* 파라미터내용(명) */
+			     , ATB_TY_CD
+			     , GET_CODE_F('CMD_DATA_ATRB_EXT', ATB_TY_CD) AS ATB_TY_NM
+			     , ATB_TY_MIN_LT
+			     , ATB_TY_MAX_LT
+			     , DEF_VAL as TEST_VALUE   /* 기본값 내용 */
+			     , DEF_VAL_NM as TEST_VALUE_NM   /* 기본값 내용 */
+			     , DEF_VAL_SQL_ID  /* 기본값내용 SQL ID */
+			     , NEED_YN  /* 필수여부 */
+			     , RM
+			     ,(SELECT P.DEF_VAL_SQL_ID FROM CMD_SQL_PARAMTRS P WHERE P.SQL_ID = A.DEF_VAL_SQL_ID) AS POPUP_PARAMS
+			     <include refid="whoCol" />
+		FROM  CMD_SQL_PARAMTRS A
+		WHERE 1=1
+        AND SQL_ID = #{SQL_ID}
+        ORDER BY SEQ_NO
+    </select>
+
+    <!-- 다양한SQL 등록 -->
+    <insert id="insertSqls" parameterType="hashmap">
+        <selectKey keyProperty="SQL_ID" resultType="Integer" order="BEFORE">
+          SELECT  /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.insertSqls" */
+                      CMD_SQLS_S.NEXTVAL
+          FROM     DUAL
+        </selectKey>
+        INSERT
+        INTO      CMD_SQLS
+                    ( SQL_ID
+                    , SQL_GUBUN_CD
+                    , SQL_GRP_CD
+                    , JOB_GUBUN_CD
+                    , USE_YN
+                    , SQL_NAME
+                    , SQL_DESC
+                    , WHERE_SNTENC
+                    , ORDER_BY_SNTENC
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , SELECT_SNTENC
+                    , FROM_SNTENC
+                   )
+        VALUES (
+                      #{SQL_ID}
+                    , #{SQL_GUBUN_CD}
+                    , #{SQL_GRP_CD}
+                    , #{JOB_GUBUN_CD}
+                    , #{USE_YN}
+                    , #{SQL_NAME}
+                    , #{SQL_DESC}
+                    , #{WHERE}
+                    , #{ORDER}
+                    , #{CREATED_BY}
+                    , SYSDATE
+                    , #{SELECT}
+                    , #{FROM}
+                )
+    </insert>
+
+    <!-- 다양한SQL 수정 -->
+    <update id="updateSqls" parameterType="hashmap">
+        UPDATE  /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.updateSqls" */ CMD_SQLS
+        SET
+                  SQL_GUBUN_CD = #{SQL_GUBUN_CD}
+                , SQL_GRP_CD = #{SQL_GRP_CD}
+                , JOB_GUBUN_CD = #{JOB_GUBUN_CD}
+                , USE_YN = #{USE_YN}
+                , SQL_NAME = #{SQL_NAME}
+                <if test="SQL_DESC != null and SQL_DESC != 'undefined' ">
+                , SQL_DESC = #{SQL_DESC}
+                </if>
+                <if test="WHERE != null and WHERE != 'undefined' ">
+                , WHERE_SNTENC = #{WHERE}
+                </if>
+                <if test="ORDER != null and ORDER != 'undefined' ">
+                , ORDER_BY_SNTENC = #{ORDER}
+                </if>
+                 , LAST_UPDATED_BY = #{LAST_UPDATED_BY}          /* 최종수정자ID - 차후 수정필요 */
+                 , LAST_UPDATE_DATE = SYSDATE                          /* 최종수정일 */
+                 , SELECT_SNTENC = #{SELECT}
+                 , FROM_SNTENC = #{FROM}
+        WHERE  SQL_ID = #{SQL_ID}
+    </update>
+
+    <!-- 다양한SQL 파라미터(조회조건) 등록 -->
+    <insert id="insertSqlParamtrs" parameterType="hashmap">
+        INSERT   /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.insertSqlParamtrs" */
+        INTO      CMD_SQL_PARAMTRS
+                    ( SQL_ID
+                    , SEQ_NO
+                    , PARAMTR
+                    , ATB_TY_CD
+                    , ATB_TY_MIN_LT
+                    , ATB_TY_MAX_LT
+                    , DEF_VAL    -- 기본 입력값
+                    , DEF_VAL_NM    -- 기본 입력값
+                    , DEF_VAL_SQL_ID  -- 기본 조회조건의 SQL ID
+                    , NEED_YN
+                    , RM
+                    , CREATED_BY
+                    , CREATION_DATE
+                   )
+        VALUES (
+                      #{SQL_ID}
+                    , #{SEQ_NO}
+                    , #{PARAMTR_NM}
+                    , #{ATB_TY_CD}
+                    , #{ATB_TY_MIN_LT}
+                    , #{ATB_TY_MAX_LT}
+                    , #{TEST_VALUE}
+                    , #{TEST_VALUE_NM}
+                    , #{DEF_VAL_SQL_ID}
+                    , #{NEED_YN}
+                    , #{RM}
+                    , #{CREATED_BY}
+                    , SYSDATE
+                )
+    </insert>
+
+    <!-- 다양한SQL 파라미터 삭제 -->
+    <delete id="deleteSqlParamtrs" parameterType="hashmap">
+        DELETE  /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.deleteSqlParamtrs" */
+        FROM  CMD_SQL_PARAMTRS
+        WHERE SQL_ID = #{SQL_ID}
+    </delete>
+
+    <!-- 다양한SQL 삭제 -->
+    <delete id="deleteSqls" parameterType="hashmap">
+        DELETE  /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.deleteSqls" */
+        FROM  CMD_SQLS
+        WHERE SQL_ID = #{SQL_ID}
+    </delete>
+
+    <!--다양한  SQL(Dynamic SQL) 업무권한 조회(단건)  -->
+    <select id="selectSqlAuthList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.selectSqlAuthList"  */
+                   SQL_ID
+                 , JOB_GUBUN_CD
+                 , GET_CODE_F('CMD_JOB_GUBUNCD', JOB_GUBUN_CD) AS JOB_GUBUN_NM      /* 업무시스템 명(한글)*/
+                 , USE_YN
+                 , RM
+                 <include refid="whoCol" />
+        FROM  CMD_SQL_AUTHS
+        WHERE 1=1
+        AND SQL_ID = #{SQL_ID}
+        AND USE_YN = 'Y'
+        ORDER BY JOB_GUBUN_CD
+    </select>
+
+    <!-- 다양한SQL 업무권한 삭제 -->
+    <delete id="deleteSqlAuths" parameterType="hashmap">
+        DELETE  /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.deleteSqlAuths" */
+        FROM  CMD_SQL_AUTHS
+        WHERE SQL_ID = #{SQL_ID}
+    </delete>
+
+    <!-- 다양한SQL 업무권한 등록 -->
+    <insert id="insertSqlAuths" parameterType="hashmap">
+        INSERT   /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.insertSqlAuths" */
+        INTO      CMD_SQL_AUTHS
+                    ( SQL_ID
+                    , JOB_GUBUN_CD
+                    , USE_YN
+                    , RM
+                    , CREATED_BY
+                    , CREATION_DATE
+                   )
+        VALUES (
+                      #{SQL_ID}
+                    , #{JOB_GUBUN_CD}
+                    , #{USE_YN}
+                    , #{RM}
+                    , #{CREATED_BY}
+                    , SYSDATE
+                )
+    </insert>
+
+    <!--다양한  SQL(Dynamic SQL) 컬럼관리 조회(단건)  -->
+    <select id="selectSqlClumMngsList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.selectSqlClumMngsList"  */
+                   SQL_ID
+                 , CLUM_ORDR
+                 , INDICT_YN
+                 , CLUM_SIZE
+                 , CLUM_ATB
+                 <include refid="whoCol" />
+        FROM  CMD_SQL_CLUM_MNGS
+        WHERE 1=1
+        AND SQL_ID = #{SQL_ID}
+        ORDER BY CLUM_ORDR
+    </select>
+
+    <!-- 다양한SQL 컬럼관리 삭제 -->
+    <delete id="deleteSqClumMngs" parameterType="hashmap">
+        DELETE  /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.deleteSqClumMngs" */
+        FROM  CMD_SQL_CLUM_MNGS
+        WHERE SQL_ID = #{SQL_ID}
+    </delete>
+
+    <!-- 다양한SQL 컬럼관리 등록 -->
+    <insert id="insertSqlClumMngs" parameterType="hashmap">
+        INSERT   /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.insertSqlClumMngs" */
+        INTO      CMD_SQL_CLUM_MNGS
+                    ( SQL_ID
+                    , CLUM_ORDR
+                    , INDICT_YN
+                    , CLUM_SIZE
+                    , CLUM_ATB
+                    , CREATED_BY
+                    , CREATION_DATE
+                   )
+        VALUES (
+                      #{SQL_ID}
+                    , #{CLUM_ORDR}
+                    , #{INDICT_YN}
+                    , #{CLUM_SIZE}
+                    , #{CLUM_ATB}
+                    , #{CREATED_BY}
+                    , SYSDATE
+                )
+    </insert>
+
+    <!-- [해당월 첫날,마지막날짜]조회-->
+    <select id="selectDefVal" parameterType="map" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsl.dao.CMSL01000Dao.selectDefVal" */
+                    SQL_ID
+                    ,SEQ_NO
+                    ,PARAMTR
+                    ,DEF_VAL
+          FROM CMD_SQL_PARAMTRS P
+        WHERE P.SQL_ID = #{SQL_ID}
+    </select>
+
+</mapper>

@@ -1,0 +1,154 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nbdf.cmd.cm.cmsy.dao.CMSY03400Dao">
+<!-- 사용자-->
+
+    <!-- 사용자 등록 -->
+    <insert id="insertCmdUsers" parameterType="map">
+    <selectKey keyProperty="ID" resultType="Integer" order="BEFORE">
+      SELECT  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY03400Dao.selectUserIdSeqence" */
+                  CMD_USERS_S.NEXTVAL
+      FROM     DUAL
+    </selectKey>      
+    /* "com.nbdf.cmd.cm.cmsy.dao.CMSY03400Dao.insertCmdUsers" */
+    INSERT INTO CMD_USERS( 
+        ID  
+        ,USER_ID  
+        ,USER_PWD  
+        ,USER_NM  
+        ,EMP_NO  
+        ,EMAIL_ADDR  
+        ,CLPS_CD  
+        ,JIKWI_CD  
+        ,CMPN_PHN_NO  
+        ,MBPH_NO  
+        ,USE_YN  
+        ,PWD_CHANGE_DATE  
+        ,PWD_ERR_CNT  
+        ,LAST_LGN_DTM  
+        ,LAST_LGN_IP  
+        ,CREATED_BY  
+        ,CREATION_DATE  
+        ,LAST_UPDATED_BY  
+        ,LAST_UPDATE_DATE  
+        ,PWD_ERR_DTM  
+        ,PLANTID  
+        ,DEPT_NM  
+        ,ENTERPRISEID  
+        ,NICKNAME  
+        ,HOMEADDRESS  
+        ,LANGUAGETYPE  
+        ,USERSTATE  
+        ,ISEESLINK  
+        ,DESCRIPTION  
+        ,AREARESPONSIBILITY  
+        ,DEPT_CD        ) 
+    VALUES( 
+        #{ID}  
+        ,#{USER_ID}  
+        ,#{USER_PWD}  
+        ,#{USER_NM}  
+        ,#{EMP_NO}  
+        ,#{EMAIL_ADDR}  
+        ,#{CLPS_CD}  
+        ,#{JIKWI_CD}  
+        ,#{CMPN_PHN_NO}  
+        ,#{MBPH_NO}  
+        ,#{USE_YN}  
+        ,#{PWD_CHANGE_DATE}  
+        ,#{PWD_ERR_CNT}  
+        ,#{LAST_LGN_DTM}  
+        ,#{LAST_LGN_IP}  
+        ,#{CREATED_BY}  
+        ,#{CREATION_DATE}  
+        ,#{LAST_UPDATED_BY}  
+        ,#{LAST_UPDATE_DATE}  
+        ,#{PWD_ERR_DTM}  
+        ,#{PLANTID}  
+        ,#{DEPT_NM}  
+        ,#{ENTERPRISEID}  
+        ,#{NICKNAME}  
+        ,#{HOMEADDRESS}  
+        ,#{LANGUAGETYPE}  
+        ,'Request'  
+        ,#{ISEESLINK}  
+        ,#{DESCRIPTION}  
+        ,#{AREARESPONSIBILITY}  
+        ,#{DEPT_CD}    )
+    </insert>
+
+    <!-- 비밀번호 초기화 -->
+    <update id="updateCmdUsersPwdInit" parameterType="hashmap">
+    UPDATE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY03400Dao.updateCmdUsersPwdInit" */  CMD_USERS
+    SET     USER_PWD             ='dc98e82fcfb4b165f5fa390d5ca61a9245a5be6ea70a4f00020ddff029afefba'  
+    		,PWD_ERR_CNT = 0      													
+			,LAST_UPDATED_BY 	 = #{LAST_UPDATED_BY}          /* 최종수정자ID */
+			,LAST_UPDATE_DATE 	 = SYSDATE                   /* 최종수정자ID */
+	WHERE  USER_ID = #{USER_ID}
+    </update>
+
+    <!-- 신청승인 -->
+    <update id="updateCmdUsersApproval" parameterType="map" >
+    /* "com.nbdf.cmd.cm.cmsy.dao.CMSY03400Dao.updateCmdUsersPwdInit" */
+    UPDATE    CMD_USERS
+    SET     PWD_ERR_CNT = 0
+    		,USE_YN = 'Y'      			
+    		,LAST_UPDATED_BY 	 = #{LAST_UPDATED_BY}          /* 최종수정자ID */
+			,LAST_UPDATE_DATE 	 = SYSDATE                   /* 최종수정자ID */
+	WHERE  USER_ID = #{USER_ID}
+    </update>
+
+    <!-- 사용자 조회-->
+    <select id="selectCmdUsersList" parameterType="map" resultType="hashmap">
+    /* "com.nbdf.cmd.cm.cmsy.dao.CMSY03400Dao.selectCmdUsersList" */
+    SELECT 
+        A.ID
+        ,A.USER_ID
+        ,A.USER_ID as USER_ACNT	
+        ,A.USER_PWD	
+        ,A.USER_NM	
+        ,A.EMP_NO	
+        ,A.EMAIL_ADDR	
+        ,A.CLPS_CD	
+        ,A.JIKWI_CD	
+        ,A.CMPN_PHN_NO	
+        ,A.MBPH_NO	
+        ,case when PWD_ERR_CNT <![CDATA[ >= ]]>5 then 'N' 
+        	  else A.USE_YN end as USE_YN	
+        ,A.PWD_CHANGE_DATE	
+        ,A.PWD_ERR_CNT	
+        ,A.LAST_LGN_DTM	
+        ,A.LAST_LGN_IP	
+        ,A.CREATED_BY	
+        ,to_char(A.CREATION_DATE,'yyyy-mm-dd hh24:mi:ss') as CREATION_DATE	
+        ,A.LAST_UPDATED_BY	
+        ,to_char(A.LAST_UPDATE_DATE,'yyyy-mm-dd hh24:mi:ss') as LAST_UPDATE_DATE
+        ,A.PWD_ERR_DTM	
+        ,A.PLANTID	
+        ,NVL(B.DEPT_NM,A.DEPT_NM) AS DEPT_NM	
+        ,A.ENTERPRISEID	
+        ,A.NICKNAME	
+        ,A.HOMEADDRESS	
+        ,A.LANGUAGETYPE	
+        ,A.USERSTATE	
+        ,A.ISEESLINK	
+        ,A.DESCRIPTION	
+        ,A.AREARESPONSIBILITY	
+        ,A.DEPT_CD
+        ,'' as CHK
+        ,decode(USE_REQ_YN,'1','MES User Request','2','ERP HR') as SOURCE	
+    FROM	CMD_USERS A, CMD_DEPTS B 
+    WHERE 1=1 
+    AND A.DEPT_CD = B.DEPT_CD(+)
+    AND A.USERSTATE = 'Request'
+    AND nvl(A.USE_YN,'N') = 'N'
+    <if test="USER_ID != null and USER_ID !='' "> 
+        AND A.USER_ID like #{USER_ID}|| '%'
+    </if>
+    <if test="USER_NM != null and USER_NM !='' "> 
+        AND A.USER_NM like '%'|| #{USER_NM} || '%'
+    </if>
+    </select>
+</mapper>

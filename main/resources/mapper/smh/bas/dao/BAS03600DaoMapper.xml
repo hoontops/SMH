@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS03600Dao">
+
+   <!-- 자재 사용품목 조회 -->
+    <select id="selectBasMaterialUseProduct" parameterType="map" resultType="hashmap">
+    	/*selectBasResourceUseProduct*/
+			 SELECT  
+					BF.PROCESSDEFID				AS PRODUCTDEFID
+	            ,   BF.PROCESSDEFVERSION		AS PRODUCTDEFVERSION
+	            ,	PD.PRODUCTDEFNAME
+	            ,   PP.PLANTID
+	            ,	PP.USERSEQUENCE
+	            ,	PP.PROCESSSEGMENTID
+	            ,	COALESCE(PSD.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)  AS PROCESSSEGMENTNAME
+	            ,	PP.PROCESSUOM
+				,	PP.DESCRIPTION
+				,	BF.MATERIALDEFID
+				,	BF.MATERIALDEFVERSION
+				,	CD.CONSUMABLEDEFNAME								 AS CONSUMABLEDEFNAME
+				,	BF.UNIT
+				,	BF.QTY
+	        FROM    BAS_PROCESSPATH    			PP
+	        INNER JOIN BAS_BILLOFMATERIAL			BF	ON	BF.PROCESSDEFID	= PP.PROCESSDEFID
+	        										AND BF.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+	        										AND BF.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+	        										AND BF.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+   			LEFT JOIN BAS_CONSUMABLEDEFINITION  	CD  ON  BF.MATERIALDEFID = CD.CONSUMABLEDEFID
+                                     					AND BF.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION
+	        LEFT JOIN BAS_PRODUCTDEFINITION  	PD  ON  PD.PROCESSDEFID = BF.PROCESSDEFID
+	                                            	AND PD.PROCESSDEFVERSION = BF.PROCESSDEFVERSION
+	        LEFT JOIN BAs_PROCESSSEGMENT			PS	ON 	BF.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+	        										AND	BF.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+   			LEFT JOIN CMD_DICTIONARY         	PSD ON  PS.PROCESSSEGMENTNAME = PSD.DICTIONARYID
+                                 					AND PSD.LANGUAGETYPE = #{LANGUAGETYPE}                       
+	        WHERE   1 = 1
+		<if test="MATERIALID != null and MATERIALID !=''"> 
+			AND	EXISTS
+				(
+							SELECT	1
+							FROM	ufn_selectStringToSplit2(#{MATERIALID} ||',' , ',','|') 		MAP
+							WHERE	  BF.MATERIALDEFID = MAP.VALUE
+							AND		  BF.MATERIALDEFVERSION = MAP.VALUE2
+					)
+		</if> 
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">										
+			AND	PD.PRODUCTDEFID = #{PRODUCTDEFID} 
+			AND PD.PRODUCTDEFVERSION =#{PRODUCTDEFVERSION}
+		</if>
+			AND PP.VALIDSTATE='Valid'
+		ORDER BY BF.PROCESSDEFID, TO_NUMBER(PP.USERSEQUENCE) 
+    </select>    
+    
+     <!-- 자재 popup list  조회 사용품목 조회 -->
+    <select id="selectMaterialPopupList" parameterType="map" resultType="hashmap">
+    	/*selectMaterialPopupList*/
+	   SELECT   A.PLANTID
+                 ,   A.ITEMID 				AS CONSUMABLEDEFID
+                 ,   A.ITEMVERSION 			AS CONSUMABLEDEFVERSION
+                 ,   A.ITEMNAME				AS CONSUMABLEDEFNAME
+                 ,   A.LOTCONTROL
+                 ,   MIS.DESCRIPTION
+                 ,   A.UOMDEFID				AS CONSUMABLEUOM
+                 ,   C.UOMDEFNAME	
+                 ,	 A.ITEMID||'|'||A.ITEMVERSION	AS CONSUMABLENUM
+                 ,   A.MASTERDATACLASSID
+                 ,   A.SPEC
+                 ,   A.CONSUMABLETYPE
+                 ,   MIS.MAKER
+             FROM 	 BAS_ITEMMASTER 				  A 
+             INNER JOIN BAS_MASTERDATACLASS        B     ON     A.ENTERPRISEID       = B.ENTERPRISEID 
+                                                    	AND    A.MASTERDATACLASSID  = B.MASTERDATACLASSID
+             LEFT OUTER JOIN BAS_MATERIALITEMSPEC  MIS   ON     MIS.ENTERPRISEID     = A.ENTERPRISEID
+                                           				AND    MIS.ITEMID           = A.ITEMID
+            LEFT OUTER JOIN BAS_UOMDEFINITION      C     ON     A.ENTERPRISEID       = C.ENTERPRISEID
+                                                   		AND    A.UOMDEFID           = C.UOMDEFID 
+             WHERE	1=1 
+             AND B.MESITEMTYPE = 'Consumable'
+             AND A.VALIDSTATE    = #{VALIDSTATE}   
+             AND A.ENTERPRISEID    = 'SMLINES'
+             AND A.PLANTID = 'IFC'
+             <if test="MATERIAL != null and MATERIAL !=''">	
+             	AND (A.ITEMID LIKE UPPER(<![CDATA['%' ||]]> #{MATERIAL} <![CDATA[|| '%']]> )
+             	OR A.ITEMNAME LIKE UPPER(<![CDATA['%' ||]]> #{MATERIAL} <![CDATA[|| '%']]> ))
+             </if>
+             ORDER BY A.ITEMID, A.ITEMVERSION 
+    </select>    
+    
+    
+     <!-- 자재 사용품목 조회 -->
+    <select id="selectBasMaterialUseProductAll" parameterType="map" resultType="hashmap">
+    	/*selectBasResourceUseProduct*/
+			 SELECT  
+					BF.PROCESSDEFID				AS PRODUCTDEFID
+	            ,   BF.PROCESSDEFVERSION		AS PRODUCTDEFVERSION
+	            ,	PD.PRODUCTDEFNAME
+	            ,   PP.PLANTID
+	            ,	PP.USERSEQUENCE
+	            ,	PP.PROCESSSEGMENTID
+	            ,	COALESCE(PSD.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)  AS PROCESSSEGMENTNAME
+	            ,	PP.PROCESSUOM
+				,	PP.DESCRIPTION
+				,	BF.MATERIALDEFID
+				,	BF.MATERIALDEFVERSION
+				,	CD.CONSUMABLEDEFNAME								 AS CONSUMABLEDEFNAME
+				,	BF.UNIT
+				,	BF.QTY
+	        FROM    BAS_PROCESSPATH    			PP
+	        INNER JOIN BAS_BILLOFMATERIAL			BF	ON	BF.PROCESSDEFID	= PP.PROCESSDEFID
+	        										AND BF.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+	        										AND BF.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+	        										AND BF.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+   			LEFT JOIN BAS_CONSUMABLEDEFINITION  	CD  ON  BF.MATERIALDEFID = CD.CONSUMABLEDEFID
+                                     					AND BF.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION
+	        LEFT JOIN BAS_PRODUCTDEFINITION  	PD  ON  PD.PROCESSDEFID = BF.PROCESSDEFID
+	                                            	AND PD.PROCESSDEFVERSION = BF.PROCESSDEFVERSION
+	        LEFT JOIN BAs_PROCESSSEGMENT			PS	ON 	BF.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+	        										AND	BF.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+   			LEFT JOIN CMD_DICTIONARY         	PSD ON  PS.PROCESSSEGMENTNAME = PSD.DICTIONARYID
+                                 					AND PSD.LANGUAGETYPE = #{LANGUAGETYPE}                       
+	        WHERE   1 = 1 
+			AND	EXISTS
+				(
+							SELECT	1
+							FROM	ufn_selectStringToSplit2(#{MATERIALID} ||',' , ',','|') 		MAP
+							WHERE	  BF.MATERIALDEFID = MAP.VALUE
+							AND		  BF.MATERIALDEFVERSION = MAP.VALUE2
+					)
+			AND (BF.PROCESSDEFID, BF.PROCESSDEFVERSION) IN (
+				SELECT PRODUCTDEFID, PRODUCTDEFVERSION FROM BAS_BILLOFMATERIAL BM
+				WHERE 
+				EXISTS (
+					SELECT 1
+					FROM ufn_selectStringToSplit2(#{MATERIALID} ||',' , ',','|') MAP
+					WHERE BM.MATERIALDEFID = MAP.VALUE
+					AND BM.MATERIALDEFVERSION = MAP.VALUE2  )
+				GROUP BY PRODUCTDEFID, PRODUCTDEFVERSION
+				HAVING COUNT(1) = 
+					(SELECT COUNT(1) FROM ufn_selectStringToSplit2(#{MATERIALID} ||',' , ',','|'))
+				)
+		ORDER BY BF.PROCESSDEFID, TO_NUMBER(PP.USERSEQUENCE) 
+    </select>    
+    
+
+</mapper>

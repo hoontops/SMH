@@ -1,0 +1,369 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ADL version="2.0">
+  <Application id="SMH" screenid="Desktop_screen" onload="Application_onload" onerror="Application_onerror">
+    <Layout>
+      <MainFrame id="mainframe" showtitlebar="true" showstatusbar="false" width="1278" height="890" titletext="SM상선 my HR" onsize="mainframe_onsize">
+        <VFrameSet id="VFrameSet" separatesize="0,0,0,*,0">
+          <Frames>
+            <ChildFrame id="TopFrame" formurl="frame::frmTop.xfdl" dragmovetype="none" showstatusbar="false" showtitlebar="false"/>
+            <HFrameSet id="HFrameSet0" separatesize="251,*" onsize="mainframe_VFrameSet_HFrameSet0_onsize">
+              <Frames>
+                <ChildFrame id="LeftFrame" formurl="frame::frmLeft.xfdl" dragmovetype="none" showtitlebar="false"/>
+                <VFrameSet id="VFrameSet0" separatesize="30,0,*">
+                  <Frames>
+                    <ChildFrame id="WorkTopFrame" formurl="frame::frmMdi.xfdl" showtitlebar="false" dragmovetype="none"/>
+                    <ChildFrame id="WorkFrame" formurl="cmd::CMD10200M.xfdl" showtitlebar="false"/>
+                    <FrameSet id="FrameSet0"/>
+                  </Frames>
+                </VFrameSet>
+              </Frames>
+            </HFrameSet>
+            <ChildFrame id="commFrame" formurl="frame::frmMain.xfdl" showcascadetitletext="true" showtitlebar="false"/>
+            <ChildFrame id="commLogin" formurl="frame::frmLogin.xfdl" showtitlebar="false" dragmovetype="none"/>
+            <ChildFrame id="bottomFrame" formurl="frame::frmBottom.xfdl" showtitlebar="false" dragmovetype="none"/>
+          </Frames>
+        </VFrameSet>
+      </MainFrame>
+    </Layout>
+    <Style url="xcssrc::richtexteditor.xcss"/>
+  </Application>
+  <Script type="xscript5.1"><![CDATA[this.gv_appBodyFrameSet = undefined; //VFrameSEt 프레임
+this.gv_appBodySubFrameSet = undefined; //VFrameSEt 프레임
+this.gv_appTopFrame = undefined; //상단 프레임
+this.gv_appLeftFrame = undefined; //Left 프레임
+this.gv_appWorkTopFrame = undefined; //업무화면을 관리하는 프레임셋
+this.gv_appWorkFrame = undefined; //업무화면을 관리하는 프레임셋
+this.gv_appMainFrame = undefined; //Main 프레임
+this.gv_appLoginFrame = undefined; //로그인 프레임
+this.gv_appBottomFrame = undefined; //하단 프레임
+this.gv_appWorkFrameSet = undefined; //work 프레임
+this.gv_arrClipboard = ""; //클립보드 저장용 글로벌 변수
+
+this.gv_frameWidth = 1280; //화면 넓이
+TOBE = nexacro;
+
+this.Application_onload = function(obj:nexacro.Application,e:nexacro.LoadEventInfo)
+{
+	this.gdsUrlSetting();
+	gv_appBodyFrameSet = this.mainframe.VFrameSet;
+	gv_appBodySubFrameSet = this.mainframe.VFrameSet.HFrameSet0;
+	gv_appTopFrame = this.mainframe.VFrameSet.TopFrame;
+	gv_appWorkTopFrame = this.mainframe.VFrameSet.HFrameSet0.VFrameSet0.WorkTopFrame;
+	gv_appWorkFrame = this.mainframe.VFrameSet.HFrameSet0.VFrameSet0.WorkFrame;
+	gv_appLeftFrame = this.mainframe.VFrameSet.HFrameSet0.LeftFrame;
+	gv_appMainFrame = this.mainframe.VFrameSet.commFrame;
+	gv_appLoginFrame = this.mainframe.VFrameSet.commLogin;
+	gv_appBottomFrame = this.mainframe.VFrameSet.bottomFrame;
+	gv_appWorkFrameSet = this.mainframe.VFrameSet.HFrameSet0.VFrameSet0.FrameSet0;
+	
+	
+	var appUrl = nexacro.getApplication().xadl;
+	var appUrlSplit = appUrl.split("/");
+	var protocol = appUrlSplit[0];
+	var jobSysCd = "IFC";	//appUrlSplit[3];
+	var serverNm = appUrlSplit[2];
+	nexacro.getApplication().gv_quickView = "app";
+	this.runModeSetting(serverNm);
+	this.afn_setServiceUrl(jobSysCd);	
+	var sLoginInfo = nexacro._getCookie("gv_loginInfo");
+	
+	
+	gv_appBodyFrameSet.set_separatesize("76,*,0,0,27");
+	this.mainframe_VFrameSet_HFrameSet0_onsize();
+	
+	
+	
+	
+};
+
+// 브라우저의 뒤로가기, 앞으로가기 실행시 호출됨
+this.onChangeHistory = function (hash, data)
+{
+	if (hash == "") 
+	{
+		// 초기화면
+		this.div_work.set_url("");
+	}
+	else 
+	{
+		// hash id 를 확인하여 필요한 처리를 진행한다.
+		var temp = hash.split(":");
+		var type = temp[0];
+
+		if (type == "menu") 
+		{
+			var menuId = temp[1];
+
+			this.goMenu(menuId, data);
+		}
+	}
+};
+this.gdsUrlSetting = function ()
+{
+	nexacro.getApplication().gds_url.loadXML(efn_setUrl());
+	//trace(nexacro.getApplication().gds_url.saveXML());
+};
+
+this.runModeSetting = function (serverNm)
+{
+	//if (serverNm.indexOf("172.16.4.222") > -1 || serverNm.indexOf("mesdev") > -1) 
+	if (serverNm.indexOf("mesdev") > -1) 
+	{
+		nexacro.getApplication().gv_runMode = "dev";
+	}
+	else if (serverNm.indexOf("local") > -1) 
+	{
+		nexacro.getApplication().gv_runMode = "local";
+	}
+	else 
+	{
+		nexacro.getApplication().gv_runMode = "prod";	
+	}
+	//개발환경 강제화
+    nexacro.getApplication().gv_runMode = "local";	
+};
+
+/**
+ * @class 요청한 시스템ID로 default 서비스 url 설정
+ * @param  {String} sAppNm - appication 명
+ * @param  {String} sCommand - application ID
+ * @return N/A
+ */
+this.afn_setServiceUrl = function (sCommand)
+{
+	var sUrl = nexacro.getApplication().gds_url.lookup("RUN_MODE", nexacro.getApplication().gv_runMode, sCommand.toString().toUpperCase());
+	//efn_setRexpert(sCommand.toString().toUpperCase());
+
+    //alert(sUrl);
+	nexacro.getApplication().gv_host = sUrl;
+	nexacro.getEnvironment().services["svcurl"].url = sUrl;
+
+	trace("==================================================================");
+	trace(" [(1)접속 모드]    : " + nexacro.getApplication().gv_runMode);
+	trace(" [(2)접속URL 정보] : " + nexacro.getApplication().gv_host);
+	trace("♧================================================================");
+
+};
+
+this.afn_GetMessage = function ()
+{
+	var sSvcID = "selectCmMsg";
+	var sController = nexacro.getApplication().gv_host + "/cmmm01100/selectCmMsg.do";
+	var sOutDatasets = "ds_message=ds_output";
+	var sArgs = "method='selectCmMsg'";
+	var sCallbackFunc = "afn_Callback";
+
+	this.transaction(sSvcID, sController, "", sOutDatasets, sArgs, sCallbackFunc);
+};
+
+this.afn_Callback = function (strSvcId, nErrorCode, strErrorMsg)
+{
+
+	if (nErrorCode < 0) 
+	{
+		alert(strErrorMsg);
+		return;
+	}
+	
+	
+		alert('App Desktop .. strSvcId : '+strSvcId);
+
+	switch (strSvcId) 
+	{
+	/*
+		case "menu":
+			if (nexacro.getApplication().gds_Menu.rowcount <= 0) 
+			{
+				return;
+			}
+			break;
+		case "mymenu":
+			break;
+		case "userSearch":
+			break;
+		case "selectCmMsg":
+			break;
+		case "selectCmMenu":
+			//trace(nexacro.getApplication().gds_userInfo.saveXML());
+
+			break;
+		*/	
+
+	}
+};
+
+this.afn_logout = function ()
+{
+	nexacro.getApplication().exit();
+};
+
+this.mainframe_onsize = function(obj:nexacro.MainFrame,e:nexacro.SizeEventInfo)
+{
+	trace("this.gv_frameWidth-->"+this.gv_frameWidth);
+	trace("e.cx-->"+e.cx);
+	// 최저 width(1280) 확인
+	if (e.cx < this.gv_frameWidth) 
+	{
+		obj.set_width(this.gv_frameWidth);
+	}
+	if (e.cx < 1530)
+	{
+		var strSeparatesize = "0,*"; 
+		gv_appBodySubFrameSet.set_separatesize(strSeparatesize);
+		gv_appLeftFrame.form.fn_leftShowHide(false);
+	}else{
+		var strSeparatesize = "251,*"; 
+		gv_appBodySubFrameSet.set_separatesize(strSeparatesize);
+		gv_appLeftFrame.form.fn_leftShowHide(true);
+	}
+};
+
+/**
+ * application 로딩시 사용자 정의 화면 호출
+ * @param  {string} sFormId - frame Form 아이디
+ * @return N/A
+ * @example
+ * @memberOf public
+ */
+this.av_sLoadFrame = ""; //application 초기 로딩시 사용
+this.afn_completeLoadForm = function (sFormId)
+{
+	if (sFormId && sFormId !== null) 
+	{
+		this.av_sLoadFrame = this.av_sLoadFrame + "&&" + sFormId;
+	}
+	// trace("this.av_sLoadFrame-->"+this.av_sLoadFrame);
+	// if(this.av_sLoadFrame.indexOf("leftFrame") > -1)	gv_appLeftFrame.form.fn_myMenuAutoLoading();
+	/*
+	 * application 로딩시 메뉴 호출이 발생될 때
+	 * 메뉴 적용 시점 문제 발생. main, tabFrame 과 workTopFrame 폼 로딩 이후 메뉴 호출 처리
+	 */
+	if (this.av_sLoadFrame && this.av_sLoadFrame.indexOf("workTopFrame") > -1
+		 && this.av_sLoadFrame.indexOf("tabFrame") > -1
+		 && this.av_sLoadFrame.indexOf("main") > -1) 
+	{
+		var key = "formUrl";
+		var location = window.location.search;
+		var objRegExp = new RegExp('[\\?&]' + key + '=([^&#]*)', "gi");
+		var results = objRegExp.exec(location);
+
+		if (results) 
+		{
+			var splitResult = results[1].split("@");
+			if ((splitResult.length > 1) && (splitResult[1] == "new")) 
+			{
+				var sMenuId = nexacro.getApplication().gds_menu.lookup("PAGE_URL", splitResult[0], "MENU_ID");
+				if (this.gfn_isNull(sMenuId)) 
+				{
+					trace("sMenuId in null");
+					return;
+				}
+				gv_appMainFrame.form.gfn_newPopup(sMenuId);
+			}
+			else 
+			{
+				gv_appMainFrame.form.gfn_goPage(splitResult[0]);
+			}
+		}
+		this.av_sLoadFrame = "";
+		// gv_appLeftFrame.form.fn_myMenuAutoLoading();
+	}
+};
+
+this.Application_onerror = function(obj:nexacro.Application,e:nexacro.ErrorEventInfo)
+{
+	trace("application_onerror > e.errorcode=[" + e.errorcode + "] e.errormsg=[" + e.errormsg + "] e.statuscode=[" + e.statuscode + "]");
+	var arrMsg = e.errormsg.split(")");
+
+	// 사용자가 통신중에 ESC키 발생시
+	if (e.errorcode == -2147418039) 
+	{
+		return true;
+		// 사용자가 통신중에 ESC키로 통신중단을 막을때 주석해제한다.
+	}
+
+	// Network이 연결이 끊어진경우
+	if (e.errorcode = -2147418085) 
+	{
+		if (e.statuscode == 10060) 
+		{
+			trace("application_onerror : 서버와의 통신이 원활하지 않습니다.");
+		}
+		else if (e.statuscode == 0) 
+		{
+			// timeout
+			trace("application_onerror : timeout 이 발생했습니다.");
+		}
+		else if (e.statuscode == 404) 
+		{
+			// 404 에러시 처리 방안
+			trace("application_onerror : 404 에러가  발생했습니다.");
+			nexacro.getApplication().mainframe.ChildFrame0.form.div_work.set_url("frame::workFrameNofile.xfdl");
+		}
+		else if (e.statuscode == 408) 
+		{
+			// 408 Request Timeout
+			trace("application_onerror : 408 Request Timeout 가 발생했습니다.");
+		}
+		else if (e.statuscode == 500) 
+		{
+			// 500 에러시 처리 방안
+			trace("application_onerror : 500 에러 가 발생했습니다.");
+		}
+		else if (e.statuscode == 503) 
+		{
+			// Service Unavaliable
+			alert("System is unavailable. Please reconnect after a while.");
+		}
+		else if (e.statuscode == 504) 
+		{
+			// Gateway timeout
+			alert("System is unavailable. Please reconnect after a while.");
+		}
+		else if (e.statuscode == 12029) 
+		{
+			alert("No response from the server. Again in a few minutes, please login.");
+			// application.exit();
+		}
+		else 
+		{
+			// 미등록 오류 발생시.
+			trace("application_onerror : 미등록 오류 발생했습니다. = " + e.statuscode + ":" + e.errormsg);
+		}
+	}	
+};
+
+
+this.mainframe_VFrameSet_HFrameSet0_onsize = function(obj:nexacro.HFrameSet,e:nexacro.SizeEventInfo)
+{
+	
+	gv_appLoginFrame.form.div_login.set_left(this.mainframe.width/2 - 410);
+	gv_appLoginFrame.form.div_login.set_top(this.mainframe.height/2 - 240);
+	
+	
+	
+	return;
+	
+	
+	
+	//var aaaaa = (this.mainframe.width/2 - gv_appLoginFrame.form.div_login.width/2);
+	//gv_appLoginFrame.form.div_login.set_left(this.mainframe.width/2 - 410);
+	
+	/*
+	
+	//this.div_login.set_left(this.application.mainframe.width/2 - 213);
+	//this.div_login.set_top(this.application.mainframe.height/2 - this.div_login.height/2);
+	*/
+
+	
+	
+	
+	
+	
+	
+	
+	
+	
+};
+]]></Script>
+</ADL>

@@ -1,0 +1,550 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS03900Dao">
+    <sql id="insertDictionary">
+    BAS_COMMON_PKG.GENERATE_DICTIONARY
+    </sql>
+
+    <!-- 불량코드 조회 -->
+    <select id="selectDefectcoderelList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS03900Dao.selectDefectcoderelList */
+        SELECT D.ENTERPRISEID
+            ,  REL.QCSEGMENTID||REL.DEFECTCODE AS JOINCODE
+            ,  DD.DICTIONARYNAME
+               ||'-'|| CD.DICTIONARYNAME       AS JOINNAME
+            ,  REL.DEFECTCODE
+            ,  DD.DICTIONARYNAME               AS DEFECTCODENAME
+            ,  REL.QCSEGMENTID
+            ,  CD.DICTIONARYNAME               AS QCSEGMENTNAME
+            ,  REL.ATTRIBUTECLASS
+            ,  REL.DETAILCLASS
+            ,  REL.DECISIONDEGREE
+            ,  REL.VALIDSTATE
+            ,  CU.USER_NM                      AS CREATOR
+            ,  TO_CHAR(REL.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+            ,  MU.USER_NM                      AS MODIFIER
+            ,  TO_CHAR(REL.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+            ,  REL.CONFIRMSITE
+          FROM            BAS_DEFECTCODEREL        REL
+          LEFT OUTER JOIN BAS_DEFECTCODE           D    ON   REL.DEFECTCODE  = D.DEFECTCODE
+          LEFT OUTER JOIN CMD_DICTIONARY           DD   ON   D.DICTIONARYID  = DD.DICTIONARYID
+                                                        AND  DD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION  Q    ON   Q.QCSEGMENTID   = REL.QCSEGMENTID
+          LEFT OUTER JOIN CMD_DICTIONARY           CD   ON   Q.QCSEGMENTNAME = CD.DICTIONARYID
+                                                        AND  CD.LANGUAGETYPE =  #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_USERS                CU   ON   REL.CREATOR     = CU.USER_ID
+          LEFT OUTER JOIN CMD_USERS                MU   ON   REL.MODIFIER    = MU.USER_ID
+         WHERE 1 = 1
+        ]]>
+           AND D.ENTERPRISEID = #{ENTERPRISEID}
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+            AND REL.VALIDSTATE = #{VALIDSTATE}
+        </if>
+        <if test="QCSEGMENTID != null and QCSEGMENTID !='' ">
+            AND REL.QCSEGMENTID = #{QCSEGMENTID}
+        </if>
+        <if test="DEFECTCODE != null and DEFECTCODE !='' ">
+            AND REL.DEFECTCODE = #{DEFECTCODE}
+        </if>
+         ORDER BY REL.QCSEGMENTID||REL.DEFECTCODE
+    </select>
+
+    <!-- 불량코드 - 체크 -->
+    <select id="selectDefectcoderelChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS03900Dao.selectDefectcoderelChk */
+        SELECT REL.DEFECTCODE
+          FROM BAS_DEFECTCODEREL REL
+         WHERE REL.DEFECTCODE  = #{DEFECTCODE}
+           AND REL.QCSEGMENTID = #{QCSEGMENTID}
+           AND ROWNUM          = 1
+    </select>
+
+    <!-- 불량유형 조회 -->
+    <select id="selectDefectcodeList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS03900Dao.selectDefectcodeList */
+        SELECT A.DEFECTCODE
+            ,  DK.DICTIONARYNAME          AS DEFECTCODENAME_KR
+            ,  DE.DICTIONARYNAME          AS DEFECTCODENAME_US
+            ,  DC.DICTIONARYNAME          AS DEFECTCODENAME_CN
+            ,  DV.DICTIONARYNAME          AS DEFECTCODENAME_VN
+            ,  A.DESCRIPTION
+            ,  A.ENTERPRISEID
+            ,  A.PLANTID
+            ,  CU.USER_NM                 AS CREATOR
+            ,  TO_CHAR(A.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+            ,  MU.USER_NM                 AS MODIFIER
+            ,  TO_CHAR(A.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+            ,  A.VALIDSTATE
+            ,  CD.DICTIONARYNAME          AS DEFECTCODENAME
+            ,  CD.DICTIONARYID
+            ,  NULL                       AS CHK
+          FROM            BAS_DEFECTCODE  A
+          LEFT OUTER JOIN CMD_USERS       CU  ON   A.CREATOR       = CU.USER_ID
+          LEFT OUTER JOIN CMD_USERS       MU  ON   A.MODIFIER      = MU.USER_ID
+          LEFT OUTER JOIN CMD_DICTIONARY  CD  ON   A.DICTIONARYID  = CD.DICTIONARYID
+                                              AND  CD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY  DK  ON   A.DICTIONARYID  = DK.DICTIONARYID
+                                              AND  DK.LANGUAGETYPE = 'ko-KR'
+          LEFT OUTER JOIN CMD_DICTIONARY  DE  ON   A.DICTIONARYID  = DE.DICTIONARYID
+                                              AND  DE.LANGUAGETYPE = 'en-US'
+          LEFT OUTER JOIN CMD_DICTIONARY  DC  ON   A.DICTIONARYID  = DC.DICTIONARYID
+                                              AND  DC.LANGUAGETYPE = 'zh-CN'
+          LEFT OUTER JOIN CMD_DICTIONARY  DV  ON   A.DICTIONARYID  = DV.DICTIONARYID
+                                              AND  DV.LANGUAGETYPE = 'vi-VN'
+         WHERE 1 = 1
+        ]]>
+           AND A.ENTERPRISEID = #{ENTERPRISEID}
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+            AND A.VALIDSTATE = #{VALIDSTATE}
+        </if>
+        <if test="DEFECTCODE != null and DEFECTCODE !='' ">
+            AND A.DEFECTCODE = #{DEFECTCODE}
+        </if>
+        ORDER BY DEFECTCODE
+    </select>
+
+    <!-- 불량유형 - 체크 -->
+    <select id="selectDefectcodeChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS03900Dao.selectDefectcodeChk */
+        SELECT REL.DEFECTCODE
+          FROM BAS_DEFECTCODE REL
+         WHERE REL.DEFECTCODE = #{DEFECTCODE}
+           AND ROWNUM         = 1
+    </select>
+
+     <!-- 불량유형에 매핑된 불량코드 조회 -->
+    <select id="selectDefectcoderelList2" parameterType="map" resultType="hashmap">
+    <![CDATA[
+        /* smh.bas.dao.BAS03900Dao.selectDefectcoderelList2 */
+        SELECT DCR.QCSEGMENTID
+             , DCR.DEFECTCODE
+             , DCR.VALIDSTATE
+          FROM BAS_DEFECTCODEREL DCR
+         WHERE DCR.DEFECTCODE = #{DEFECTCODE}
+    ]]>
+    </select>
+
+    <!-- 품질공정 리스트 -->
+    <select id="selectQcsegmentList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS03900Dao.selectQcsegmentList */
+        SELECT  QD.QCSEGMENTID
+             ,  DK.DICTIONARYNAME               AS QCSEGMENTNAME_KR
+             ,  DE.DICTIONARYNAME               AS QCSEGMENTNAME_US
+             ,  DC.DICTIONARYNAME               AS QCSEGMENTNAME_CN
+             ,  DV.DICTIONARYNAME               AS QCSEGMENTNAME_VN
+             ,  QD.DESCRIPTION
+             ,  QD.ENTERPRISEID
+             ,  QD.DESCRIPTION
+             ,  QD.PLANTID
+             ,  QD.RECEIPTFLAG
+             ,  CU.USER_NM                      AS CREATOR
+             ,  TO_CHAR(QD.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+             ,  MU.USER_NM                      AS MODIFIER
+             ,  TO_CHAR(QD.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+             ,  QD.VALIDSTATE
+             ,  CD.DICTIONARYID                 AS QCSEGMENTNAME
+          FROM            QAM_QCSEGMENTDEFINITION QD
+          LEFT OUTER JOIN CMD_USERS               CU  ON   QD.CREATOR       = CU.USER_ID
+          LEFT OUTER JOIN CMD_USERS               MU  ON   QD.MODIFIER      = MU.USER_ID
+          LEFT OUTER JOIN CMD_DICTIONARY          CD  ON   QD.QCSEGMENTNAME = CD.DICTIONARYID
+                                                      AND  CD.LANGUAGETYPE  = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY          DK  ON   QD.QCSEGMENTNAME = DK.DICTIONARYID
+                                                      AND  DK.LANGUAGETYPE  = 'ko-KR'
+          LEFT OUTER JOIN CMD_DICTIONARY          DE  ON   QD.QCSEGMENTNAME = DE.DICTIONARYID
+                                                      AND  DE.LANGUAGETYPE  = 'en-US'
+          LEFT OUTER JOIN CMD_DICTIONARY          DC  ON   QD.QCSEGMENTNAME = DC.DICTIONARYID
+                                                      AND  DC.LANGUAGETYPE  = 'zh-CN'
+          LEFT OUTER JOIN CMD_DICTIONARY          DV  ON   QD.QCSEGMENTNAME = DV.DICTIONARYID
+                                                      AND  DV.LANGUAGETYPE  = 'vi-VN'
+         WHERE    1 = 1
+        ]]>
+          AND QD.ENTERPRISEID = #{ENTERPRISEID}
+         <if test="QCSEGMENTID != null and QCSEGMENTID !='' ">
+          AND QD.QCSEGMENTID  = #{QCSEGMENTID}
+         </if>
+         <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+             AND QD.VALIDSTATE = #{VALIDSTATE}
+         </if>
+        ORDER BY QD.QCSEGMENTID
+    </select>
+
+    <!-- 품질공정 - 체크 -->
+    <select id="selectQcsegmentChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS03900Dao.selectQcsegmentChk */
+        SELECT QD.QCSEGMENTID
+          FROM QAM_QCSEGMENTDEFINITION QD
+         WHERE QD.QCSEGMENTID  = #{QCSEGMENTID}
+           AND ROWNUM          = 1
+    </select>
+
+    <!-- 중공정 리스트 -->
+    <select id="selectQcsegmentrelList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS03900Dao.selectQcsegmentrelList */
+        SELECT  REL.QCSEGMENTID
+            ,   PC.PARENTPROCESSSEGMENTCLASSID      AS PARENTPROCESSSEGMENTCLASSID
+            ,   PPD.DICTIONARYNAME                  AS PARENTPROCESSSEGMENTCLASSNAME
+            ,   REL.PROCESSSEGMENTCLASSID
+            ,   PD.DICTIONARYNAME                   AS PROCESSSEGMENTCLASSNAME
+            ,   CU.USER_NM                          AS CREATOR
+            ,   TO_CHAR(REL.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+            ,   MU.USER_NM                          AS MODIFIER
+            ,   TO_CHAR(REL.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+            ,   REL.VALIDSTATE
+          FROM            QAM_QCSEGMENTCLASSREL    REL
+          LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS  PC   ON   REL.PROCESSSEGMENTCLASSID      = PC.PROCESSSEGMENTCLASSID
+          LEFT OUTER JOIN CMD_DICTIONARY           PD   ON   PC.PROCESSSEGMENTCLASSNAME     = PD.DICTIONARYID
+                                                        AND  PD.LANGUAGETYPE                = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS  PPC  ON   PC.PARENTPROCESSSEGMENTCLASSID = PPC.PROCESSSEGMENTCLASSID
+          LEFT OUTER JOIN CMD_DICTIONARY           PPD  ON   PPC.PROCESSSEGMENTCLASSNAME    = PPD.DICTIONARYID
+                                                        AND  PPD.LANGUAGETYPE               = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_USERS                CU   ON   REL.CREATOR                    = CU.USER_ID
+          LEFT OUTER JOIN CMD_USERS                MU   ON   REL.MODIFIER                   = MU.USER_ID
+         WHERE    1 = 1
+         ]]>
+        AND    REL.QCSEGMENTID = #{QCSEGMENTID}
+        <if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' ">
+            AND REL.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID}
+        </if>
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+            AND REL.VALIDSTATE = #{VALIDSTATE}
+        </if>
+    </select>
+
+     <!-- 중공정 - 체크 -->
+    <select id="selectQcsegmentrelChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS03900Dao.selectQcsegmentrelChk */
+        SELECT REL.QCSEGMENTID
+          FROM QAM_QCSEGMENTCLASSREL REL
+         WHERE REL.QCSEGMENTID           = #{QCSEGMENTID}
+           AND REL.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID}
+           AND ROWNUM                    = 1
+    </select>
+
+    <!-- 품질공정-품질관리공정 검사 매핑정보 등록 -->
+    <select id="selectQcsegmentinspectChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS03900Dao.selectQcsegmentinspectChk */
+        SELECT INSPECTIONCLASSID
+          FROM QAM_QCSEGMENTINSPECTIONREL
+         WHERE INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+           AND QCSEGMENTID       = #{QCSEGMENTID}
+           AND ROWNUM            = 1
+    </select>
+
+    <!-- 불량코드 삽입 -->
+    <insert id="insertDefectcoderel" parameterType="map">
+    DECLARE
+    BEGIN
+        INSERT /* smh.bas.dao.BAS03900Dao.insertDefectcoderel */ INTO BAS_DEFECTCODEREL
+        (     QCSEGMENTID
+            , DEFECTCODE
+            , DECISIONDEGREE
+            , DISPLAYSEQUENCE
+            , DESCRIPTION
+            , CREATOR
+            , CREATEDTIME
+            , LASTTXNHISTKEY
+            , LASTTXNID
+            , LASTTXNUSER
+            , LASTTXNTIME
+            , LASTTXNCOMMENT
+            , VALIDSTATE
+            , ATTRIBUTECLASS
+            , DETAILCLASS
+            , CONFIRMSITE
+        )VALUES(
+              #{QCSEGMENTID}
+            , #{DEFECTCODE}
+            , #{DECISIONDEGREE}
+            , #{DISPLAYSEQUENCE}
+            , #{DESCRIPTION}
+            , #{CREATOR}
+            , SYSDATE
+            , #{LASTTXNHISTKEY}
+            , #{LASTTXNID}
+            , #{CREATOR}
+            , SYSDATE
+            , #{LASTTXNCOMMENT}
+            , #{VALIDSTATE}
+            , #{ATTRIBUTECLASS}
+            , #{DETAILCLASS}
+            , #{CONFIRMSITE}
+        );
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{DEFECTCODENAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODEREL','ko-KR',#{DEFECTCODENAME}, #{CREATOR}, #{DEFECTCODENAME_KR}); END IF;
+        IF #{DEFECTCODENAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODEREL','en-US',#{DEFECTCODENAME}, #{CREATOR}, #{DEFECTCODENAME_US}); END IF;
+        IF #{DEFECTCODENAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODEREL','zh-CN',#{DEFECTCODENAME}, #{CREATOR}, #{DEFECTCODENAME_CN}); END IF;
+        IF #{DEFECTCODENAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODEREL','vi-VN',#{DEFECTCODENAME}, #{CREATOR}, #{DEFECTCODENAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;
+    </insert>
+
+    <!-- 불량유형 삽입 -->
+    <insert id="insertDefectcode" parameterType="map">
+    DECLARE
+    BEGIN
+        INSERT /* smh.bas.dao.BAS03900Dao.insertDefectcode */ INTO BAS_DEFECTCODE
+        (     DEFECTCODE
+            , ENTERPRISEID
+            , PLANTID
+            , DEFECTCODENAME
+            , PARENTDEFECTCODE
+            , DISPLAYSEQUENCE
+            , DICTIONARYID
+            , DESCRIPTION
+            , CREATOR
+            , CREATEDTIME
+            , LASTTXNHISTKEY
+            , LASTTXNID
+            , LASTTXNUSER
+            , LASTTXNTIME
+            , LASTTXNCOMMENT
+            , VALIDSTATE
+        )VALUES(
+              #{DEFECTCODE}
+            , #{ENTERPRISEID}
+            , #{PLANTID}
+            , #{DEFECTCODENAME}
+            , #{PARENTDEFECTCODE}
+            , #{DISPLAYSEQUENCE}
+            , #{DICTIONARYID}
+            , #{DESCRIPTION}
+            , #{CREATOR}
+            , SYSDATE
+            , #{LASTTXNHISTKEY}
+            , #{LASTTXNID}
+            , #{CREATOR}
+            , SYSDATE
+            , #{LASTTXNCOMMENT}
+            , #{VALIDSTATE}
+        );
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{DEFECTCODENAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODE','ko-KR',#{DICTIONARYID}, #{CREATOR}, #{DEFECTCODENAME_KR}); END IF;
+        IF #{DEFECTCODENAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODE','en-US',#{DICTIONARYID}, #{CREATOR}, #{DEFECTCODENAME_US}); END IF;
+        IF #{DEFECTCODENAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODE','zh-CN',#{DICTIONARYID}, #{CREATOR}, #{DEFECTCODENAME_CN}); END IF;
+        IF #{DEFECTCODENAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODE','vi-VN',#{DICTIONARYID}, #{CREATOR}, #{DEFECTCODENAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;
+    </insert>
+
+    <!-- 품질공정 삽입 -->
+    <insert id="insertQcsegment" parameterType="map">
+    DECLARE
+    BEGIN
+        INSERT /* smh.bas.dao.BAS03900Dao.insertQcsegment */ INTO QAM_QCSEGMENTDEFINITION
+        (     QCSEGMENTID
+            , QCSEGMENTNAME
+            , ENTERPRISEID
+            , PLANTID
+            , DESCRIPTION
+            , CREATOR
+            , CREATEDTIME
+            , LASTTXNHISTKEY
+            , LASTTXNID
+            , LASTTXNUSER
+            , LASTTXNTIME
+            , LASTTXNCOMMENT
+            , VALIDSTATE
+            , RECEIPTFLAG
+        )VALUES(
+              #{QCSEGMENTID}
+            , #{QCSEGMENTNAME}
+            , #{ENTERPRISEID}
+            , #{PLANTID}
+            , #{DESCRIPTION}
+            , #{CREATOR}
+            , SYSDATE
+            , #{LASTTXNHISTKEY}
+            , #{LASTTXNID}
+            , #{CREATOR}
+            , SYSDATE
+            , #{LASTTXNCOMMENT}
+            , #{VALIDSTATE}
+            , #{RECEIPTFLAG}
+        );
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{QCSEGMENTNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('QAM_QCSEGMENTDEFINITION','ko-KR',#{QCSEGMENTNAME}, #{CREATOR}, #{QCSEGMENTNAME_KR}); END IF;
+        IF #{QCSEGMENTNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('QAM_QCSEGMENTDEFINITION','en-US',#{QCSEGMENTNAME}, #{CREATOR}, #{QCSEGMENTNAME_US}); END IF;
+        IF #{QCSEGMENTNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('QAM_QCSEGMENTDEFINITION','zh-CN',#{QCSEGMENTNAME}, #{CREATOR}, #{QCSEGMENTNAME_CN}); END IF;
+        IF #{QCSEGMENTNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('QAM_QCSEGMENTDEFINITION','vi-VN',#{QCSEGMENTNAME}, #{CREATOR}, #{QCSEGMENTNAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;
+    </insert>
+
+    <!-- 품질공정-품질관리공정 검사 매핑정보 등록 -->
+    <insert id="insertQcsegmentinspect" parameterType="map">
+    DECLARE
+    BEGIN
+        INSERT /* smh.bas.dao.BAS03900Dao.insertQcsegmentinspect */ INTO QAM_QCSEGMENTINSPECTIONREL
+        (     QCSEGMENTID                   /*품질관리공정 ID*/
+            , INSPECTIONCLASSID             /*검사 그룹 ID*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+
+        )VALUES(
+              #{QCSEGMENTID}                  /*품질관리공정 ID*/
+            , #{INSPECTIONCLASSID}            /*검사 그룹 ID*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+
+        );
+    END;
+    </insert>
+
+    <!-- 중공정 삽입 -->
+    <insert id="insertQcsegmentrel" parameterType="map">
+    DECLARE
+    BEGIN
+        INSERT /* smh.bas.dao.BAS03900Dao.insertQcsegmentrel */ INTO QAM_QCSEGMENTCLASSREL
+        (     QCSEGMENTID                   /*품질관리공정 ID*/
+            , PROCESSSEGMENTCLASSID         /*공정 그룹 ID*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+        )VALUES(
+              #{QCSEGMENTID}                  /*품질관리공정 ID*/
+            , #{PROCESSSEGMENTCLASSID}        /*공정 그룹 ID*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+        );
+    END;
+    </insert>
+
+    <!-- 불량코드 수정 -->
+    <update id="updateDefectcoderel" parameterType="map">
+        UPDATE /* smh.bas.dao.BAS03900Dao.updateDefectcoderel */ BAS_DEFECTCODEREL
+           SET MODIFIER                      = #{MODIFIER}
+             , MODIFIEDTIME                  = SYSDATE
+             , LASTTXNID                     = #{LASTTXNID}
+             , LASTTXNUSER                   = #{MODIFIER}
+             , LASTTXNTIME                   = SYSDATE
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}
+             , VALIDSTATE                    = #{VALIDSTATE}
+             , ATTRIBUTECLASS                = #{ATTRIBUTECLASS}
+             , DETAILCLASS                   = #{DETAILCLASS}
+             , CONFIRMSITE                   = #{CONFIRMSITE}
+             , DECISIONDEGREE                = #{DECISIONDEGREE}
+         WHERE QCSEGMENTID                   = #{QCSEGMENTID}
+           AND DEFECTCODE                    = #{DEFECTCODE}
+    </update>
+
+    <!-- 불량유형 수정 -->
+    <update id="updateDefectcode" parameterType="map">
+    DECLARE
+    BEGIN
+        UPDATE /* smh.bas.dao.BAS03900Dao.updateDefectcode */ BAS_DEFECTCODE
+           SET DEFECTCODENAME                = #{DEFECTCODENAME}
+             , PARENTDEFECTCODE              = #{PARENTDEFECTCODE}
+             , DISPLAYSEQUENCE               = #{DISPLAYSEQUENCE}
+             , DICTIONARYID                  = #{DICTIONARYID}
+             , DESCRIPTION                   = #{DESCRIPTION}
+             , MODIFIER                      = #{MODIFIER}
+             , MODIFIEDTIME                  = SYSDATE
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}
+             , LASTTXNID                     = #{LASTTXNID}
+             , LASTTXNUSER                   = #{MODIFIER}
+             , LASTTXNTIME                   = SYSDATE
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}
+             , VALIDSTATE                    = #{VALIDSTATE}
+         WHERE DEFECTCODE                    = #{DEFECTCODE}
+           AND ENTERPRISEID                  = #{ENTERPRISEID}
+        ;
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{DEFECTCODENAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODE','ko-KR',#{DICTIONARYID}, #{CREATOR}, #{DEFECTCODENAME_KR}); END IF;
+        IF #{DEFECTCODENAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODE','en-US',#{DICTIONARYID}, #{CREATOR}, #{DEFECTCODENAME_US}); END IF;
+        IF #{DEFECTCODENAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODE','zh-CN',#{DICTIONARYID}, #{CREATOR}, #{DEFECTCODENAME_CN}); END IF;
+        IF #{DEFECTCODENAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_DEFECTCODE','vi-VN',#{DICTIONARYID}, #{CREATOR}, #{DEFECTCODENAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;
+    </update>
+
+    <!-- 품질공정 수정 -->
+    <update id="updateQcsegment" parameterType="map">
+    DECLARE
+    BEGIN
+        UPDATE /* smh.bas.dao.BAS03900Dao.updateQcsegment */ QAM_QCSEGMENTDEFINITION
+           SET MODIFIER                      = #{MODIFIER}
+             , MODIFIEDTIME                  = SYSDATE
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}
+             , LASTTXNID                     = #{LASTTXNID}
+             , LASTTXNUSER                   = #{MODIFIER}
+             , LASTTXNTIME                   = SYSDATE
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}
+             , VALIDSTATE                    = #{VALIDSTATE}
+             , RECEIPTFLAG                   = #{RECEIPTFLAG}
+         WHERE QCSEGMENTID                   = #{QCSEGMENTID}
+           AND ENTERPRISEID                  = #{ENTERPRISEID}
+        ;
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{QCSEGMENTNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('QAM_QCSEGMENTDEFINITION','ko-KR',#{QCSEGMENTNAME}, #{CREATOR}, #{QCSEGMENTNAME_KR}); END IF;
+        IF #{QCSEGMENTNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('QAM_QCSEGMENTDEFINITION','en-US',#{QCSEGMENTNAME}, #{CREATOR}, #{QCSEGMENTNAME_US}); END IF;
+        IF #{QCSEGMENTNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('QAM_QCSEGMENTDEFINITION','zh-CN',#{QCSEGMENTNAME}, #{CREATOR}, #{QCSEGMENTNAME_CN}); END IF;
+        IF #{QCSEGMENTNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('QAM_QCSEGMENTDEFINITION','vi-VN',#{QCSEGMENTNAME}, #{CREATOR}, #{QCSEGMENTNAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;
+    </update>
+
+    <!-- 품질공정 - 중공정 수정 -->
+    <update id="updateQcsegmentrel" parameterType="map">
+    DECLARE
+    BEGIN
+        UPDATE /* smh.bas.dao.BAS03900Dao.updateQcsegmentrel */ QAM_QCSEGMENTCLASSREL
+           SET MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+         WHERE QCSEGMENTID                   = #{QCSEGMENTID}                /*품질관리공정 ID*/
+           AND PROCESSSEGMENTCLASSID         = #{PROCESSSEGMENTCLASSID}      /*공정 그룹 ID*/
+        ;
+    END;
+    </update>
+
+    <!-- 품질공정-품질관리공정 검사 매핑정보 수정 -->
+    <delete id="deleteQcsegmentinspect" parameterType="map">
+        /* smh.bas.dao.BAS03900Dao.deleteQcsegmentinspect */
+        DELETE FROM QAM_QCSEGMENTINSPECTIONREL
+         WHERE QCSEGMENTID                   = #{QCSEGMENTID}                /*품질관리공정 ID*/
+           AND INSPECTIONCLASSID             = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+    </delete>
+</mapper>

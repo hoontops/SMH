@@ -1,0 +1,637 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM01500Dao">
+
+
+    <!--  -->
+    <select id="SelectLotInspectionList" parameterType="map" resultType="hashmap">
+    		SELECT *
+				FROM 
+				(
+					SELECT	NVL(MAX(IR."degree"), '0') AS DEGREE1
+						,	X.PRODUCTDEFID
+						,	X.PRODUCTDEFVERSION
+						,	X.PRODUCTDEFNAME
+						,	MAX(CEIL(X.QTY / X.PANELPERQTY))      AS PANELQTY
+						,	X.LOTID
+						,	X.USERSEQUENCE
+						,	X.PROCESSSEGMENTID
+						,	X.PROCESSSEGMENTVERSION
+						,	D3.DICTIONARYNAME			AS PROCESSSEGMENTNAME
+						,	MAX(X.QTY)                  AS QTY
+						,	X.AREAID
+						,	D1.DICTIONARYNAME			AS AREANAME
+				<choose>
+					<when test="INSPECTIONCLASSID == 'SelfInspectionTake'">
+					    ,   '' 							AS EQUIPMENTNAME
+					    ,   'T' 						AS MENUTP
+					</when>
+					<otherwise>
+						,   FN_PM_GETUSEEQUIPMENTLIST2(X.LOTID, X.PROCESSSEGMENTID, 'Run', D1.LANGUAGETYPE) AS EQUIPMENTNAME
+						,   'S' 						AS MENUTP 
+					</otherwise>
+				</choose>
+						,	NVL(U.USERNAME, X.TRACKOUTUSER) AS USERNAME
+						,	TO_CHAR(X.TRACKOUTTIME, 'YYYY-MM-DD HH24:MI:SS') AS TRACKOUTTIME
+						,	X.LOTSTATE
+						,	X.PROCESSSTATE
+						,	X.ISHOLD
+						,	X.ISLOCKING
+						,	MAX(X.PANELPERQTY)			AS PCSPNL
+						,	X.UNIT
+						,	MAX(X.NCRINSPECTIONQTY)     AS NCRINSPECTIONQTY
+						,	X.INSPECTIONUNIT
+						,	X.CURAREAID	
+						,	X.CURAREANAME						
+						,	X.PREVSENDTIME
+					FROM 
+					(
+						SELECT	L.PRODUCTDEFID
+							, L.PRODUCTDEFVERSION
+							, PD.PRODUCTDEFNAME
+							, L.PANELQTY
+							, L.LOTID
+							, PP.USERSEQUENCE
+							, L.PROCESSSEGMENTID
+							, L.PROCESSSEGMENTVERSION
+							, PS.PROCESSSEGMENTNAME
+							, L.QTY
+					<choose>
+						<when test="INSPECTIONCLASSID == 'SelfInspectionTake'">
+						    , '' AS TRACKOUTTIME  		
+							, '' AS TRACKOUTUSER  		
+							, LH.PREVAREAID AS AREAID	
+						</when>
+						<otherwise>
+							, L.TRACKOUTTIME			
+							, L.TRACKOUTUSER  			
+							, L.AREAID AS AREAID		
+						</otherwise>
+					</choose> 
+							, L.LOTSTATE
+							, L.PROCESSSTATE
+							, L.ISHOLD
+							, L.ISLOCKING
+							, L.PANELPERQTY
+							--2020-03-06 강유라 DEFECTUNIT이 있는 경우 DEFECTUNIT봄
+							, NVL(L.DEFECTUNIT,L.UNIT)			AS UNIT
+							, NVL(QCR.NCRINSPECTIONQTY,0) 		AS NCRINSPECTIONQTY
+							, QCR.INSPECTIONUNIT	
+					        , L.AREAID  							AS CURAREAID
+					        , NVL(SD.DICTIONARYNAME,L.AREAID) 	AS CURAREANAME	
+					        , CASE WHEN PP.PATHTYPE = 'Start' OR PP.PATHTYPE = 'StartEnd' THEN L.STARTEDDATE
+					               ELSE LH.SENDTIME END PREVSENDTIME		        						
+					  FROM	PCM_LOT 							L
+					  INNER JOIN BAS_PRODUCTDEFINITION 		PD 	ON 1=1
+					  											AND L.PRODUCTDEFID = PD.PRODUCTDEFID 
+					  											AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+					  INNER JOIN BAS_PROCESSPATH             PP  ON  SPLIT_PART(L.PROCESSPATHSTACK, '.', 1) = PP.PROCESSPATHID
+					  INNER JOIN BAS_PROCESSSEGMENT 			PS 	ON 	L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID 
+					  											AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+					  INNER JOIN PCM_LOTWORKRESULT           LW  ON  L.LOTID = LW.LOTID
+					                                            AND L.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+					                                            AND L.WORKCOUNT = LW.WORKCOUNT
+					  INNER JOIN BAS_AREA                     SA ON  L.AREAID = SA.AREAID
+					  LEFT  JOIN CMD_DICTIONARY               SD ON  SA.AREANAME = SD.DICTIONARYID
+					                                            AND SD.LANGUAGETYPE = #{LANGUAGETYPE} 	   				                                            
+					  LEFT JOIN PCM_LOTHISTORY              LH  ON  LW.LOTID = LH.LOTID
+					                                            AND LW.PREVSENDLOTHISTKEY = LH.TXNHISTKEY	
+					  LEFT JOIN BAS_RESOURCE				BR  ON BR.RESOURCEID = L.RESOURCEID 
+					  LEFT JOIN BAS_PROCESSSEGMENT			BP  ON BP.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+	                  LEFT JOIN (SELECT QC.PROCESSSEGMENTCLASSID
+	                                 ,  IR.NCRINSPECTIONQTY
+	                                 ,  IR.INSPECTIONUNIT
+	                                 ,  QC.PROCESSSEGMENTCLASSID || IR.PROCESSSEGID AS SEGMENTID -- 새로 추가 
+	                             FROM QAM_QCSEGMENTCLASSREL QC
+	                             INNER JOIN BAS_INSPECTIONITEMREL IR ON  QC.QCSEGMENTID = IR.PROCESSSEGID
+	                                                                AND IR.INSPECTIONDEFID =  #{INSPECTIONCLASSID} 
+	                             --) QCR  ON QCR.PROCESSSEGMENTCLASSID =  PS.PROCESSSEGMENTCLASSID
+	                             ) QCR  ON QCR.SEGMENTID =  L.PROCESSSEGMENTID	 			                                            						
+					  WHERE	1 = 1
+					  AND 	L.LOTSTATE = 'InProduction'
+					  AND	L.AREAID = #{AREAID}
+					  AND	L.PLANTID = #{PLANTID}
+					  AND	L.ISHOLD = 'N'
+					  AND	L.ISLOCKING = 'N'
+			  <choose>
+			  	<when test="INSPECTIONCLASSID == 'SelfInspectionTake'">
+			  		  AND   L.PROCESSSTATE = 'WaitForReceive'  
+			  		  --AND   L.PROCESSSTATE = (CASE WHEN BR.STEPTYPE IS NOT NULL THEN  -- 첫 Step
+					  --			 SUBSTR(BR.STEPTYPE,1,INSTR(BR.STEPTYPE,',')-1)  
+					  --		ELSE SUBSTR(BP.STEPTYPE,1,INSTR(BP.STEPTYPE,',')-1)  
+					  --		END)
+			  	</when>
+			  	<otherwise>
+			  		  --AND   L.PROCESSSTATE = 'WaitForSend'  
+			  		  AND   L.PROCESSSTATE = (CASE WHEN BR.STEPTYPE IS NOT NULL THEN  --마지막 Step    
+					  			 SUBSTR(BR.STEPTYPE,INSTR(BR.STEPTYPE,',',-1)+1)
+					  		ELSE SUBSTR(BP.STEPTYPE,INSTR(BP.STEPTYPE,',',-1)+1)
+					  		END)
+			  	</otherwise>
+			  </choose>
+			     
+			    <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			    	AND 
+			     <foreach collection="PRODUCTDEFID" item="PRODUCTDEFID"  open="(" close=")" separator="OR">
+   	                L.PRODUCTDEFID LIKE <![CDATA['%' ||]]> #{PRODUCTDEFID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+					  AND L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+				</if>
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				 	  AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+				</if>
+				<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+			    	AND 
+			     <foreach collection="PROCESSSEGMENTID" item="PROCESSSEGMENTID"  open="(" close=")" separator="OR">
+   	                L.PROCESSSEGMENTID LIKE <![CDATA['%' ||]]> #{PROCESSSEGMENTID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				<if test="LOTID != null and LOTID !=''"> 
+			    	AND 
+			     <foreach collection="LOTID" item="LOTID"  open="(" close=")" separator="OR">
+   	                L.LOTID LIKE <![CDATA['%' ||]]> #{LOTID} <![CDATA[|| '%']]>
+   	   			 </foreach>
+				</if>
+				 -- 제품구분
+			    <if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+			    	AND PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}	
+			    </if>	
+					)X
+					LEFT OUTER JOIN BAS_AREA				AR	ON	X.AREAID = AR.AREAID
+					LEFT OUTER JOIN CMD_DICTIONARY		D1	ON	AR.AREANAME = D1.DICTIONARYID
+						  									AND	D1.LANGUAGETYPE = #{LANGUAGETYPE} 					  																			
+					LEFT OUTER JOIN CMD_USER_V			U	ON	X.TRACKOUTUSER = U.USERID
+					LEFT OUTER JOIN BAS_PROCESSSEGMENT	PS2	ON	X.PROCESSSEGMENTID = PS2.PROCESSSEGMENTID
+															AND	X.PROCESSSEGMENTVERSION = PS2.PROCESSSEGMENTVERSION
+					LEFT OUTER JOIN CMD_DICTIONARY		D3	ON	PS2.PROCESSSEGMENTNAME = D3.DICTIONARYID
+															AND D3.LANGUAGETYPE = #{LANGUAGETYPE} 	
+					LEFT OUTER JOIN QAM_INSPECTIONRESULT IR  ON  X.LOTID = IR.RESOURCEID
+	                                                        AND X.PROCESSSEGMENTID = IR.PROCESSSEGMENTID
+	                                                        AND X.PROCESSSEGMENTVERSION = IR.PROCESSSEGMENTVERSION
+	                                                        AND X.PROCESSSEGMENTID = IR.PROCESSRELNO
+	                                                        AND IR.RESOURCETYPE = #{INSPECTIONCLASSID} 
+					GROUP BY X.PRODUCTDEFID
+	                    ,    X.PRODUCTDEFVERSION
+	                    ,    X.PRODUCTDEFNAME
+	                    ,    X.LOTID
+	                    ,    X.USERSEQUENCE
+	                    ,    X.PROCESSSEGMENTID
+	                    ,    X.PROCESSSEGMENTVERSION
+	                    ,    D3.DICTIONARYNAME
+	                    ,    X.AREAID
+	                    ,    D1.DICTIONARYNAME
+	            <choose>
+				  	<when test="INSPECTIONCLASSID == 'SelfInspectionShip'">
+				  		,    FN_PM_GETUSEEQUIPMENTLIST2(X.LOTID, X.PROCESSSEGMENTID, 'Run', D1.LANGUAGETYPE)
+				  	</when>
+			  	</choose>
+	                    ,    NVL(U.USERNAME, X.TRACKOUTUSER)
+	                    ,    X.TRACKOUTTIME
+	                    ,    X.LOTSTATE
+	                    ,    X.PROCESSSTATE
+	                    ,    X.ISHOLD
+	                    ,    X.ISLOCKING
+	                    ,    X.UNIT
+	                    ,    X.INSPECTIONUNIT
+	                    ,	 X.CURAREAID	  
+	                    ,    X.CURAREANAME
+	                    ,	 X.PREVSENDTIME
+				)Y
+				ORDER BY DEGREE1
+				      ,  Y.LOTID 
+				<choose>
+			  		<when test="INSPECTIONCLASSID == 'SelfInspectionTake'">
+			  		  ,  Y.PREVSENDTIME
+			  		</when>
+			  		<otherwise>
+			  		  ,  Y.TRACKOUTTIME
+			  		</otherwise>
+			  	</choose>
+    </select>
+
+	<select id="SelectNcrStandardOfSelfInspection" parameterType="map" resultType="hashmap">
+		/* GetNcrStandardOfSelfInspection 10002*/
+			SELECT
+					    QIL.DECISIONDEGREE			                    AS DECISIONDEGREE			--판정등급
+					 ,  NVL(SD3.DICTIONARYNAME,QIL.DECISIONDEGREE) 		AS DECISIONDEGREENAME
+					 ,  QIL.QCGRADE					                    AS QCGRADE					--조치등급			
+					 ,	QIL.NGCONDITION				                    AS NGCONDITION				--NG조건
+					 ,  NVL(SD1.DICTIONARYNAME,QIL.NGCONDITION)    		AS NGCONDITIONNAME
+					 ,	QIL.QTYORRATE				                    AS QTYORRATE				--수량/불량율 구분
+					 ,  NVL(SD2.DICTIONARYNAME,QIL.QTYORRATE)      		AS QTYORRATENAME
+					 ,  CASE WHEN QTYORRATE = 'RATE' THEN
+								  CASE WHEN QIL.NGCONDITION = 'BT' THEN TO_CHAR(QIL.FROMNGRATE) || ' ~ ' || QIL.TONGRATE
+								       WHEN QIL.NGCONDITION = 'GE' OR QIL.NGCONDITION = 'GT' THEN TO_CHAR(QIL.TONGRATE) || ' ~'
+								       WHEN QIL.NGCONDITION = 'LE' OR QIL.NGCONDITION = 'LT' THEN '~ ' || TO_CHAR(QIL.TONGRATE)
+								       END
+							 WHEN QTYORRATE = 'QTY' THEN 
+								  CASE WHEN QIL.NGCONDITION  = 'EQ' THEN TO_CHAR(QIL.NGQUANTITY)
+				                       WHEN QIL.NGCONDITION = 'GE' OR QIL.NGCONDITION = 'GT' THEN TO_CHAR(QIL.NGQUANTITY) || ' ~'
+				                       WHEN QIL.NGCONDITION = 'LE' OR QIL.NGCONDITION = 'LT' THEN TO_CHAR(QIL.NGQUANTITY) || ' ~'
+				                       END
+				             END NCRSPEC        
+					  ,	 QIL.FROMNGRATE FROMRATE			     --From불량율
+					  ,	 QIL.TONGRATE	TORATE					--To불량율
+					  ,	 QIL.NGQUANTITY	NGQUANTITY				--불량수량	                              
+				FROM	BAS_QCINTERLOCK			QIL
+				INNER JOIN BAS_INSPECTIONCLASS	ISC	ON	QIL.INSPECTIONCLASSID		= ISC.INSPECTIONCLASSID
+				INNER JOIN CMD_DICTIONARY		DCC	ON	ISC.INSPECTIONCLASSNAME		= DCC.DICTIONARYID
+													AND	DCC.LANGUAGETYPE			= #{LANGUAGETYPE}
+				LEFT   JOIN BAS_QCINTERLOCKACTION QL ON  QIL.QCGRADE = QL.QCGRADE
+							                        AND QL.ACTIONID = 'QCAction004' 
+							                        AND QIL.PLANTID = QL.PLANTID
+				LEFT   JOIN CMD_LOOKUP_VALUES    SC1 ON  QIL.NGCONDITION = SC1.LOOKUP_CODE
+							                        AND SC1.LOOKUP_TYPE = 'Condition'
+				LEFT   JOIN CMD_DICTIONARY       SD1 ON  SC1.DICTIONARYID = SD1.DICTIONARYID
+							                        AND SD1.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT   JOIN CMD_LOOKUP_VALUES   SC2 ON  QIL.QTYORRATE = SC2.LOOKUP_CODE
+							                        AND SC2.LOOKUP_TYPE = 'QtyDefectRateType'
+				LEFT   JOIN CMD_DICTIONARY       SD2 ON  SC2.DICTIONARYID = SD2.DICTIONARYID
+							                        AND SD2.LANGUAGETYPE = #{LANGUAGETYPE}		
+				LEFT   JOIN CMD_LOOKUP_VALUES   SC3 ON  QIL.DECISIONDEGREE = SC3.LOOKUP_CODE
+							                        AND SC3.LOOKUP_TYPE = 'DecisionDegree'
+				LEFT   JOIN CMD_DICTIONARY       SD3 ON  SC3.DICTIONARYID = SD3.DICTIONARYID
+							                        AND SD3.LANGUAGETYPE = #{LANGUAGETYPE}					                                                   
+				WHERE 1=1	
+				AND QIL.INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+				AND QIL.DECISIONTYPE= 'NCR'
+				AND QIL.VALIDSTATE = 'Valid'
+				AND QIL.PLANTID = #{PLANTID}
+				ORDER BY DECISIONDEGREE 
+	</select>
+	
+	<select id="SelectDefectCodeByProcess" parameterType="map" resultType="hashmap">
+		/* GetDefectCodeByProcess 10003 */
+				SELECT DEFECTCODE
+				, DEFECTCODENAME
+				, QCSEGMENTID
+				, QCSEGMENTNAME
+				, SEGMENT_DEFECTCODE
+				, SEGMENT_DEFECTNAME
+				, DECISIONDEGREE
+				, CONFIRMSITE
+			  FROM (
+					SELECT  DISTINCT 
+	                        D.DEFECTCODE
+	                    ,   NVL(DC1.DICTIONARYNAME, D.DEFECTCODENAME)  AS DEFECTCODENAME
+	                    ,   QSD.QCSEGMENTID
+	                    ,   NVL(DC2.DICTIONARYNAME, QSD.QCSEGMENTNAME) AS QCSEGMENTNAME
+	                    ,   QSD.QCSEGMENTID || D.DEFECTCODE AS SEGMENT_DEFECTCODE
+	                    ,   NVL(DC2.DICTIONARYNAME, QSD.QCSEGMENTNAME) || '-' || NVL(DC1.DICTIONARYNAME, D.DEFECTCODENAME)  AS SEGMENT_DEFECTNAME
+	                    ,   DFR.DECISIONDEGREE
+	                    ,   DFR.CONFIRMSITE
+	                FROM    BAS_DEFECTCODE                   D
+	                LEFT OUTER JOIN BAS_DEFECTCODEREL        DFR ON  D.DEFECTCODE = DFR.DEFECTCODE
+	                LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION  QSD ON  DFR.QCSEGMENTID = QSD.QCSEGMENTID
+	                LEFT OUTER JOIN CMD_DICTIONARY           DC1 ON  D.DICTIONARYID = DC1.DICTIONARYID
+	                                                            AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+	                LEFT OUTER JOIN CMD_DICTIONARY           DC2 ON  QSD.QCSEGMENTNAME = DC2.DICTIONARYID
+	                                                            AND DC2.LANGUAGETYPE = #{LANGUAGETYPE}
+	                INNER JOIN QAM_QCSEGMENTCLASSREL         QSR ON  QSD.QCSEGMENTID = QSR.QCSEGMENTID
+	                INNER JOIN BAS_PROCESSSEGMENTCLASS       SGC ON  QSR.PROCESSSEGMENTCLASSID = SGC.PROCESSSEGMENTCLASSID
+	                INNER JOIN BAS_PROCESSSEGMENT            SG  ON  SGC.PROCESSSEGMENTCLASSID = SG.PROCESSSEGMENTCLASSID
+	                INNER JOIN UFN_SELECTSTRINGTOSPLIT(#{SEGMENTID},',') WR ON SG.PROCESSSEGMENTID = WR.VALUE
+	                WHERE   1 = 1
+	                AND     D.VALIDSTATE = 'Valid'
+	                AND     QSD.VALIDSTATE = 'Valid'
+	                AND     DFR.VALIDSTATE = 'Valid'    
+                	AND     (DFR.ATTRIBUTECLASS IS NULL OR DFR.ATTRIBUTECLASS NOT IN ('Management'))    
+                	UNION
+	                SELECT  D.DEFECTCODE
+	                    ,   NVL(DC1.DICTIONARYNAME, D.DEFECTCODENAME)  AS DEFECTCODENAME
+	                    ,   QSD.QCSEGMENTID
+	                    ,   COALESCE(DC2.DICTIONARYNAME, QSD.QCSEGMENTNAME) AS QCSEGMENTNAME
+	                    ,   QSD.QCSEGMENTID || D.DEFECTCODE AS SEGMENT_DEFECTCODE
+	                    ,   NVL(DC2.DICTIONARYNAME, QSD.QCSEGMENTNAME) || '-' || NVL(DC1.DICTIONARYNAME, D.DEFECTCODENAME)  AS SEGMENT_DEFECTNAME
+	                    ,   DFR.DECISIONDEGREE
+	                    ,   DFR.CONFIRMSITE
+	                FROM    BAS_DEFECTCODE                   D
+	                LEFT OUTER JOIN BAS_DEFECTCODEREL        DFR ON  D.DEFECTCODE = DFR.DEFECTCODE
+	                LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION  QSD ON  DFR.QCSEGMENTID = QSD.QCSEGMENTID
+	                LEFT OUTER JOIN CMD_DICTIONARY           DC1 ON  D.DICTIONARYID = DC1.DICTIONARYID
+	                                                            AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+	                LEFT OUTER JOIN CMD_DICTIONARY           DC2 ON  QSD.QCSEGMENTNAME = DC2.DICTIONARYID
+	                                                            AND DC2.LANGUAGETYPE = #{LANGUAGETYPE}
+	                INNER JOIN QAM_QCSEGMENTCLASSREL         QSR ON  QSD.QCSEGMENTID = QSR.QCSEGMENTID
+	                INNER JOIN BAS_PROCESSSEGMENTCLASS       SGC ON  QSR.PROCESSSEGMENTCLASSID = SGC.PROCESSSEGMENTCLASSID
+	                INNER JOIN BAS_PROCESSSEGMENT            SG  ON  SGC.PROCESSSEGMENTCLASSID = SG.PROCESSSEGMENTCLASSID
+	                INNER JOIN UFN_SELECTSTRINGTOSPLIT(#{SEGMENTID},',') WR ON SG.PROCESSSEGMENTID = WR.VALUE
+	                WHERE   1=1
+					AND     (DFR.ATTRIBUTECLASS IS NULL OR DFR.ATTRIBUTECLASS IN ('Management'))    
+	                AND     D.VALIDSTATE = 'Valid'
+	                AND     QSD.VALIDSTATE = 'Valid'
+	                AND     DFR.VALIDSTATE = 'Valid'      
+                )
+                WHERE 1=1
+        <if test="DEFECTCODENAME != null and DEFECTCODENAME !='' ">
+                AND		(
+	                       SEGMENT_DEFECTNAME LIKE '%' || UPPER(#{DEFECTCODENAME}) ||'%'
+	                    OR SEGMENT_DEFECTCODE LIKE '%' || UPPER(#{DEFECTCODENAME}) ||'%'
+                		)
+        </if>
+	</select>
+	
+	<select id="SelectNCRCheckBasis" parameterType="map" resultType="hashmap">
+		/* SelectNCRCheckBasis 10001 */
+		SELECT
+					INSPECTIONCLASSID
+				, 	DECISIONDEGREE
+				, 	"SEQUENCE"
+				, 	QCGRADE
+				, 	PRIORITY
+				, 	FROMNGRATE
+				, 	TONGRATE
+				, 	NGQUANTITY
+				, 	NGCONDITION
+				, 	QTYORRATE
+			FROM 	BAS_QCINTERLOCK
+			where   INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+			AND 	DECISIONDEGREE = #{NCRDECISIONDEGREE} --판정등급
+			AND 	ENTERPRISEID = #{ENTERPRISEID}
+			AND 	PLANTID = #{PLANTID}
+			AND 	DECISIONTYPE = 'NCR'
+			AND 	VALIDSTATE ='Valid'
+			ORDER BY 
+					DECISIONDEGREE
+				, 	PRIORITY
+	</select>
+	
+	<select id="selectInspResultActionType" parameterType="map" resultType="hashmap">
+		/* GetInspResultActionType 10001 */
+		SELECT LISTAGG(ACTIONTYPE, '/') WITHIN GROUP(ORDER BY ACTIONTYPE) AS ACTIONTYPE
+			FROM (
+				SELECT AC.ACTIONTYPE
+								FROM 	BAS_QCINTERLOCKACTION 								QLA 
+								INNER JOIN BAS_ACTION 										AC ON QLA.ACTIONID = AC.ACTIONID
+								WHERE 1=1	
+							AND 	QLA.QCGRADE = #{QCGRADE}
+							AND 	QLA.ENTERPRISEID =#{ENTERPRISEID}
+							AND 	QLA.PLANTID =#{PLANTID}
+								AND 	QLA.VALIDSTATE ='Valid'
+								AND 	AC.VALIDSTATE ='Valid'
+				GROUP BY AC.ACTIONTYPE
+			)
+	</select>
+	
+	<select id="selectMaxDegreeByInspection" parameterType="map" resultType="hashmap">
+		/* GetMaxDegreeByInspectionDefect 10001 */
+		SELECT TO_CHAR(NVL(MAX(TO_NUMBER("degree")), 0)) AS DEGREE1			
+				FROM 	QAM_INSPECTIONRESULT				
+				WHERE	1 = 1
+				AND		RESOURCEID = #{RESOURCEID}
+				AND 	RESOURCETYPE = #{RESOURCETYPE}
+				AND		INSPECTIONDEFID = #{INSPECTIONDEFID}
+				AND		INSPECTIONDEFVERSION = #{INSPECTIONDEFVERSION}
+				AND 	PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+				AND		PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}	
+	</select>
+	
+	<select id="selectStepInfo" parameterType="map" resultType="hashmap">
+		SELECT L.RESOURCEID , L.PROCESSSEGMENTID 
+		, (CASE WHEN BR.STEPTYPE IS NOT NULL THEN  -- 첫 Step
+							  			 SUBSTR(BR.STEPTYPE,1,INSTR(BR.STEPTYPE,',')-1)  
+							  		ELSE SUBSTR(BP.STEPTYPE,1,INSTR(BP.STEPTYPE,',')-1)  
+							  		END) FIRSTSTEP
+		, (CASE WHEN BR.STEPTYPE IS NOT NULL THEN  --마지막 Step    
+							  			 SUBSTR(BR.STEPTYPE,INSTR(BR.STEPTYPE,',',-1)+1)
+							  		ELSE SUBSTR(BP.STEPTYPE,INSTR(BP.STEPTYPE,',',-1)+1)
+							  		END) LASTSTEP
+		FROM PCM_LOT L 
+		LEFT JOIN BAS_RESOURCE				BR  ON BR.RESOURCEID = L.RESOURCEID 
+		LEFT JOIN BAS_PROCESSSEGMENT			BP  ON BP.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+		WHERE 1=1
+		AND LOTID  = #{LOTID}
+	</select>
+	<!-- 검사 불량정보 등록 -->
+    <insert id="insertQamInspectiondefect" parameterType="map">
+    INSERT INTO QAM_INSPECTIONDEFECT( 
+        TXNHISTKEY  
+        ,RESOURCETYPE  
+        ,RESOURCEID  
+        ,DEFECTCODE  
+        ,PROCESSRELNO  
+        ,DEGREE  
+        ,MAPPINGRESOURCEID  
+        ,INSPECTIONQTY  
+        ,SAMPLEQTY  
+        ,DEFECTQTY  
+        ,REASONSEGMENTID  
+        ,REASONCONSUMABLELOTID  
+        ,REASONCONSUMABLEDEFID  
+        ,REASONCONSUMABLEDEFVERSION  
+        ,REASONAREAID  
+        ,FILERESOURCEID  
+        ,INSPECTIONRESULT  
+        ,QCSEGMENTID  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,MODIFIER  
+        ,MODIFIEDTIME  
+        ,TXNGROUPHISTKEY  
+        ,TXNID  
+        ,TXNUSER  
+        ,TXNTIME  
+        ,TXNCOMMENT        ) 
+    VALUES( 
+        #{TXNHISTKEY}  
+        ,#{RESOURCETYPE}  
+        ,#{RESOURCEID}  
+        ,#{DEFECTCODE}  
+        ,#{PROCESSRELNO}  
+        ,#{DEGREE}  
+        ,#{MAPPINGRESOURCEID}  
+        ,#{INSPECTIONQTY}  
+        ,#{SAMPLEQTY}  
+        ,#{DEFECTQTY}  
+        ,#{REASONSEGMENTID}  
+        ,#{REASONCONSUMABLELOTID}  
+        ,#{REASONCONSUMABLEDEFID}  
+        ,#{REASONCONSUMABLEDEFVERSION}  
+        ,#{REASONAREAID}  
+        ,#{FILERESOURCEID}  
+        ,#{INSPECTIONRESULT}  
+        ,#{QCSEGMENTID}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{MODIFIER}  
+        ,SYSDATE  
+        ,#{TXNGROUPHISTKEY}  
+        ,#{TXNID}  
+        ,#{CREATOR}  
+        ,SYSDATE 
+        ,#{TXNCOMMENT}    )
+    </insert>
+    
+    <!-- 검사결과 등록 -->
+    <insert id="insertQamInspectionResult" parameterType="map">
+    INSERT INTO QAM_INSPECTIONRESULT( 
+        TXNHISTKEY  
+        ,RESOURCETYPE  
+        ,RESOURCEID  
+        ,PROCESSRELNO  
+        ,INSPECTIONDEFID  
+        ,INSPECTIONDEFVERSION  
+        ,"degree"  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,INSPECTIONTYPE  
+        ,PRODUCTDEFID  
+        ,PRODUCTDEFVERSION  
+        ,PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,PROCESSSEGMENTID  
+        ,PROCESSSEGMENTVERSION  
+        ,EQUIPMENTID  
+        ,REQUESTUSER  
+        ,REQUESTDATE  
+        ,ACCEPTUSER  
+        ,ACCEPTDATE  
+        ,INSPECTIONQTY  
+        ,SAMPLEQTY  
+        ,SPECOUTQTY  
+        ,INSPECTIONRESULT  
+        ,INSPECTIONDATE  
+        ,INSPECTIONUSER  
+        ,ISSEND  
+        ,AREAID  
+        ,ISNCRPUBLISH  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,MODIFIER  
+        ,MODIFIEDTIME  
+        ,TXNGROUPHISTKEY  
+        ,TXNID  
+        ,TXNUSER  
+        ,TXNTIME  
+        ,TXNCOMMENT  
+        ,ISCOMPLETION  
+        ,RESULTITEM  
+        ,JUDGMENTCRITERIA  
+        ,WORKCOUNT  
+        ,INSPECTIONCLASSID        ) 
+    VALUES( 
+        #{TXNHISTKEY}  
+        ,#{RESOURCETYPE}  
+        ,#{RESOURCEID}  
+        ,#{PROCESSRELNO}  
+        ,#{INSPECTIONDEFID}  
+        ,#{INSPECTIONDEFVERSION}  
+        ,#{DEGREE}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{INSPECTIONTYPE}  
+        ,#{PRODUCTDEFID}  
+        ,#{PRODUCTDEFVERSION}  
+        ,#{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PROCESSSEGMENTVERSION}  
+        ,#{EQUIPMENTID}  
+        ,#{REQUESTUSER}  
+        ,#{REQUESTDATE}  
+        ,#{ACCEPTUSER}  
+        ,#{ACCEPTDATE}  
+        ,#{INSPECTIONQTY}  
+        ,#{SAMPLEQTY}  
+        ,#{SPECOUTQTY}  
+        ,#{INSPECTIONRESULT}  
+        ,#{INSPECTIONDATE}  
+        ,#{INSPECTIONUSER}  
+        ,#{ISSEND}  
+        ,#{AREAID}  
+        ,#{ISNCRPUBLISH}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{MODIFIER}  
+        ,SYSDATE  
+        ,#{TXNGROUPHISTKEY}  
+        ,#{TXNID}  
+        ,#{CREATOR}  
+        ,SYSDATE 
+        ,#{TXNCOMMENT}  
+        ,#{ISCOMPLETION}  
+        ,#{RESULTITEM}  
+        ,#{JUDGMENTCRITERIA}  
+        ,#{WORKCOUNT}  
+        ,#{INSPECTIONCLASSID}    )
+    </insert>
+    
+        <!-- LOT 작업자 정보 등록 -->
+    <insert id="insertPcmInspectionWorker" parameterType="map">
+    INSERT INTO PCM_INSPECTIONWORKER( 
+        TXNHISTKEY  
+        ,RESOURCETYPE  
+        ,RESOURCEID  
+        ,PROCESSRELNO  
+        ,INSPECTIONDEFID  
+        ,"DEGREE"  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,PROCESSSEGMENTID  
+        ,PROCESSSEGMENTVERSION  
+        ,WORKCOUNT  
+        ,INSPECTIONUSER  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,TXNGROUPHISTKEY  
+        ,TXNUSER  
+        ,TXNTIME  
+        ,TXNREASONCODECLASS  
+        ,TXNREASONCODE  
+        ,TXNCOMMENT        ) 
+    VALUES( 
+        #{TXNHISTKEY}  
+        ,#{RESOURCETYPE}  
+        ,#{RESOURCEID}  
+        ,#{PROCESSRELNO}  
+        ,#{INSPECTIONDEFID}  
+        ,#{DEGREE}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PROCESSSEGMENTVERSION}  
+        ,#{WORKCOUNT}  
+        ,#{INSPECTIONUSER}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{TXNGROUPHISTKEY}  
+        ,#{CREATOR}  
+        ,SYSDATE 
+        ,#{TXNREASONCODECLASS}  
+        ,#{TXNREASONCODE}  
+        ,#{TXNCOMMENT}    )
+    </insert>
+    
+    <!-- LOT 작업실적 변경 -->
+    <update id="updatePcmLotWorkResult" parameterType="map" >
+	    UPDATE PCM_LOTWORKRESULT 
+	    <choose>
+			<when test="SELFTAKEINSPRESULT != null and SELFTAKEINSPRESULT !=''">
+	    	SET SELFTAKEINSPRESULT = #{SELFTAKEINSPRESULT}
+	    	</when>
+			<otherwise>    
+	        SET SELFSHIPINSPRESULT = #{SELFSHIPINSPRESULT}  
+	        </otherwise>
+	    </choose>  
+	    	,  MODIFIER = #{MODIFIER} , MODIFIEDTIME = SYSDATE
+	    WHERE LOTID = #{LOTID}
+	    AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	    AND WORKCOUNT = #{WORKCOUNT}
+    </update>
+    
+    
+</mapper>

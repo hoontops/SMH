@@ -1,0 +1,280 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 우편번호 관련
+    설명          : 우편번호 관련 SQL
+    작성자       : 진성하
+    최초작성일 : 2017.03.27
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.03.27     진성하     최초  생성
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmzc.dao.CMZC01500Dao">
+
+    <sql id="whoCol" >
+         , CREATED_BY
+         , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD') as CREATION_DATE
+         , LAST_UPDATED_BY, TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DATE
+    </sql>
+
+    <!-- 우편번호 시도/시군구/읍면동 전체  조회(not use)  -->
+    <select id="selectZipsSidoList_OLD" resultType="hashmap">
+	    SELECT /* "com.nbdf.cmd.cm.cmzc.dao.CMZC01500Dao.selectZipsSidoList_OLD"  */
+		          DISTINCT SI_NM,
+                  SGG_NM,
+                  EMD_NM
+        FROM CMD_LNM_SCOPE_IFR
+	    WHERE 1=1
+	    ORDER  BY DECODE(SI_NM, '서울특별시',1, '경기도', 2, '부산광역시',3, '인천광역시', 4, '대구광역시',5,
+		        '광주광역시',6, '대전광역시',7, '울산광역시',8, '전라북도',9,'전라남도',10, '경상북도',11, '경상남도',12,
+		        '충청북도',13, '충청남도',14, '강원도',15, 20)
+    </select>
+
+    <!-- 우편번호 시도/시군구/읍면동 전체  조회  -->
+    <select id="selectZipsSidoList" resultType="hashmap">
+		SELECT /* "com.nbdf.cmd.cm.cmzc.dao.CMZC01500Dao.selectZipsSidoList"  */
+		      SI_NM
+		    , SGG_NM
+		FROM CMD_LNM_SCOPE_IFR
+		WHERE 1=1
+		GROUP BY SI_NM,SGG_NM
+		ORDER  BY DECODE(SI_NM, '서울특별시',1, '경기도', 2, '부산광역시',3, '인천광역시', 4, '대구광역시',5,
+		        '광주광역시',6, '대전광역시',7, '울산광역시',8, '전라북도',9,'전라남도',10, '경상북도',11, '경상남도',12,
+		        '충청북도',13, '충청남도',14, '강원도',15, 20), SGG_NM
+    </select>
+
+    <!-- 우편번호 검색 카운트 -->
+    <select id="selectZipsSearchCount" resultType="hashmap">
+	    SELECT /* "com.nbdf.cmd.cm.cmzc.dao.CMZC01500Dao.selectZipsSearchCount"  */
+	               COUNT(*) as CNT
+	    FROM   CMD_ZIPS_V
+	    WHERE 1=1
+	    <if test="CITY != null and CITY != ''">
+	           AND CITY = #{CITY}  /* 시도 */
+	    </if>
+	    <if test="SIGNGU != null and SIGNGU != ''">
+	           AND SIGNGU = #{SIGNGU}   /* 시군구 */
+	    </if>
+	    <if test="RN != null and RN != ''">
+	           AND RN LIKE #{TEXT}  || '%' /* 도로명 */
+	    </if>
+	    <if test="EUPMYEON != null and EUPMYEON != ''">
+	           AND EUPMYEON LIKE #{TEXT} || '%' /* 읍면동명  */
+	    </if>
+	    <if test="BDNBR_BASS != null and BDNBR_BASS != ''">
+	           AND BDNBR_BASS = #{TEXT2}      /* 건물본번(도로명 건물번호) */
+	    </if>
+	    <if test="BDNBR_SUB != null and BDNBR_SUB != ''">
+	           AND BDNBR_SUB = #{TEXT3}       /* 건물부번(도로명 건물번호) */
+	    </if>
+	    <if test="LNM_BASS != null and LNM_BASS != ''">
+	           AND LNM_BASS = #{TEXT2}       /* 지번본번  */
+	    </if>
+	    <if test="LNM_SUB != null and LNM_SUB != ''">
+	           AND LNM_SUB = #{TEXT3}        /* 지번부번  */
+	    </if>
+	    <if test="ZIP_CODE != null and ZIP_CODE != ''">
+	           AND ZIP_CODE = #{ZIP_CODE}                 /* 새우편번호 */
+	    </if>
+	    <if test="PAST_ZIP_CODE != null and PAST_ZIP_CODE != ''">
+	           AND PAST_ZIP_CODE = #{PAST_ZIP_CODE}        /* 구우편번호 */
+	    </if>
+	    <if test="BLD_NM != null and BLD_NM != ''">
+	           AND BLD_NAME LIKE #{TEXT} || '%'
+	    </if>
+	    AND USE_YN = 'Y'
+    </select>
+
+    <!-- 우편번호 검색 리스트 -->
+    <select id="selectZipsSearchList" resultType="hashmap">
+    SELECT  /* "com.nbdf.cmd.cm.cmzc.dao.CMZC01500Dao.selectZipsSearchList"  */
+        *
+        FROM (
+	        SELECT ROWNUM AS RNUM, T.* FROM (
+			    SELECT
+				    -- ZIP_CODE_ID as ZIP_ID,            /* 우편번호 ID(X) */
+				    ZIP_CODE as ZIP,                    /* 우편번호 */
+				    SUBSTR(PAST_ZIP_CODE,0,3) || '-' || SUBSTR(PAST_ZIP_CODE,4,6) as PAST_ZIP,  /* 과거 우편번호 */
+				    CITY,   /* 시도 */
+				    SIGNGU,              /* 시군구 */
+				    EUPMYEON,         /* 읍면 */
+				    LI_NAME as LI_NM,        /* 리명 */
+				    RN,                    /* 도로명 */
+				    BLD_MNG_NO,      /* 건물관리번호 */
+				    BDNBR_BASS,       /* 건물번호 본번 */
+				    BDNBR_SUB,         /* 건물번호 부번 */
+				    BLD_NAME as BLD_NM,           /* 건물명 */
+				    SIGNGU_BLD_NM,  /* 시군구건물명 */
+				    ADS_DONG_NM,    /* 행정동명   */
+				    LNM_BASS,          /* 지번 본번 */
+				    LNM_SUB,            /* 지번 부번 */
+				    LEG_DONG_CD,     /* 법정동코드 */
+				    ADS_DONG_CD,    /* 행정동코드 */
+				    MUCH_DLVR_OFC_NM, /* 다량배달처명 */
+				    POST_SEQ_NO,    /* 우편 일련번호 */
+				    EMD_SEQ_NO,     /* 읍면동 일련번호 */
+				    MT_YN,              /* 산 여부 */
+				    UNDGRND_YN,     /* 지하 여부 */
+				    APHUS_YN,         /* 공동주택 여부 */
+				    DTL_BLD_NAME as DTL_BLD_NM,      /* 상세 건물명 */
+				    GET_RN_ADDR_F(CITY,SIGNGU,RN,BDNBR_BASS,BDNBR_SUB,EUPMYEON,LI_NAME,BLD_NAME,SIGNGU_BLD_NM,MT_YN,UNDGRND_YN,DTL_BLD_NAME) as RN_ALL_ADDR,      /* 도로명 전체주소 */
+	                GET_LNM_ADDR_F(CITY,SIGNGU,EUPMYEON,LI_NAME,LNM_BASS,LNM_SUB,SIGNGU_BLD_NM,MT_YN,UNDGRND_YN,DTL_BLD_NAME) as LNM_ALL_ADDR, /* 지번 전체주소   */
+				    ROAD_MNG_NO,   /* 도로 관리번호 */
+				    CITY_ENG,          /* 시도 영문 */
+				    SIGNGU_ENG,      /* 시군구 영문 */
+				    EUPMYEON_ENG,  /* 읍면 영문  */
+				    LI_ENG_NAME as LI_ENG_NM,  /* 리 영문 */
+				    RN_ENG,             /* 도로명 영문 */
+				    BLD_ENG_NAME as BLD_ENG_NM,  /* 건물 영문명 */
+				    RN_CD,              /* 도로명 코드 */
+				   --  CREATED_BY
+				    TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD HH24:MI:SS') as CREATION_DATE
+				FROM CMD_ZIPS_V
+				WHERE 1=1
+				<if test="CITY != null and CITY != ''">
+			           AND CITY = #{CITY}          /* 시도 */
+			    </if>
+			    <if test="SIGNGU != null and SIGNGU != ''">
+			           AND SIGNGU = #{SIGNGU}  /* 시군구 */
+			    </if>
+			    <if test="RN != null and RN != ''">
+	                   AND RN LIKE #{TEXT}  || '%'  /* 도로명 */
+			    </if>
+			    <if test="EUPMYEON != null and EUPMYEON != ''">
+	                   AND EUPMYEON LIKE #{TEXT}  || '%'  /* 읍면동명  */
+			    </if>
+			    <if test="BDNBR_BASS != null and BDNBR_BASS != ''">
+			           AND BDNBR_BASS = #{TEXT2}      /* 건물본번(도로명 건물번호) */
+			    </if>
+			    <if test="BDNBR_SUB != null and BDNBR_SUB != ''">
+			           AND BDNBR_SUB = #{TEXT3}       /* 건물부번(도로명 건물번호) */
+			    </if>
+			    <if test="LNM_BASS != null and LNM_BASS != ''">
+			           AND LNM_BASS = #{TEXT2}       /* 지번본번  */
+			    </if>
+			    <if test="LNM_SUB != null and LNM_SUB != ''">
+			           AND LNM_SUB = #{TEXT3}        /* 지번부번  */
+			    </if>
+			    <if test="ZIP_CODE != null and ZIP_CODE != ''">
+			           AND ZIP_CODE = #{ZIP_CODE}           /* 새우편번호 */
+			    </if>
+			    <if test="PAST_ZIP_CODE != null and PAST_ZIP_CODE != ''">
+			           AND PAST_ZIP_CODE = #{PAST_ZIP_CODE}  /* 구우편번호 */
+			    </if>
+			    <if test="BLD_NM != null and BLD_NM != ''">
+	                  AND BLD_NAME LIKE #{TEXT} || '%'
+	            </if>
+	            AND USE_YN = 'Y'
+		    )T WHERE 1=1
+		        <if test= "P_END != null and P_END != ''">
+		         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+		        </if>
+		    ) WHERE 1=1
+	    <if test= "P_START != null and P_START != ''">
+	    AND  RNUM >= #{P_START}
+	    </if>
+    </select>
+
+    <!-- 우편번호 사서함 검색 카운트 -->
+    <select id="selectMlbxSearchCount" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmzc.dao.CMZC01500Dao.selectMlbxSearchCount"  */
+                   COUNT(*) as CNT
+                FROM CMD_ZIP_MLBX_IFR
+                WHERE 1=1
+                AND USEYN = 'Y'
+                <if test="CITY != null and CITY != ''">
+                       AND SI_NM = #{CITY}          /* 시도 */
+                </if>
+                <if test="SIGNGU != null and SIGNGU != ''">
+                       AND SGG_NM = #{SIGNGU}   /* 시군구 */
+                </if>
+                <if test="RN != null and RN != ''">
+                       AND RD_NM LIKE  '%' || #{TEXT}  || '%'  /* 도로명(사서함)  */
+                </if>
+                <if test="BDNBR_BASS != null and BDNBR_BASS != ''">
+                       AND ST_JBUNJI = #{TEXT2}      /* 시작주번 */
+                </if>
+                <if test="BDNBR_SUB != null and BDNBR_SUB != ''">
+                       AND ST_BBUNJI = #{TEXT3}       /* 시작부번 */
+                </if>
+    </select>
+
+    <!-- 우편번호 사서함 검색 리스트 -->
+    <select id="selectMlbxSearchList" resultType="hashmap">
+    SELECT  /* "com.nbdf.cmd.cm.cmzc.dao.CMZC01500Dao.selectMlbxSearchList"  */
+        *
+        FROM (
+            SELECT
+                ROWNUM AS RNUM,
+                T.* FROM (
+                SELECT
+	                  AREA_CD as ZIP  /* 우편번호 */
+				    , SUBSTR(ZIP_CD,0,3) || '-' || SUBSTR(ZIP_CD,4,6) as PAST_ZIP /* 과거 우편번호 */
+				    , SI_NM as CITY
+				    , SGG_NM as SIGNGU
+				    , EMD_NM as EUPMYEON
+				    , RD_NM as RN -- 사서함
+				    , ST_JBUNJI as BDNBR_BASS -- 시작주번
+				    , ST_BBUNJI as BDNBR_SUB  -- 시작부번
+				    , ED_JBUNJI as LNM_BASS   -- 끝주번
+				    , ED_BBUNJI as LNM_SUB    -- 끝부번
+				    , '' AS RN_ALL_ADDR
+				    , (SI_NM || ' ' || SGG_NM || ' ' || EMD_NM || ' ' || RD_NM || ' '
+				        || TO_CHAR(ST_JBUNJI) ||
+				        CASE WHEN TO_CHAR(ST_BBUNJI) IS NOT NULL THEN '-' || TO_CHAR(ST_BBUNJI)
+				        ELSE '' END
+				        ||
+				        CASE WHEN TO_CHAR(ED_JBUNJI) IS NOT NULL THEN '~' || TO_CHAR(ED_JBUNJI) ||
+				        CASE WHEN TO_CHAR(ED_BBUNJI) IS NOT NULL THEN '-' || TO_CHAR(ED_JBUNJI)
+				        ELSE ''
+				        END
+				        ELSE '' END
+				    ) as LNM_ALL_ADDR  /* 사서함 전체주소(지번) */
+	                FROM CMD_ZIP_MLBX_IFR
+	                WHERE 1=1
+	                AND USEYN = 'Y'
+	                <if test="CITY != null and CITY != ''">
+	                       AND SI_NM = #{CITY}          /* 시도 */
+	                </if>
+	                <if test="SIGNGU != null and SIGNGU != ''">
+	                       AND SGG_NM = #{SIGNGU}   /* 시군구 */
+	                </if>
+	                <if test="RN != null and RN != ''">
+	                       AND RD_NM LIKE  '%' || #{TEXT}  || '%'  /* 도로명(사서함)  */
+	                </if>
+	                <if test="BDNBR_BASS != null and BDNBR_BASS != ''">
+	                       AND ST_JBUNJI = #{TEXT2}      /* 시작주번 */
+	                </if>
+	                <if test="BDNBR_SUB != null and BDNBR_SUB != ''">
+	                       AND ST_BBUNJI = #{TEXT3}       /* 시작부번 */
+	                </if>
+            )T WHERE 1=1
+                <if test= "P_END != null and P_END != ''">
+                 AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+                </if>
+            ) WHERE 1=1
+        <if test= "P_START != null and P_START != ''">
+        AND  RNUM >= #{P_START}
+        </if>
+    </select>
+
+    <!-- 배치 프로시져 Call을 위한 파라미터 설정 샘플  -->
+    <parameterMap id="batchParamMap"  type="hashmap">
+        <parameter property="P_FET_CNT" javaType="java.lang.Integer" jdbcType="INTEGER" mode="OUT" />  <!-- 필수1(처리대상 건수)  -->
+        <parameter property="P_SKP_CNT" javaType="java.lang.Integer" jdbcType="INTEGER" mode="OUT" />  <!-- 필수2(스킵 건수)  -->
+        <parameter property="P_ERR_CNT" javaType="java.lang.Integer" jdbcType="INTEGER" mode="OUT" />  <!-- 필수3(오류 건수)  -->
+        <parameter property="P_ERR_DESC" javaType="java.lang.String" jdbcType="VARCHAR" mode="OUT" />  <!-- 필수4(오류메시지)  -->
+        <parameter property="v_grp_cd" javaType="java.lang.String" jdbcType="VARCHAR" mode="IN" />        <!-- 옵션:파라미터 변수1 -->
+        <parameter property="v_cm_cd" javaType="java.lang.String" jdbcType="VARCHAR" mode="IN" />        <!-- 옵션:파라미터 변수2 -->
+    </parameterMap>
+
+   <!-- 배치 프로시져 Call 샘플  -->
+   <select id="sampleBatchSp" statementType="CALLABLE"  parameterMap="batchParamMap">
+        {call CMD_SAMPLE_BATCH_P(?, ? ,? ,? ,? ,?)}
+   </select>
+
+ </mapper>

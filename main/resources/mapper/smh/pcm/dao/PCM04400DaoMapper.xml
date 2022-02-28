@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : Lot 불량처리
+    설명          : Lot 불량처리
+    작성자       : 김애리
+    최초작성일 : 2021.04.07
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.04.07      김애리     최초  생성
+-->
+
+<mapper namespace="smh.pcm.dao.PCM04400Dao">
+	<select id="selectDefectCodeList4Popup" parameterType="map" resultType="hashmap">
+		/* GetDefectCodeList 10001 */
+			SELECT * 
+			FROM (
+				SELECT D.DEFECTCODE
+		             , NVL(DC1.DICTIONARYNAME, D.DEFECTCODENAME) AS DEFECTCODENAME
+		             , QS.QCSEGMENTID
+		             , NVL(DC2.DICTIONARYNAME, QS.QCSEGMENTNAME) AS QCSEGMENTNAME
+		             , QS.QCSEGMENTID || D.DEFECTCODE AS SEGMENT_DEFECTCODE
+		             , NVL(DC1.DICTIONARYNAME, D.DEFECTCODENAME) || '-' || NVL(DC2.DICTIONARYNAME, QS.QCSEGMENTNAME)  AS SEGMENT_DEFECTNAME
+		          FROM             BAS_DEFECTCODE               D
+		          INNER JOIN       BAS_DEFECTCODEREL            DFR ON   D.DEFECTCODE           = DFR.DEFECTCODE
+		          INNER JOIN       QAM_QCSEGMENTDEFINITION      QS  ON   DFR.QCSEGMENTID        = QS.QCSEGMENTID
+		          LEFT OUTER JOIN  CMD_DICTIONARY               DC1 ON   D.DICTIONARYID         = DC1.DICTIONARYID
+		                                                            AND  DC1.LANGUAGETYPE       = #{LANGUAGETYPE}
+		          LEFT OUTER JOIN  CMD_DICTIONARY               DC2 ON   QS.QCSEGMENTNAME       = DC2.DICTIONARYID
+		                                                            AND  DC2.LANGUAGETYPE       = #{LANGUAGETYPE}
+		    ) 
+		    WHERE 1=1
+		<if test="DEFECTCODENAME != null and DEFECTCODENAME !='' ">
+		    AND		(
+		               SEGMENT_DEFECTNAME LIKE '%' || UPPER(#{DEFECTCODENAME}) ||'%'
+		            OR SEGMENT_DEFECTCODE LIKE '%' || UPPER(#{DEFECTCODENAME}) ||'%'
+		    		)
+		</if>
+	</select>
+	
+	<select id="selectHasJobStart" parameterType="map" resultType="hashmap">
+		/* selectHasJobStart */
+		SELECT * FROM PCM_LOTWORKRESULT WHERE LOTID = #{LOTID}
+		AND (  CREATEDTIME 		> TO_DATE(#{CREATEDTIME},'YYYY-MM-DD HH24:MI:SS')
+			OR RECEIVETIME 		> TO_DATE(#{CREATEDTIME},'YYYY-MM-DD HH24:MI:SS')
+			OR WORKSTARTTIME 	> TO_DATE(#{CREATEDTIME},'YYYY-MM-DD HH24:MI:SS')
+			OR WORKENDTIME 		> TO_DATE(#{CREATEDTIME},'YYYY-MM-DD HH24:MI:SS')
+			OR SENDTIME 		> TO_DATE(#{CREATEDTIME},'YYYY-MM-DD HH24:MI:SS')
+			OR MODIFIEDTIME 	> TO_DATE(#{CREATEDTIME},'YYYY-MM-DD HH24:MI:SS')
+			)
+	</select>
+	
+	<select id="selectHasDefectReg" parameterType="map" resultType="hashmap">
+		/* selectHasDefectReg */
+		SELECT * FROM PCM_LOTDEFECT 
+		WHERE LOTID IN (
+						SELECT DESTINATIONLOTID FROM PCM_LOTGENEAL WHERE LOTID = #{LOTID}
+						)
+		AND CREATEDTIME > TO_DATE(#{CREATEDTIME},'YYYY-MM-DD HH24:MI:SS')
+	</select>
+	
+	<select id="selectHasLotGeneal" parameterType="map" resultType="hashmap">
+		/* selectHasLotGeneal */
+		SELECT * FROM PCM_LOTGENEAL WHERE LOTID = #{LOTID}
+		AND TXNTIME > TO_DATE(#{CREATEDTIME},'YYYY-MM-DD HH24:MI:SS')
+	</select>
+</mapper>

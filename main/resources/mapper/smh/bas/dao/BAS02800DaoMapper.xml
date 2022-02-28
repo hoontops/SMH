@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS02800Dao">
+
+    <select id="SelectMoldAndToolManagement_Mold" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.BAS02800Dao.SelectMoldAndToolManagement_Mold */    
+SELECT 	DISTINCT
+						DD.PLANTID
+				   ,	DD.ENTERPRISEID
+				   ,	DD.DURABLECLASSID
+				   ,	DD.DURABLEDEFID
+				   ,    DIC.DICTIONARYNAME          AS DURABLEDEFNAME  
+				   ,	NVL(DD.SUMMARY,0)				AS SUMMARY 
+				   ,TRDT.DURABLEDEFVERSION          AS TOOLVERSION 
+				   ,	DD.DURABLEDEFVERSION 
+				   ,	DK.DICTIONARYNAME			AS DURABLEDEFNAME_KR
+				   ,	DE.DICTIONARYNAME			AS DURABLEDEFNAME_US
+				   ,	DC.DICTIONARYNAME			AS DURABLEDEFNAME_CN
+				   ,	DV.DICTIONARYNAME			AS DURABLEDEFNAME_VN
+                   ,	FN_GETTOOLFORMNAME(#{SESSION_ENTERPRISEID}, #{SESSION_LANGUAGETYPE}, DD.DURABLECLASSID, DD.FORM) AS TOOLFORM
+                   ,	FN_GETTOOLKINDNAME(#{SESSION_ENTERPRISEID}, #{SESSION_LANGUAGETYPE}, DD.DURABLECLASSID, DD.FORM, DD.TOOLKIND) AS TOOLKINDNM
+				   ,	DD.FORM						AS TOOLFORMCODE  
+				   ,	DD.TOOLTYPE               
+				   ,	DD.TOOLDETAILTYPE
+				   ,	DD.USEDLIMIT
+				   ,	DD.CLEANLIMIT
+				   ,	DD.THICKNESSLIMIT
+				   ,	DD.USEDFACTOR     
+				   ,	DD.FILMUSELAYER1		
+				   ,	DD.VALIDSTATE
+				   ,	CU.USERNAME AS CREATOR
+				   ,	TO_CHAR(DD.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+				   ,	MU.USERNAME AS MODIFIER
+				   ,	TO_CHAR(DD.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+				   ,	DD.PRODUCTDEFID
+				   , IM.ITEMNAME 				AS PRODUCTDEFNAME
+				   ,	DD.PRODUCTDEFVERSION 
+				   ,VDR.VENDORNAME	 AS MANUFACTURER
+				   ,	DD.RECEIPTAREAID
+				   ,	NVL(DAR.DICTIONARYNAME, TRDT.AREAID) AS RECEIPTAREA
+				   ,	DD.DESCRIPTION				    
+				   ,	DD.SUMMARY					AS	ARRAY
+				   ,	DD.SCALEX
+				   ,	DD.SCALEY
+				   ,	DD.HITCOUNT
+				   ,	PS.PCSPNL
+           		   ,AD3.DICTIONARYNAME  AS TOOLKIND
+				FROM	TOM_DURABLEDEFINITION 			DD
+           INNER JOIN    TOM_TOOLREQUESTDETAIL            TRDT ON TRDT.DURABLEDEFID       = DD.DURABLEDEFID
+                                                            AND  TRDT.DURABLEDEFVERSION = DD.DURABLEDEFVERSION
+          LEFT OUTER JOIN BAS_VENDOR   		 		 VDR     ON TRDT.VENDORID        	= VDR.VENDORID 				--20210312 APPEND (제작처/협력업체 : 제작처명)
+                                                            AND  TRDT.ENTERPRISEID    	= VDR.ENTERPRISEID
+                                                            AND  TRDT.PLANTID    		= VDR.PLANTID
+            LEFT OUTER JOIN BAS_AREA                 SAC   	 ON SAC.AREAID              = TRDT.AREAID				--20210318 APPEND (작업장)                                                            
+        	LEFT OUTER JOIN CMD_DICTIONARY           DAR     ON DAR.DICTIONARYID        = SAC.AREANAME
+                                                            AND  DAR.LANGUAGETYPE       = #{SESSION_LANGUAGETYPE}                                                            
+				LEFT OUTER JOIN cmd_dICTIONARY			DK	ON	DD.DURABLEDEFNAME 		= DK.DICTIONARYID
+															AND	DK.LANGUAGETYPE 		= 'ko-KR'
+			    LEFT OUTER JOIN cmd_dICTIONARY			DE	ON	DD.DURABLEDEFNAME 		= DE.DICTIONARYID
+															AND	DE.LANGUAGETYPE 		= 'en-US'
+			    LEFT OUTER JOIN cmd_dICTIONARY			DC	ON	DD.DURABLEDEFNAME 		= DC.DICTIONARYID
+															AND	DC.LANGUAGETYPE 		= 'zh-CN'
+			    LEFT OUTER JOIN cmd_dICTIONARY			DV	ON	DD.DURABLEDEFNAME 		= DV.DICTIONARYID
+															AND	DV.LANGUAGETYPE 		= 'vi-VN'														
+			    LEFT OUTER JOIN cmd_uSER_V 				CU  ON  CU.USERID 				= DD.CREATOR
+			    LEFT OUTER JOIN cmd_uSER_V 				MU  ON  MU.USERID 				= DD.MODIFIER	                                        
+				LEFT OUTER JOIN cmd_dICTIONARY		 	DIC ON	DD.DURABLEDEFNAME 		= DIC.DICTIONARYID
+															AND DIC.LANGUAGETYPE 		=#{SESSION_LANGUAGETYPE}		                                        
+				LEFT OUTER JOIN BAS_ITEMMASTER		 	IM ON  DD.ENTERPRISEID   	  	= IM.ENTERPRISEID
+			    											AND DD.PRODUCTDEFID      	= IM.ITEMID
+														 	AND DD.PRODUCTDEFVERSION 	= IM.ITEMVERSION		
+				LEFT OUTER JOIN BAS_PRODUCTDEFINITION 	PS ON  DD.ENTERPRISEID   	  	= PS.ENTERPRISEID
+			    											AND DD.PRODUCTDEFID      	= PS.PRODUCTDEFID
+														 	AND DD.PRODUCTDEFVERSION 	= PS.PRODUCTDEFVERSION		
+				LEFT OUTER JOIN cmd_lOOKUP_VALUES					CDF	ON	DD.FORM					= CDF.lookup_coDE
+															AND	CDF.lookup_type			= 'ToolForm'
+				LEFT OUTER JOIN cmd_dICTIONARY			DCF	ON	CDF.DICTIONARYID		= DCF.DICTIONARYID
+															AND	DCF.LANGUAGETYPE		= #{SESSION_LANGUAGETYPE}
+				INNER JOIN cmd_lOOKUP_VALUES						CDD	ON CDD.lookup_type = 'DurableClass'
+															AND CDD.lookup_coDE = DD.DURABLECLASSID
+				LEFT JOIN BAS_AREA						AR	ON	DD.RECEIPTAREAID = AR.AREAID
+				LEFT JOIN cmd_dICTIONARY					AD2 ON	AR.AREANAME = AD2.DICTIONARYID
+															AND AD2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}			
+        LEFT OUTER JOIN cmd_lOOKUP_VALUES          CDF2  ON  DD.TOOLKIND          = CDF2.lookup_coDE
+                              AND  CDF2.lookup_type      = 'ToolKind'|| DD.DURABLECLASSID || dd.form                                         
+        LEFT JOIN cmd_dICTIONARY          AD3 ON  cdf2.dictionaryid = AD3.DICTIONARYID
+                              AND AD3.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}			
+				WHERE 1=1 
+					AND CDD.lookup_coDE IN ('M','W', 'B', 'J')
+		<if test="PLANTID != null and PLANTID !='' ">
+			AND DD.PLANTID = #{PLANTID}
+		</if>
+		<if test="STARTDATE != null and STARTDATE !='' ">
+			<![CDATA[
+				AND	DD.CREATEDTIME >= to_timestamp( #{STARTDATE} || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+			]]>
+		</if>
+		<if test="ENDDATE != null and ENDDATE !='' ">
+			<![CDATA[
+				AND	DD.CREATEDTIME <= to_timestamp( #{ENDDATE} || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+			]]>
+		</if>
+                        
+		<if test="ITEMID != null and ITEMID !='' ">
+			AND DD.PRODUCTDEFID = #{ITEMID}
+		</if>
+		<if test="ITEMVERSION != null and ITEMVERSION !='' ">
+			AND DD.PRODUCTDEFVERSION = #{ITEMVERSION}
+		</if>
+		<if test="MODELCODE != null and MODELCODE !='' ">			
+			AND	UPPER(IM.ITEMID) LIKE UPPER('%' || #{MODELCODE} || '%')
+		</if>	
+		        AND (DD.DURABLETYPE != 'SparePart'  
+        OR COALESCE(DD.DURABLETYPE, '') = '')
+        ORDER BY DD.DURABLEDEFID, DD.DURABLEDEFVERSION
+    </select>
+    
+        
+	<select id="SelectMoldAndToolManagement_Film" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.BAS02800Dao.SelectMoldAndToolManagement_Film */
+   SELECT 
+						DD.PLANTID
+				   ,	DD.ENTERPRISEID
+				   ,	DD.DURABLECLASSID
+				   ,	DD.DURABLEDEFID
+				   ,    DIC.DICTIONARYNAME          AS DURABLEDEFNAME  
+				   --,	DD.DURABLEDEFVERSION
+				   ,	DK.DICTIONARYNAME			AS DURABLEDEFNAME_KR
+				   ,	DE.DICTIONARYNAME			AS DURABLEDEFNAME_US
+				   ,	DC.DICTIONARYNAME			AS DURABLEDEFNAME_CN
+				   ,	DV.DICTIONARYNAME			AS DURABLEDEFNAME_VN
+				   ,	DD.FORM						AS TOOLFORMCODE				--Tool형식코드
+				   ,	DCF.DICTIONARYNAME			AS TOOLFORM					--Tool형식
+				   ,	DD.TOOLTYPE
+				   ,	DD.TOOLDETAILTYPE
+				   ,	DD.FILMUSELAYER1
+				   ,	DD.FILMUSELAYER2			
+				   ,	DD.VALIDSTATE
+				   ,	CU.USERNAME AS CREATOR
+           ,  DD.CREATEDTIME
+           ,  MU.USERNAME AS MODIFIER
+           ,  DD.MODIFIEDTIME
+           ,  DD.PRODUCTDEFID
+           ,    IM.ITEMNAME         AS PRODUCTDEFNAME
+           ,  DD.PRODUCTDEFVERSION 
+           ,  DD.DESCRIPTION      
+        FROM  TOM_DURABLEDEFINITION       DD
+        LEFT OUTER JOIN CMD_DICTIONARY      DK  ON  DD.DURABLEDEFNAME     = DK.DICTIONARYID
+                              AND  DK.LANGUAGETYPE     = 'ko-KR'
+          LEFT OUTER JOIN CMD_DICTIONARY      DE  ON  DD.DURABLEDEFNAME     = DE.DICTIONARYID
+                              AND  DE.LANGUAGETYPE     = 'en-US'
+          LEFT OUTER JOIN CMD_DICTIONARY      DC  ON  DD.DURABLEDEFNAME     = DC.DICTIONARYID
+                              AND  DC.LANGUAGETYPE     = 'zh-CN'
+          LEFT OUTER JOIN CMD_DICTIONARY      DV  ON  DD.DURABLEDEFNAME     = DV.DICTIONARYID
+                              AND  DV.LANGUAGETYPE     = 'vi-VN'                            
+          LEFT OUTER JOIN CMD_USER_V         CU  ON  CU.USERID         = DD.CREATOR
+          LEFT OUTER JOIN CMD_USER_V         MU  ON  MU.USERID         = DD.MODIFIER                                          
+        LEFT OUTER JOIN CMD_DICTIONARY       DIC ON  DD.DURABLEDEFNAME     = DIC.DICTIONARYID
+                              AND DIC.LANGUAGETYPE     =#{SESSION_LANGUAGETYPE}                                            
+        LEFT OUTER JOIN BAS_ITEMMASTER       IM ON  DD.ENTERPRISEID         = IM.ENTERPRISEID
+                                AND DD.PRODUCTDEFID        = IM.ITEMID
+                               AND DD.PRODUCTDEFVERSION   = IM.ITEMVERSION
+        LEFT OUTER JOIN CMD_LOOKUP_VALUES          CDF  ON  DD.FORM          = CDF.LOOKUP_CODE
+                              AND  CDF.LOOKUP_TYPE      = 'ToolForm'
+        LEFT OUTER JOIN CMD_DICTIONARY      DCF  ON  CDF.DICTIONARYID    = DCF.DICTIONARYID
+                              AND  DCF.LANGUAGETYPE    = #{SESSION_LANGUAGETYPE}  
+        INNER JOIN CMD_LOOKUP_VALUES            CDD  ON CDD.LOOKUP_TYPE = 'DurableClass'
+                              AND CDD.LOOKUP_CODE = DD.DURABLECLASSID
+        LEFT OUTER JOIN  BAS_PRODUCTITEMSPECTOOL   PIS ON PIS.ITEMID = dd.DURABLEDEFID
+                              AND PIS.ITEMVERSION = dd.DURABLEDEFVERSION
+        WHERE 1=1 
+          AND CDD.LOOKUP_CODE = 'F'
+		<if test="PLANTID != null and PLANTID !='' ">
+			AND DD.PLANTID = #{PLANTID}
+		</if>
+		<if test="STARTDATE != null and STARTDATE !='' ">
+			<![CDATA[
+				AND	DD.CREATEDTIME >= to_timestamp( #{STARTDATE} || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+			]]>
+		</if>
+		<if test="ENDDATE != null and ENDDATE !='' ">
+			<![CDATA[
+				AND	DD.CREATEDTIME <= to_timestamp( #{ENDDATE} || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+			]]>
+		</if>
+                        
+		<if test="ITEMID != null and ITEMID !='' ">
+			AND DD.PRODUCTDEFID = #{ITEMID}
+		</if>
+		<if test="ITEMVERSION != null and ITEMVERSION !='' ">
+			AND DD.PRODUCTDEFVERSION = #{ITEMVERSION}
+		</if>
+		<if test="MODELCODE != null and MODELCODE !='' ">
+			AND	UPPER(IM.ITEMID) LIKE UPPER('%' || #{MODELCODE} || '%')
+		</if>	
+		        AND (DD.DURABLETYPE != 'SparePart'  
+        OR COALESCE(DD.DURABLETYPE, '') = '')
+		
+		    
+    </select>
+    
+</mapper>

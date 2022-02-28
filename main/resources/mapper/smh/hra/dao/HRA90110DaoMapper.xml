@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.hra.dao.HRA90110Dao">
+
+   <select id="selectOrgTree" parameterType="map" resultType="hashmap">	
+		-- 조직정보 : 전체
+		SELECT
+			DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), CHILD_ORGANIZATION_NAME, CHILD_ORGANIZATION_NAME_ENG) AS "NAME",
+			ORG_LEVEL AS "LEVEL",
+			CHILD_ORGANIZATION_ID AS "ORG_ID"
+		FROM HJSPFM_ORG_HIERARCHY_V2
+    </select>
+    
+    
+   <select id="selectMembers" parameterType="map" resultType="hashmap">
+   <![CDATA[
+	  SELECT DEF.EMPLOYEE_NAME                            /* 이름          */    
+         , DECODE( NVL(DEF.PERSON_TYPE,'H'), 'E',DEF.EU_TITLE_NAME,DEF.GRADE_TITLE) AS TITLE_NAME /*호 칭 2013.04.10 구주메뉴와 같이 사용됨 */
+         , DEF.POSITION_NAME                            /* 직책          */
+         , DEF.JOB_NAME                                 /* 직무          */
+         , DEF.GRADE_NAME                               /* 직급          */
+         , DEF.JOB_FAMILY                               /* 직종          */
+         , NVL(DEF.EFFECTIVE_ORG_DATE, DEF.HIRE_DATE) AS EFFECTIVE_ORG_DATE   /* 부서일자      */
+         , DEF.PROMOTION_DATE                           /* 승진일        */
+         , DEF.EMPLOYEE_NUMBER                          /* 사원번호      */
+         , DEF.RETIRE_DATE                              /* 퇴직일        */
+         , DEF.RETIRE_REASON                            /* 퇴직사유      */
+         , DEF.PERSON_ID                                /* PERSON ID     */
+         , (SELECT MAX(PG.SEQUENCE)
+              FROM PER_GRADES   PG
+             WHERE PG.DATE_TO IS NULL
+               AND PG.ATTRIBUTE1 = DEF.GRADE_TITLE )  AS GRADE_SEQ   /* GRADE SEQ  */
+         , DEF.POSITION_GRADE_SEQ
+         , DEF.GRADE_TITLE                              /* 호칭          */
+      FROM
+         (
+           SELECT DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), PPF.KOR_NAME, NVL(PPF.EU_NAME,PPF.KOR_NAME))         AS  EMPLOYEE_NAME        /* 이름          */
+                , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), PPF.JOB_NAME, PPF.JOB_ENG_NAME)     AS  JOB_NAME             /* 직무          */
+                , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), PPF.ORG_NAME, PPF.ORG_ENG_NAME)     AS  ORG_NAME             /* 부서명        */
+                , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), PPF.KOR_GRADE, PPF.ENG_GRADE)       AS  GRADE_NAME           /* 직급          */
+                , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), PPF.KOR_POSITION, PPF.ENG_POSITION) AS  POSITION_NAME        /* 직책          */
+                , PPF.EMPLOYEE_NUMBER                                 AS  EMPLOYEE_NUMBER      /* 사원번호      */
+             /* , CHO.EFFECTIVE_ORG_DATE                              AS  EFFECTIVE_ORG_DATE_OLD */  /* 부서일자      */
+                , ( SELECT TO_CHAR(MAX(PSAS.START_DATE), 'YYYY/MM/DD')
+                      FROM PER_ALL_ASSIGNMENTS_F  PAA
+                         , PER_SECONDARY_ASS_STATUSES  PSAS
+                         , FND_LOOKUP_VALUES  FLV
+                     WHERE PAA.ASSIGNMENT_ID = PSAS.ASSIGNMENT_ID
+                       AND PSAS.ATTRIBUTE2 = FLV.LOOKUP_CODE
+                       AND PAA.PERSON_ID = PPF.PERSON_ID
+                       AND FLV.LOOKUP_TYPE = 'HJS_HR_ASG_REASON'
+                       AND FLV.TAG = 'Y' )                            AS  EFFECTIVE_ORG_DATE   /* 부서일자      */
+                , PPF.NATIONAL_IDENTIFIER                             AS  NATIONAL_IDENTIFIER  /* 주민번호      */
+                , FAM.JOB_GROUP                                       AS  JOB_GROUP            /* 직군          */
+                , FAM.JOB_FAMILY                                      AS  JOB_FAMILY           /* 직종          */
+                , PPF.PERSON_ID                                       AS  PERSON_ID            /* PERSON ID     */
+                , ( SELECT TO_CHAR(MAX(SED.START_DATE), 'YYYY/MM/DD')
+                      FROM HJSHRA_PER_SECONDARY_ASS_ST_V SED
+                     WHERE 1=1
+                       AND SED.ASSIGNMENT_ID  = PPF.ASSIGNMENT_ID
+                       AND SED.USER_STATUS    = 'Promotion'
+                       AND SED.START_DATE    <= TRUNC(SYSDATE)
+                  )  AS  PROMOTION_DATE
+                , ( SELECT TO_CHAR(PPS.ACTUAL_TERMINATION_DATE, 'YYYY/MM/DD')
+                      FROM PER_PERIODS_OF_SERVICE  PPS
+                     WHERE 1=1
+                       AND PPS.PERIOD_OF_SERVICE_ID = PPF.PERIOD_OF_SERVICE_ID
+                  )  AS  RETIRE_DATE
+                , ( SELECT HJSHRF_DECODE_LOOKUP_FNC('LEAV_REAS', PPS.LEAVING_REASON)
+                      FROM PER_PERIODS_OF_SERVICE  PPS
+                     WHERE 1=1
+                       AND PPS.PERIOD_OF_SERVICE_ID = PPF.PERIOD_OF_SERVICE_ID
+                  )  AS  RETIRE_REASON
+                , ( SELECT DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2),FLV.MEANING,FLV.DESCRIPTION)
+                      FROM PER_PEOPLE_EXTRA_INFO     PPEI
+                         , FND_LOOKUP_VALUES   FLV
+                     WHERE PPEI.PERSON_ID = PPF.PERSON_ID
+                       AND FLV.LOOKUP_CODE = PPEI.PEI_INFORMATION11
+                       AND PPEI.INFORMATION_TYPE(+) = 'HJS_HR_PERSONAL_DATE_INFO'
+                       AND FLV.LOOKUP_TYPE = 'HJS_HR_GRADE_TITLE'
+                  )  AS GRADE_TITLE   /* 호칭 */
+                , POO.POSITION_GRADE_SEQ
+                , ( SELECT TO_DATE(SUBSTR(PPEI.PEI_INFORMATION1, 1, 10),'YYYY/MM/DD')
+                      FROM PER_PEOPLE_EXTRA_INFO        PPEI
+                     WHERE PPEI.PERSON_ID = PPF.PERSON_ID
+                       AND PPEI.INFORMATION_TYPE = 'HJS_HR_PERSONAL_DATE_INFO' )   AS HIRE_DATE /* 입사일 */
+                , PPF.EU_TITLE_NAME
+                ,(SELECT PERSON_TYPE 
+                   FROM HJSHR_IAM_PERSON_INFO_V
+                  WHERE  PERSON_TYPE IN ('E','H')
+                    AND ORG_MDM_CODE <> 'HJSH'
+                    AND EMPLOYEE_NUMBER =PPF.EMPLOYEE_NUMBER  ) AS PERSON_TYPE /* 2013.04.03 구주 (E), 국내(H) */
+             FROM
+                (
+                   SELECT XAF.PERSON_ID
+                        , HJSPFM_ASSIGN_FIRST_ORG_DATE (XAF.PERSON_ID, XAF.ORGANIZATION_ID, TRUNC(SYSDATE)) AS EFFECTIVE_ORG_DATE_OLD
+                     FROM PER_ALL_ASSIGNMENTS_F  XAF
+                    WHERE 1=1
+                      AND XAF.ORGANIZATION_ID = #{ORG_ID}   /* Param1: Org ID */
+                      AND XAF.PRIMARY_FLAG    = 'Y'
+                      AND XAF.ASSIGNMENT_TYPE = 'E'
+                      AND TRUNC(SYSDATE) BETWEEN XAF.EFFECTIVE_START_DATE AND XAF.EFFECTIVE_END_DATE
+                      AND NOT EXISTS ( SELECT 'x'
+                                         FROM HJSPFM_ORG_MANAGER_V1 XOM
+                                        WHERE 1=1
+                                          AND XAF.ORGANIZATION_ID = XOM.ORGANIZATION_ID
+                                          AND XAF.PERSON_ID       = XOM.PERSON_ID
+                                          AND TRUNC(SYSDATE) BETWEEN XOM.EFFECTIVE_START_DATE AND XOM.EFFECTIVE_END_DATE
+                                     )
+                UNION ALL
+                   SELECT HOM.PERSON_ID
+                        , TO_CHAR(HOM.EFFECTIVE_START_DATE, 'YYYY/MM/DD') AS EFFECTIVE_ORG_DATE_OLD
+                     FROM HJSPFM_ORG_MANAGER_V1 HOM
+                    WHERE 1=1
+                      AND HOM.ORGANIZATION_ID = #{ORG_ID}  /* Param1: Org ID */
+                      AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE AND HOM.EFFECTIVE_END_DATE
+                ) CHO,
+                (
+                  SELECT DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), GRP.KR_JOB_GROUP , GRP.US_JOB_GROUP )         AS JOB_GROUP
+                       , DECODE('ko', SUBSTR(#{SESSION_LANGUAGETYPE}, 1, 2), FAM.KR_JOB_FAMILY, FAM.US_JOB_FAMILY)         AS JOB_FAMILY
+                       , CHO.JOB_ID                                                    AS JOB_ID
+                       , GRP.ATTRIBUTE2                                                AS JOB_GROUP_CODE
+                       , FAM.SEGMENT1                                                  AS JOB_FAMILY_CODE
+                    FROM PER_JOB_DEFINITIONS   DEF
+                       , PER_JOBS              CHO
+                       , (
+                           SELECT FFVT.DESCRIPTION          AS KR_JOB_GROUP
+                                , FFVT.FLEX_VALUE_MEANING   AS US_JOB_GROUP
+                                , FFV.FLEX_VALUE            AS ATTRIBUTE2
+                             FROM FND_FLEX_VALUES       FFV
+                                , FND_FLEX_VALUE_SETS  FFVS
+                                , FND_FLEX_VALUES_TL   FFVT
+                            WHERE FFV.FLEX_VALUE_SET_ID     = FFVS.FLEX_VALUE_SET_ID
+                              AND FFVT.FLEX_VALUE_ID        = FFV.FLEX_VALUE_ID
+                              AND FFVS.FLEX_VALUE_SET_NAME  = 'HJS_HR_JOB_GROUP'
+                              AND FFV.ENABLED_FLAG          = 'Y'
+                              AND FFVT.LANGUAGE             = 'US'
+                         ) GRP
+                       , (
+                           SELECT FFVT.DESCRIPTION          AS KR_JOB_FAMILY
+                                , FFVT.FLEX_VALUE_MEANING   AS US_JOB_FAMILY
+                                , FFV.FLEX_VALUE            AS SEGMENT1
+                             FROM FND_FLEX_VALUES       FFV
+                                , FND_FLEX_VALUE_SETS  FFVS
+                                , FND_FLEX_VALUES_TL   FFVT
+                            WHERE FFV.FLEX_VALUE_SET_ID     = FFVS.FLEX_VALUE_SET_ID
+                              AND FFVT.FLEX_VALUE_ID        = FFV.FLEX_VALUE_ID
+                              AND FFVS.FLEX_VALUE_SET_NAME  = 'HJS_HR_JOB_FAMILY'
+                              AND FFV.ENABLED_FLAG          = 'Y'
+                              AND FFVT.LANGUAGE             = 'US'
+                         ) FAM
+                   WHERE CHO.JOB_DEFINITION_ID = DEF.JOB_DEFINITION_ID
+                     AND CHO.ATTRIBUTE2        = GRP.ATTRIBUTE2
+                     AND DEF.SEGMENT1          = FAM.SEGMENT1
+                ) FAM,
+                (
+                  SELECT FFV.FLEX_VALUE            AS POSITION_GRADE_NAME
+                       , FFV.ATTRIBUTE5            AS POSITION_GRADE_SEQ
+                    FROM FND_FLEX_VALUES       FFV
+                       , FND_FLEX_VALUE_SETS  FFVS
+                       , FND_FLEX_VALUES_TL   FFVT
+                   WHERE FFV.FLEX_VALUE_SET_ID     = FFVS.FLEX_VALUE_SET_ID
+                     AND FFVT.FLEX_VALUE_ID        = FFV.FLEX_VALUE_ID
+                     AND FFVS.FLEX_VALUE_SET_NAME  = 'HJS_HR_POSITION_GRADE'
+                     AND FFV.ENABLED_FLAG          = 'Y'
+                     AND FFVT.LANGUAGE             = 'US'
+                ) POO
+                , HJS_SSHR_EMPLOYEE_LOV_V   PPF
+            WHERE 1=1
+              AND PPF.PERSON_ID            =  CHO.PERSON_ID
+              AND PPF.PERSON_TYPE         != 'Vessel'
+              AND PPF.JOB_ID               =  FAM.JOB_ID(+)
+              AND PPF.POSITION_GRADE_NAME  =  POO.POSITION_GRADE_NAME(+)
+              AND TRUNC(SYSDATE) BETWEEN PPF.EFFECTIVE_START_DATE AND PPF.EFFECTIVE_END_DATE
+         ) DEF
+     WHERE 1 = 1
+     ORDER BY POSITION_GRADE_SEQ, GRADE_SEQ, EMPLOYEE_NAME
+
+     ]]>
+    </select>
+</mapper>

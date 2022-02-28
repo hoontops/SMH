@@ -1,0 +1,572 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM02200Dao">
+
+
+    <!-- 상단 LOT INFO -->
+    <select id="selectLotInfoBylotIDbyAreaAuthority" parameterType="map" resultType="hashmap">
+    	/* SelectLotInfoBylotIDbyAreaAuthority 10001 */
+    		WITH PROCESSSEGMENT AS
+				(
+					SELECT
+							L.LOTID
+						,	L.ENTERPRISEID
+						,	L.PLANTID
+						,	PP.PROCESSPATHID
+						,	LAG(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)		AS PREVPROCESSSEGMENTID
+						,	LAG(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)	AS PREVPROCESSSEGMENTVERSION
+						,	PP.PROCESSSEGMENTID
+						,	PP.PROCESSSEGMENTVERSION
+						,	LEAD(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)		AS NEXTPROCESSSEGMENTID
+						,	LEAD(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)	AS NEXTPROCESSSEGMENTVERSION
+					FROM	PCM_LOT						L
+					LEFT OUTER JOIN BAS_PROCESSPATH		PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+															AND	L.PROCESSDEFID = PP.PROCESSDEFID
+															AND L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+					WHERE	1=1
+					  AND   L.ENTERPRISEID = #{ENTERPRISEID}
+					  AND	L.PLANTID = #{PLANTID}
+					  AND	L.LOTID = #{LOTID}
+				)
+				SELECT	L.LOTID
+					,	PP.PROCESSPATHID
+					,	COALESCE(DC1.DICTIONARYNAME, PSP.PROCESSSEGMENTNAME)	AS PREVPROCESSSEGMENTNAME
+					,	PS.PROCESSSEGMENTID
+					,	COALESCE(DC2.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)		AS PROCESSSEGMENTNAME
+					,	PS.PROCESSSEGMENTVERSION
+					,	COALESCE(DC3.DICTIONARYNAME, PSN.PROCESSSEGMENTNAME)	AS NEXTPROCESSSEGMENTNAME
+					,	L.USERSEQUENCE
+					,	L.PRODUCTDEFID
+					,	L.PRODUCTDEFVERSION
+					,	PD.PRODUCTDEFNAME
+					,	'Main'													AS PRODUCTTYPE
+					,	TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD')					AS INPUTDATE
+					,	L.PRODUCTIONORDERID
+					,	TO_CHAR(L.DUEDATE, 'YYYY-MM-DD')						AS DUEDATE
+					,	DTD.DICTIONARYNAME										AS PRODUCTDEFTYPE
+					,	OTD.DICTIONARYNAME										AS PRODUCTIONTYPE
+					,	COALESCE(L.ISLOCKING, 'N')								AS ISLOCKING
+					,	COALESCE(DC4.DICTIONARYNAME, A.AREANAME)				AS AREANAME
+					,	C.CUSTOMERNAME
+					,	L.UNIT
+					,	L.DEFECTUNIT
+					,	L.PANELQTY                      						AS PNLQTY
+					,	L.PANELPERQTY											AS PANELPERQTY
+					,	L.QTY                           						AS PCSQTY
+					,	ROUND(L.QTY / PD.PCSMM,2)   							AS MM
+					,	PD.PCSPNL												AS PCSPNL
+					,	PS.PROCESSSEGMENTTYPE
+					,	COALESCE(ST2.STEPTYPE, ST1.STEPTYPE)					AS STEPTYPE	
+					,	COALESCE(L.ISREWORK, 'N')								AS ISREWORK
+					,	L.PROCESSSTATE
+					,	L.ISLOCKING
+					,	L.ISHOLD
+					,	L.RESOURCEID
+					,	L.LOTTYPE
+					,   L.WORKCOUNT
+					,	PD.PRODUCTIONTYPE
+				FROM PCM_LOT								L		
+				<!-- INNER JOIN FN_AREA('vadmin') FA ON  L.AREAID = FA.AREAID -->
+				INNER JOIN FN_AREA(#{USERID}) FA ON  L.AREAID = FA.AREAID
+				                                           AND FA.ISMODIFY = 'Y'							
+				LEFT OUTER JOIN	PROCESSSEGMENT			PP	ON	PP.ENTERPRISEID = L.ENTERPRISEID
+															AND	PP.LOTID = L.LOTID
+															AND	PP.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+															AND PP.PROCESSSEGMENTVERSION = L.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PSP	ON	PP.PREVPROCESSSEGMENTID = PSP.PROCESSSEGMENTID
+															AND	PP.PREVPROCESSSEGMENTVERSION = PSP.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY			DC1 ON  PSP.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+															AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS	ON	L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+															AND	L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN FN_GETSTEPTYPE() ST1 ON PS.STEPCLASS=ST1.CODE
+				LEFT OUTER JOIN BAS_RESOURCE				RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+															AND	L.PLANTID = RC.PLANTID
+															AND	L.RESOURCEID = RC.RESOURCEID
+				LEFT OUTER JOIN FN_GETSTEPTYPE() ST2 ON RC.STEPCLASS=ST2.CODE																					
+				LEFT OUTER JOIN CMD_DICTIONARY			DC2 ON  PS.PROCESSSEGMENTNAME = DC2.DICTIONARYID
+															AND DC2.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PSN	ON	PP.NEXTPROCESSSEGMENTID = PSN.PROCESSSEGMENTID
+															AND	PP.NEXTPROCESSSEGMENTVERSION = PSN.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY           DC3 ON  PSN.PROCESSSEGMENTNAME = DC3.DICTIONARYID
+															AND DC3.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD	ON	L.ENTERPRISEID = PD.ENTERPRISEID
+															AND	L.ORIGINALPLANTID = PD.PLANTID
+															AND	L.PRODUCTDEFID = PD.PRODUCTDEFID
+															AND	L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT OUTER JOIN MFM_PRODUCTIONORDER		PO	ON	L.ENTERPRISEID = PO.ENTERPRISEID
+															AND	L.ORIGINALPLANTID = PO.PLANTID
+															AND	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+															AND	L.LINENO = PO.LINENO
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES		DT	ON	PD.PRODUCTDEFTYPE = DT.LOOKUP_CODE
+															AND	DT.LOOKUP_TYPE = 'ProductDefType'
+				LEFT OUTER JOIN CMD_DICTIONARY			DTD	ON	DT.DICTIONARYID = DTD.DICTIONARYID
+															AND	DTD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES		OT	ON	L.LOTTYPE = OT.LOOKUP_CODE
+															AND	OT.LOOKUP_TYPE = 'ProductionType'
+				LEFT OUTER JOIN CMD_DICTIONARY			OTD	ON	OT.DICTIONARYID = OTD.DICTIONARYID
+															AND	OTD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_AREA					A	ON	L.ENTERPRISEID = A.ENTERPRISEID
+															AND	L.PLANTID = A.PLANTID
+															AND L.AREAID = A.AREAID
+				LEFT OUTER JOIN CMD_DICTIONARY			DC4 ON  A.AREANAME = DC4.DICTIONARYID
+															AND DC4.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_CUSTOMER				C	ON	PO.ENTERPRISEID = C.ENTERPRISEID
+															AND	PO.PLANTID = C.PLANTID
+															AND	PO.CUSTOMERID = C.CUSTOMERID
+				WHERE L.LOTID = #{LOTID}
+				
+    </select>
+	
+	<!-- 작업 설비 -->
+    <select id="selectEquipmentInfoByLotID4Run" parameterType="map" resultType="hashmap">
+    	/* SelectEquipmentInfoByLotID 10002 */
+    	SELECT *
+				FROM
+				(
+					SELECT L.LOTID
+						,	EQ.EQUIPMENTID
+						,	NVL(EQD.DICTIONARYNAME, EQ.EQUIPMENTNAME) 												AS EQUIPMENTNAME
+						,	TO_CHAR(LEQ.TRACKINTIME, 'YYYY-MM-DD HH24:MI:SS')										AS TRACKINTIME
+						,	LEQ.TRACKOUTTIME
+						, 	(CASE WHEN LEQ.TRACKOUTTIME IS NULL AND LEQ.TRACKINTIME IS NOT NULL THEN 1 ELSE 0 END) 		AS ISRUNNING
+						, 	(CASE WHEN LEQ.TRACKOUTTIME IS NOT NULL THEN 1 ELSE 0 END) 									AS ISCOMPLETED
+						, 	(CASE WHEN LEQ.TRACKOUTTIME IS NULL AND LEQ.TRACKINTIME IS NOT NULL THEN 1 ELSE 0 END) 		AS ISRUNNING_ORG
+						, 	(CASE WHEN LEQ.TRACKOUTTIME IS NOT NULL THEN 1 ELSE 0 END)		 							AS ISCOMPLETED_ORG
+						,	LEQ.TXNHISTKEY
+						,	L.PROCESSSEGMENTID
+						,	L.PROCESSSEGMENTVERSION
+						,	L.WORKCOUNT
+						,	EQ.CONTROLMODE
+						,	CASE 
+								WHEN 
+								(
+									SELECT 	COUNT (*) 
+									FROM 	BAS_BILLOFRESOURCE BOR
+									WHERE 	1 = 1
+									AND		L.ENTERPRISEID = BOR.ENTERPRISEID
+									AND		L.PLANTID = BOR.PLANTID
+									AND		L.PRODUCTDEFID = BOR.PRODUCTDEFID
+									AND		L.PRODUCTDEFVERSION = BOR.PRODUCTDEFVERSION
+									AND 	BOR.PROCESSDEFID = NVL(L.SUBPROCESSDEFID, L.PROCESSDEFID)
+									AND 	BOR.PROCESSDEFVERSION = NVL(L.SUBPROCESSDEFID, L.PROCESSDEFVERSION)
+									AND		L.PROCESSSEGMENTID = BOR.PROCESSSEGMENTID
+									AND		L.PROCESSSEGMENTVERSION = BOR.PROCESSSEGMENTVERSION
+									AND		BOR.RESOURCETYPE in ('Durable', 'Tool')
+								) > 0 THEN 'Y' 
+								ELSE 'N' 
+							END AS DURABLEREQUIRED
+					FROM 		PCM_LOT L
+					INNER JOIN PCM_LOTEQUIPMENT 		LEQ	ON	L.LOTID = LEQ.LOTID
+														AND L.PROCESSSEGMENTID = LEQ.PROCESSSEGMENTID
+														AND L.PROCESSSEGMENTVERSION = LEQ.PROCESSSEGMENTVERSION
+														AND L.REWORKCOUNT = LEQ.WORKCOUNT
+					INNER JOIN BAS_EQUIPMENT			EQ 	ON  LEQ.EQUIPMENTID = EQ.EQUIPMENTID
+					                           			AND EQ.VALIDSTATE = 'Valid'
+					                           			AND L.AREAID = EQ.AREAID 
+					                           			AND EQ.EQUIPMENTTYPE = 'Production'
+					                           			AND EQ.DETAILEQUIPMENTTYPE = 'Main'
+					LEFT OUTER JOIN CMD_DICTIONARY	EQD	ON	EQD.DICTIONARYID = EQ.EQUIPMENTNAME
+														AND	EQD.LANGUAGETYPE = #{LANGUAGETYPE}
+					WHERE	1 = 1
+					AND		L.ENTERPRISEID = #{ENTERPRISEID}
+					AND		L.PLANTID = #{PLANTID}
+					AND		L.LOTID = #{LOTID}
+					AND		(EQ.STATE NOT IN ('Down', 'Maint') OR LEQ.EQUIPMENTID IS NOT NULL)
+				) Z
+				WHERE 	ISRUNNING = '1'
+				ORDER BY ISRUNNING_ORG DESC
+    </select>
+    
+     <!-- 변경 가능 설비 -->
+    <select id="selectEquipmentInfoByLotID4Change" parameterType="map" resultType="hashmap">
+    	/* SelectEquipmentInfoByLotID 10003 */
+    	SELECT 	0		AS CHK
+					,	Z.*
+				FROM
+				(
+					SELECT
+							L.LOTID
+						,	EQ.EQUIPMENTID
+						,	NVL(EQD.DICTIONARYNAME, EQ.EQUIPMENTNAME) 												AS EQUIPMENTNAME
+						,	NULL																						AS TRACKINTIME
+						, 	(CASE WHEN LEQ.TRACKOUTTIME IS NULL AND LEQ.TRACKINTIME IS NOT NULL THEN 1 ELSE 0 END) 		AS ISRUNNING
+						,	L.PROCESSSEGMENTID
+						,	L.PROCESSSEGMENTVERSION
+						,	L.WORKCOUNT
+						,	EQ.CONTROLMODE
+						,	CASE 
+								WHEN 
+								(
+									SELECT 	COUNT (*) 
+									FROM 	BAS_BILLOFRESOURCE BOR
+									WHERE 	1 = 1
+									AND		L.ENTERPRISEID = BOR.ENTERPRISEID
+									AND		L.PLANTID = BOR.PLANTID
+									AND		L.PRODUCTDEFID = BOR.PRODUCTDEFID
+									AND		L.PRODUCTDEFVERSION = BOR.PRODUCTDEFVERSION
+									AND 	BOR.PROCESSDEFID = COALESCE(NULLIF(L.SUBPROCESSDEFID, ''), L.PROCESSDEFID)
+									AND 	BOR.PROCESSDEFVERSION = COALESCE(NULLIF(L.SUBPROCESSDEFVERSION, ''), L.PROCESSDEFVERSION)
+									AND		L.PROCESSSEGMENTID = BOR.PROCESSSEGMENTID
+									AND		L.PROCESSSEGMENTVERSION = BOR.PROCESSSEGMENTVERSION
+									AND		BOR.RESOURCETYPE in ('Durable', 'Tool')
+								) > 0 THEN 'Y' 
+								ELSE 'N' 
+							END AS DURABLEREQUIRED
+					FROM 			PCM_LOT L
+					INNER JOIN 		BAS_RESOURCE 	MR	ON  MR.RESOURCEID = L.RESOURCEID    
+					                          			AND MR.ENTERPRISEID = L.ENTERPRISEID
+					                          			AND MR.PLANTID = L.PLANTID
+					                         			AND MR.RESOURCEID = L.RESOURCEID
+					INNER JOIN		BAS_EQUIPMENT	EQ 	ON  MR.EQUIPMENTCLASSID = EQ.EQUIPMENTCLASSID
+					                           			AND EQ.VALIDSTATE = 'Valid'
+					                           			AND MR.AREAID = EQ.AREAID 
+					                           			AND EQ.EQUIPMENTTYPE = 'Production'
+					                           			AND EQ.DETAILEQUIPMENTTYPE = 'Main'
+					LEFT OUTER JOIN CMD_DICTIONARY	EQD	ON	EQD.DICTIONARYID = EQ.EQUIPMENTNAME
+														AND	EQD.LANGUAGETYPE = #{LANGUAGETYPE}
+					LEFT OUTER JOIN PCM_LOTEQUIPMENT LEQ	ON	L.LOTID = LEQ.LOTID
+														AND	EQ.EQUIPMENTID = LEQ.EQUIPMENTID
+														AND L.PROCESSSEGMENTID = LEQ.PROCESSSEGMENTID
+														AND L.PROCESSSEGMENTVERSION = LEQ.PROCESSSEGMENTVERSION
+														AND L.REWORKCOUNT = LEQ.WORKCOUNT
+														AND ( LEQ.TRACKINTIME IS NULL OR 
+                                                              (LEQ.TRACKINTIME IS NOT NULL AND LEQ.TRACKOUTTIME IS NULL) 
+                                                            )
+					WHERE	1 = 1
+					AND		L.ENTERPRISEID = #{ENTERPRISEID}
+					AND		L.PLANTID = #{PLANTID}
+					AND		L.LOTID = #{LOTID}
+					AND		(EQ.STATE NOT IN ('Down', 'Maint') OR LEQ.EQUIPMENTID IS NOT NULL)
+				) Z
+				WHERE 	ISRUNNING = '0'
+				ORDER BY EQUIPMENTID 
+    </select>
+    
+    <!-- 작업 치공구 -->
+    <select id="selectDurableInfoByLotID4Run" parameterType="map" resultType="hashmap">
+    	/* SelectDurableInfoByLotID 10001, 10003(IF EQUIPMENTID)*/
+			SELECT  	CLD.EQUIPMENTID
+					,	NVL(EQD.DICTIONARYNAME, EQP.EQUIPMENTNAME) AS EQUIPMENTNAME
+					,	DL.DURABLELOTID
+					,	NVL(DDD.DICTIONARYNAME, DD.DURABLEDEFNAME) AS DURABLEDEFNAME
+					,	DL.TOTALUSEDCOUNT
+					,	DL.USEDCOUNT
+					,	DD.USEDLIMIT
+					,	TO_CHAR(CLD.WORKSTARTTIME, 'YYYY-MM-DD HH24:MI:SS') AS WORKSTARTTIME
+					,	CLD.WORKENDTIME
+					, 	0												AS ISCOMPLETED
+					,	1												AS ISRUNNING
+					,	DD.DURABLEDEFID
+					,	DD.DURABLEDEFVERSION
+					,	LOT.LOTID
+					,	CLD.TXNHISTKEY
+					,	LOT.PROCESSSEGMENTID
+					,	LOT.PROCESSSEGMENTVERSION
+					,	LOT.WORKCOUNT
+				FROM		PCM_LOT					LOT
+				INNER JOIN	PCM_LOTDURABLE			CLD	ON	CLD.LOTID = LOT.LOTID
+														AND	CLD.PROCESSSEGMENTID = LOT.PROCESSSEGMENTID
+														AND CLD.PROCESSSEGMENTVERSION = LOT.PROCESSSEGMENTVERSION
+														AND CLD.WORKCOUNT = LOT.WORKCOUNT
+				INNER JOIN	TOM_DURABLELOT			DL	ON	DL.DURABLELOTID = CLD.DURABLELOTID
+				INNER JOIN	TOM_DURABLEDEFINITION	DD	ON	DD.DURABLEDEFID = DL.DURABLEDEFID
+														AND	DD.DURABLEDEFVERSION = DL.DURABLEDEFVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY		DDD	ON	DDD.DICTIONARYID = DD.DURABLEDEFNAME
+														AND	DDD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_EQUIPMENT		EQP	ON	EQP.EQUIPMENTID = CLD.EQUIPMENTID
+				LEFT OUTER JOIN CMD_DICTIONARY		EQD	ON	EQD.DICTIONARYID = EQP.EQUIPMENTNAME
+														AND	EQD.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE	1 = 1
+				AND		LOT.ENTERPRISEID = #{ENTERPRISEID}
+				AND		LOT.PLANTID = #{PLANTID}
+				AND		LOT.LOTID = #{LOTID}
+			<if test="EQUIPMENTID != null and EQUIPMENTID !=''"> 
+				AND     CLD.EQUIPMENTID = #{EQUIPMENTID}
+			</if>
+				AND		CLD.WORKENDTIME IS NULL
+				ORDER BY WORKSTARTTIME DESC, LOTID, EQUIPMENTID 
+    </select>
+    
+    <!-- 변경 가능 치공구 -->
+    <select id="selectDurableInfoByLotID4Change" parameterType="map" resultType="hashmap">
+    	/* SelectDurableInfoByLotID 10002, 10004(IF EQUIPMENTID) */
+    	SELECT	DISTINCT
+						0											AS CHK
+                    ,	NULL                                            AS EQUIPMENTID
+                    ,   NULL                                            AS EQUIPMENTNAME
+                    ,   DL.DURABLELOTID
+                    ,   NVL(DDD.DICTIONARYNAME, DD.DURABLEDEFNAME) AS DURABLEDEFNAME
+                    ,   DL.TOTALUSEDCOUNT
+                    ,   DL.USEDCOUNT
+                    ,   DD.USEDLIMIT
+                    ,   NULL                                            AS WORKSTARTTIME
+                    ,   DD.DURABLEDEFID
+                    ,   DD.DURABLEDEFVERSION
+                    ,   LOT.LOTID
+                    ,   LOT.PROCESSSEGMENTID
+                    ,   LOT.PROCESSSEGMENTVERSION
+                    ,   LOT.WORKCOUNT
+                FROM        PCM_LOT                  LOT
+                INNER JOIN  BAS_BILLOFRESOURCE       BOR ON  BOR.ENTERPRISEID = LOT.ENTERPRISEID
+                                                        AND BOR.PLANTID = LOT.PLANTID
+                                                        AND BOR.PRODUCTDEFID = LOT.PRODUCTDEFID
+                                                        AND BOR.PRODUCTDEFVERSION = LOT.PRODUCTDEFVERSION
+                                                        AND BOR.PROCESSDEFID = NVL(LOT.SUBPROCESSDEFID, LOT.PROCESSDEFID)
+                                                        AND BOR.PROCESSDEFVERSION = NVL(LOT.SUBPROCESSDEFVERSION, LOT.PROCESSDEFVERSION)
+                                                        AND BOR.PROCESSSEGMENTID = LOT.PROCESSSEGMENTID
+                                                        AND BOR.PROCESSSEGMENTVERSION = LOT.PROCESSSEGMENTVERSION
+                                                        AND BOR.RESOURCETYPE in ('Durable', 'Tool')
+                INNER JOIN  TOM_DURABLEDEFINITION    DD  ON  DD.DURABLEDEFID = BOR.RESOURCEID
+                                                        AND DD.DURABLEDEFVERSION = BOR.RESOURCEVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY		DDD	ON	DDD.DICTIONARYID = DD.DURABLEDEFNAME
+														AND	DDD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN TOM_DURABLELOT		DL	ON	DL.DURABLEDEFID = DD.DURABLEDEFID
+														AND	DL.DURABLEDEFVERSION = DD.DURABLEDEFVERSION
+														AND	DL.AREAID = LOT.AREAID
+			<if test="EQUIPMENTID != null and EQUIPMENTID !=''"> 
+				LEFT OUTER JOIN PCM_LOTDURABLE       CLD ON  CLD.LOTID = LOT.LOTID
+                                                        AND CLD.PROCESSSEGMENTID = LOT.PROCESSSEGMENTID
+                                                        AND CLD.PROCESSSEGMENTVERSION = LOT.PROCESSSEGMENTVERSION
+                                                        AND CLD.WORKCOUNT = LOT.WORKCOUNT
+                                                        AND DL.DURABLELOTID = CLD.DURABLELOTID
+                                                        AND CLD.EQUIPMENTID = #{EQUIPMENTID}
+                                                        AND CLD.WORKENDTIME IS NULL
+            </if>
+				WHERE	1 = 1
+				AND		LOT.ENTERPRISEID = #{ENTERPRISEID}
+				AND		LOT.PLANTID = #{PLANTID}
+				AND		LOT.LOTID = #{LOTID}
+			<if test="EQUIPMENTID != null and EQUIPMENTID !=''"> 
+				AND     CLD.DURABLELOTID IS NULL
+			</if>
+				AND		DL.DURABLESTATE IN ('Available', 'InUse')
+				AND		NVL(DL.ISHOLD, 'N') = 'N'
+				ORDER BY LOTID, DL.DURABLELOTID 
+    </select>
+   
+   <!-- 자원 정보 조회-->
+    <select id="selectBasBillofresourceList" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.PRODUCTDEFID	
+        ,A.PRODUCTDEFVERSION	
+        ,A.PROCESSDEFID	
+        ,A.PROCESSDEFVERSION	
+        ,A.PROCESSSEGMENTID	
+        ,A.PROCESSSEGMENTVERSION	
+        ,A.RESOURCETYPE	
+        ,A."sequence"		
+        ,A.EQUIPMENTID	
+        ,A.RESOURCECLASSID	
+        ,A.RESOURCEID	
+        ,A.ISPRIMARYRESOURCE	
+        ,A.ENTERPRISEID	
+        ,A.PLANTID	
+        ,A.DESCRIPTION	
+        ,A.CREATOR	
+        ,A.CREATEDTIME	
+        ,A.MODIFIER	
+        ,A.MODIFIEDTIME	
+        ,A.LASTTXNHISTKEY	
+        ,A.LASTTXNID	
+        ,A.LASTTXNUSER	
+        ,A.LASTTXNTIME	
+        ,A.LASTTXNCOMMENT	
+        ,A.VALIDSTATE	
+        ,A.RESOURCEVERSION	
+    FROM	BAS_BILLOFRESOURCE A 
+    WHERE 1=1 
+    AND A.RESOURCETYPE IN ('Durable','Tool')
+    <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+        AND A.PRODUCTDEFID = #{PRODUCTDEFID}
+    </if>
+    <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' "> 
+        AND A.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+    </if>
+    <if test="PROCESSDEFID != null and PROCESSDEFID !='' "> 
+        AND A.PROCESSDEFID = #{PROCESSDEFID}
+    </if>
+    <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' "> 
+        AND A.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </if>
+    <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+        AND A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </if>
+    <if test="PROCESSSEGMENTVERSION != null and PROCESSSEGMENTVERSION !='' "> 
+        AND A.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+    </if>
+    <if test="ENTERPRISEID != null and ENTERPRISEID !='' "> 
+        AND A.ENTERPRISEID = #{ENTERPRISEID}
+    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND A.PLANTID = #{PLANTID}
+    </if>
+    <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+        AND A.VALIDSTATE = #{VALIDSTATE}
+    </if>
+    </select>
+    
+    <!-- LOT 사용 설비 수정 -->
+    <update id="updatePcmLotEquipmentTrackOutTime" parameterType="map" >
+	    UPDATE PCM_LOTEQUIPMENT
+	    	SET  TRACKOUTTIME = TO_DATE(#{TRACKOUTTIME}, 'YYYY-MM-DD HH24:MI:SS')
+	    	,  MODIFIER = #{MODIFIER} , MODIFIEDTIME = SYSDATE
+	    WHERE LOTID = #{LOTID}
+	    AND TXNHISTKEY = #{TXNHISTKEY}
+    </update>
+    
+    <!-- LOT 사용 치공구 수정 -->
+    <update id="updatePcmLotDurableWorkendtime" parameterType="map" >
+	    UPDATE PCM_LOTDURABLE
+	    	SET  WORKENDTIME = TO_DATE(#{WORKENDTIME}, 'YYYY-MM-DD HH24:MI:SS')
+	    	,  MODIFIER = #{MODIFIER} , MODIFIEDTIME = SYSDATE
+	    WHERE LOTID = #{LOTID}
+	    AND TXNHISTKEY = #{TXNHISTKEY}
+	    AND EQUIPMENTID = #{EQUIPMENTID}
+	    AND DURABLELOTID = #{DURABLELOTID}
+    </update>
+    
+    <!-- LOT 사용 설비 등록 -->
+    <insert id="insertPcmLotequipment" parameterType="map">
+	    INSERT INTO PCM_LOTEQUIPMENT( 
+	        LOTID  
+	        ,TXNHISTKEY  
+	        ,EQUIPMENTID  
+	        ,PROCESSSTATE  
+	        ,PROCESSSEGMENTID  
+	        ,PROCESSSEGMENTVERSION  
+	        ,WORKCOUNT  
+	        ,TRACKINTIME  
+	        ,CREATOR  
+	        ,CREATEDTIME  
+	        ,TXNGROUPHISTKEY  
+	        ,TXNID  
+	        ,TXNUSER  
+	        ,TXNTIME  
+	        ,TXNREASONCODECLASS  
+	        ,TXNREASONCODE  
+	        ,TXNCOMMENT  
+	        ) 
+	    VALUES( 
+	        #{LOTID}  
+	        ,#{TXNHISTKEY}  
+	        ,#{EQUIPMENTID}  
+	        ,#{PROCESSSTATE}  
+	        ,#{PROCESSSEGMENTID}  
+	        ,#{PROCESSSEGMENTVERSION}  
+	        ,#{WORKCOUNT}  
+	        ,TO_DATE(#{TRACKINTIME}, 'YYYY-MM-DD HH24:MI:SS')
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{TXNGROUPHISTKEY}  
+	        ,#{TXNID}  
+	        ,#{TXNUSER}  
+	        ,SYSDATE
+	        ,#{TXNREASONCODECLASS}  
+	        ,#{TXNREASONCODE}  
+	        ,#{TXNCOMMENT}  
+	        )
+    </insert>
+    
+    
+    <select id="selectPcmLotequipmentRun" parameterType="map" resultType="map">
+	    SELECT *
+	    FROM	PCM_LOTEQUIPMENT A 
+	    WHERE A.LOTID = #{LOTID}
+	    AND	A.EQUIPMENTID = #{EQUIPMENTID}
+	    AND TRACKOUTTIME IS NULL
+    </select>  
+    
+    <select id="selectPcmLotdurable" parameterType="map" resultType="hashmap">
+	    SELECT 
+	        A.TXNHISTKEY	 
+	        ,A.LOTID	 
+	        ,A.EQUIPMENTID	 
+	        ,A.DURABLELOTID	 
+	        ,A.PROCESSSEGMENTID	 
+	        ,A.PROCESSSEGMENTVERSION	 
+	        ,A.WORKCOUNT	 
+	        ,A.WORKSTARTTIME	 
+	        ,A.WORKENDTIME	 
+	        ,A.USEDQTY	 
+	        ,A.DESCRIPTION	 
+	    FROM	PCM_LOTDURABLE A 
+	    WHERE A.DURABLELOTID = #{DURABLELOTID}
+	    AND	A.EQUIPMENTID = #{EQUIPMENTID}
+	    AND	A.LOTID = #{LOTID}
+	    AND	A.TXNHISTKEY = #{TXNHISTKEY}
+    </select>
+    
+    <select id="selectTomDurableLotbyEquipment" parameterType="map" resultType="hashmap">
+	    SELECT A.DURABLELOTID  
+	         , A.DURABLELOTGROUPID  
+	         , A.DURABLEDEFID  
+	         , A.DURABLEDEFVERSION  
+	         , A.DURABLELOTNAME  
+	         , A.ENTERPRISEID  
+	         , A.PLANTID  
+	         , A.AREAID  
+	         , A.EQUIPMENTID  
+	         , A.LOCATIONID  
+	         , A.DURABLESTATE  
+	         , A.DURABLECLEANSTATE  
+	         , A.ISHOLD  
+	         , A.DURABLELOTQTY  
+	      FROM TOM_DURABLELOT A 
+	     WHERE A.EQUIPMENTID = #{EQUIPMENTID}
+	       AND A.DURABLESTATE = #{DURABLESTATE}
+	</select>	
+    
+    <!-- LOT 사용 치공구 등록 -->
+    <insert id="insertPcmLotdurable" parameterType="map">
+    INSERT INTO PCM_LOTDURABLE( 
+        TXNHISTKEY  
+        ,LOTID  
+        ,EQUIPMENTID  
+        ,DURABLELOTID  
+        ,PROCESSSEGMENTID  
+        ,PROCESSSEGMENTVERSION  
+        ,WORKCOUNT  
+        ,WORKSTARTTIME  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,TXNGROUPHISTKEY  
+        ,TXNID  
+        ,TXNUSER  
+        ,TXNTIME  
+        ,TXNREASONCODECLASS  
+        ,TXNREASONCODE  
+        ,TXNCOMMENT        ) 
+    VALUES( 
+        #{TXNHISTKEY}  
+        ,#{LOTID}  
+        ,#{EQUIPMENTID}  
+        ,#{DURABLELOTID}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PROCESSSEGMENTVERSION}  
+        ,#{WORKCOUNT}  
+        ,TO_DATE(#{WORKSTARTTIME}, 'YYYY-MM-DD HH24:MI:SS')
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{TXNGROUPHISTKEY}  
+        ,#{TXNID}  
+        ,#{TXNUSER}  
+        ,SYSDATE 
+        ,#{TXNREASONCODECLASS}  
+        ,#{TXNREASONCODE}  
+        ,#{TXNCOMMENT}    )
+    </insert>
+    
+     <!-- 치공구 LOT 정보 변경 -->
+    <update id="updateTomDurablelot" parameterType="map" >
+	    UPDATE TOM_DURABLELOT 
+	    SET EQUIPMENTID = #{EQUIPMENTID}        
+	        ,DURABLESTATE = #{DURABLESTATE}                    
+	        ,MODIFIER = #{MODIFIER}     
+	        ,MODIFIEDTIME = SYSDATE     
+	    WHERE DURABLELOTID = #{DURABLELOTID}
+    </update>
+    
+</mapper>

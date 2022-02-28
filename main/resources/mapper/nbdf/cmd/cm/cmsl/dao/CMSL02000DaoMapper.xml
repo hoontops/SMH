@@ -1,0 +1,398 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : CMSL02000DaoMapper.xml
+    설명         : 다양한 쿼리 실행
+    작성자       : Kang Jeong Gi
+    최초작성일   : 2018.05.25
+<< 개정이력(Modification Information) >>
+    수정일         수정자    수정내용
+    2018.05.25     Kang Jeong Gi    최초 생성
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao">
+
+    <!-- 다양한 쿼리 실행 - 헤더 - 조회  -->    
+    <select id="selectCmdDynamicSqlHeaderList" parameterType="map" resultType="hashmap">
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.selectCmdDynamicSqlHeaderList */        
+        SELECT CSH.BUSINESS_TYPE
+		     , CSH.PROGRAM_CD
+		     , CSH.PROGRAM_NM
+		     , DBMS_LOB.SUBSTR(CSH.SQL_TEXT, 32767, 1) AS SQL_TEXT
+		     , CSH.CREATED_BY
+		     , CSH.CREATION_DATE
+		     , CSH.LAST_UPDATED_BY
+		     , CSH.LAST_UPDATE_DATE
+		     , CSH.ROWID   AS ROW_ID
+		  FROM CMD_DYNAMIC_SQL_HEADER CSH
+		 WHERE 1=1
+		 
+		 <!-- 업무구분 값이 존재할 경우 -->
+		 <if test="BUSINESS_TYPE != null and BUSINESS_TYPE !='' "> 
+           AND CSH.BUSINESS_TYPE = #{BUSINESS_TYPE} 
+         </if>
+         
+         <!-- 등록코드 값이 존재할 경우 -->
+         <if test="PROGRAM_CD != null and PROGRAM_CD !='' "> 
+           AND CSH.PROGRAM_CD    = #{PROGRAM_CD} 
+         </if>
+         
+		 ORDER BY CSH.BUSINESS_TYPE
+		        , CSH.PROGRAM_CD
+    </select>
+    
+    <!-- 다양한 쿼리 실행 - 헤더 - 저장 -->
+    <insert id="insertCmdDynamicSqlHeader" parameterType="map">        
+        <selectKey keyProperty="PROGRAM_CD"  resultType="String" order="BEFORE">
+            SELECT #{BUSINESS_TYPE} || TO_CHAR(NVL(TO_NUMBER(MAX(REPLACE(CSH.PROGRAM_CD, #{BUSINESS_TYPE}, ''))), 0) + 1, 'FM00000') 
+              FROM CMD_DYNAMIC_SQL_HEADER CSH        
+             WHERE CSH.BUSINESS_TYPE = #{BUSINESS_TYPE}
+        </selectKey>
+        
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.insertCmdDynamicSqlHeader */    
+        INSERT INTO CMD_DYNAMIC_SQL_HEADER
+		 ( BUSINESS_TYPE
+		 , PROGRAM_CD
+		 , PROGRAM_NM
+		 , SQL_TEXT
+		 , CREATED_BY
+		 , CREATION_DATE
+		 , LAST_UPDATED_BY
+		 , LAST_UPDATE_DATE
+		 )
+		VALUES
+		 ( #{BUSINESS_TYPE}
+         , #{PROGRAM_CD}
+         , #{PROGRAM_NM}
+         , #{SQL_TEXT}
+         , NVL(#{CREATED_BY}, -1)
+         , SYSDATE
+         , NVL(#{LAST_UPDATED_BY}, -1)
+         , SYSDATE
+         )
+    </insert>
+
+    <!-- 다양한 쿼리 실행 - 헤더 - 수정 -->
+    <update id="updateCmdDynamicSqlHeader" parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.updateCmdDynamicSqlHeader */
+        UPDATE CMD_DYNAMIC_SQL_HEADER
+		   SET PROGRAM_NM       = #{PROGRAM_NM} 
+		     , SQL_TEXT         = #{SQL_TEXT}
+		     , LAST_UPDATED_BY  = NVL(#{LAST_UPDATED_BY}, -1)
+		     , LAST_UPDATE_DATE = SYSDATE
+		 WHERE 1=1
+		   AND ROWID            = #{ROW_ID}
+    </update>
+    
+    <!-- 다양한 쿼리 실행 - 헤더 - 삭제 -->
+    <update id="deleteCmdDynamicSqlHeader" parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.deleteCmdDynamicSqlHeader */
+        DELETE CMD_DYNAMIC_SQL_HEADER           
+         WHERE 1=1
+           AND ROWID            = #{ROW_ID}
+    </update>
+
+    <!-- 다양한 쿼리 실행 - 헤더 - 중복체크 -->
+    <select id="selectCmdDynamicSqlHeaderDupCheck" parameterType="map" resultType="Integer">
+	    /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.selectCmdDynamicSqlHeaderDupCheck */
+	    SELECT COUNT(*) AS CNT
+          FROM CMD_DYNAMIC_SQL_HEADER CSH  
+         WHERE 1=1
+           AND CSH.PROGRAM_NM   = #{PROGRAM_NM}
+    </select> 
+            
+    
+    <!-- ============================================================================================================== -->
+    <!-- 다양한 쿼리 실행 - 출력명칭 및 포멧 설정 - 조회  -->    
+    <select id="selectCmdDynamicSqlPrintAliasList" parameterType="map" resultType="hashmap">
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.selectCmdDynamicSqlPrintAliasList */        
+        SELECT CSA.PROGRAM_CD
+		     , CSA.FIELD_NO
+		     , CSA.FIELD_NM
+		     , CSA.FIELD_PRINT_NM
+		     , CSA.FIELD_TYPE
+		     , CSA.FIELD_SIZE
+		     , CSA.FIELD_FORMAT		
+		     , DECODE(NVL(CSA.FIELD_SUM_YN, 'N'), 'Y', '1', '0') AS FIELD_SUM_YN     
+		     , CSA.CREATED_BY
+		     , CSA.CREATION_DATE
+		     , CSA.LAST_UPDATED_BY
+		     , CSA.LAST_UPDATE_DATE
+		     , CSA.ROWID  AS ROW_ID
+		  FROM CMD_DYNAMIC_SQL_PRINT_ALIAS CSA
+		 WHERE 1=1
+		   AND CSA.PROGRAM_CD = #{PROGRAM_CD}         
+         ORDER BY CSA.PROGRAM_CD
+                , CSA.FIELD_NO
+    </select>
+    
+    <!-- 다양한 쿼리 실행 - 출력명칭 및 포멧 설정 - 저장 -->
+    <insert id="insertCmdDynamicSqlPrintAlias" parameterType="map">
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.insertCmdDynamicSqlPrintAlias */
+        INSERT INTO CMD_DYNAMIC_SQL_PRINT_ALIAS
+          (PROGRAM_CD
+	     , FIELD_NO
+	     , FIELD_NM
+	     , FIELD_PRINT_NM
+	     , FIELD_TYPE
+	     , FIELD_SIZE
+	     , FIELD_FORMAT
+	     , FIELD_SUM_YN
+	     , CREATED_BY
+	     , CREATION_DATE
+	     , LAST_UPDATED_BY
+	     , LAST_UPDATE_DATE)
+        VALUES
+          (#{PROGRAM_CD}
+         , #{FIELD_NO}
+         , #{FIELD_NM}
+         , #{FIELD_PRINT_NM}
+         , #{FIELD_TYPE}
+         , #{FIELD_SIZE}
+         , #{FIELD_FORMAT}
+         , DECODE(NVL(#{FIELD_SUM_YN}, '0'), '1', 'Y', 'N')
+         , NVL(#{CREATED_BY}, -1)
+         , SYSDATE
+         , NVL(#{LAST_UPDATED_BY}, -1)
+         , SYSDATE)
+    </insert>
+
+    <!-- 다양한 쿼리 실행 - 출력명칭 및 포멧 설정 - 수정 -->
+    <update id="updateCmdDynamicSqlPrintAlias" parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.updateCmdDynamicSqlPrintAlias */
+        UPDATE CMD_DYNAMIC_SQL_PRINT_ALIAS
+           SET FIELD_NO         = #{FIELD_NO}
+	         , FIELD_NM         = #{FIELD_NM}
+	         , FIELD_PRINT_NM   = #{FIELD_PRINT_NM}
+	         , FIELD_TYPE       = #{FIELD_TYPE}
+	         , FIELD_SIZE       = #{FIELD_SIZE}
+	         , FIELD_FORMAT     = #{FIELD_FORMAT}
+	         , FIELD_SUM_YN     = DECODE(NVL(#{FIELD_SUM_YN}, '0'), '1', 'Y', 'N')
+             , LAST_UPDATED_BY  = NVL(#{LAST_UPDATED_BY}, -1)
+             , LAST_UPDATE_DATE = SYSDATE
+         WHERE 1=1
+           AND ROWID            = #{ROW_ID}
+    </update>
+    
+    <!-- 다양한 쿼리 실행 - 출력명칭 및 포멧 설정 - 삭제 -->
+    <update id="deleteCmdDynamicSqlPrintAlias" parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.deleteCmdDynamicSqlPrintAlias */
+        DELETE CMD_DYNAMIC_SQL_PRINT_ALIAS           
+         WHERE 1=1
+           AND ROWID            = #{ROW_ID}
+    </update>
+    
+    <!-- 다양한 쿼리 실행 - 출력명칭 및 포멧 설정 - 중복체크 -->
+    <select id="selectCmdDynamicSqlPrintAliasDupCheck" parameterType="map" resultType="Integer">
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.selectCmdDynamicSqlPrintAliasDupCheck */
+        SELECT COUNT(*) AS CNT
+          FROM CMD_DYNAMIC_SQL_PRINT_ALIAS CSH  
+         WHERE 1=1
+           AND CSH.PROGRAM_CD   = #{PROGRAM_CD}
+           AND CSH.FIELD_NM     = #{FIELD_NM}
+    </select>
+    
+    
+    <!-- ============================================================================================================== -->
+    <!-- 다양한 쿼리 실행 - 매개변수 설정 - 조회  -->    
+    <select id="selectCmdDynamicSqlParamList" parameterType="map" resultType="hashmap">
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.selectCmdDynamicSqlParamList */        
+        SELECT CSP.PROGRAM_CD
+		     , CSP.PARAM_NO
+		     , CSP.PARAM_CD
+		     , CSP.PARAM_NM
+		     , CSP.PARAM_TYPE
+		     , CSP.PARAM_DEFAULT
+		     , CASE WHEN CSP.PARAM_TYPE = 'YYYYMMDD'  THEN TO_CHAR(SYSDATE, 'YYYYMMDD')
+		            WHEN CSP.PARAM_TYPE = 'YYYYMM'    THEN TO_CHAR(SYSDATE, 'YYYYMM')
+		            WHEN CSP.PARAM_TYPE = 'YYYY'      THEN TO_CHAR(SYSDATE, 'YYYY')
+		            WHEN CSP.PARAM_TYPE = 'USERID'    THEN NVL(#{SESSION_USER_ID}, '-1')	
+		            ELSE CSP.PARAM_VALUE
+		       END AS PARAM_VALUE
+		     , '' AS PARAM_DIS_VALUE  
+		     , CSP.PARAM_SQL_TEXT
+		     , CSP.PARAM_NULL_VALUE
+		     , DECODE(NVL(CSP.PARAM_REQUIRED, 'N'), 'Y', '1', '0') AS PARAM_REQUIRED
+		     , CSP.CREATED_BY
+		     , CSP.CREATION_DATE
+		     , CSP.LAST_UPDATED_BY
+		     , CSP.LAST_UPDATE_DATE
+		     , CSP.ROWID  AS ROW_ID
+		  FROM CMD_DYNAMIC_SQL_PARAM CSP
+         WHERE 1=1
+           AND CSP.PROGRAM_CD = #{PROGRAM_CD}         
+         ORDER BY CSP.PROGRAM_CD
+                , CSP.PARAM_NO
+    </select>
+    
+    <!-- 다양한 쿼리 실행 - 매개변수 설정 - 저장 -->
+    <insert id="insertCmdDynamicSqlParam" parameterType="map">
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.insertCmdDynamicSqlParam */
+        INSERT INTO CMD_DYNAMIC_SQL_PARAM
+          (PROGRAM_CD
+         , PARAM_NO
+         , PARAM_CD
+         , PARAM_NM
+         , PARAM_TYPE         
+         , PARAM_DEFAULT
+         , PARAM_VALUE
+         , PARAM_SQL_TEXT         
+         , PARAM_NULL_VALUE
+         , PARAM_REQUIRED
+         , CREATED_BY
+         , CREATION_DATE
+         , LAST_UPDATED_BY
+         , LAST_UPDATE_DATE)
+        VALUES
+          (#{PROGRAM_CD}
+         , #{PARAM_NO}
+         , #{PARAM_CD}
+         , #{PARAM_NM}
+         , #{PARAM_TYPE}
+         , #{PARAM_DEFAULT}
+         , #{PARAM_VALUE}
+         , #{PARAM_SQL_TEXT}
+         , #{PARAM_NULL_VALUE} 
+         , DECODE(NVL(#{PARAM_REQUIRED}, '0'), '1', 'Y', 'N')
+         , NVL(#{CREATED_BY}, -1)
+         , SYSDATE
+         , NVL(#{LAST_UPDATED_BY}, -1)
+         , SYSDATE)
+    </insert>
+
+    <!-- 다양한 쿼리 실행 - 매개변수 설정 - 수정 -->
+    <update id="updateCmdDynamicSqlParam" parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.updateCmdDynamicSqlParam */
+        UPDATE CMD_DYNAMIC_SQL_PARAM
+           SET PARAM_NO         = #{PARAM_NO}
+	         , PARAM_CD         = #{PARAM_CD}
+	         , PARAM_NM         = #{PARAM_NM}  
+	         , PARAM_TYPE       = #{PARAM_TYPE}
+	         , PARAM_DEFAULT    = #{PARAM_DEFAULT}
+	         , PARAM_VALUE      = #{PARAM_VALUE}
+	         , PARAM_SQL_TEXT   = #{PARAM_SQL_TEXT}
+	         , PARAM_NULL_VALUE = #{PARAM_NULL_VALUE}	 
+	         , PARAM_REQUIRED   = DECODE(NVL(#{PARAM_REQUIRED}, '0'), '1', 'Y', 'N')        
+             , LAST_UPDATED_BY  = NVL(#{LAST_UPDATED_BY}, -1)
+             , LAST_UPDATE_DATE = SYSDATE
+         WHERE 1=1
+           AND ROWID            = #{ROW_ID}
+    </update>
+    
+    <!-- 다양한 쿼리 실행 - 매개변수 설정 - 삭제 -->
+    <update id="deleteCmdDynamicSqlParam" parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.deleteCmdDynamicSqlParam */
+        DELETE CMD_DYNAMIC_SQL_PARAM           
+         WHERE 1=1
+           AND ROWID            = #{ROW_ID}
+    </update>
+    
+    <!-- 다양한 쿼리 실행 - 매개변수 설정 - 중복체크 -->
+    <select id="selectCmdDynamicSqlParamDupCheck" parameterType="map" resultType="Integer">
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.selectCmdDynamicSqlParamDupCheck */
+        SELECT COUNT(*) AS CNT
+          FROM CMD_DYNAMIC_SQL_PARAM CSP  
+         WHERE 1=1
+           AND CSP.PROGRAM_CD   = #{PROGRAM_CD}
+           AND CSP.PARAM_CD     = #{PARAM_CD}
+    </select>
+    
+    
+    
+    <!-- ============================================================================================================== -->
+    <!-- 다양한 쿼리 실행 - SQL 유효성 검사 -->
+    <select id="executeDynamicSqlValidation" statementType="CALLABLE"  parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.executeDynamicSqlValidation */
+        {
+            call CMD_DYNAMIC_SQL_PKG.GET_SQL_VALIDATION (                       
+                     #{O_RTN_CD      ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{O_RTN_MSG     ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{O_RTN_VAL     ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{P_SQL_TEXT    ,mode=IN   ,jdbcType=VARCHAR  ,javaType=string}
+                   )
+        }
+    </select>
+    
+    <!-- 다양한 쿼리 실행 - 출력명칭 및 포멧 설정 - 출력명칭 일괄생성 -->
+    <select id="executeDynamicSqlPrintAlias" statementType="CALLABLE"  parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.executeDynamicSqlPrintAlias */
+        {
+            call CMD_DYNAMIC_SQL_PKG.GET_ALIAS_NM (                       
+                     #{O_RTN_CD      ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{O_RTN_MSG     ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{O_RTN_VAL     ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{P_SQL_TEXT    ,mode=IN   ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{P_PROGRAM_CD  ,mode=IN   ,jdbcType=VARCHAR  ,javaType=string}
+                   )
+        }
+    </select>
+    
+    
+    <!-- 다양한 쿼리 실행 - 쿼리 실행 버튼 -->
+    <!-- 프로시저에서 실행된 결과 : 커서를 리턴받기 위한 해시맵 -->
+    <resultMap id="executeDynamicSqlRun" type="hashmap">
+    </resultMap>
+    
+    <select id="executeDynamicSqlRun" statementType="CALLABLE" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.executeDynamicSqlRun */
+        {
+            call CMD_DYNAMIC_SQL_PKG.GET_SQL_RUN (                       
+                     #{O_RTN_CD      ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{O_RTN_MSG     ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{O_RTN_CURSOR  ,mode=OUT  ,jdbcType=CURSOR   ,javaType=ResultSet, resultMap=executeDynamicSqlRun}
+                   , #{P_PROGRAM_CD  ,mode=IN   ,jdbcType=VARCHAR  ,javaType=string}
+                   )
+        }
+    </select>
+    
+    <!-- 다양한 쿼리 실행 - LOV 쿼리 데이터 추출 -->
+    <!-- 프로시저에서 실행된 결과 : 커서를 리턴받기 위한 해시맵 -->
+    <resultMap id="executeDynamicSqlLov" type="hashmap">
+    </resultMap>
+    
+    <select id="executeDynamicSqlLov" statementType="CALLABLE" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.executeDynamicSqlLov */
+        {
+            call CMD_DYNAMIC_SQL_PKG.GET_SQL_LOV (                       
+                     #{O_RTN_CD       ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{O_RTN_MSG      ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{O_RTN_CURSOR   ,mode=OUT  ,jdbcType=CURSOR   ,javaType=ResultSet, resultMap=executeDynamicSqlLov}
+                   , #{O_RTN_SQL_TEXT ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{P_PROGRAM_CD   ,mode=IN   ,jdbcType=VARCHAR  ,javaType=string}
+                   )
+        }
+    </select>
+    
+    <!-- 다양한 쿼리 실행 - 쿼리 문장 보기 -->
+    <select id="executeDynamicSqlView" statementType="CALLABLE"  parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.executeDynamicSqlView */
+        {
+            call CMD_DYNAMIC_SQL_PKG.GET_SQL_VIEW (                       
+                     #{O_RTN_CD      ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{O_RTN_MSG     ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}                   
+                   , #{O_SQL_TEXT    ,mode=OUT  ,jdbcType=VARCHAR  ,javaType=string}
+                   , #{P_PROGRAM_CD  ,mode=IN   ,jdbcType=VARCHAR  ,javaType=string}
+                   )
+        }
+    </select>
+    
+    <!-- 다양한 쿼리 실행 - 전체 삭제 -->
+    <update id="deleteDynamicDataAll" parameterType="map" >
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02000Dao.deleteDynamicDataAll */
+        DECLARE
+        BEGIN        
+            DELETE CMD_DYNAMIC_SQL_HEADER CDH
+             WHERE CDH.PROGRAM_CD = #{PROGRAM_CD};
+             
+            DELETE CMD_DYNAMIC_SQL_PRINT_ALIAS CDA
+             WHERE CDA.PROGRAM_CD = #{PROGRAM_CD};  
+            
+            DELETE CMD_DYNAMIC_SQL_PARAM CDP           
+             WHERE CDP.PROGRAM_CD = #{PROGRAM_CD};
+        END;
+    </update>
+
+</mapper>

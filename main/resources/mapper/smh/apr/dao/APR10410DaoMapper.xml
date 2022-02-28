@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.apr.dao.APR10410Dao">
+
+
+    <!-- 평가이력조회 -->
+    <select id="selectAppraisalInfo" parameterType="map" resultType="hashmap">
+     /* smh.apr.dao.APR10410Dao.selectAppraisalInfo */
+	SELECT
+		   PERSON_ID       AS PERSONID
+	      ,KOR_NAME        AS NAME
+	      ,EMPLOYEE_NUMBER AS EMPLOYEENUMBER
+	      ,ORG_NAME        AS DEPARTMENT
+	      ,GRADE_NAME      AS GRADE      
+	      ,JOB_NAME        AS JOB
+	      ,POSITION_NAME   AS POSITION
+	  FROM HJSHRA_PER_PEOPLE_V
+	 WHERE 1=1 
+	   AND PERSON_ID = #{PERSONID}  /*추후변경*/
+    </select>
+   
+   
+   
+  <select id="selectAppraisalList" parameterType="map" resultType="hashmap">
+	     /* smh.apr.dao.APR10410Dao.selectAppraisalList */ 
+	SELECT JAM.APPRAISAL_YEAR       AS APPRAISALYEAR,     -- 평가년도
+	       JAM.APPRAISAL_SEQUENCE,                        -- 평가차수   
+	       JAM.APPRAISEE_ID,                              -- 피평가자 PERSON ID   
+	       JAM.EFFECTIVE_START_DATE,                      -- 평가기간(FROM)
+	       JAM.EFFECTIVE_END_DATE,                        -- 평가기간(TO)   
+	       PAPF.LAST_NAME || PAPF.FIRST_NAME APPRAISEE_NAME, -- 피평가자
+	       PAPF.EMPLOYEE_NUMBER,                             -- 사번      
+	       JAM.AP_MASTER_SEQ,
+	       JAM.AC_MASTER_SEQ,
+	       JAM.AB_MASTER_SEQ,
+	       RAP.APPRAISAL_1ST_RATING AS AP_GRADE,             -- 업적평가 등급
+	       RAP.APPRAISAL_1ST_RANK   AS AP_SCORE,             -- 업적평가 점수
+	       RAC.JOB_1ST_GRADE        AS AC_GRADE,             -- 역량평가 등급
+	       RAC.APPRAISAL_1ST_RANK   AS AC_SCORE,             -- 역량평가 점수
+	       RAB.CORE_1ST_GRADE       AS AB_GRADE,             -- 행동평가 등급
+	       RAB.APPRAISAL_1ST_RANK   AS AB_SCORE,             -- 행동평가 점수
+	       RAP.APPRAISAL_2ND_OVERALL_RATING AS AM_GRADE,     -- 2차평가 등급
+	       RAP.APPRAISAL_2ND_RANK    AS AM_SCORE,             -- 2차평가 점수
+	       RAP.APPRAISAL_FINAL_RATING AS RATING,             -- 최종평가 등급
+	       nvl(RAP.APPRAISAL_1ST_RANK,0) + nvl(RAC.APPRAISAL_1ST_RANK,0) + NVL(RAB.APPRAISAL_1ST_RANK, 0) + NVL(RAP.APPRAISAL_2ND_RANK, NVL(RAC.APPRAISAL_2ND_RANK,0)) AS FINAL_TOTAL_SCORE,  -- 최종평가 점수
+	       NVL(RAP.ASSESSMENT_STATUS, RAC.ASSESSMENT_STATUS)                                          AS MGR_ASSESSMENT_STATUS,         -- 평가상태코드
+	       HJSPFM_SM_APPRAISAL_PKG.GET_ASS_STATUS(NVL(RAP.ASSESSMENT_STATUS, RAC.ASSESSMENT_STATUS))  AS MGR_ASSESSMENT_STATUS_DESC,    -- 평가상태명                       
+	       NVL(RAP.APPRAISAL_2ND_OVERALL_RATING, RAC.APPRAISAL_2ND_OVERALL_RATING)                    AS MGR_SCORE                      -- ????
+	  FROM (SELECT A.APPRAISAL_YEAR,
+	               A.APPRAISAL_SEQUENCE,
+	               A.APPRAISEE_ID,
+	               MIN(A.EFFECTIVE_START_DATE) AS EFFECTIVE_START_DATE,
+	               MAX(A.EFFECTIVE_END_DATE) AS EFFECTIVE_END_DATE,
+	               MAX(DECODE(A.APPRAISAL_TYPE, 'A110', A.HJSPFM_APPRAISAL_MASTER_SEQ, 0)) AS AP_MASTER_SEQ,
+	               MAX(DECODE(A.APPRAISAL_TYPE, 'A120', A.HJSPFM_APPRAISAL_MASTER_SEQ, 0)) AS AC_MASTER_SEQ,
+	               MAX(DECODE(A.APPRAISAL_TYPE, 'A130', A.HJSPFM_APPRAISAL_MASTER_SEQ, 0)) AS AB_MASTER_SEQ
+	          FROM HJSPFM_APPRAISAL_MASTER A
+	         WHERE 1 = 1
+	           AND A.APPRAISAL_YEAR >= '2020'
+	           AND A.APPRAISAL_TYPE IN ('A110', 'A120', 'A130')
+	           AND A.PRIMARY_FLAG   = 'Y'
+	         GROUP BY A.APPRAISAL_YEAR,
+	                  A.APPRAISAL_SEQUENCE,
+	                  A.APPRAISEE_ID) JAM,
+	       PER_ALL_PEOPLE_F           PAPF,
+	       HJSPFM_APPRAISAL_MASTER RAP,
+	       HJSPFM_APPRAISAL_MASTER RAC,
+	       HJSPFM_APPRAISAL_MASTER RAB
+	 WHERE 1=1
+	   AND PAPF.PERSON_ID    = #{PERSONID}   /*추후변경*/    
+	   AND JAM.AP_MASTER_SEQ = RAP.HJSPFM_APPRAISAL_MASTER_SEQ
+	   AND JAM.AC_MASTER_SEQ = RAC.HJSPFM_APPRAISAL_MASTER_SEQ
+	   AND JAM.AB_MASTER_SEQ = RAB.HJSPFM_APPRAISAL_MASTER_SEQ
+	   AND JAM.APPRAISEE_ID          = PAPF.PERSON_ID
+	   AND TRUNC(JAM.EFFECTIVE_END_DATE) BETWEEN PAPF.EFFECTIVE_START_DATE AND PAPF.EFFECTIVE_END_DATE
+	ORDER  BY JAM.APPRAISAL_YEAR DESC
+	   
+ </select>  
+</mapper>

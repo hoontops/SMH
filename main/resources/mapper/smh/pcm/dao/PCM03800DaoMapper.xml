@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM03800Dao">
+	
+	<!-- LOT Locking 정보 -->
+	<select id="selectLotLockingList" parameterType="map" resultType="hashmap">
+	/* "GetLotLockingList" 10001 */
+	--id : selectLotLockingList
+		SELECT	LL.TXNHISTKEY
+					,	LL.LOTID
+					,	DC1.DICTIONARYNAME									AS LOTTYPE
+					,	L.PRODUCTDEFID
+					,	L.PRODUCTDEFVERSION
+					,	PD.PRODUCTDEFNAME
+					,	L.PROCESSDEFID
+					,	L.PROCESSSEGMENTID
+					,	COALESCE(DS1.DICTIONARYNAME, SG.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+					,	L.USERSEQUENCE
+					,	L.PLANTID
+					,	L.AREAID
+					,   COALESCE(DCR.DICTIONARYNAME, AR.AREANAME)           AS AREANAME
+					,	COALESCE(PD.RTRSHT, 'Sheet')						AS RTRSHT
+					,	L.UNIT
+					,	L.QTY
+					,	L.PCSQTY
+					,	L.PANELQTY
+					,	ROUND(L.QTY / PD.PCSMM, 2)							AS M2QTY
+					,	PO.PLANENDTIME										AS DELIVERYDATE
+					,	L.ISLOCKING
+					,	TO_CHAR(L.ROOTLOTSTARTDATE, 'YYYY-MM-DD')			AS LOTINPUTDATE
+					,	DC2.DICTIONARYNAME									AS LOCKINGTYPE
+					,	DC3.DICTIONARYNAME									AS LOCKINGREASON 
+					,	US.USER_NM 											AS LOCKINGUSER
+					,	TO_CHAR(LL.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS')	AS LOCKINGDATE
+					,	'' AS CHK
+				FROM	PCM_LOTLOCKING				LL
+				
+				INNER JOIN PCM_LOT					L	ON	LL.LOTID = L.LOTID
+				INNER JOIN BAS_PRODUCTDEFINITION		PD	ON	LL.PRODUCTDEFID = PD.PRODUCTDEFID
+			    										AND LL.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				INNER JOIN MFM_PRODUCTIONORDER		PO	ON	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+														AND L.LINENO = PO.LINENO
+														--AND PO.VALIDSTATE = 'Valid'
+				INNER JOIN BAS_PROCESSSEGMENT		SG	ON	LL.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+														AND LL.PROCESSSEGMENTVERSION = SG.PROCESSSEGMENTVERSION
+														AND SG.VALIDSTATE = 'Valid'
+				INNER JOIN FN_AREA(#{MODIFIER}) 		AR	ON	L.AREAID = AR.AREAID
+														AND AR.ISMODIFY = 'Y' -- 등록화면
+				LEFT  JOIN CMD_DICTIONARY           DCR ON  AR.AREANAME = DCR.DICTIONARYID
+                                                        AND DCR.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN BAS_PROCESSSEGMENTCLASS	MSC	ON	SG.PROCESSSEGMENTCLASSID = MSC.PROCESSSEGMENTCLASSID			-- 중공정
+														AND MSC.VALIDSTATE = 'Valid'
+				LEFT JOIN BAS_PROCESSSEGMENTCLASS	TSC ON	MSC.PARENTPROCESSSEGMENTCLASSID = TSC.PROCESSSEGMENTCLASSID		-- 대공정
+														AND TSC.VALIDSTATE = 'Valid'
+				LEFT JOIN CMD_DICTIONARY			DS1	ON	SG.PROCESSSEGMENTNAME = DS1.DICTIONARYID
+														AND DS1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				INNER JOIN CMD_LOOKUP_VALUES		CD1	ON	L.LOTTYPE = CD1.LOOKUP_CODE											-- 구분
+														AND CD1.LOOKUP_TYPE = 'ProductionType'
+														AND CD1.ENABLED_FLAG = 'Y'
+				LEFT JOIN CMD_DICTIONARY			DC1	ON	DC1.DICTIONARYID = CD1.DICTIONARYID
+														AND	DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				INNER JOIN CMD_USERS				US	ON	LL.CREATOR = US.USER_ID
+				LEFT JOIN BAS_REASONCODECLASS		CD2 ON  LL.LOCKINGTYPE = CD2.REASONCODECLASSID
+				LEFT JOIN CMD_DICTIONARY			DC2	ON	DC2.DICTIONARYID = CD2.REASONCODECLASSNAME
+														AND	DC2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				LEFT JOIN BAS_REASONCODE			CD3 ON  LL.LOCKINGCODE = CD3.REASONCODEID
+				LEFT JOIN CMD_DICTIONARY			DC3	ON	DC3.DICTIONARYID = CD3.REASONCODENAME
+														AND	DC3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}												
+				WHERE   L.LOTSTATE IN ('InProduction', 'InTransit')
+				AND 	LL.LOCKINGSTATUS = 'Y'
+		        AND     L.ISHOLD = 'N'
+		        AND     NVL(L.ISDEFECTED, 'N') = 'N'
+		        AND 	LL.LOCKINGTYPE NOT IN (
+		        								SELECT REASONCODEID
+                                                FROM BAS_REASONCODE
+                                                WHERE REASONCODECLASSID IN (
+                                                                                SELECT REASONCODECLASSID
+                                                                                FROM BAS_REASONCODECLASS
+                                                                                WHERE PARENTREASONCODECLASSID = 'AbnormalOccurrenceCode'
+                                                                           )
+		        							  )
+		        --2021.05.12 담당자 상관없이 조회로 변경
+		        --AND		EXISTS
+		        --		(
+		        --			SELECT 	1
+		        --			FROM	BAS_USERGROUPUSER	UC	
+		        --			WHERE	UC.USERID = LL.CREATOR
+		        --			AND		UC.USERGROUPID IN (
+		        --										SELECT  USERGROUPID
+		        --										FROM	BAS_USERGROUPUSER
+		        --										WHERE	USERID = {MODIFIER}
+		        --									  )
+		        --		)
+		        -- Locking 여부
+		        AND     COALESCE(L.ISLOCKING, 'N') = 'Y'
+		        
+		        -- SITE 조건
+		        <if test="PLANTID != null and PLANTID !=''">
+					AND L.PLANTID = #{PLANTID}		
+				</if>
+		        -- LOTID 조회
+		        <if test="LOTID != null and LOTID !=''">
+			   		AND EXISTS 
+			   			(
+			   				SELECT 1 
+			   				FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',')	LMP 
+			   				WHERE L.LOTID = LMP.VALUE
+		   				)	   				
+				</if>  		        
+		        -- 작업장
+		        <if test="AREANAME != null and AREANAME !=''">
+					AND L.AREAID = #{AREAID}		
+				</if>		        				
+				-- 품목코드
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">
+			   		AND EXISTS 
+			   			(
+			   				SELECT 1 
+			   				FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')	LMP 
+			   				WHERE L.PRODUCTDEFID = LMP.VALUE
+		   				)	   				
+				</if>
+				<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+					AND PD.PRODUCTDEFNAME LIKE #{PRODUCTDEFNAME}		
+				</if>	
+				
+				-- 대공정
+				<if test="P_PROCESSSEGMENTCLASSID_TOP != null and P_PROCESSSEGMENTCLASSID_TOP !=''">
+			   		AND EXISTS 
+			   			(
+			   				SELECT 1 
+			   				FROM UFN_SELECTSTRINGTOSPLIT(#{P_PROCESSSEGMENTCLASSID_TOP}, ',')	LMP 
+			   				WHERE TSC.PROCESSSEGMENTCLASSID = LMP.VALUE
+		   				)	   				
+				</if>
+				-- 주요공정
+				<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''">
+					AND		SG.ISMAINSEGMENT = 'Y'
+			   		AND EXISTS 
+			   			(
+			   				SELECT 1 
+			   				FROM UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID}, ',')	LMP 
+			   				WHERE SG.PROCESSSEGMENTID = LMP.VALUE
+		   				)	   				
+				</if>
+				-- 구분
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">
+					AND L.LOTTYPE =  #{PRODUCTIONTYPE}		
+				</if>	
+				
+		        -- 제품구분
+		        <if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">					
+			   		AND EXISTS 
+			   			(
+			   				SELECT 1 
+			   				FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDIVISION}, ',')	LMP 
+			   				WHERE PD.PRODUCTDEFTYPE = LMP.VALUE
+		   				)	   				
+				</if>				
+		        
+		        -- 자사/외주구분
+		        <if test="OWNTYPE != null and OWNTYPE !=''">
+					AND AR.OWNTYPE =  #{OWNTYPE}		
+				</if>	
+	</select>
+	
+	<!-- PCM_LOT에서 LOT조회 -->
+	<select id="selectLot" parameterType="map" resultType="hashmap">
+	--id : selectLot
+		SELECT 
+			AREAID 
+		FROM PCM_LOT
+		WHERE LOTID = #{LOTID}
+	</select>
+	<!-- PCM_LOTLOCKING에서 LOT조회 -->
+	<select id="selectLotLocking" parameterType="map" resultType="hashmap">
+	--id : selectLotLocking
+		SELECT * FROM PCM_LOTLOCKING
+		WHERE 	LOTID = #{LOTID}
+		AND		TXNHISTKEY = #{TXNHISTKEY}
+	</select>
+	<select id="selectAreaListByAuthority" parameterType="map" resultType="hashmap">
+	/* "GetAreaListByAuthority" 10001 */
+	--id : selectAreaListByAuthority
+			SELECT	AREAID
+			,	CASE
+					WHEN D.DICTIONARYNAME IS NULL THEN A.AREANAME 
+					ELSE D.DICTIONARYNAME
+				END 						AS AREANAME
+			,	A.PLANTID
+		FROM	FN_AREA(#{MODIFIER}) A
+		LEFT OUTER JOIN CMD_DICTIONARY 		 D	ON	A.AREANAME = D.DICTIONARYID
+										  		AND	D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE 	1 = 1
+		<if test='ISMODIFY != "N"'>
+			AND     A.ISMODIFY = 'Y'
+		</if>	
+		<if test="PLANTID != null and PLANTID !=''">
+			AND 	A.PLANTID =  #{PLANTID}
+		</if>
+		<if test="TXTAREA != null and TXTAREA !=''">
+			AND    (UPPER(AREAID) ILIKE UPPER(#{TXTAREA})
+			 OR 	 UPPER(AREANAME) ILIKE UPPER(#{TXTAREA})
+			 OR 	 UPPER(D.DICTIONARYNAME) ILIKE UPPER(#{TXTAREA}))
+		</if>
+		<if test="AREA != null and AREA !=''">
+			 AND    (UPPER(AREAID) ILIKE UPPER(#{AREA})
+			 OR 	 UPPER(AREANAME) ILIKE UPPER(#{AREA})
+			 OR 	 UPPER(D.DICTIONARYNAME) ILIKE UPPER(#{AREA}))
+		</if>						
+		ORDER BY AREAID ASC
+	</select>
+	<!--  PCM_LOTLOCKING 업데이터 -->
+	<update id="updateLotLocking"  parameterType="map">
+	--id : updateLotLocking
+		UPDATE PCM_LOTLOCKING SET 
+			 LOCKINGSTATUS   	= #{LOCKINGSTATUS}
+			,UNLOCKINGCODE      = #{UNLOCKINGCODE}
+			,RELEASECOMMENTS	= #{COMMENTS}
+			,TXNGROUPHISTKEY    = #{TXNGROUPHISTKEY}
+			,TXNUSER 				= #{MODIFIER}
+			,TXNTIME      			= SYSDATE			
+		WHERE 
+			TXNHISTKEY = #{TXNHISTKEY}
+			AND	LOTID = #{LOTID}
+	</update>
+	<select id="selectLotLockingCount" parameterType="map" resultType="hashmap">
+	/* "GetLotLockingCount" 10001 */
+	--id : selectLotLockingCount
+		SELECT	COUNT(*)	AS COUNT
+		FROM 	PCM_LOTLOCKING
+		WHERE 	1 = 1
+		AND		LOTID = #{LOTID}
+		AND 	LOCKINGSTATUS = 'Y'
+		<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''">
+			AND 	PROCESSSEGMENTID =  #{PROCESSSEGMENTID}
+		</if>
+		<if test="LOCKINGTYPE != null and LOCKINGTYPE !=''">
+			AND 	LOCKINGTYPE =  #{PROCESSSEGMENTID}
+		</if>
+		<if test="LOCKINGCODE != null and LOCKINGCODE !=''">
+			AND 	LOCKINGCODE =  #{LOCKINGCODE}
+		</if>
+	</select>
+	
+	<!--  LOT 업데이터 -->
+	<update id="SetReleaseLocking"  parameterType="map">
+	--id : SetReleaseLocking
+		UPDATE PCM_LOT SET 
+			 ISLOCKING        			= #{ISLOCKING}
+			,MODIFIER         			= #{MODIFIER}
+			,MODIFIEDTIME           	= SYSDATE
+			,LASTTXNGROUPHISTKEY  = #{TXNGROUPHISTKEY}
+			,LASTTXNHISTKEY 			= #{TXNHISTKEY}			
+			,LASTTXNID           		= #{LASTTXNID}
+			,LASTTXNUSER         		= #{MODIFIER}
+			,LASTTXNTIME           	= SYSDATE
+		WHERE 
+			LOTID = #{LOTID}
+	</update>
+	<select id="selectLotAbnocrTypeCheck" parameterType="map" resultType="hashmap">
+	--id : selectLotAbnocrTypeCheck
+		SELECT 
+				LOTID
+			, 	ABNOCRTYPE 
+		FROM QAM_AFFECTLOT 
+		WHERE LOTID = #{LOTID}
+		AND LOCKINGTXNHISTKEY = #{TXNHISTKEY}
+		AND ABNOCRTYPE  = 'QualityStandardInspection'
+	</select>
+	<!-- AffectLot 정보 변경 -->
+    <update id="updateQamAffectlotBylotid" parameterType="map" >
+    --id : updateQamAffectlotBylotid
+    UPDATE QAM_AFFECTLOT 
+    SET  ISLOCKING = #{ISLOCKING}     
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+        ,LOCKINGTXNHISTKEY = #{TXNHISTKEY}     
+    WHERE  ABNOCRTYPE = #{ABNOCRTYPE}
+    AND LOCKINGTXNHISTKEY = #{TXNHISTKEY}
+    AND LOTID = #{LOTID}
+    </update>
+</mapper>

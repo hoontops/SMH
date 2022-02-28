@@ -1,0 +1,416 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+	PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+	"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 사용자 관리
+    설명          : 사용자 테이블 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2017.03.01
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.03.01     진성하     최초  생성
+     2017.04.28     진성하     SQL 표준 작성 가이드 적용
+-->
+
+<!-- 사용자 관리 -->
+<mapper namespace="com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao">
+
+    <!-- 사용자조회 -->
+	<select id="selectCmdUsersList" resultType="hashmap" parameterType="hashmap">
+       SELECT 
+           Z.*
+	      FROM
+	         (
+	           SELECT Y.*
+	                , ROWNUM RNUM
+	             FROM
+	                (
+				        SELECT /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.selectCmdUsersList"  */
+						  A.ID                                        
+			              ,A.USER_ID                                      
+			              ,A.USER_ID as USER_ACNT                                      
+			              ,A.USER_PWD                                       
+			              ,A.USER_NM                                        
+			              ,A.EMP_NO                                         
+			              ,A.EMAIL_ADDR                                     
+			              ,A.CLPS_CD                                        
+			              ,A.JIKWI_CD                                       
+			              ,CLV.MEANING AS JIKWI_NM                                       
+			              ,A.DEPT_CD                                        
+			              ,A.CMPN_PHN_NO                                    
+			              ,A.MBPH_NO                                        
+			              ,A.USE_YN                                         
+			              ,A.PWD_CHANGE_DATE                                
+			              ,A.PWD_ERR_CNT                                    
+			              ,A.LAST_LGN_DTM                                   
+			              ,A.LAST_LGN_IP                                    
+			              ,B.DEPT_NM                                    
+			              ,C.USER_NM AS CREATED_BY                                     
+			              ,TO_CHAR(A.CREATION_DATE,'YYYYMMDD') AS CREATION_DATE                                  
+			              ,D.USER_NM AS LAST_UPDATED_BY                                
+			              ,TO_CHAR(A.LAST_UPDATE_DATE,'YYYYMMDD') AS LAST_UPDATE_DATE
+			              ,A.PLANTID
+			              ,A.ENTERPRISEID
+			              ,A.NICKNAME
+			              ,A.HOMEADDRESS
+			              ,A.LANGUAGETYPE
+			              ,A.USERSTATE
+			              ,A.ISEESLINK
+			              ,A.DESCRIPTION
+			              ,A.AREARESPONSIBILITY
+			              ,to_char(A.RETR_DATE,'yyyymmdd') as RETR_DATE
+		                    ,(SELECT AUTH_NM 
+		                      FROM CMD_USER_AUTH_MPNG CUAM, CMD_JOB_AUTH_MNG CJAM
+		                      WHERE A.USER_ID = CUAM.USER_ID
+		                      AND CUAM.JOB_AUTH_ID = CJAM.JOB_AUTH_ID
+		                      AND CJAM.PLANTID = #{SESSION_SITETYPE}
+		                      and rownum=1
+		                     )AUTH_NM			 				
+		                     ,'' as CHK
+							,count(*) over() AS TOTAL_ROWS
+						FROM CMD_USERS A, CMD_DEPTS B, CMD_USERS C, CMD_USERS D, CMD_LOOKUP_VALUES CLV
+						WHERE 1=1
+						AND A.DEPT_CD = B.DEPT_CD(+)
+						AND A.CREATED_BY = C.ID(+)
+						AND A.LAST_UPDATED_BY = D.ID(+)
+						AND A.JIKWI_CD = CLV.LOOKUP_CODE(+)
+			            AND CLV.LOOKUP_TYPE(+)='HRPostCode'
+						AND (NVL(A.USERSTATE,'-') != 'Request'
+                       		OR (A.USERSTATE = 'Request' AND A.USE_YN='Y'))
+            
+						
+				       <if test="ID != null and ID != ''">
+				           AND A.ID = #{ID}
+				       </if>
+				       <if test="USER_ID != null and USER_ID != ''">
+				           AND A.USER_ID LIKE #{USER_ID} || '%'
+				       </if>
+				       <if test="USER_NM != null and USER_NM != ''">
+				           AND A.USER_NM LIKE '%' || #{USER_NM} || '%'
+				       </if>
+				       <if test="DEPT_NM != null and DEPT_NM != ''">
+				           AND A.DEPT_NM LIKE '%' || #{DEPT_NM} || '%'
+				       </if>
+				       <if test="EMP_NO != null and EMP_NO != ''">
+				           AND A.EMP_NO LIKE #{EMP_NO} || '%'
+				       </if>
+				       <if test="USE_YN != null and USE_YN != ''">
+				           AND A.USE_YN = #{USE_YN} 
+				       </if>
+				       <if test="PLANTID != null and PLANTID != ''">
+				           AND A.PLANTID = #{PLANTID} 
+				       </if>
+				       <if test="AUTH_ID != null and AUTH_ID != ''">
+				           AND A.USER_ID IN (SELECT USER_ID FROM cmd_user_auth_mpng WHERE JOB_AUTH_ID = #{AUTH_ID}) 
+				       </if>
+				       ORDER BY A.USER_ID
+	                ) Y
+	            WHERE 1=1
+			    <if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+			       AND ROWNUM <![CDATA[<=]]> #{PAGE_NUMBER} * #{PAGE_SIZE}
+			    </if>
+	         ) Z
+	     WHERE 1=1
+		<if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+	       AND Z.RNUM <![CDATA[>]]> ( #{PAGE_NUMBER} - 1 ) * #{PAGE_SIZE}
+	    </if>
+	</select>
+
+	<select id="selectCmdUsers" resultType="hashmap" parameterType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.selectCmdUsers"  */
+		  A.ID                                        
+             ,A.USER_ID                                      
+             ,A.USER_ID as USER_ACNT                                      
+             ,A.USER_PWD                                       
+             ,A.USER_NM                                        
+             ,A.EMP_NO                                         
+             ,A.EMAIL_ADDR                                     
+             ,A.CLPS_CD                                        
+             ,A.JIKWI_CD                                       
+             ,A.DEPT_CD                                        
+             ,A.CMPN_PHN_NO                                    
+             ,A.MBPH_NO                                        
+             ,A.USE_YN                                         
+             ,A.PWD_CHANGE_DATE                                
+             ,A.PWD_ERR_CNT                                    
+             ,A.LAST_LGN_DTM                                   
+             ,A.LAST_LGN_IP                                    
+             ,A.DEPT_NM                                    
+             ,A.CREATED_BY                                     
+             ,A.CREATION_DATE                                  
+             ,A.LAST_UPDATED_BY                                
+             ,A.LAST_UPDATE_DATE
+             ,A.PLANTID
+             ,A.ENTERPRISEID
+             ,A.NICKNAME
+             ,A.HOMEADDRESS
+             ,A.LANGUAGETYPE
+             ,A.USERSTATE
+             ,A.ISEESLINK
+             ,A.DESCRIPTION
+             ,A.AREARESPONSIBILITY
+             ,to_char(A.RETR_DATE,'yyyymmdd') as RETR_DATE
+		FROM CMD_USERS A
+		WHERE 1=1
+          AND A.USER_ID = #{USER_ID}
+	</select>
+    <!-- 사용자등록 -->
+    <insert id="insertCmdUsers" parameterType="hashmap">
+    <selectKey keyProperty="ID" resultType="Integer" order="BEFORE">
+      SELECT  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.selectUserIdSeqence" */
+                  CMD_USERS_S.NEXTVAL
+      FROM     DUAL
+    </selectKey>      
+	     /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.insertCmdUsers" */
+	    INSERT INTO CMD_USERS( 
+	        ID  
+	        ,USER_ID  
+	        ,USER_PWD  
+	        ,USER_NM  
+	        ,EMP_NO  
+	        ,EMAIL_ADDR  
+	        ,CLPS_CD  
+	        ,JIKWI_CD  
+	        ,CMPN_PHN_NO  
+	        ,MBPH_NO  
+	        ,USE_YN  
+	        ,PWD_CHANGE_DATE  
+	        ,PWD_ERR_CNT  
+	        ,LAST_LGN_DTM  
+	        ,LAST_LGN_IP  
+	        ,CREATED_BY  
+	        ,CREATION_DATE  
+	        ,LAST_UPDATED_BY  
+	        ,LAST_UPDATE_DATE  
+	        ,PWD_ERR_DTM  
+	        ,PLANTID  
+	        ,DEPT_NM  
+	        ,ENTERPRISEID  
+	        ,NICKNAME  
+	        ,HOMEADDRESS  
+	        ,LANGUAGETYPE  
+	        ,USERSTATE  
+	        ,ISEESLINK  
+	        ,DESCRIPTION  
+	        ,AREARESPONSIBILITY  
+	        ,DEPT_CD
+	        ,USE_REQ_YN
+	        ,RETR_DATE        ) 
+	    VALUES( 
+	        #{ID}
+	        ,#{USER_ID}  
+	        ,#{USER_PWD}  
+	        ,#{USER_NM}  
+	        ,#{EMP_NO}  
+	        ,#{EMAIL_ADDR}  
+	        ,#{CLPS_CD}  
+	        ,#{JIKWI_CD}  
+	        ,#{CMPN_PHN_NO}  
+	        ,#{MBPH_NO}  
+	        ,#{USE_YN}  
+	        ,#{PWD_CHANGE_DATE}  
+	        ,#{PWD_ERR_CNT}  
+	        ,#{LAST_LGN_DTM}  
+	        ,#{LAST_LGN_IP}  
+	        ,#{CREATED_BY}  
+	        ,sysdate
+	        ,#{LAST_UPDATED_BY}  
+	        ,sysdate 
+	        ,#{PWD_ERR_DTM}  
+	        ,#{PLANTID}  
+	        ,#{DEPT_NM}  
+	        ,#{ENTERPRISEID}  
+	        ,#{NICKNAME}  
+	        ,#{HOMEADDRESS}  
+	        ,#{LANGUAGETYPE}  
+	        ,nvl(#{USERSTATE},'Create')  
+	        ,#{ISEESLINK}  
+	        ,#{DESCRIPTION}  
+	        ,#{AREARESPONSIBILITY}  
+	        ,#{DEPT_CD}
+	        ,#{USE_REQ_YN}
+	        ,to_date(#{RETR_DATE},'yyyymmdd')    )
+    </insert>
+
+   <!-- 사용자 삭제 -->
+    <delete id="deleteCmdUsers" parameterType="hashmap">
+    DELETE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.deleteCmdUsers" */
+    FROM    CMD_USERS
+    WHERE  ID = #{USER_ID}
+    </delete>
+
+   <!-- 사용자 사번 건수-->
+    <select id="selectCmdUsersCnt" parameterType="hashmap" resultType="Integer" >
+    select  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.selectCmdUsersCnt" */
+    COUNT(*)
+    FROM    CMD_USERS
+    WHERE  USER_ID = #{USER_ID}
+    AND EMAIL_ADDR = nvl(#{EMAIL_ADDR},EMAIL_ADDR)
+    </select>
+    
+    <select id="selectCmdUserDupCheck" resultType="hashmap" parameterType="hashmap">
+    select  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.selectCmdUserDupCheck" */
+    COUNT(*) AS CNT
+    FROM    CMD_USERS
+    WHERE  USER_ID = #{USER_ID}
+    </select>
+
+    <!-- 사용자 수정 -->
+    <update id="updateCmdUsers" parameterType="hashmap">
+    UPDATE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.updateCmdUsers" */  CMD_USERS
+    SET      USER_NM = #{USER_NM}     
+	        ,EMP_NO = #{EMP_NO}     
+	        ,EMAIL_ADDR = #{EMAIL_ADDR}     
+	        ,CLPS_CD = #{CLPS_CD}     
+	        ,JIKWI_CD = #{JIKWI_CD}     
+	        ,CMPN_PHN_NO = #{CMPN_PHN_NO}     
+	        ,MBPH_NO = #{MBPH_NO}     
+	        ,USE_YN = #{USE_YN}     
+	        ,PWD_CHANGE_DATE = #{PWD_CHANGE_DATE}     
+	        ,PWD_ERR_CNT = nvl(#{PWD_ERR_CNT},PWD_ERR_CNT)     
+	        ,LAST_LGN_DTM = nvl(#{LAST_LGN_DTM} ,LAST_LGN_DTM)    
+	        ,LAST_LGN_IP = nvl(#{LAST_LGN_IP},LAST_LGN_IP)     
+	        ,LAST_UPDATED_BY = #{LAST_UPDATED_BY}     
+	        ,LAST_UPDATE_DATE = sysdate
+	        ,PWD_ERR_DTM = #{PWD_ERR_DTM}     
+	        ,PLANTID = #{PLANTID}     
+	        ,DEPT_CD = #{DEPT_CD}
+	        ,DEPT_NM = #{DEPT_NM}     
+	        ,ENTERPRISEID = #{ENTERPRISEID}     
+	        ,NICKNAME = #{NICKNAME}     
+	        ,HOMEADDRESS = #{HOMEADDRESS}     
+	        ,LANGUAGETYPE = #{LANGUAGETYPE}     
+	        ,USERSTATE = #{USERSTATE}     
+	        ,ISEESLINK = #{ISEESLINK}     
+	        ,DESCRIPTION = #{DESCRIPTION}     
+	        ,AREARESPONSIBILITY = #{AREARESPONSIBILITY}
+	        ,RETR_DATE = to_date(#{RETR_DATE},'yyyymmdd') 
+	WHERE  USER_ID = #{USER_ID}
+    </update>
+
+    <!-- 비밀번호 초기화 -->
+    <update id="updateCmdUsersPwdInit" parameterType="hashmap">
+    UPDATE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.updateCmdUsersPwdInit" */  CMD_USERS
+    SET     USER_PWD             ='dc98e82fcfb4b165f5fa390d5ca61a9245a5be6ea70a4f00020ddff029afefba'  /*a123456!*/
+    		,PWD_ERR_CNT = 0      													
+			,LAST_UPDATED_BY 	 = NVL2(#{USER_ID},(SELECT ID FROM CMD_USERS WHERE USER_ID=#{USER_ID}),#{LAST_UPDATED_BY})          /* 최종수정자ID */
+			,LAST_UPDATE_DATE 	 = SYSDATE                   /* 최종수정자ID */
+	WHERE  USER_ID = #{USER_ID} 
+    </update>
+
+    <!-- 비밀번호 언락 -->
+    <update id="updateCmdUsersPwdUnlock" parameterType="hashmap">
+    UPDATE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.updateCmdUsersPwdUnlock" */  CMD_USERS
+    SET     PWD_ERR_CNT = 0, PWD_ERR_DTM = null      													
+			,LAST_UPDATED_BY 	 = #{LAST_UPDATED_BY}          /* 최종수정자ID */
+			,LAST_UPDATE_DATE 	 = SYSDATE                   /* 최종수정자ID */
+	WHERE  USER_ID = #{USER_ID}
+    </update>
+
+    <!-- 퇴사 -->
+    <update id="updateCmdUsersHffcSttusCd" parameterType="hashmap">
+    UPDATE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.updateCmdUsersHffcSttusCd" */  CMD_USERS
+    SET     HFFC_STTUS_CD = #{HFFC_STTUS_CD}      													
+			,USE_YN = #{USE_YN}      													
+			,LAST_UPDATED_BY 	 = #{LAST_UPDATED_BY}          /* 최종수정자ID */
+			,LAST_UPDATE_DATE 	 = SYSDATE                   /* 최종수정자ID */
+	WHERE  USER_ID = #{USER_ID}
+    </update>
+
+
+    <!-- 사용자업무조회 -->
+	<select id="selectCmdUserJobList" resultType="hashmap" parameterType="hashmap">
+        SELECT
+			NVL2(USER_JOB_ID,'1','0') as chk
+			,LOOKUP_CODE AS code   
+			,MEANING AS value         													
+			,B.ATTRIBUTE10 AS ORDR              													
+			,#{USER_ID} AS USER_ID              													
+			,USER_JOB_ID            													
+			,LOOKUP_CODE AS JOB_GUBUN_CD   
+		FROM CMD_USER_JOB A, CMD_LOOKUP_VALUES B
+		WHERE 1=1
+		AND A.JOB_GUBUN_CD(+) = B.LOOKUP_CODE
+		AND B.LOOKUP_TYPE = 'CMD_JOB_GUBUNCD'
+        AND A.USER_ID(+) = #{USER_ID}
+        ORDER BY to_number(B.ATTRIBUTE10) 
+	</select>
+    <!-- 사용자업무등록 -->
+    <insert id="insertCmdUserJob" parameterType="hashmap">
+    INSERT  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.insertCmdUserJob" */
+    INTO     CMD_USER_JOB
+                (USER_JOB_ID              													
+				,USER_ID            													
+				,JOB_GUBUN_CD             													
+				,ORDR              													
+				,CREATED_BY           													
+				,CREATION_DATE        													
+				,LAST_UPDATED_BY      													
+				,LAST_UPDATE_DATE     													
+                )
+    VALUES 	(
+                CMD_USER_JOB_S.NEXTVAL
+				,#{USER_ID}             													
+				,#{JOB_GUBUN_CD}             													
+				,#{ORDR}              													
+				,#{CREATED_BY}
+			    ,SYSDATE
+				,#{LAST_UPDATED_BY}      
+				,SYSDATE     
+			    )
+    </insert>
+
+   <!-- 사용자업무 삭제 -->
+    <delete id="deleteCmdUserJob" parameterType="hashmap">
+    DELETE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.deleteCmdUserJob" */
+    FROM    CMD_USER_JOB
+    WHERE  USER_ID = #{USER_ID}
+    AND  USER_JOB_ID = #{USER_JOB_ID}
+    </delete>
+
+    <!-- 사용자업무조회 -->
+	<select id="selectCmdJobGubunList" resultType="hashmap" parameterType="hashmap">
+        SELECT
+			'' as CHK
+			,LOOKUP_CODE AS code   
+			,MEANING AS value         													
+			,to_number(B.ATTRIBUTE10) AS ORDR              													
+		FROM CMD_LOOKUP_VALUES B
+		WHERE LOOKUP_TYPE=#{LOOKUP_TYPE}
+		order by to_number(B.ATTRIBUTE10) 
+	</select>
+	
+    <!-- 비밀번호 변경 -->
+    <update id="updateChangeUserPw" parameterType="map">
+        /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.updateUserPw" */
+        update CMD_USERS set
+		  USER_PWD = #{NEW_USER_PWD},
+		  PWD_CHANGE_DATE =  to_char(sysdate, 'yyyymmdd'),
+		  PWD_ERR_CNT = 0,
+		  LAST_UPDATED_BY = #{CREATED_BY},
+		  LAST_UPDATE_DATE = sysdate
+		where USER_ID = #{USER_ID}
+    </update>
+
+    <select id="selectCmdPlantList" parameterType="map" resultType="hashmap">
+    SELECT /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.selectCmdPlantList"  */
+        USER_ID	
+        ,PLANTID	
+        ,A.ENTERPRISEID	
+        ,decode(A.VALIDSTATE,'Valid','1','0') as VALIDSTATE	
+    FROM	CMD_PLANTUSER A
+    WHERE 1=1 
+    AND A.USER_ID = #{USER_ID}
+
+    </select>
+    <select id="selectUserIdSeqence" parameterType="map" resultType="hashmap">
+      SELECT  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01100Dao.selectUserIdSeqence" */
+                  CMD_USERS_S.NEXTVAL AS ID
+      FROM     DUAL
+
+
+    </select>
+	
+  </mapper>

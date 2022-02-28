@@ -1,0 +1,455 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAMInspectionResultDao">
+   
+    <select id="selectQamInspectionResult" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAMInspectionResultDao.selectQamInspectionResult  */
+	    SELECT TXNHISTKEY                    /*TXN HistKey*/
+             , RESOURCETYPE                  /*LOT 구분*/
+             , RESOURCEID                    /*ID*/
+             , PROCESSRELNO                  /*연관번호*/
+             , INSPECTIONDEFID               /*검사 정의 ID*/
+             , INSPECTIONDEFVERSION          /*검사 정의 Version*/
+             , "degree" AS DEGREE            /*차수*/
+             , ENTERPRISEID                  /*회사 ID*/
+             , PLANTID                       /*Site ID*/
+             , INSPECTIONTYPE                /*검사 구분*/
+             , PRODUCTDEFID                  /*제품 정의 ID*/
+             , PRODUCTDEFVERSION             /*제품 정의 Version*/
+             , PROCESSDEFID                  /*라우팅 ID*/
+             , PROCESSDEFVERSION             /*라우팅 Version*/
+             , PROCESSSEGMENTID              /*공정 ID*/
+             , PROCESSSEGMENTVERSION         /*공정 Version*/
+             , EQUIPMENTID                   /*설비 ID*/
+             , REQUESTUSER                   /*의뢰자*/
+             , REQUESTDATE                   /*의뢰일자*/
+             , ACCEPTUSER                    /*접수자*/
+             , ACCEPTDATE                    /*접수일자*/
+             , INSPECTIONQTY                 /*검사 수량*/
+             , SAMPLEQTY                     /*샘플 수량*/
+             , SPECOUTQTY                    /*불량 수량*/
+             , INSPECTIONRESULT              /*검사 결과*/
+             , INSPECTIONDATE                /*검사일*/
+             , INSPECTIONUSER                /*검사자*/
+             , ISSEND                        /*인계여부*/
+             , AREAID                        /*작업장 ID*/
+             , ISNCRPUBLISH                  /*NCR발행여부*/
+             , DESCRIPTION                   /*설명*/             
+             , TXNGROUPHISTKEY               /*TXN GroupHistKey*/             
+             , ISCOMPLETION                  /*완료여부*/
+             , RESULTITEM                    /*처리사항*/
+             , JUDGMENTCRITERIA              /*판정기준*/
+             , WORKCOUNT                     /*작업차수*/
+             , INSPECTIONCLASSID             /*검사 그룹 ID*/
+          FROM QAM_INSPECTIONRESULT
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                     /*TXN HistKey*/
+           AND RESOURCETYPE                  = #{RESOURCETYPE}                   /*LOT 구분*/
+           AND RESOURCEID                    = #{RESOURCEID}                     /*ID*/
+           AND PROCESSRELNO                  = #{PROCESSRELNO}                   /*연관번호*/
+    </select>
+
+    <!-- 
+         desc : 라우팅 정의
+         call : getProcessDefinitionInfo
+    -->
+    <select id="selectProcessDefType" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAMInspectionResultDao.selectProcessDefType  */
+	SELECT PROCESSDEFTYPE                /*라우팅 유형*/
+      FROM BAS_PROCESSDEFINITION
+     WHERE PROCESSDEFID                  = #{PROCESSDEFID}                   /*라우팅 ID*/
+       AND PROCESSDEFVERSION             = #{PROCESSDEFVERSION}              /*라우팅 Version*/
+   	</select>
+
+    <!-- 
+         desc : 라우팅 상세 정의
+         call : getProcessPathId
+    -->
+    <select id="selectProcessPathId" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAMInspectionResultDao.selectProcessPathId  */
+	SELECT PROCESSPATHID                 /*공정별 라우팅 정의 ID*/
+      FROM BAS_PROCESSPATH
+     WHERE ENTERPRISEID                  = #{ENTERPRISEID}                   /*회사 ID*/
+       AND PLANTID                       = #{PLANTID}                        /*Site ID*/
+       AND PROCESSDEFID                  = #{PROCESSDEFID}                   /*라우팅 ID*/
+       AND PROCESSDEFVERSION             = #{PROCESSDEFVERSION}              /*라우팅 Version*/
+       AND PROCESSSEGMENTID              = #{PROCESSSEGMENTID}               /*공정 ID*/
+       AND PROCESSSEGMENTVERSION         = #{PROCESSSEGMENTVERSION}          /*공정 Version*/
+    </select>
+
+    <!-- 
+         desc : 검사항목별 결과 등록
+         call : insertItemResult
+    -->
+    <insert id="insertBasInspectionItemResultInspRslt" parameterType="map">
+        /* smh.qam.dao.QAMInspectionResultDao.insertBasInspectionItemResultInspRslt */
+        INSERT INTO BAS_INSPECTIONITEMRESULT
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , RESOURCETYPE                  /*Resource 구분*/
+            , RESOURCEID                    /*Resource ID*/
+            , INSPITEMID                    /*검사 항목 ID*/
+            , INSPITEMVERSION               /*검사 항목 Version*/
+            , PROCESSRELNO                  /*연관번호*/
+            , INSPECTIONDEFID               /*검사 정의 ID*/
+            , INSPECTIONDEFVERSION          /*검사 정의 Version*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , degree                        /*차수*/
+            , TARGETVALUE                   /*목표값*/
+            , LOWERSPECLIMIT                /*최소 스펙값*/
+            , UPPERSPECLIMIT                /*최대 스펙값*/
+            , LOWERCONTROLLIMIT             /*최소 검사 범위값*/
+            , UPPERCONTROLLIMIT             /*최대 검사 범위값*/
+            , LOWERSCREENLIMIT              /*최소 표현값*/
+            , UPPERSCREENLIMIT              /*최대 표현값*/
+            , INSPECTIONQTY                 /*검사 수량*/
+            , SAMPLEQTY                     /*샘플 수량*/
+            , SPECOUTQTY                    /*불량 수량*/
+            , INSPECTIONRESULT              /*검사 결과*/
+            , MEASUREVALUE                  /*측정값*/
+            , FILEID                        /*파일 ID*/
+            , PARENTINSPITEMID              /*상위 검사항목 ID*/
+            , PARENTINSPITEMVERSION         /*상위 검사항목 Version*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , TXNGROUPHISTKEY               /*TXN GroupHistKey*/
+            , TXNID                         /*TXN ID*/
+            , TXNUSER                       /*TXN 사용자*/
+            , TXNTIME                       /*TXN 시간*/
+            , TXNCOMMENT                    /*TXN 코멘트*/            
+        )VALUES( 
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{RESOURCETYPE}                 /*Resource 구분*/
+            , #{RESOURCEID}                   /*Resource ID*/
+            , #{INSPITEMID}                   /*검사 항목 ID*/
+            , #{INSPITEMVERSION}              /*검사 항목 Version*/
+            , #{PROCESSRELNO}                 /*연관번호*/
+            , #{INSPECTIONDEFID}              /*검사 정의 ID*/
+            , #{INSPECTIONDEFVERSION}         /*검사 정의 Version*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{DEGREE}                       /*차수*/
+            , #{TARGETVALUE}                  /*목표값*/
+            , #{LOWERSPECLIMIT}               /*최소 스펙값*/
+            , #{UPPERSPECLIMIT}               /*최대 스펙값*/
+            , #{LOWERCONTROLLIMIT}            /*최소 검사 범위값*/
+            , #{UPPERCONTROLLIMIT}            /*최대 검사 범위값*/
+            , #{LOWERSCREENLIMIT}             /*최소 표현값*/
+            , #{UPPERSCREENLIMIT}             /*최대 표현값*/
+            , #{INSPECTIONQTY}                /*검사 수량*/
+            , #{SAMPLEQTY}                    /*샘플 수량*/
+            , #{SPECOUTQTY}                   /*불량 수량*/
+            , #{INSPECTIONRESULT}             /*검사 결과*/
+            , #{MEASUREVALUE}                 /*측정값*/
+            , #{FILEID}                       /*파일 ID*/
+            , #{PARENTINSPITEMID}             /*상위 검사항목 ID*/
+            , #{PARENTINSPITEMVERSION}        /*상위 검사항목 Version*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/
+            , #{TXNGROUPHISTKEY}              /*TXN GroupHistKey*/
+            , #{TXNID}                        /*TXN ID*/
+            , #{CREATOR}                      /*TXN 사용자*/
+            , SYSDATE                         /*TXN 시간*/
+            , #{TXNCOMMENT}                   /*TXN 코멘트*/            
+        )
+    </insert>
+    
+    <!-- 
+         desc : 
+         call : insertResult,insertResultWithLot
+    -->
+    <insert id="insertQamInspectionResultInspRslt" parameterType="map">
+        /* smh.qam.dao.QAMInspectionResultDao.insertQamInspectionResultInspRslt */
+        INSERT INTO QAM_INSPECTIONRESULT
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , RESOURCETYPE                  /*LOT 구분*/
+            , RESOURCEID                    /*ID*/
+            , PROCESSRELNO                  /*연관번호*/
+            , INSPECTIONDEFID               /*검사 정의 ID*/
+            , INSPECTIONDEFVERSION          /*검사 정의 Version*/
+            , "degree"                      /*차수*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , INSPECTIONTYPE                /*검사 구분*/
+            , PRODUCTDEFID                  /*제품 정의 ID*/
+            , PRODUCTDEFVERSION             /*제품 정의 Version*/
+            , PROCESSDEFID                  /*라우팅 ID*/
+            , PROCESSDEFVERSION             /*라우팅 Version*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PROCESSSEGMENTVERSION         /*공정 Version*/
+            , EQUIPMENTID                   /*설비 ID*/
+            , REQUESTUSER                   /*의뢰자*/
+            , REQUESTDATE                   /*의뢰일자*/
+            , ACCEPTUSER                    /*접수자*/
+            , ACCEPTDATE                    /*접수일자*/
+            , INSPECTIONQTY                 /*검사 수량*/
+            , SAMPLEQTY                     /*샘플 수량*/
+            , SPECOUTQTY                    /*불량 수량*/
+            , INSPECTIONRESULT              /*검사 결과*/
+            , INSPECTIONDATE                /*검사일*/
+            , INSPECTIONUSER                /*검사자*/
+            , ISSEND                        /*인계여부*/
+            , AREAID                        /*작업장 ID*/
+            , ISNCRPUBLISH                  /*NCR발행여부*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , TXNGROUPHISTKEY               /*TXN GroupHistKey*/
+            , TXNID                         /*TXN ID*/
+            , TXNUSER                       /*TXN 사용자*/
+            , TXNTIME                       /*TXN 시간*/
+            , TXNCOMMENT                    /*TXN 코멘트*/
+            , ISCOMPLETION                  /*완료여부*/
+            , RESULTITEM                    /*처리사항*/
+            , JUDGMENTCRITERIA              /*판정기준*/
+            , WORKCOUNT                     /*작업차수*/
+            , INSPECTIONCLASSID             /*검사 그룹 ID*/
+            , MEASUREUSER			        /*계측값 등록화면에 입력한 사람 또는 업체*/
+        )VALUES(
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{RESOURCETYPE}                 /*LOT 구분*/
+            , #{RESOURCEID}                   /*ID*/
+            , #{PROCESSRELNO}                 /*연관번호*/
+            , #{INSPECTIONDEFID}              /*검사 정의 ID*/
+            , #{INSPECTIONDEFVERSION}         /*검사 정의 Version*/
+            , #{DEGREE}                       /*차수*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{INSPECTIONTYPE}               /*검사 구분*/
+            , #{PRODUCTDEFID}                 /*제품 정의 ID*/
+            , #{PRODUCTDEFVERSION}            /*제품 정의 Version*/
+            , #{PROCESSDEFID}                 /*라우팅 ID*/
+            , #{PROCESSDEFVERSION}            /*라우팅 Version*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PROCESSSEGMENTVERSION}        /*공정 Version*/
+            , #{EQUIPMENTID}                  /*설비 ID*/
+            , #{REQUESTUSER}                  /*의뢰자*/
+            , #{REQUESTDATE}                  /*의뢰일자*/
+            , #{ACCEPTUSER}                   /*접수자*/
+            , #{ACCEPTDATE}                   /*접수일자*/
+            , #{INSPECTIONQTY}                /*검사 수량*/
+            , #{SAMPLEQTY}                    /*샘플 수량*/
+            , #{SPECOUTQTY}                   /*불량 수량*/
+            , #{INSPECTIONRESULT}             /*검사 결과*/
+            , TO_TIMESTAMP(#{INSPECTIONDATE}, 'YYYYMMDDHH24MISSFF3')/*검사일*/
+            , #{INSPECTIONUSER}               /*검사자*/
+            , #{ISSEND}                       /*인계여부*/
+            , #{AREAID}                       /*작업장 ID*/
+            , #{ISNCRPUBLISH}                 /*NCR발행여부*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/
+            , #{TXNGROUPHISTKEY}              /*TXN GroupHistKey*/
+            , #{TXNID}                        /*TXN ID*/
+            , #{CREATOR}                      /*TXN 사용자*/
+            , SYSDATE                         /*TXN 시간*/
+            , #{TXNCOMMENT}                   /*TXN 코멘트*/
+            , #{ISCOMPLETION}                 /*완료여부*/
+            , #{RESULTITEM}                   /*처리사항*/
+            , #{JUDGMENTCRITERIA}             /*판정기준*/
+            , #{WORKCOUNT}                    /*작업차수*/
+            , #{INSPECTIONCLASSID}            /*검사 그룹 ID*/
+            , #{MEASUREUSER}    	          /*계측값 등록화면에 입력한 사람 또는 업체*/
+        )
+    </insert>	
+
+    
+    <!-- 
+         desc : 검사 불량정보 등록
+         call : insertDefectResult
+    -->
+    <insert id="insertQamInspectionDefectInspRslt" parameterType="map">
+        /* smh.qam.dao.QAMInspectionResultDao.insertQamInspectionDefectInspRslt */
+        INSERT INTO QAM_INSPECTIONDEFECT
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , RESOURCETYPE                  /*Resource 구분*/
+            , RESOURCEID                    /*Resource ID*/
+            , DEFECTCODE                    /*불량 코드*/
+            , PROCESSRELNO                  /*연관번호*/
+            , DEGREE                        /*차수*/
+            , MAPPINGRESOURCEID             /*연관 매핑 ID*/
+            , INSPECTIONQTY                 /*검사 수량*/
+            , SAMPLEQTY                     /*샘플 수량*/
+            , DEFECTQTY                     /*불량수량*/
+            , REASONSEGMENTID               /*원인공정*/
+            , REASONCONSUMABLELOTID         /*원인자재LOT*/
+            , REASONCONSUMABLEDEFID         /*원인자재 정의 ID*/
+            , REASONCONSUMABLEDEFVERSION    /*원인자재 정의 VERSION*/
+            , REASONAREAID                  /*원인 작업장 ID*/
+            , FILERESOURCEID                /*파일 매핑 KEY*/
+            , INSPECTIONRESULT              /*검사 결과*/
+            , QCSEGMENTID                   /*품질관리공정 ID*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , TXNGROUPHISTKEY               /*TXN GroupHistKey*/
+            , TXNID                         /*TXN ID*/
+            , TXNUSER                       /*TXN 사용자*/
+            , TXNTIME                       /*TXN 시간*/
+            , TXNCOMMENT                    /*TXN 코멘트*/
+        )VALUES( 
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{RESOURCETYPE}                 /*Resource 구분*/
+            , #{RESOURCEID}                   /*Resource ID*/
+            , #{DEFECTCODE}                   /*불량 코드*/
+            , #{PROCESSRELNO}                 /*연관번호*/
+            , #{DEGREE}                       /*차수*/
+            , #{MAPPINGRESOURCEID}            /*연관 매핑 ID*/
+            , #{INSPECTIONQTY}                /*검사 수량*/
+            , #{SAMPLEQTY}                    /*샘플 수량*/
+            , #{DEFECTQTY}                    /*불량수량*/
+            , #{REASONSEGMENTID}              /*원인공정*/
+            , #{REASONCONSUMABLELOTID}        /*원인자재LOT*/
+            , #{REASONCONSUMABLEDEFID}        /*원인자재 정의 ID*/
+            , #{REASONCONSUMABLEDEFVERSION}   /*원인자재 정의 VERSION*/
+            , #{REASONAREAID}                 /*원인 작업장 ID*/
+            , #{FILERESOURCEID}               /*파일 매핑 KEY*/
+            , #{INSPECTIONRESULT}             /*검사 결과*/
+            , #{QCSEGMENTID}                  /*품질관리공정 ID*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/
+            , #{TXNGROUPHISTKEY}              /*TXN GroupHistKey*/
+            , #{TXNID}                        /*TXN ID*/
+            , #{CREATOR}                      /*TXN 사용자*/
+            , SYSDATE                         /*TXN 시간*/
+            , #{TXNCOMMENT}                   /*TXN 코멘트*/
+        )
+    </insert>  
+
+    <!-- LOT 불량 정보 - 조정 -->
+    <insert id="insertPcmLotDefectInspRslt" parameterType="map">
+        /* smh.qam.dao.QAMInspectionResultDao.insertPcmLotDefectInspRslt */
+        INSERT INTO PCM_LOTDEFECT
+        (     TXNHISTKEY                    /*TXN HistKey*/
+            , LOTID                         /*LOT ID*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , AREAID                        /*작업장 ID*/
+            , PRODUCTDEFID                  /*제품 정의 ID*/
+            , PRODUCTDEFVERSION             /*제품 정의 Version*/
+            , PROCESSDEFID                  /*라우팅 ID*/
+            , PROCESSDEFVERSION             /*라우팅 Version*/
+            , PROCESSPATHID                 /*공정별 라우팅 정의 ID*/
+            , USERSEQUENCE                  /*ProcessPath 상의 사용자 순서*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PROCESSSEGMENTVERSION         /*공정 Version*/
+            , WORKCOUNT                     /*작업차수*/
+            , DETECTIONSEGMENTCLASSID       /*연관공정그룹*/
+            , REASONAREAID                  /*원인 작업장 ID*/
+            , DEFECTCODE                    /*불량 코드*/
+            , DEFECTQTY                     /*불량 수량*/
+            , QCSEGMENTID                   /*품질 공정 ID*/
+            , REASONSEGMENTID               /*원인공정*/
+            , REASONCONSUMABLELOTID         /*원인자재LOT*/
+            , REASONCONSUMABLEDEFID         /*원인자재 정의 ID*/
+            , REASONCONSUMABLEDEFVERSION    /*원인자재 정의 VERSION*/
+            , RESOURCEID                    /*자원 ID*/
+            , REWORKCOUNT                   /*재작업횟수*/
+            , OCCURREDSTEP                  /*불량 발생 STEP*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , TXNGROUPHISTKEY               /*TXN GroupHistKey*/
+            , TXNUSER                       /*TXN 사용자*/
+            , TXNTIME                       /*TXN 시간*/
+            , TXNREASONCODECLASS            /*TXN 사유코드 그룹*/
+            , TXNREASONCODE                 /*TXN 사유코드*/
+            , TXNCOMMENT                    /*TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+            , DESCRIPTION                   /*비고*/
+        )VALUES(
+              #{TXNHISTKEY}                   /*TXN HistKey*/
+            , #{LOTID}                        /*LOT ID*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{AREAID}                       /*작업장 ID*/
+            , #{PRODUCTDEFID}                 /*제품 정의 ID*/
+            , #{PRODUCTDEFVERSION}            /*제품 정의 Version*/
+            , #{PROCESSDEFID}                 /*라우팅 ID*/
+            , #{PROCESSDEFVERSION}            /*라우팅 Version*/
+            , #{PROCESSPATHID}                /*공정별 라우팅 정의 ID*/
+            , #{USERSEQUENCE}                 /*ProcessPath 상의 사용자 순서*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PROCESSSEGMENTVERSION}        /*공정 Version*/
+            , NVL(#{WORKCOUNT}, 0)            /*작업차수*/
+            , #{DETECTIONSEGMENTCLASSID}      /*연관공정그룹*/
+            , #{REASONAREAID}                 /*원인 작업장 ID*/
+            , #{DEFECTCODE}                   /*불량 코드*/
+            , #{DEFECTQTY}                    /*불량 수량*/
+            , #{QCSEGMENTID}                  /*품질 공정 ID*/
+            , #{REASONSEGMENTID}              /*원인공정*/
+            , #{REASONCONSUMABLELOTID}        /*원인자재LOT*/
+            , #{REASONCONSUMABLEDEFID}        /*원인자재 정의 ID*/
+            , #{REASONCONSUMABLEDEFVERSION}   /*원인자재 정의 VERSION*/
+            , #{RESOURCEID}                   /*자원 ID*/
+            , #{REWORKCOUNT}                  /*재작업횟수*/
+            , #{OCCURREDSTEP}                 /*불량 발생 STEP*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{TXNGROUPHISTKEY}              /*TXN GroupHistKey*/
+            , #{CREATOR}                      /*TXN 사용자*/
+            , SYSDATE                         /*TXN 시간*/
+            , #{TXNREASONCODECLASS}           /*TXN 사유코드 그룹*/
+            , #{TXNREASONCODE}                /*TXN 사유코드*/
+            , #{TXNCOMMENT}                   /*TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+            , #{DESCRIPTION}                  /*비고*/
+        )
+    </insert>
+    
+    <!-- 
+         desc : 
+         call : updateResult
+    -->
+    <update id="updateQamInspectionResultInspRslt" parameterType="map">
+        /* smh.qam.dao.QAMInspectionResultDao.updateQamInspectionResultInspRslt */
+        UPDATE QAM_INSPECTIONRESULT
+           SET ACCEPTDATE                    = #{ACCEPTDATE}                 /*접수일자*/
+             , INSPECTIONUSER                = #{INSPECTIONUSER}             /*검사자*/
+             , DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+             , REQUESTUSER                   = #{REQUESTUSER}                /*의뢰자*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , TXNGROUPHISTKEY               = #{TXNGROUPHISTKEY}            /*TXN GroupHistKey*/
+             , TXNID                         = #{TXNID}                      /*TXN ID*/
+             , TXNUSER                       = #{MODIFIER}                   /*TXN 사용자*/
+             , TXNTIME                       = SYSDATE                       /*TXN 시간*/             
+         WHERE TXNHISTKEY                    = #{TXNHISTKEY}                 /*TXN HistKey*/
+           AND RESOURCETYPE                  = #{RESOURCETYPE}               /*LOT 구분*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*ID*/
+           AND PROCESSRELNO                  = #{PROCESSRELNO}               /*연관번호*/
+    </update>
+    
+    <!-- 
+         desc : 이상발생정보
+         call : updateNCRAbnormalOccurrence
+    -->
+    <update id="updateQamAbnormalOccurrenceInspRslt" parameterType="map">
+        /* smh.qam.dao.QAMInspectionResultDao.updateQamAbnormalOccurrenceInspRslt */
+        UPDATE QAM_ABNORMALOCCURRENCE
+           SET DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , TXNGROUPHISTKEY               = #{TXNGROUPHISTKEY}            /*TXN GroupHistKey*/
+             , TXNID                         = #{TXNID}                      /*TXN ID*/
+             , TXNUSER                       = #{MODIFIER}                   /*TXN 사용자*/
+             , TXNTIME                       = SYSDATE                       /*TXN 시간*/             
+         WHERE ABNOCRNO                      = #{ABNOCRNO}                   /*이상발생번호*/
+           AND ABNOCRTYPE                    = #{ABNOCRTYPE}                 /*이상발생유형*/
+    </update>     
+</mapper>

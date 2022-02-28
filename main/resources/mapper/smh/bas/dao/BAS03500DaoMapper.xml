@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS03500Dao">
+
+   <!-- 자원 사용품목 조회 -->
+    <select id="selectBasResourceUseProduct" parameterType="map" resultType="hashmap">
+    	/*selectBasResourceUseProduct*/
+	  SELECT 
+					BOR.PRODUCTDEFID 
+				,	BOR.PRODUCTDEFVERSION
+				,	PD.PRODUCTDEFNAME
+				,	BOR.PLANTID
+				,	O.USERSEQUENCE
+				,	BOR.PROCESSSEGMENTID
+				,	D1.DICTIONARYNAME			AS PROCESSSEGMENTNAME
+				,	O.PROCESSUOM
+				,	O.DESCRIPTION
+				,	BOR.RESOURCEID
+				,	RS.DESCRIPTION				AS RESOURCENAME
+				,   BOR.ISPRIMARYRESOURCE
+				,	BOR.RESOURCEVERSION
+				--,	RS.AREAID
+				--,	D2.DICTIONARYNAME			AS AREANAME
+				,	BOR.DESCRIPTION
+				,	U.USER_NM					AS CREATOR
+				,	BOR.CREATEDTIME
+			FROM BAS_BILLOFRESOURCE 			BOR
+			INNER JOIN BAS_PRODUCTDEFINITION	PD 	ON 	BOR.PRODUCTDEFID = PD.PRODUCTDEFID 
+												AND BOR.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+												AND BOR.PROCESSDEFID = PD.PROCESSDEFID
+			                                    AND BOR.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+			INNER JOIN BAS_PROCESSSEGMENT	PS	ON	BOR.PROCESSSEGMENTID = PS.PROCESSSEGMENTID 
+												AND BOR.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+			INNER JOIN BAS_RESOURCE			RS  ON  BOR.RESOURCEID = RS.RESOURCEID
+			INNER JOIN BAS_OPERATION 			O 	ON 	BOR.PROCESSSEGMENTID = O.PROCESSSEGMENTID  
+												AND BOR.PRODUCTDEFID = O.MAINPRODUCTID 
+												AND BOR.PRODUCTDEFVERSION = O.MAINPRODUCTVERSION
+												AND O.VALIDSTATE='Valid'
+			LEFT JOIN CMD_DICTIONARY			D1	ON	D1.DICTIONARYID = PS.PROCESSSEGMENTNAME 
+												AND D1.LANGUAGETYPE = #{LANGUAGETYPE}   
+			LEFT JOIN CMD_USERS				U	ON	BOR.CREATOR = U.USER_ID
+			WHERE 1=1
+			AND	BOR.RESOURCETYPE = 'Resource'
+			AND	BOR.PLANTID	= 'IFC' 
+		<if test="RESOURCEID != null and RESOURCEID !=''"> 
+			AND	EXISTS
+				(
+							SELECT	1
+							FROM	ufn_selectStringToSplit(#{RESOURCEID} ||',' , ',') 		MAP
+							WHERE	  RS.RESOURCEID = MAP.VALUE
+					)
+		</if> 
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">										
+			AND	PD.PRODUCTDEFID = #{PRODUCTDEFID} 
+			AND PD.PRODUCTDEFVERSION =#{PRODUCTDEFVERSION}
+		</if>
+		ORDER BY BOR.PRODUCTDEFID 
+			   ,BOR.PRODUCTDEFVERSION
+			   ,PD.PRODUCTDEFNAME
+			   ,BOR.PLANTID
+			   ,TO_NUMBER(O.USERSEQUENCE)
+			   ,BOR.PROCESSSEGMENTID
+    </select>    
+    
+       <!-- Resource Popup 조회-->
+    <select id="selectResourcePopup" parameterType="map" resultType="hashmap">
+     -- selectResourcePopup
+				SELECT 
+                       	RS.RESOURCEID
+                    ,	RS.DESCRIPTION		AS RESOURCENAME
+                    ,	RS.AREAID
+                    ,	DI.DICTIONARYNAME       AREANAME
+                    ,   RS.EQUIPMENTCLASSID
+                    ,	EDI.DICTIONARYNAME      EQUIPMENTCLASSNAME
+                FROM BAS_RESOURCE               			RS
+                INNER JOIN BAS_AREA 			    		AR  ON  RS.AREAID   = AR.AREAID
+				LEFT OUTER JOIN CMD_DICTIONARY   		DI  ON  DI.DICTIONARYID = AR.AREANAME
+													 		AND DI.LANGUAGETYPE = #{LANGUAGETYPE}   					 
+				LEFT JOIN BAS_EQUIPMENTCLASS     		EC 	ON  RS.ENTERPRISEID = EC.ENTERPRISEID
+													 		AND RS.EQUIPMENTCLASSID = EC.EQUIPMENTCLASSID								 
+				LEFT JOIN CMD_DICTIONARY 	    		EDI ON  EDI.DICTIONARYID = EC.EQUIPMENTCLASSNAME
+												     		AND EDI.LANGUAGETYPE = #{LANGUAGETYPE}   
+				WHERE 1=1
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())"> 
+					AND	RS.PLANTID = #{PLANTID}
+				</if>
+				<if test="RESOURCE != null and RESOURCE !='' and !(RESOURCE eq '*'.toString())"> 
+					AND	(UPPER(RS.RESOURCEID) like UPPER( <![CDATA['%' ||]]> #{RESOURCE} <![CDATA[|| '%']]> ) OR
+					    UPPER(RS.DESCRIPTION) like UPPER( <![CDATA['%' ||]]> #{RESOURCE} <![CDATA[|| '%']]> ))
+				</if>
+				ORDER BY RS.RESOURCEID
+    </select>
+     
+
+</mapper>

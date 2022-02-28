@@ -1,0 +1,557 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS04200Dao">
+    <sql id="insertDictionary">
+    BAS_COMMON_PKG.GENERATE_DICTIONARY
+    </sql>
+
+    <!-- 검사항목목록 조회 -->
+    <select id="selectInspitemList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04200Dao.selectInspitemList */
+        SELECT ISI.INSPITEMID
+             , ISI.INSPITEMNAME              AS INSPITEMKEYNAME
+             , DCR.DICTIONARYNAME            AS INSPITEMNAME
+             , DCK.DICTIONARYNAME            AS INSPITEMNAME_KR
+             , DCE.DICTIONARYNAME            AS INSPITEMNAME_US
+             , DCC.DICTIONARYNAME            AS INSPITEMNAME_CN
+             , DCV.DICTIONARYNAME            AS INSPITEMNAME_VN
+             , ISI.UNIT
+             , ISI.EQPINSPITEMID             AS EQPINSPITEMID
+             , ISI.VALIDSTATE                AS VALIDSTATE
+             , NVL(U1.USER_NM, ISI.CREATOR)  AS CREATOR
+             , TO_CHAR(ISI.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+             , NVL(U2.USER_NM, ISI.MODIFIER) AS MODIFIER
+             , TO_CHAR(ISI.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+             , ISI.ENTERPRISEID
+             , ISI.INSPITEMVERSION
+             , ISI.INSPITEMCLASS
+             , ISI.TOPBOTTOMYN
+             , ISI.CIRCUITSTD
+             , ISI.SPECTRANSTYPE
+          FROM       BAS_INSPITEM    ISI
+          INNER JOIN CMD_DICTIONARY  DCR ON  ISI.INSPITEMNAME = DCR.DICTIONARYID
+                                         AND DCR.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+          INNER JOIN CMD_DICTIONARY  DCK ON  ISI.INSPITEMNAME = DCK.DICTIONARYID
+                                         AND DCK.LANGUAGETYPE = 'ko-KR'
+          INNER JOIN CMD_DICTIONARY  DCE ON  ISI.INSPITEMNAME = DCE.DICTIONARYID
+                                         AND DCE.LANGUAGETYPE = 'en-US'
+          INNER JOIN CMD_DICTIONARY  DCC ON  ISI.INSPITEMNAME = DCC.DICTIONARYID
+                                         AND DCC.LANGUAGETYPE = 'zh-CN'
+          INNER JOIN CMD_DICTIONARY  DCV ON  ISI.INSPITEMNAME = DCV.DICTIONARYID
+                                         AND DCV.LANGUAGETYPE = 'vi-VN'
+          LEFT OUTER JOIN CMD_USERS  U1  ON  ISI.CREATOR      = U1.USER_ID
+          LEFT OUTER JOIN CMD_USERS  U2  ON  ISI.MODIFIER     = U2.USER_ID
+         WHERE 1 = 1
+           AND ISI.ENTERPRISEID = #{ENTERPRISEID}
+        ]]>
+           <if test="SRCHNAME != null and SRCHNAME !='' ">
+               AND DCR.DICTIONARYNAME LIKE '%' || #{SRCHNAME} || '%'
+           </if>
+           <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+               AND ISI.VALIDSTATE = #{VALIDSTATE}
+           </if>
+        ORDER BY ISI.INSPITEMID
+    </select>
+
+    <!-- 검사항목목록 - 체크 -->
+    <select id="selectInspitemChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04200Dao.selectInspitemChk */
+        SELECT INSPITEMID
+          FROM BAS_INSPITEM
+         WHERE ENTERPRISEID     = #{ENTERPRISEID}
+           AND INSPITEMID       = #{INSPITEMID}       /*검사 항목 ID*/
+           AND INSPITEMVERSION  = #{INSPITEMVERSION}  /*검사 항목 Version*/
+           AND ROWNUM           = 1
+    </select>
+
+    <!-- 검사항목목록 - 명칭중복 체크 -->
+    <select id="selectInspitemNameChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04200Dao.selectInspitemNameChk */
+        SELECT DCR.DICTIONARYNAME
+          FROM       BAS_INSPITEM   ISI
+          INNER JOIN CMD_DICTIONARY DCR    ON  ISI.INSPITEMNAME = DCR.DICTIONARYID
+                                           AND DCR.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+         WHERE ISI.ENTERPRISEID     = #{ENTERPRISEID}
+           AND ISI.INSPITEMID      != #{INSPITEMID}       /*검사 항목 ID*/
+           AND DCR.DICTIONARYNAME   = #{INSPITEMNAME}     /*검사 항목명*/
+           AND ISI.VALIDSTATE       = 'Valid'
+           AND ROWNUM               = 1
+    </select>
+
+    <!-- 검사방법목록 조회 -->
+    <select id="selectLookInspmethodList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04200Dao.selectLookInspmethodList */
+        SELECT ISM.LOOKUP_CODE                      AS INSPECTIONMETHODID
+             , DCR.DICTIONARYNAME                   AS INSPECTIONMETHODNAME
+             , (SELECT X.DICTIONARYNAME FROM CMD_DICTIONARY X WHERE X.DICTIONARYID = ISM.DICTIONARYID AND X.LANGUAGETYPE='ko-KR') as INSPECTIONMETHODNAME_KR
+             , (SELECT X.DICTIONARYNAME FROM CMD_DICTIONARY X WHERE X.DICTIONARYID = ISM.DICTIONARYID AND X.LANGUAGETYPE='en-US') as INSPECTIONMETHODNAME_US
+             , (SELECT X.DICTIONARYNAME FROM CMD_DICTIONARY X WHERE X.DICTIONARYID = ISM.DICTIONARYID AND X.LANGUAGETYPE='zh-CN') as INSPECTIONMETHODNAME_CN
+             , (SELECT X.DICTIONARYNAME FROM CMD_DICTIONARY X WHERE X.DICTIONARYID = ISM.DICTIONARYID AND X.LANGUAGETYPE='vi-VN') as INSPECTIONMETHODNAME_VN
+             , DECODE(ISM.ENABLED_FLAG, 'Y', 'Valid', 'N', 'Invalid', ISM.ENABLED_FLAG)
+                                                    AS VALIDSTATE
+             , NVL(U1.USER_NM, ISM.CREATED_BY)      AS CREATOR
+             , TO_CHAR(ISM.CREATION_DATE, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+             , NVL(U2.USER_NM, ISM.LAST_UPDATED_BY) AS MODIFIER
+             , TO_CHAR(ISM.LAST_UPDATE_DATE, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+             , ISM.DICTIONARYID
+          FROM            CMD_LOOKUP_VALUES ISM
+          LEFT OUTER JOIN CMD_DICTIONARY    DCR ON  ISM.DICTIONARYID    = DCR.DICTIONARYID
+                                                AND DCR.LANGUAGETYPE    = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_USERS         U1  ON  ISM.CREATED_BY      = U1.USER_ID
+          LEFT OUTER JOIN CMD_USERS         U2  ON  ISM.LAST_UPDATED_BY = U2.USER_ID
+         WHERE 1 =1
+           AND ISM.LOOKUP_TYPE                      = 'InspectionMethod'
+        ]]>
+           <if test="SRCHNAME != null and SRCHNAME !='' ">
+               AND DCR.DICTIONARYNAME LIKE '%' || #{SRCHNAME} || '%'
+           </if>
+           <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+               AND ISM.ENABLED_FLAG = DECODE(#{VALIDSTATE}, 'Valid', 'Y', 'Invalid', 'N', #{VALIDSTATE})
+           </if>
+        ORDER BY ISM.LOOKUP_CODE
+    </select>
+
+    <!-- 검사방법목록 - 체크 -->
+    <select id="selectLookValuesChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04200Dao.selectLookValuesChk */
+        SELECT LOOKUP_CODE
+          FROM CMD_LOOKUP_VALUES
+         WHERE LOOKUP_TYPE   = #{LOOKUP_TYPE}  /*검사 항목 ID*/
+           AND LOOKUP_CODE   = #{LOOKUP_CODE}  /*검사 항목 Version*/
+           AND ROWNUM        = 1
+    </select>
+
+    <!-- 감사방법별 검사항목 등록 - 트리 조회 -->
+    <select id="selectInspitemmethodTreeList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04200Dao.selectInspitemmethodTreeList */
+        SELECT ITEMID
+             , ITEMNAME
+             , INSPECTIONCLASSID
+             , ITEMLEVEL
+          FROM (SELECT '*'         AS ITEMID
+                     , 'SMLINES' AS ITEMNAME
+                     , NULL        AS INSPECTIONCLASSID
+                     , 0           AS ITEMLEVEL
+                  FROM DUAL
+                UNION ALL
+                SELECT ITEMID
+                     , ITEMNAME
+                     , INSPECTIONCLASSID
+                     , LEVEL ITEMLEVEL
+                  FROM (
+                        SELECT ISC.INSPECTIONCLASSID              AS ITEMID
+                             , DCI.DICTIONARYNAME                 AS ITEMNAME
+                             , ISC.PARENTINSPECTIONCLASSID        AS INSPECTIONCLASSID
+                          FROM BAS_INSPECTIONCLASS                ISC
+                          INNER JOIN CMD_DICTIONARY           DCI ON  ISC.INSPECTIONCLASSNAME = DCI.DICTIONARYID
+                                                                  AND DCI.LANGUAGETYPE        = #{SESSION_LANGUAGETYPE}
+                         WHERE ISC.PARENTINSPECTIONCLASSID    IS NULL
+                           AND ISC.INSPECTIONCLASSID          IN ('RawInspection', 'SubassemblyInspection')
+                ]]>
+                        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+                           AND ISC.VALIDSTATE            = #{VALIDSTATE}
+                        </if>
+                <![CDATA[
+                         UNION
+                         SELECT ISM.INSPECTIONCLASSID || '_'|| ISM.INSPECTIONMETHODID AS ITEMID
+                              , DCM.DICTIONARYNAME                AS ITEMNAME
+                              , ISM.INSPECTIONCLASSID             AS INSPECTIONCLASSID
+                         FROM       BAS_INSPECTIONMETHOD ISM
+                         INNER JOIN CMD_LOOKUP_VALUES    CDM    ON  ISM.INSPECTIONMETHODID  = CDM.LOOKUP_CODE
+                                                                AND CDM.LOOKUP_TYPE         = 'InspectionMethod'
+                         INNER JOIN CMD_DICTIONARY       DCM    ON  CDM.DICTIONARYID        = DCM.DICTIONARYID
+                                                                AND DCM.LANGUAGETYPE        = #{SESSION_LANGUAGETYPE}
+                         WHERE ISM.INSPECTIONCLASSID            IN ('RawInspection', 'SubassemblyInspection')
+                ]]>
+                        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+                           AND ISM.VALIDSTATE            = #{VALIDSTATE}
+                        </if>
+                       ) TR
+            START  WITH INSPECTIONCLASSID IS NULL
+            CONNECT BY NOCYCLE PRIOR TR.ITEMID = TR.INSPECTIONCLASSID )
+    </select>
+
+    <!-- 감사방법별 검사항목 등록 - 검사방법 조회 -->
+    <select id="selectInspmethodList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04200Dao.selectInspmethodList */
+        SELECT ISM.INSPECTIONMETHODID             AS INSPECTIONMETHODID
+             , DCM.DICTIONARYNAME                 AS INSPECTIONMETHODNAME
+             , ISM.INSPECTIONCLASSID              AS INSPECTIONCLASSID
+             , ISM.VALIDSTATE
+             , NVL(U1.USER_NM, ISM.CREATOR)       AS CREATOR
+             , TO_CHAR(ISM.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME 
+             , NVL(U2.USER_NM, ISM.MODIFIER)      AS MODIFIER
+             , TO_CHAR(ISM.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+             , ISM.ENTERPRISEID
+          FROM            BAS_INSPECTIONMETHOD  ISM
+          INNER JOIN      CMD_LOOKUP_VALUES     CDM   ON  ISM.INSPECTIONMETHODID = CDM.LOOKUP_CODE
+                                                      AND CDM.LOOKUP_TYPE        = 'InspectionMethod'
+          INNER JOIN      CMD_DICTIONARY        DCM   ON  CDM.DICTIONARYID       = DCM.DICTIONARYID
+                                                      AND DCM.LANGUAGETYPE       = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_USERS             U1    ON  ISM.CREATOR            = U1.USER_ID
+          LEFT OUTER JOIN CMD_USERS             U2    ON  ISM.MODIFIER           = U2.USER_ID
+         WHERE ISM.ENTERPRISEID        = #{ENTERPRISEID}
+           AND ISM.INSPECTIONCLASSID   = #{INSPECTIONCLASSID}
+        ]]>
+         <if test="INSPECTIONMETHODID != null and INSPECTIONMETHODID !='' ">
+             AND ISM.INSPECTIONMETHODID = #{INSPECTIONMETHODID}
+         </if>
+         <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+             AND ISM.VALIDSTATE = #{VALIDSTATE}
+         </if>
+        ORDER BY ISM.INSPECTIONMETHODID
+
+    </select>
+
+    <!-- 검사방법목록 - 체크 -->
+    <select id="selectInspmethodChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04200Dao.selectInspmethodChk */
+        SELECT INSPECTIONCLASSID
+          FROM BAS_INSPECTIONMETHOD
+         WHERE ENTERPRISEID        = #{SESSION_ENTERPRISEID}
+           AND INSPECTIONCLASSID   = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+           AND INSPECTIONMETHODID  = #{INSPECTIONMETHODID}         /*검사방법ID*/
+           AND ROWNUM              = 1
+    </select>
+
+    <!-- 감사방법별 검사항목 등록 - 검사항목 조회 -->
+    <select id="selectInspmethoditemList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04200Dao.selectInspmethoditemList */
+        SELECT IMI.INSPITEMID
+             , IMI.INSPITEMVERSION
+             , DCS.DICTIONARYNAME                      AS INSPITEMNAME
+             , IMI.INSPITEMTYPE                        AS INSPITEMTYPE
+             , IMI.VALIDSTATE
+             , NVL(U1.USER_NM, IMI.CREATOR)            AS CREATOR
+             , TO_CHAR(IMI.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+             , NVL(U2.USER_NM, IMI.MODIFIER)           AS MODIFIER
+             , TO_CHAR(IMI.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+             , IMI.ENTERPRISEID
+             , IMI.INSPECTIONCLASSID
+             , IMI.INSPECTIONMETHODID
+             , ISI.UNIT
+          FROM             BAS_INSPECTIONMETHODITEM  IMI
+          INNER JOIN       BAS_INSPITEM              ISI    ON  IMI.INSPITEMID       = ISI.INSPITEMID
+                                                            AND IMI.INSPITEMVERSION  = ISI.INSPITEMVERSION
+          INNER JOIN      CMD_DICTIONARY             DCS    ON  ISI.INSPITEMNAME     = DCS.DICTIONARYID
+                                                            AND DCS.LANGUAGETYPE     = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES          CDY    ON  IMI.INSPITEMTYPE     = CDY.LOOKUP_CODE
+                                                            AND CDY.LOOKUP_TYPE      = 'InspItemType'
+          LEFT OUTER JOIN CMD_DICTIONARY             DCY    ON  CDY.DICTIONARYID     = DCY.DICTIONARYID
+                                                            AND DCY.LANGUAGETYPE     = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_USERS                  U1     ON  IMI.CREATOR = U1.USER_ID
+          LEFT OUTER JOIN CMD_USERS                  U2     ON  IMI.MODIFIER = U2.USER_ID
+         WHERE IMI.ENTERPRISEID        = #{ENTERPRISEID}
+           AND IMI.INSPECTIONMETHODID  = #{INSPECTIONMETHODID}
+           AND IMI.INSPECTIONCLASSID   = #{INSPECTIONCLASSID}
+        ]]>
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+           AND IMI.VALIDSTATE            = #{VALIDSTATE}
+        </if>
+        ORDER BY IMI.INSPITEMID
+    </select>
+
+    <!-- 감사방법별 검사항목 등록 - 검사항목 체크 -->
+    <select id="selectInspmethoditemChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04200Dao.selectInspmethoditemChk */
+        SELECT IMI.INSPITEMID
+          FROM BAS_INSPECTIONMETHODITEM        IMI
+         WHERE IMI.ENTERPRISEID        = #{ENTERPRISEID}
+           AND IMI.INSPECTIONMETHODID  = #{INSPECTIONMETHODID}
+           AND IMI.INSPECTIONCLASSID   = #{INSPECTIONCLASSID}
+           AND IMI.INSPITEMID          = #{INSPITEMID}
+           AND IMI.INSPITEMVERSION     = #{INSPITEMVERSION}
+           AND ROWNUM                  = 1
+    </select>
+
+    <!-- 검사항목목록 등록 -->
+    <insert id="insertInspitem" parameterType="map">
+    DECLARE
+    BEGIN
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{INSPITEMNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPITEM','ko-KR',#{INSPITEMKEYNAME}, #{CREATOR}, #{INSPITEMNAME_KR}); END IF;
+        IF #{INSPITEMNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPITEM','en-US',#{INSPITEMKEYNAME}, #{CREATOR}, #{INSPITEMNAME_US}); END IF;
+        IF #{INSPITEMNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPITEM','zh-CN',#{INSPITEMKEYNAME}, #{CREATOR}, #{INSPITEMNAME_CN}); END IF;
+        IF #{INSPITEMNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPITEM','vi-VN',#{INSPITEMKEYNAME}, #{CREATOR}, #{INSPITEMNAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+        
+        INSERT /* smh.bas.dao.BAS04200Dao.insertInspitem */ INTO BAS_INSPITEM
+        (     INSPITEMID                    /*검사 항목 ID*/
+            , INSPITEMVERSION               /*검사 항목 Version*/
+            , INSPITEMNAME                  /*검사 항목명*/
+            , EQPINSPITEMID                 /*설비검사항목ID*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , VERSIONSTATE                  /*Version 상태*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+            , UNIT                          /*단위*/
+            , INSPITEMCLASS                 /*검사항목분류(lookup_type=InspItemClass)*/
+            , TOPBOTTOMYN                   /*상/하단사용여부*/
+            , CIRCUITSTD                    /*회로폭기준(lookup_type=CurcuitStd)*/
+            , SPECTRANSTYPE                 /*공정spec 기준값 변환유형(lookup_type=spectranstype) */
+        )VALUES(
+              #{INSPITEMID}                   /*검사 항목 ID*/
+            , #{INSPITEMVERSION}              /*검사 항목 Version*/
+            , #{INSPITEMKEYNAME}              /*검사 항목명*/
+            , #{EQPINSPITEMID}                /*설비검사항목ID*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{VERSIONSTATE}                 /*Version 상태*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+            , #{UNIT}                         /*단위*/
+            , #{INSPITEMCLASS}                /*검사항목분류(lookup_type=InspItemClass)*/
+            , #{TOPBOTTOMYN}                  /*상/하단사용여부*/
+            , #{CIRCUITSTD}                   /*회로폭기준(lookup_type=CurcuitStd)*/
+            , #{SPECTRANSTYPE}                /*공정spec 기준값 변환유형(lookup_type=spectranstype) */
+        );
+    END;
+    </insert>
+
+    <!-- 검사방법목록 등록 -->
+    <insert id="insertLookValues" parameterType="map">
+    DECLARE
+    BEGIN
+        INSERT /* smh.bas.dao.BAS04200Dao.insertLookValues */ INTO CMD_LOOKUP_VALUES
+        (     LOOKUP_TYPE                   /*룩업유형*/
+            , LOOKUP_CODE                   /*룩업코드*/
+            , MEANING                       /*의미*/
+            , DESCRIPTION                   /*적요내용*/
+            , ENABLED_FLAG                  /*사용가능여부*/
+            , ATTRIBUTE1                    /*부가정보1*/
+            , ATTRIBUTE2                    /*부가정보2*/
+            , ATTRIBUTE3                    /*부가정보3*/
+            , ATTRIBUTE4                    /*부가정보4*/
+            , ATTRIBUTE5                    /*부가정보5*/
+            , ATTRIBUTE6                    /*부가정보6*/
+            , ATTRIBUTE7                    /*부가정보7*/
+            , ATTRIBUTE8                    /*부가정보8*/
+            , ATTRIBUTE9                    /*부가정보9*/
+            , ATTRIBUTE10                   /*정렬순서*/
+            , CREATED_BY                    /*최초생성자*/
+            , CREATION_DATE                 /*최초생성일*/
+            , PARENTCODEID                  /*상위 코드*/
+            , DISPLAYSEQUENCE               /*화면표시순서*/
+            , DICTIONARYID                  /*다국어 ID*/
+            , DICTIONARYID2                 /*다국어 ID 정제*/
+
+        )VALUES(
+              #{LOOKUP_TYPE}                  /*룩업유형*/
+            , #{LOOKUP_CODE}                  /*룩업코드*/
+            , #{MEANING}                      /*의미*/
+            , #{DESCRIPTION}                  /*적요내용*/
+            , DECODE(#{VALIDSTATE}, 'Valid', 'Y', 'Invalid', 'N', #{VALIDSTATE}) /*사용가능여부*/
+            , #{ATTRIBUTE1}                   /*부가정보1*/
+            , #{ATTRIBUTE2}                   /*부가정보2*/
+            , #{ATTRIBUTE3}                   /*부가정보3*/
+            , #{ATTRIBUTE4}                   /*부가정보4*/
+            , #{ATTRIBUTE5}                   /*부가정보5*/
+            , #{ATTRIBUTE6}                   /*부가정보6*/
+            , #{ATTRIBUTE7}                   /*부가정보7*/
+            , #{ATTRIBUTE8}                   /*부가정보8*/
+            , #{ATTRIBUTE9}                   /*부가정보9*/
+            , #{ATTRIBUTE10}                  /*정렬순서*/
+            , #{CREATOR}                      /*최초생성자*/
+            , SYSDATE                         /*최초생성일*/
+            , #{PARENTCODEID}                 /*상위 코드*/
+            , #{DISPLAYSEQUENCE}              /*화면표시순서*/
+            , #{DICTIONARYID}                 /*다국어 ID*/
+            , #{DICTIONARYID2}                /*다국어 ID 정제*/
+        );
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{DICTIONARYNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('CMD_LOOKUP_VALUES','ko-KR',#{DICTIONARYID}, #{CREATOR}, #{DICTIONARYNAME_KR}); END IF;
+        IF #{DICTIONARYNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('CMD_LOOKUP_VALUES','en-US',#{DICTIONARYID}, #{CREATOR}, #{DICTIONARYNAME_US}); END IF;
+        IF #{DICTIONARYNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('CMD_LOOKUP_VALUES','zh-CN',#{DICTIONARYID}, #{CREATOR}, #{DICTIONARYNAME_CN}); END IF;
+        IF #{DICTIONARYNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('CMD_LOOKUP_VALUES','vi-VN',#{DICTIONARYID}, #{CREATOR}, #{DICTIONARYNAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;
+    </insert>
+
+    <!-- 감사방법별 검사항목 등록 - 검사방법 등록 -->
+    <insert id="insertInspmethod" parameterType="map">
+        INSERT /* smh.bas.dao.BAS04200Dao.insertInspmethod */ INTO BAS_INSPECTIONMETHOD
+        (     INSPECTIONCLASSID             /*검사 그룹 ID*/
+            , INSPECTIONMETHODID            /*검사방법ID*/
+            , INSPECTIONMETHODNAME          /*검사방법명*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+        )VALUES(
+              #{INSPECTIONCLASSID}            /*검사 그룹 ID*/
+            , #{INSPECTIONMETHODID}           /*검사방법ID*/
+            , #{INSPECTIONMETHODNAME}         /*검사방법명*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+        )
+    </insert>
+
+    <!-- 감사방법별 검사항목 등록 - 검사항목 등록 -->
+    <insert id="insertInspmethoditem" parameterType="map">
+        INSERT /* smh.bas.dao.BAS04200Dao.insertInspmethoditem */ INTO BAS_INSPECTIONMETHODITEM
+        (     INSPECTIONCLASSID             /*검사 그룹 ID*/
+            , INSPECTIONMETHODID            /*검사방법ID*/
+            , INSPITEMID                    /*검사 항목 ID*/
+            , INSPITEMVERSION               /*검사 항목 Version*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , INSPITEMTYPE                  /*검사항목 유형*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+        )VALUES(
+             #{INSPECTIONCLASSID}            /*검사 그룹 ID*/
+            , #{INSPECTIONMETHODID}           /*검사방법ID*/
+            , #{INSPITEMID}                   /*검사 항목 ID*/
+            , #{INSPITEMVERSION}              /*검사 항목 Version*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{INSPITEMTYPE}                 /*검사항목 유형*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+        )
+    </insert>
+
+    <!-- 검사항목목록 수정 -->
+    <update id="updateInspitem" parameterType="map">
+    DECLARE
+    BEGIN
+    
+        <!-- 다국어 테이블 저장용 -->
+        IF #{INSPITEMNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPITEM','ko-KR',#{INSPITEMKEYNAME}, #{CREATOR}, #{INSPITEMNAME_KR}); END IF;
+        IF #{INSPITEMNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPITEM','en-US',#{INSPITEMKEYNAME}, #{CREATOR}, #{INSPITEMNAME_US}); END IF;
+        IF #{INSPITEMNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPITEM','zh-CN',#{INSPITEMKEYNAME}, #{CREATOR}, #{INSPITEMNAME_CN}); END IF;
+        IF #{INSPITEMNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPITEM','vi-VN',#{INSPITEMKEYNAME}, #{CREATOR}, #{INSPITEMNAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+            
+        UPDATE /* smh.bas.dao.BAS04200Dao.updateInspitem */ BAS_INSPITEM
+           SET EQPINSPITEMID                 = #{EQPINSPITEMID}              /*설비검사항목ID*/
+             , DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+             , UNIT                          = #{UNIT}                       /*단위*/             
+             , INSPITEMCLASS                 = #{INSPITEMCLASS}              /*검사항목분류(lookup_type=InspItemClass)*/
+             , TOPBOTTOMYN                   = #{TOPBOTTOMYN}                /*상/하단사용여부*/
+             , CIRCUITSTD                    = #{CIRCUITSTD}                 /*회로폭기준(lookup_type=CurcuitStd)*/
+             , SPECTRANSTYPE                 = #{SPECTRANSTYPE}              /*공정spec 기준값 변환유형(lookup_type=spectranstype) */
+         WHERE INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+        ;
+    END;
+    </update>
+
+    <!-- 검사방법목록 수정 -->
+    <update id="updateLookValues" parameterType="map">
+    DECLARE
+    BEGIN
+        UPDATE /* smh.bas.dao.BAS04200Dao.updateLookValues */ CMD_LOOKUP_VALUES
+           SET MEANING                       = #{MEANING}                    /*의미*/
+             , DESCRIPTION                   = #{DESCRIPTION}                /*적요내용*/
+             , ENABLED_FLAG                  = DECODE(#{VALIDSTATE}, 'Valid', 'Y', 'Invalid', 'N', #{VALIDSTATE}) /*사용가능여부*/
+             , LAST_UPDATED_BY               = #{MODIFIER}                   /*수정자*/
+             , LAST_UPDATE_DATE              = SYSDATE                       /*수정일*/
+         WHERE LOOKUP_TYPE                   = #{LOOKUP_TYPE}                /*룩업유형*/
+           AND LOOKUP_CODE                   = #{LOOKUP_CODE}                /*룩업코드*/
+        ;
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{DICTIONARYNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('CMD_LOOKUP_VALUES','ko-KR',#{DICTIONARYID}, #{CREATOR}, #{DICTIONARYNAME_KR}); END IF;
+        IF #{DICTIONARYNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('CMD_LOOKUP_VALUES','en-US',#{DICTIONARYID}, #{CREATOR}, #{DICTIONARYNAME_US}); END IF;
+        IF #{DICTIONARYNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('CMD_LOOKUP_VALUES','zh-CN',#{DICTIONARYID}, #{CREATOR}, #{DICTIONARYNAME_CN}); END IF;
+        IF #{DICTIONARYNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('CMD_LOOKUP_VALUES','vi-VN',#{DICTIONARYID}, #{CREATOR}, #{DICTIONARYNAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;
+    </update>
+
+    <!-- 감사방법별 검사항목 등록 - 검사방법 수정 -->
+    <update id="updateInspmethod" parameterType="map">
+        UPDATE /* smh.bas.dao.BAS04200Dao.updateInspmethod */ BAS_INSPECTIONMETHOD
+           SET MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+         WHERE INSPECTIONCLASSID             = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+           AND INSPECTIONMETHODID            = #{INSPECTIONMETHODID}         /*검사방법ID*/
+    </update>
+
+    <!-- 감사방법별 검사항목 등록 - 검사항목 수정 -->
+    <update id="updateInspmethoditem" parameterType="map">
+        UPDATE /* smh.bas.dao.BAS04200Dao.updateInspmethoditem */ BAS_INSPECTIONMETHODITEM
+           SET INSPITEMTYPE                  = #{INSPITEMTYPE}               /*검사항목 유형*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+         WHERE INSPECTIONCLASSID             = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+           AND INSPECTIONMETHODID            = #{INSPECTIONMETHODID}         /*검사방법ID*/
+           AND INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+    </update>
+</mapper>

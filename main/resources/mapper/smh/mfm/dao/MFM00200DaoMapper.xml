@@ -1,0 +1,1373 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM00200Dao">
+
+<sql id="insertDictionary">
+	BAS_COMMON_PKG.GENERATE_DICTIONARY
+</sql>
+    
+
+	<!--
+		설		명	: 대/중/소 공정그룹조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-15 
+		수  정   이  력	:
+	-->
+	<select id="selectLoadSegmentListByTypeList" parameterType="map" resultType="hashmap">
+				/*selectLoadSegmentListByTypeList - 대/중/소 공정그룹조회 (조회 팝업)*/
+				--
+				-- Id : GetLoadSegmentListByType
+				-- Version : 10001
+				
+				SELECT	LSC.LOADSEGMENTCLASSID
+					,	D1.DICTIONARYNAME		AS LOADSEGMENTCLASSNAME
+					,	LSC.LOADSEGMENTCLASSID	AS P_LOADTOPSEGMENTCLASSID
+					,	LSC.LOADSEGMENTCLASSID	AS P_LOADMIDDLESEGMENTCLASSID	
+					,	LSC.LOADSEGMENTCLASSID	AS P_LOADSMALLSEGMENTCLASSID
+					
+				FROM	BAS_LOADSEGMENTCLASS		LSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	ON	LSC.LOADSEGMENTCLASSNAME = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+				WHERE	1 = 1
+				AND		LSC.ENTERPRISEID    			= #{ENTERPRISEID}
+				AND		LSC.PLANTID         			= #{PLANTID}
+				AND		LOADSEGMENTCLASSTYPE 	= #{LOADSEGMENTCLASSTYPE}
+				
+				--대공정
+				<if test="TXTLOADTOPSEGMENTCLASS != null and TXTLOADTOPSEGMENTCLASS !='' and !(TXTLOADTOPSEGMENTCLASS eq '*'.toString()) ">
+					AND		(
+					UPPER(LSC.LOADSEGMENTCLASSID) 		LIKE  '%' || UPPER(#{TXTLOADTOPSEGMENTCLASS})|| '%'
+					OR UPPER(LSC.LOADSEGMENTCLASSNAME) 	LIKE  '%' || UPPER(#{TXTLOADTOPSEGMENTCLASS})|| '%'
+					OR UPPER(D1.DICTIONARYNAME) 				LIKE  '%' || UPPER(#{TXTLOADTOPSEGMENTCLASS})|| '%'
+					)
+				</if>
+				--중공정
+				<if test="TXTLOADMIDDLESEGMENTCLASS != null and TXTLOADMIDDLESEGMENTCLASS !='' and !(TXTLOADMIDDLESEGMENTCLASS eq '*'.toString()) ">
+					AND		(
+					UPPER(LSC.LOADSEGMENTCLASSID) 		LIKE  '%' || UPPER(#{TXTLOADMIDDLESEGMENTCLASS})|| '%'
+					OR UPPER(LSC.LOADSEGMENTCLASSNAME) 	LIKE  '%' || UPPER(#{TXTLOADMIDDLESEGMENTCLASS})|| '%'
+					OR UPPER(D1.DICTIONARYNAME) 				LIKE  '%' || UPPER(#{TXTLOADMIDDLESEGMENTCLASS})|| '%'	
+					)
+				</if>
+				--소공정
+				<if test="TXTLOADSMALLSEGMENTCLASS != null and TXTLOADSMALLSEGMENTCLASS !='' and !(TXTLOADSMALLSEGMENTCLASS eq '*'.toString()) ">
+					AND		(
+					 	 UPPER(LSC.LOADSEGMENTCLASSID) 		LIKE  '%' || UPPER(#{TXTLOADSMALLSEGMENTCLASS})|| '%'
+					OR UPPER(LSC.LOADSEGMENTCLASSNAME) 	LIKE  '%' || UPPER(#{TXTLOADSMALLSEGMENTCLASS})|| '%'
+					OR UPPER(D1.DICTIONARYNAME) 				LIKE  '%' || UPPER(#{TXTLOADSMALLSEGMENTCLASS})|| '%'			 	
+					)
+				</if>
+				
+				AND		LSC.VALIDSTATE = 'Valid'
+				
+				-- (21.06.30) - 정렬 추가
+				ORDER BY 
+						TO_NUMBER(
+                        SUBSTR( UPPER(TRIM(LSC.LOADSEGMENTCLASSID)), INSTR(UPPER(TRIM(LSC.LOADSEGMENTCLASSID)), 
+                        CASE 	WHEN LSC.LOADSEGMENTCLASSTYPE = 'TopLoadSegmentClass'
+                                THEN 	'TOP'
+                                WHEN LSC.LOADSEGMENTCLASSTYPE = 'MiddleLoadSegmentClass'
+                                THEN 	'MIDDLE'
+                                ELSE 	'SMALL'
+                                END
+                        ,1,1)+(
+                                CASE 	WHEN LSC.LOADSEGMENTCLASSTYPE = 'TopLoadSegmentClass'
+                                THEN 	3
+                                WHEN LSC.LOADSEGMENTCLASSTYPE = 'MiddleLoadSegmentClass'
+                                THEN 	6
+                                ELSE 	5
+                                END
+                        		)
+                         , LENGTH(TRIM(LSC.LOADSEGMENTCLASSID)))
+                        )       -- [21.04.30 정렬 기준 추가 -> 앞에 붙는 대/중/소 제외 숫자 기준으로 정렬]             
+                     ,LSC.CREATEDTIME -- 정렬 추가
+				
+	</select>
+	
+	
+	<!--
+		설		명	: 대/중/소 공정그룹조회 List
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-15 
+		수  정   이  력	:
+	-->
+	<select id="selectLoadSegmentList" parameterType="map" resultType="hashmap">
+				
+				--
+				-- Id : selectLoadSegmentList
+				-- Version : 10001
+				/* selectLoadSegmentList -  대/중/소 공정그룹조회 List*/
+				SELECT	LSC.LOADSEGMENTCLASSID
+					,	D1.DICTIONARYNAME		AS LOADSEGMENTCLASSNAME_KO_KR
+					,	D2.DICTIONARYNAME		AS LOADSEGMENTCLASSNAME_EN_US
+					,	D3.DICTIONARYNAME		AS LOADSEGMENTCLASSNAME_ZH_CN
+					,	D4.DICTIONARYNAME		AS LOADSEGMENTCLASSNAME_VI_VN
+					,	LSC.ENTERPRISEID
+					,	LSC.PLANTID
+					,	LSC.LOADSEGMENTCLASSTYPE
+					,	LSC.PARENTLOADSEGMENTCLASSID
+					,	LSC.DESCRIPTION
+					,	NVL(U1.USER_NM, LSC.CREATOR)	AS CREATOR
+					,	TO_CHAR(LSC.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					,	NVL(U2.USER_NM, LSC.MODIFIER)	AS MODIFIER
+					,	TO_CHAR(LSC.MODIFIEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS MODIFIEDTIME
+					,	LSC.VALIDSTATE
+					,   '0' AS CHK 
+					,   LSC.LOADSEGMENTCLASSNAME			-- 다국어id
+				FROM	BAS_LOADSEGMENTCLASS		LSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	ON	LSC.LOADSEGMENTCLASSNAME = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = 'ko-KR'
+				LEFT OUTER JOIN CMD_DICTIONARY	D2	ON	LSC.LOADSEGMENTCLASSNAME = D2.DICTIONARYID
+													AND D2.LANGUAGETYPE = 'en-US'
+				LEFT OUTER JOIN CMD_DICTIONARY	D3	ON	LSC.LOADSEGMENTCLASSNAME = D3.DICTIONARYID
+													AND D3.LANGUAGETYPE = 'zh-CN'
+				LEFT OUTER JOIN CMD_DICTIONARY	D4	ON	LSC.LOADSEGMENTCLASSNAME = D4.DICTIONARYID
+													AND D4.LANGUAGETYPE = 'vi-VN'
+				LEFT OUTER JOIN CMD_USERS			U1	ON	LSC.CREATOR = U1.USER_ID
+				LEFT OUTER JOIN CMD_USERS			U2	ON	LSC.MODIFIER = U2.USER_ID
+				WHERE	1 = 1 
+				AND		LSC.ENTERPRISEID 	= #{ENTERPRISEID}
+				AND		LSC.PLANTID 		= #{PLANTID}
+				
+				
+				<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+					AND		LSC.VALIDSTATE = #{P_VALIDSTATE}
+				</if>
+				
+				--대공정그룹
+				<if test="TYPE != null and TYPE !='' and (TYPE eq 'TOP'.toString()) ">
+					AND		LSC.LOADSEGMENTCLASSTYPE = 'TopLoadSegmentClass'
+					<if test="P_LOADTOPSEGMENTCLASSID != null and P_LOADTOPSEGMENTCLASSID !='' and !(P_LOADTOPSEGMENTCLASSID eq '*'.toString()) ">
+						AND EXISTS (
+										SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOADTOPSEGMENTCLASSID}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	LSC.LOADSEGMENTCLASSID = LMP.VALUE
+									)
+					</if>
+				</if>
+				
+				--중공정그룹
+				<if test="TYPE != null and TYPE !='' and (TYPE eq 'MIDDLE'.toString()) ">
+					AND		LSC.LOADSEGMENTCLASSTYPE = 'MiddleLoadSegmentClass'
+					<if test="P_LOADMIDDLESEGMENTCLASSID != null and P_LOADMIDDLESEGMENTCLASSID !='' and !(P_LOADMIDDLESEGMENTCLASSID eq '*'.toString()) ">
+						AND EXISTS (
+									SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOADMIDDLESEGMENTCLASSID}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	LSC.LOADSEGMENTCLASSID = LMP.VALUE
+									)
+					</if>
+				</if>
+				
+				--소공정그룹
+				<if test="TYPE != null and TYPE !='' and (TYPE eq 'SMALL'.toString()) ">
+					AND		LSC.LOADSEGMENTCLASSTYPE = 'SmallLoadSegmentClass'
+					<if test="P_LOADSMALLSEGMENTCLASSID != null and P_LOADSMALLSEGMENTCLASSID !='' and !(P_LOADSMALLSEGMENTCLASSID eq '*'.toString()) ">
+						AND EXISTS (
+									SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{P_LOADSMALLSEGMENTCLASSID}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	LSC.LOADSEGMENTCLASSID = LMP.VALUE
+									
+									)
+					</if>
+				</if>
+				
+				
+				ORDER BY 
+						TO_NUMBER(
+                        SUBSTR( UPPER(TRIM(LSC.LOADSEGMENTCLASSID)), INSTR(UPPER(TRIM(LSC.LOADSEGMENTCLASSID)), 
+                        CASE 	WHEN LSC.LOADSEGMENTCLASSTYPE = 'TopLoadSegmentClass'
+                                THEN 	'TOP'
+                                WHEN LSC.LOADSEGMENTCLASSTYPE = 'MiddleLoadSegmentClass'
+                                THEN 	'MIDDLE'
+                                ELSE 	'SMALL'
+                                END
+                        ,1,1)+(
+                                CASE 	WHEN LSC.LOADSEGMENTCLASSTYPE = 'TopLoadSegmentClass'
+                                THEN 	3
+                                WHEN LSC.LOADSEGMENTCLASSTYPE = 'MiddleLoadSegmentClass'
+                                THEN 	6
+                                ELSE 	5
+                                END
+                        		)
+                         , LENGTH(TRIM(LSC.LOADSEGMENTCLASSID)))
+                        )       -- [21.04.30 정렬 기준 추가 -> 앞에 붙는 대/중/소 제외 숫자 기준으로 정렬]             
+                     ,LSC.CREATEDTIME -- 정렬 추가
+	</select>
+	
+	<!--
+		설		명	: 대/중/소 저장전 이미 등록된 내역 확인
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-18 
+		수  정   이  력	:
+	-->
+	<select id="selectChkProcGrpList" parameterType="map" resultType="hashmap">
+				
+				/* selectChkProcGrpList -  대/중/소 저장전 이미 등록된 내역 확인 */
+				SELECT	LSC.LOADSEGMENTCLASSID
+					,	D1.DICTIONARYNAME		AS "LOADSEGMENTCLASSNAME$$KO-KR"
+					,	D2.DICTIONARYNAME		AS "LOADSEGMENTCLASSNAME$$EN-US"
+					,	D3.DICTIONARYNAME		AS "LOADSEGMENTCLASSNAME$$ZH-CN"
+					,	D4.DICTIONARYNAME		AS "LOADSEGMENTCLASSNAME$$VI-VN"
+					,	LSC.ENTERPRISEID
+					,	LSC.PLANTID
+					,	LSC.LOADSEGMENTCLASSTYPE
+					,	LSC.PARENTLOADSEGMENTCLASSID
+					,	LSC.DESCRIPTION
+					,	NVL(U1.USER_NM, LSC.CREATOR)	AS CREATOR
+					,	LSC.CREATEDTIME
+					,	NVL(U2.USER_NM, LSC.MODIFIER)	AS MODIFIER
+					,	LSC.MODIFIEDTIME
+					,	LSC.VALIDSTATE
+				FROM	BAS_LOADSEGMENTCLASS		LSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	ON	LSC.LOADSEGMENTCLASSNAME = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = 'ko-KR'
+				LEFT OUTER JOIN CMD_DICTIONARY	D2	ON	LSC.LOADSEGMENTCLASSNAME = D2.DICTIONARYID
+													AND D2.LANGUAGETYPE = 'en-US'
+				LEFT OUTER JOIN CMD_DICTIONARY	D3	ON	LSC.LOADSEGMENTCLASSNAME = D3.DICTIONARYID
+													AND D3.LANGUAGETYPE = 'zh-CN'
+				LEFT OUTER JOIN CMD_DICTIONARY	D4	ON	LSC.LOADSEGMENTCLASSNAME = D4.DICTIONARYID
+													AND D4.LANGUAGETYPE = 'vi-VN'
+				LEFT OUTER JOIN CMD_USERS			U1	ON	LSC.CREATOR = U1.USER_ID
+				LEFT OUTER JOIN CMD_USERS			U2	ON	LSC.MODIFIER = U2.USER_ID
+				WHERE	1 = 1 
+				AND		LSC.ENTERPRISEID 				= #{ENTERPRISEID}
+				AND		LSC.PLANTID 			 		= #{PLANTID}
+				AND 	LSC.LOADSEGMENTCLASSID  	= #{LOADSEGMENTCLASSID}
+				
+	</select>
+	
+	
+	<!--
+		설		명	: 대/중/소 등록
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-18 
+		수  정   이  력	:
+	-->
+	  <insert id="insertProcGrp" parameterType="map">
+	  DECLARE
+	  BEGIN
+		INSERT /* smh.mfm.dao.MFM00200Dao.insertProcGrp */	
+		INTO BAS_LOADSEGMENTCLASS
+			(LOADSEGMENTCLASSID
+			, LOADSEGMENTCLASSNAME
+			, ENTERPRISEID
+			, PLANTID
+			, LOADSEGMENTCLASSTYPE
+			, PARENTLOADSEGMENTCLASSID
+			, DESCRIPTION
+			, CREATOR
+			, CREATEDTIME
+			, MODIFIER
+			, MODIFIEDTIME
+			, LASTTXNHISTKEY
+			, VALIDSTATE)
+			VALUES
+			(
+			 UPPER(#{LOADSEGMENTCLASSID})
+			,#{LOADSEGMENTCLASSNAME}
+			,#{ENTERPRISEID}
+			,#{PLANTID}
+			,#{LOADSEGMENTCLASSTYPE}
+			,#{PARENTLOADSEGMENTCLASSID}		-- 사용안함.. 주석처리..
+			,#{DESCRIPTION}
+			,#{CREATOR}
+			,SYSDATE
+			,#{MODIFIER}
+			,SYSDATE
+			,#{LASTTXNHISTKEY}
+			,#{VALIDSTATE}			
+			);
+					
+			<!-- 다국어 테이블 저장용 -->							
+					IF #{LOADSEGMENTCLASSNAME_KO_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_LOADSEGMENTCLASS','ko-KR',#{LOADSEGMENTCLASSNAME}, #{CREATOR}, #{LOADSEGMENTCLASSNAME_KO_KR}); END IF;
+					IF #{LOADSEGMENTCLASSNAME_EN_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_LOADSEGMENTCLASS','en-US',#{LOADSEGMENTCLASSNAME}, #{CREATOR}, #{LOADSEGMENTCLASSNAME_EN_US}); END IF;
+					IF #{LOADSEGMENTCLASSNAME_ZH_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_LOADSEGMENTCLASS','zh-CN',#{LOADSEGMENTCLASSNAME}, #{CREATOR}, #{LOADSEGMENTCLASSNAME_ZH_CN}); END IF;
+					IF #{LOADSEGMENTCLASSNAME_VI_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_LOADSEGMENTCLASS','vi-VN',#{LOADSEGMENTCLASSNAME}, #{CREATOR}, #{LOADSEGMENTCLASSNAME_VI_VN}); END IF;
+				<!-- 다국어 테이블 저장용 -->
+			END;
+    </insert>
+    
+    <!--
+		설		명	: 대/중/소 수정
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-18 
+		수  정   이  력	:
+	-->
+    <update id="updateProcGrp" parameterType="map">
+		  DECLARE
+		  BEGIN
+			 /* smh.mfm.dao.MFM00200Dao.updateProcGrp */	
+			 UPDATE  BAS_LOADSEGMENTCLASS SET  
+						 DESCRIPTION		=#{DESCRIPTION}
+						,VALIDSTATE			=#{VALIDSTATE}
+						,MODIFIER			=#{MODIFIER}
+						,MODIFIEDTIME		=SYSDATE
+						,LASTTXNHISTKEY		=#{LASTTXNHISTKEY}
+			WHERE 	LOADSEGMENTCLASSID 		= #{LOADSEGMENTCLASSID};
+						
+				<!-- 다국어 테이블 저장용 -->							
+						IF #{LOADSEGMENTCLASSNAME_KO_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_LOADSEGMENTCLASS','ko-KR',#{LOADSEGMENTCLASSNAME}, #{MODIFIER}, #{LOADSEGMENTCLASSNAME_KO_KR}); END IF;
+						IF #{LOADSEGMENTCLASSNAME_EN_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_LOADSEGMENTCLASS','en-US',#{LOADSEGMENTCLASSNAME}, #{MODIFIER}, #{LOADSEGMENTCLASSNAME_EN_US}); END IF;
+						IF #{LOADSEGMENTCLASSNAME_ZH_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_LOADSEGMENTCLASS','zh-CN',#{LOADSEGMENTCLASSNAME}, #{MODIFIER}, #{LOADSEGMENTCLASSNAME_ZH_CN}); END IF;
+						IF #{LOADSEGMENTCLASSNAME_VI_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_LOADSEGMENTCLASS','vi-VN',#{LOADSEGMENTCLASSNAME}, #{MODIFIER}, #{LOADSEGMENTCLASSNAME_VI_VN}); END IF;
+				<!-- 다국어 테이블 저장용 -->
+				END;
+    </update>
+    
+    <!--
+		설		명	: 대/중/소 삭제
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-18 
+		수  정   이  력	:
+	-->
+    <delete id="deleteProcGrp" parameterType="map" >
+     /* smh.mfm.dao.MFM00200Dao.deleteProcGrp */
+    	DELETE  
+    	 FROM 	BAS_LOADSEGMENTCLASS	
+    	WHERE 	LOADSEGMENTCLASSID 		= #{LOADSEGMENTCLASSID}
+    	   AND 	ENTERPRISEID			= #{ENTERPRISEID}
+		   AND	PLANTID					= #{PLANTID} 	
+    </delete>
+    
+    <!--
+		설		명	: 공정 부하 기준 정보 - 담당자 팝업
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-19 
+		수  정   이  력	:  
+	-->
+	<select id="selectUserList" parameterType="map" resultType="hashmap">
+			/*selectUserList - 공정 부하 기준 정보 - 담당자 팝업*/
+				--
+				-- Id : GetUserList
+				-- Version : 10001
+				SELECT 
+						USER_ID         AS USERID
+					,	USER_NM         AS USERNAME
+					,	DEPT_NM         AS DEPARTMENT
+					,	EMAIL_ADDR      AS EMAILADDRESS
+					,	MBPH_NO         AS CELLPHONENUMBER
+				FROM 	CMD_USERS
+				WHERE 	1 = 1
+				
+				<if test="USERIDNAME != null and USERIDNAME !='' and !(USERIDNAME eq '*'.toString()) ">
+					AND (USER_ID LIKE  '%' || UPPER(#{USERIDNAME})|| '%' 
+						OR USER_NM LIKE  '%' || UPPER(#{USERIDNAME})|| '%'
+						)
+				</if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+					AND	PLANTID = #{PLANTID}
+				</if>
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+					AND	ENTERPRISEID = #{ENTERPRISEID}
+				</if>
+				<if test="AREAID != null and AREAID !='' and !(AREAID eq '*'.toString()) ">
+					AND	AREAID = #{AREAID}
+				</if>
+				
+				<if test="P_FILTER != null and P_FILTER !='' and (P_FILTER eq 'Y'.toString()) ">
+					-- (21.07.26) 등록된 담당자만 호출(필터의 경우) 
+					AND USER_ID IN (
+                        SELECT DISTINCT  PD.LOADOWNER
+                            FROM BAS_PRODUCTDEFINITION PD           -- 제품정보
+                                            WHERE 1=1
+                                            AND		PD.PLANTID 			= #{PLANTID}                                            
+                                            AND		PD.VALIDSTATE 	= 'Valid'			-- 추가 (화면에서 값이 안넘어옴.)
+                                            AND     PD.LOADOWNER IS NOT NULL
+                    )
+				</if>
+				
+				
+				
+				
+				ORDER BY USER_NM ASC
+				
+	</select>
+    
+    
+    <!--
+		설		명	: 공정 부하 기준 정보 - 품목 팝업
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-19 
+		수  정   이  력	:  
+	-->
+	<select id="selectProdDefIdList" parameterType="map" resultType="hashmap">
+			/*selectProdDefIdList - 공정 부하 기준 정보 - 품목 팝업*/
+				--
+				-- Id : GetProductDefListToPrd
+				-- Version : 10001
+				
+				SELECT	PD.PRODUCTDEFID
+					,	PD.PRODUCTDEFVERSION
+					,	PD.PRODUCTDEFNAME
+					,	D.DICTIONARYNAME		AS PRODUCTDEFTYPE
+					,	'0'   AS CHK
+				FROM	BAS_PRODUCTDEFINITION	PD
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES			C	ON	PD.PRODUCTDEFTYPE = C.LOOKUP_CODE
+													AND C.LOOKUP_TYPE = 'ProductDefType'
+				LEFT OUTER JOIN CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID
+													AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				WHERE	1 = 1
+				AND		PD.ENTERPRISEID = #{ENTERPRISE}
+				AND 	PD.PLANTID 		= #{PLANTID}
+				
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !='' and !(PRODUCTDIVISION eq '*'.toString()) ">
+					AND		PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}
+				</if>
+				<if test="TXTPRODUCTDEFNAME != null and TXTPRODUCTDEFNAME !='' and !(TXTPRODUCTDEFNAME eq '*'.toString()) ">
+				
+					AND		(PD.PRODUCTDEFID LIKE  '%' || UPPER(#{TXTPRODUCTDEFNAME})|| '%'
+					OR		 PD.PRODUCTDEFNAME LIKE  '%' || UPPER(#{TXTPRODUCTDEFNAME})|| '%'
+					)
+				</if>
+				 
+				<if test="P_TYPE != null and P_TYPE !='' and (P_TYPE eq 'Y'.toString()) ">
+					-- (21.06.11) 부하량 기준정보 필터의 품목 팝업의 경우 담당자에서 유효하고 품목사용여부가 여인 경우만 조회
+					AND		NVL(PD.ISLOADMNG, 'N') = 'Y'
+					AND		NVL(PD.VALIDSTATELOAD, 'Invalid') = 'Valid'		--  유효여부_공정부하 추가(담당자 Tab 설정 정보)
+				</if>
+				
+				
+				AND		PD.VALIDSTATE = 'Valid'
+				ORDER BY PD.PRODUCTDEFID ASC
+	</select>
+	
+	
+	<!--
+		설		명	: 공정 부하 기준 정보 - 담당자 맵핑 List 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-19 
+		수  정   이  력	:  
+	-->
+	<select id="selectProduDefListForOwnerMapping" parameterType="map" resultType="hashmap">
+			/*selectProduDefListForOwnerMapping - 공정 부하 기준 정보 - 담당자 맵핑 List 조회*/
+				
+				--
+				-- Id : SelectProductDefListForOwnerMapping
+				-- Version : 10001
+				
+				WITH PRDLIST AS
+				(
+				    SELECT  PD.PRODUCTDEFID
+				        ,   TRIM(PD.PRODUCTDEFNAME) AS PRODUCTDEFNAME
+				        ,	MAX(PD.PRODUCTIONTYPE) PRODUCTIONTYPE
+						,	MAX(PD.LOADOWNER)      LOADOWNER
+						,	MAX(PD.CREATOR)        CREATOR
+						,	MAX(PD.CREATEDTIME)    CREATEDTIME
+						,	MAX(PD.MODIFIER)       MODIFIER
+						,	MAX(PD.MODIFIEDTIME)   MODIFIEDTIME
+						,	MAX(PD.VALIDSTATE)     VALIDSTATE
+						,	MAX(PD.PLANTID)        PLANTID
+						,	MAX(PD.PRODUCTDEFTYPE) PRODUCTDEFTYPE
+						,	MAX(PD.ISLOADMNG)      ISLOADMNG
+						
+						,	MAX(PD.VALIDSTATELOAD)      VALIDSTATELOAD		--  유효여부_공정부하 (21.04.27)
+						
+						, 	PD.PRODUCTDEFVERSION  -- 추가  [21.04.30] 
+                        
+                        ,   MAX(PD.PRODUCTDEFCLASSGROUPNAME) AS PRODUCTDEFCLASSGROUPNAME             --추가 [21.05.17] 품목그룹
+                        
+				    FROM BAS_PRODUCTDEFINITION PD           -- 제품정보
+				    WHERE 1=1
+					
+                    AND		PD.PLANTID = #{P_PLANTID}
+                    
+                    
+                    AND		PD.VALIDSTATE = 'Valid'			-- 추가 (화면에서 값이 안넘어옴.)
+				
+				
+					
+					<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+						AND		( CASE WHEN PD.VALIDSTATELOAD = 'InValid'
+			                               THEN 'Invalid'
+			                               ELSE PD.VALIDSTATELOAD
+			                               END
+			                        ) = #{P_VALIDSTATE}			-- 유효여부_공정부하 (21.04.27)  (21.06.09) InValid -> Invalid 
+					</if>
+					
+					<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+						AND EXISTS (
+									SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODUCTDEFID}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	PD.PRODUCTDEFID = LMP.VALUE
+							   		)
+					</if>
+					
+					<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+						AND 	PD.PRODUCTIONTYPE = #{P_PRODUCTIONTYPE}
+					</if>
+					--미입력
+					<if test="!(P_NOINPUT eq '*'.toString()) ">
+						<if test="(P_NOINPUT eq 'Y'.toString()) ">
+							AND		NVL(PD.LOADOWNER, ' ') = ' '
+						</if>
+						<if test="(P_NOINPUT eq 'N'.toString()) ">
+							AND		NVL(PD.LOADOWNER, ' ') != ' '
+						</if>
+					</if>
+					
+					--담당자
+					<if test="USERID != null and USERID !='' and !(USERID eq '*'.toString()) ">
+						AND EXISTS (
+									SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{USERID}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	PD.LOADOWNER  = LMP.VALUE		-- OWNER ->LOADOWNER 변경 
+								   )
+					</if>
+					--제품구분
+					<choose>
+						<when test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' and !(P_PRODUCTDEFTYPE eq '*'.toString()) ">
+							AND 	PD.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE}
+						</when>
+						<otherwise>
+							AND 	PD.PRODUCTDEFTYPE IN ('Product','SubAssembly')			-- 21.04.26 추가 (제품, 반제품만 나오도록 )
+						</otherwise>
+					</choose>
+					
+					--품목사용여부
+					<if test="P_ISLOADMNG != null and P_ISLOADMNG !='' and !(P_ISLOADMNG eq '*'.toString()) ">
+						AND 	NVL(PD.ISLOADMNG, 'N') = #{P_ISLOADMNG}
+					</if>	
+					
+					
+					--품목그룹 (21.07.27) 추가
+					<if test="P_PRODGROUP != null and P_PRODGROUP !='' and !(P_PRODGROUP eq '*'.toString()) ">
+						AND EXISTS (
+									SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{P_PRODGROUP}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	PD.PRODUCTDEFCLASSGROUPNAME  = LMP.VALUE		-- OWNER ->LOADOWNER 변경 
+								   )
+					</if>
+                    
+					GROUP BY PD.PRODUCTDEFID
+					        , TRIM(PD.PRODUCTDEFNAME) 			-- 21.04.24 같은 품목코드가 값이 다른 경우 있음 공백 때문에		
+					        , PD.PRODUCTDEFVERSION  				-- 추가	 [21.04.30] 						    
+				)
+				SELECT	PD.PRODUCTDEFID
+					,	PD.PRODUCTDEFNAME
+					,	PD.LOADOWNER			                        AS OWNER
+					,	NVL(U1.USER_NM,PD.LOADOWNER)				AS OWNERNAME
+					,	NVL(U2.USER_NM,PD.CREATOR)				AS CREATOR
+					,	PD.ISLOADMNG
+					,	NVL(CDD.DICTIONARYNAME, PD.PRODUCTDEFTYPE) AS PRODUCTDEFTYPE
+					,	TO_CHAR(PD.CREATEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS CREATEDTIME
+					,	NVL(U3.USER_NM,PD.MODIFIER)				AS MODIFIER
+					,	TO_CHAR(PD.MODIFIEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS MODIFIEDTIME
+					,	PD.VALIDSTATE
+                    
+                    ,   CASE WHEN L.PRODUCTDEFID IS NULL
+                        THEN 'N'
+                        ELSE 'Y'
+                        END AS WIP_YN
+                        
+                    , '0' AS CHK
+                    , ''  AS X_BTN
+                    , PD.PRODUCTDEFVERSION  AS PRODUCTDEFVERSION			-- REV [21.04.30]
+                    
+                    --,   PD.VALIDSTATELOAD				--  유효여부_공정부하 (21.04.27)
+                    
+                    ,   ( CASE WHEN PD.VALIDSTATELOAD = 'InValid'
+                               THEN 'Invalid'
+                               ELSE PD.VALIDSTATELOAD
+                               END
+                        )		 AS VALIDSTATELOAD		--  유효여부_공정부하 (21.04.27)   -> (21.06.09) InValid -> Invalid 로 변경
+                    
+                    ,   PD.PRODUCTIONTYPE                       		-- 생산구분[21.05.17] - 추가
+                    ,   PD.PRODUCTDEFCLASSGROUPNAME            -- 품목그룹[21.05.17] - 추가
+                    
+				FROM 	PRDLIST					PD
+				LEFT OUTER JOIN CMD_USERS			U1	ON	PD.LOADOWNER = U1.USER_ID
+				LEFT OUTER JOIN CMD_USERS			U2	ON	PD.CREATOR = U2.USER_ID
+				LEFT OUTER JOIN CMD_USERS			U3	ON	PD.MODIFIER = U3.USER_ID
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES 		CD	ON	CD.LOOKUP_CODE = PD.PRODUCTDEFTYPE
+													AND	CD.LOOKUP_TYPE = 'ProductDivision2'
+				LEFT OUTER JOIN CMD_DICTIONARY	CDD	ON	CDD.DICTIONARYID = CD.DICTIONARYID
+													AND CDD.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}        -- 다국어 코드
+                LEFT OUTER JOIN (
+                        SELECT PRODUCTDEFID AS PRODUCTDEFID  
+                             
+                          FROM PCM_LOT
+                         WHERE  (PROCESSSTATE = 'WaitForReceive' and QTY > 0)
+                              or (PROCESSSTATE = 'Wait' and QTY > 0)
+                              or (PROCESSSTATE = 'Run' and QTY > 0)
+                              or (PROCESSSTATE = 'WaitForSend' and QTY > 0)     -- 주가 (재공유무)
+                              
+                              -- (21.06.03) : 불량은 제외  
+                              AND NVL(LOTCREATEDTYPE,'Normal') !=  'Defect'
+                         GROUP BY PRODUCTDEFID          								 -- 21.04.24 추가(하나의 품목 코드만)   
+                ) L
+                ON PD.PRODUCTDEFID = L.PRODUCTDEFID  
+                
+				WHERE	1 = 1
+				-- 21.04.24 재공여부 조건 추가
+				<if test="P_WIPYN != null and P_WIPYN !='' and !(P_WIPYN eq '*'.toString()) ">
+						<if test="(P_WIPYN eq 'Y'.toString()) ">
+							AND		L.PRODUCTDEFID IS NOT NULL
+						</if>
+						<if test="(P_WIPYN eq 'N'.toString()) ">
+							AND		L.PRODUCTDEFID IS NULL
+						</if>
+				</if>
+				ORDER BY PD.PRODUCTDEFID ASC
+	</select>
+	
+	
+	<!--
+		설		명	: 공정 부하 기준 정보 - 담당자 저장전 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-19 
+		수  정   이  력	:  
+	-->
+	<select id="selectProdDefList" parameterType="map" resultType="hashmap">
+			/*selectProdDefList - 공정 부하 기준 정보 - 담당자 저장전 조회*/
+				SELECT 	PRODUCTDEFID
+				            , PRODUCTDEFVERSION 				AS PRODUCTDEFVERSION   -- 21.04.30 REV 추가
+				            , MAX(PRODUCTCLASSID)    			AS PRODUCTCLASSID
+				            , MAX(TRIM(PRODUCTDEFNAME))  	AS PRODUCTDEFNAME
+                            , MAX(LOADOWNER)         			AS OWNER
+                            , MAX(ISLOADMNG)         			AS ISLOADMNG
+                            , MAX(VALIDSTATELOAD)         	AS VALIDSTATELOAD 		-- 유효여부_공정부하 (21.04.27)
+                            
+                            , MAX(ENTERPRISEID)         			AS ENTERPRISEID 		--  (21.05.17) - 이력저장시 등록 되도록 내용 추가
+                            , MAX(PLANTID)         				AS PLANTID 			
+                            , MAX(PRODUCTDEFTYPE)        		AS PRODUCTDEFTYPE 		
+                            , MAX(PRODUCTIONTYPE)        		AS PRODUCTIONTYPE 		
+                            , MAX(PRODUCTSHAPE)         		AS PRODUCTSHAPE 		
+                            , MAX(UNIT)         					AS UNIT
+                            , MAX(LAYER)         					AS LAYER 	
+                            , MAX(MATERIALCLASS)         		AS MATERIALCLASS 	
+                            , MAX(MATERIALSEQUENCE)     	AS MATERIALSEQUENCE
+                             		
+				 FROM 	BAS_PRODUCTDEFINITION
+				 WHERE 	1 = 1
+				   AND 	PRODUCTDEFID						= #{PRODUCTDEFID}
+				   AND 	PRODUCTDEFVERSION				= #{PRODUCTDEFVERSION}
+				   AND	VALIDSTATE 						= 'Valid'
+				   GROUP BY PRODUCTDEFID
+                          --, TRIM(PRODUCTDEFNAME)
+                          , PRODUCTDEFVERSION     -- 21.04.30 REV 추가
+				
+	</select>
+	
+	
+	<!--
+		설		명	: 담당자 변경 내용 저장
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-19 
+		수  정   이  력	:
+	-->
+    <update id="updateProdDef" parameterType="map">
+			
+			 UPDATE BAS_PRODUCTDEFINITION  /*updateProdDef - 공정 부하 기준 정보 - 담당자 저장(수정)*/
+			SET  LOADOWNER					= #{OWNER} 
+			    , ISLOADMNG					= #{ISLOADMNG} 
+				, MODIFIER						= #{MODIFIER} 
+				, MODIFIEDTIME					= SYSDATE
+				, LASTTXNHISTKEY 			= #{LASTTXNHISTKEY}
+				, VALIDSTATELOAD 			= #{VALIDSTATELOAD}		-- 유효여부_공정부하 (21.04.27)
+				, PRODUCTDEFCLASSGROUPNAME	= #{PRODUCTDEFCLASSGROUPNAME}	-- (21.05.17) 추가  품목그룹
+			WHERE PRODUCTDEFID 			= #{PRODUCTDEFID}			-- 21.04.24 품목코드에 해당하는 모든번저포함 업데이트
+			   AND PRODUCTDEFVERSION 	= #{PRODUCTDEFVERSION}	-- 21.04.30 REV 추가
+			  
+				
+    </update>
+    
+    
+    <!--
+		설		명	: 공정 부하 기준 정보 - [표준공정 맵핑] - 표준공정팝업
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-19 
+		수  정   이  력	:  
+	-->
+	<select id="selectProcessSegmentList" parameterType="map" resultType="hashmap">
+			/*selectProcessSegmentList - 공정 부하 기준 정보 - [표준공정 맵핑] - 표준공정팝업*/
+				
+				-- 
+				-- Id :GetProcessSegmentList
+				-- Version : 10002
+				
+				SELECT	PS.PROCESSSEGMENTID
+					,	NVL(D1.DICTIONARYNAME, PS.PROCESSSEGMENTNAME) 			AS PROCESSSEGMENTNAME		
+					,	NVL(D2.DICTIONARYNAME, MPS.PROCESSSEGMENTCLASSNAME)	AS PROCESSSEGMENTCLASSNAME_MIDDLE		
+					,	NVL(D3.DICTIONARYNAME, TPS.PROCESSSEGMENTCLASSNAME)	AS PROCESSSEGMENTCLASSNAME_TOP
+					,	PS.PROCESSSEGMENTID											AS P_PROCESSSEGMENTID
+					,   '0' AS CHK
+				
+				
+				FROM	BAS_PROCESSSEGMENT			PS
+				INNER JOIN BAS_PROCESSSEGMENTCLASS	MPS		ON	PS.PROCESSSEGMENTCLASSID = MPS.PROCESSSEGMENTCLASSID
+															AND MPS.PROCESSSEGMENTCLASSTYPE = #{PROCESSSEGMENTCLASSTYPE}
+														
+				INNER JOIN BAS_PROCESSSEGMENTCLASS	TPS		ON	MPS.PARENTPROCESSSEGMENTCLASSID = TPS.PROCESSSEGMENTCLASSID
+															AND TPS.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+				LEFT OUTER JOIN CMD_DICTIONARY		D1		ON	PS.PROCESSSEGMENTNAME = D1.DICTIONARYID
+															AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN CMD_DICTIONARY		D2		ON	MPS.PROCESSSEGMENTCLASSNAME = D2.DICTIONARYID
+															AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN CMD_DICTIONARY		D3		ON	TPS.PROCESSSEGMENTCLASSNAME = D3.DICTIONARYID
+															AND D3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				WHERE	1 = 1
+				<if test="PROCESSSEGMENTCLASSID_MIDDLE != null and PROCESSSEGMENTCLASSID_MIDDLE !='' and !(PROCESSSEGMENTCLASSID_MIDDLE eq '*'.toString()) ">
+					AND		PS.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID_MIDDLE}
+				</if>
+				<if test="PROCESSSEGMENT != null and PROCESSSEGMENT !='' and !(PROCESSSEGMENT eq '*'.toString()) ">
+				
+					AND		( PS.PROCESSSEGMENTID LIKE  '%' || UPPER(#{PROCESSSEGMENT})|| '%'
+					OR		  PS.PROCESSSEGMENTNAME LIKE  '%' || UPPER(#{PROCESSSEGMENT})|| '%'
+					OR		  D1.DICTIONARYNAME LIKE  '%' || UPPER(#{PROCESSSEGMENT})|| '%')
+				</if>
+				<if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND		EXISTS
+							(
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PROCESSSEGMENTID}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	PS.PROCESSSEGMENTID = LMP.VALUE
+							)
+				</if>
+				<if test="P_PROCESSSEGMENTCLASSID_TOP != null and P_PROCESSSEGMENTCLASSID_TOP !='' and !(P_PROCESSSEGMENTCLASSID_TOP eq '*'.toString()) ">
+					 AND   MPS.PARENTPROCESSSEGMENTCLASSID = #{P_PROCESSSEGMENTCLASSID_TOP}
+				</if>						
+				<if test="P_PROCESSSEGMENTCLASSID_MIDDLE != null and P_PROCESSSEGMENTCLASSID_MIDDLE !='' and !(P_PROCESSSEGMENTCLASSID_MIDDLE eq '*'.toString()) ">
+					AND   PS.PROCESSSEGMENTCLASSID = #{P_PROCESSSEGMENTCLASSID_MIDDLE}
+				</if>	
+				ORDER BY PS.PROCESSSEGMENTID ASC
+	</select>
+    
+    
+    <!--
+		설		명	: 공정 부하 기준 정보 - [표준공정 맵핑] - 표준공정팝업 - 중공정
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-19 
+		수  정   이  력	:  
+	-->
+	<select id="selectProcessSegmentClassByTypeList" parameterType="map" resultType="hashmap">
+			/*selectProcessSegmentClassByTypeList - 공정 부하 기준 정보 - [표준공정 맵핑] - 표준공정팝업 - 중공정*/
+				--
+				-- Id : GetProcessSegmentClassByType
+				-- Version : 10001
+				
+				SELECT 
+						PSC.PROCESSSEGMENTCLASSID		
+					,	PSC.PROCESSSEGMENTCLASSID || '_' || NVL(D.DICTIONARYNAME, PSC.PROCESSSEGMENTCLASSNAME) AS PROCESSSEGMENTCLASSNAME 			
+		
+				FROM 	BAS_PROCESSSEGMENTCLASS		PSC
+				LEFT OUTER JOIN CMD_DICTIONARY		D	ON	PSC.PROCESSSEGMENTCLASSNAME = D.DICTIONARYID
+														AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				WHERE 	1 = 1
+				
+				<if test="PROCESSSEGMENTCLASSTYPE != null and PROCESSSEGMENTCLASSTYPE !='' and !(PROCESSSEGMENTCLASSTYPE eq '*'.toString()) ">
+					AND		PSC.PROCESSSEGMENTCLASSTYPE = #{PROCESSSEGMENTCLASSTYPE}
+					<if test="PROCESSSEGMENTCLASSTYPE != null and PROCESSSEGMENTCLASSTYPE !='' and (PROCESSSEGMENTCLASSTYPE eq 'TopProcessSegmentClass'.toString()) ">
+						AND		NVL(PSC.PARENTPROCESSSEGMENTCLASSID, ' ') = ' '
+					</if>
+					<if test="PROCESSSEGMENTCLASSTYPE != null and PROCESSSEGMENTCLASSTYPE !='' and (PROCESSSEGMENTCLASSTYPE eq 'MiddleProcessSegmentClass'.toString()) ">
+						AND	NOT	NVL(PSC.PARENTPROCESSSEGMENTCLASSID, ' ') = ' '
+					</if>				
+				</if>
+				<if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' and !(PROCESSSEGMENTCLASSID eq '*'.toString()) ">
+				
+					AND ( PSC.PROCESSSEGMENTCLASSID LIKE  '%' || UPPER(#{PROCESSSEGMENTCLASSID})|| '%'
+					OR	  PSC.PROCESSSEGMENTCLASSNAME LIKE  '%' || UPPER(#{PROCESSSEGMENTCLASSID})|| '%'
+					OR	  D.DICTIONARYNAME LIKE  '%' || UPPER(#{PROCESSSEGMENTCLASSID})|| '%' )
+				</if>
+				<if test="P_PROCESSSEGMENTCLASSID_TOP != null and P_PROCESSSEGMENTCLASSID_TOP !='' and !(P_PROCESSSEGMENTCLASSID_TOP eq '*'.toString()) ">
+					AND		PSC.PARENTPROCESSSEGMENTCLASSID = #{P_PROCESSSEGMENTCLASSID_TOP}
+				</if>
+				
+				AND 	PSC.VALIDSTATE = 'Valid'
+				ORDER BY PSC.PROCESSSEGMENTCLASSID ASC
+	</select>
+	
+	
+	<!--
+		설		명	: 공정 부하 기준 정보 - [표준공정 맵핑] - 표준공정List 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-20 
+		수  정   이  력	:  
+	-->
+	<select id="selectLoadSegmentRelList" parameterType="map" resultType="hashmap">
+			/*selectLoadSegmentRelList - 공정 부하 기준 정보 - [표준공정 맵핑] - 표준공정List 조회*/
+				
+				--
+				-- Id : selectLoadSegmentRelList
+				-- Version : 10001
+				
+				SELECT	PS.PROCESSSEGMENTID
+					,	D.DICTIONARYNAME			AS PROCESSSEGMENTNAME
+					,	LSR.LOADTOPSEGMENTCLASSID
+					,	D1.DICTIONARYNAME			AS LOADTOPSEGMENTCLASSNAME
+					,	LSR.LOADMIDDLESEGMENTCLASSID
+					,	D2.DICTIONARYNAME			AS LOADMIDDLESEGMENTCLASSNAME
+					,	LSR.LOADSMALLSEGMENTCLASSID
+					,	D3.DICTIONARYNAME			AS LOADSMALLSEGMENTCLASSNAME
+					,	LSR.DESCRIPTION
+					,	U1.USER_NM					AS CREATOR
+					,	TO_CHAR(LSR.CREATEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS CREATEDTIME
+					,	U2.USER_NM					AS MODIFIER
+					,	TO_CHAR(LSR.MODIFIEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS MODIFIEDTIME
+					
+					,	LSR.VALIDSTATE
+					,   '' AS X_T_BTN
+                    ,   '' AS X_M_BTN
+                    ,   '' AS X_S_BTN
+                    ,   '0' AS CHK
+                    , '' AS ENTERPRISEID
+                    , '' AS PLANTID
+                    
+				FROM BAS_PROCESSSEGMENT				PS
+				LEFT OUTER JOIN CMD_DICTIONARY		D	ON	PS.PROCESSSEGMENTNAME = D.DICTIONARYID
+														AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN BAS_LOADSEGMENTREL	LSR ON	PS.PROCESSSEGMENTID = LSR.PROCESSSEGMENTID
+														<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+														AND		LSR.VALIDSTATE = #{P_VALIDSTATE}
+														</if>
+				LEFT OUTER JOIN BAS_LOADSEGMENTCLASS	L1	ON	LSR.LOADTOPSEGMENTCLASSID = L1.LOADSEGMENTCLASSID
+				LEFT OUTER JOIN CMD_DICTIONARY		D1	ON	L1.LOADSEGMENTCLASSNAME = D1.DICTIONARYID
+														AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN BAS_LOADSEGMENTCLASS L2	ON	LSR.LOADMIDDLESEGMENTCLASSID = L2.LOADSEGMENTCLASSID
+				LEFT OUTER JOIN CMD_DICTIONARY		D2	ON	L2.LOADSEGMENTCLASSNAME = D2.DICTIONARYID
+														AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN BAS_LOADSEGMENTCLASS L3	ON	LSR.LOADSMALLSEGMENTCLASSID = L3.LOADSEGMENTCLASSID
+				LEFT OUTER JOIN CMD_DICTIONARY		D3	ON	L3.LOADSEGMENTCLASSNAME = D3.DICTIONARYID
+														AND D3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN CMD_USERS				U1	ON	LSR.CREATOR = U1.USER_ID
+				LEFT OUTER JOIN CMD_USERS				U2  ON	LSR.MODIFIER = U2.USER_ID
+				WHERE	1 = 1
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND EXISTS (
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PROCESSSEGMENTID}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	PS.PROCESSSEGMENTID = LMP.VALUE
+								
+								)
+				</if>
+				<if test="P_NOINPUT != null and P_NOINPUT !='' and !(P_NOINPUT eq '*'.toString()) ">
+					
+					<if test="(P_NOINPUT eq 'Y'.toString()) ">
+						AND 	(NVL(LSR.LOADTOPSEGMENTCLASSID, ' ') = ' '
+						OR		 NVL(LSR.LOADMIDDLESEGMENTCLASSID, ' ') = ' '
+						OR		 NVL(LSR.LOADSMALLSEGMENTCLASSID, ' ') = ' ')
+					</if>	
+					<if test="(P_NOINPUT eq 'N'.toString()) ">
+						AND 	 NVL(LSR.LOADTOPSEGMENTCLASSID, ' ') != ' '
+						AND		 NVL(LSR.LOADMIDDLESEGMENTCLASSID, ' ') != ' '
+						AND		 NVL(LSR.LOADSMALLSEGMENTCLASSID, ' ') != ' '
+					</if>
+				</if>
+				
+				ORDER BY PS.PROCESSSEGMENTID ASC
+				
+	</select>
+	
+	
+	<!--
+		설		명	: 공정 부하 기준 정보 - 표준공정 (기존 내역 조회)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-20 
+		수  정   이  력	:  
+	-->
+	<select id="selectSegmentRelList" parameterType="map" resultType="hashmap">
+			/*selectSegmentRelList - 공정 부하 기준 정보 - 표준공정 (기존 내역 조회)*/
+				SELECT 
+					  PROCESSSEGMENTID
+					, LOADTOPSEGMENTCLASSID
+					, LOADMIDDLESEGMENTCLASSID
+					, LOADSMALLSEGMENTCLASSID
+					, ENTERPRISEID
+					, PLANTID
+					, DESCRIPTION
+					, CREATOR
+					, CREATEDTIME
+					, MODIFIER
+					, MODIFIEDTIME
+					, LASTTXNHISTKEY
+					, LASTTXNID
+					, LASTTXNUSER
+					, LASTTXNTIME
+					, LASTTXNCOMMENT
+					, VALIDSTATE
+
+				  FROM BAS_LOADSEGMENTREL   --표준공정 공정부하공정 그룹 매핑
+				 WHERE 1 = 1
+				   AND 	PROCESSSEGMENTID		= #{PROCESSSEGMENTID}
+	</select>
+	
+	<!--
+		설		명	: 공정 부하 기준 정보 - 표준공정 신규등록
+		생	성	자	: 김진현 
+		생	성	일	: 2020-04-20 
+		수  정   이  력	: 
+	-->
+	<insert id="insertSegmentRel" parameterType="map">
+	    /*insertSegmentRel - 공정 부하 기준 정보 - 표준공정 신규등록*/
+		INSERT INTO BAS_LOADSEGMENTREL( 
+			  PROCESSSEGMENTID
+			, LOADTOPSEGMENTCLASSID
+			, LOADMIDDLESEGMENTCLASSID
+			, LOADSMALLSEGMENTCLASSID
+			, ENTERPRISEID
+			, PLANTID
+			, DESCRIPTION
+			, CREATOR
+			, CREATEDTIME
+			, MODIFIER
+			, MODIFIEDTIME
+			, LASTTXNHISTKEY
+			, LASTTXNID
+			, LASTTXNUSER
+			, LASTTXNTIME
+			, LASTTXNCOMMENT
+			, VALIDSTATE
+			) 
+	    VALUES( 
+	         #{PROCESSSEGMENTID}  
+	        ,#{LOADTOPSEGMENTCLASSID}  
+	        ,#{LOADMIDDLESEGMENTCLASSID}  
+	        ,#{LOADSMALLSEGMENTCLASSID}  			
+	        ,#{ENTERPRISEID}
+	        ,#{PLANTID}
+	        ,#{DESCRIPTION} 
+			,#{CREATOR}
+            ,SYSDATE
+            ,#{MODIFIER}
+            ,SYSDATE
+			,#{LASTTXNHISTKEY}
+			,#{TXNID}
+            ,#{CREATOR}
+            ,SYSDATE
+            ,NULL
+			,#{VALIDSTATE}
+			)
+    </insert>
+    
+    <!--
+		설		명	: 공정 부하 기준 정보 - 표준공정 수정
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-20 
+		수  정   이  력	:
+	-->
+    <update id="updateSegmentRel" parameterType="map">
+			
+			 UPDATE BAS_LOADSEGMENTREL  /*updateSegmentRel - 공정 부하 기준 정보 - 표준공정 수정*/
+			SET   LOADTOPSEGMENTCLASSID		= #{LOADTOPSEGMENTCLASSID} 
+				, LOADMIDDLESEGMENTCLASSID	= #{LOADMIDDLESEGMENTCLASSID} 
+				, LOADSMALLSEGMENTCLASSID	= #{LOADSMALLSEGMENTCLASSID} 
+				, DESCRIPTION				= #{DESCRIPTION} 
+			    , VALIDSTATE				= #{VALIDSTATE} 
+				, MODIFIER					= #{MODIFIER} 
+				, MODIFIEDTIME				= SYSDATE
+				, LASTTXNHISTKEY 			= #{LASTTXNHISTKEY}
+			WHERE PROCESSSEGMENTID 			= #{PROCESSSEGMENTID}
+    </update>
+	
+	
+	<!--
+		설		명	: 공정 부하 기준 정보 - [부하량 기준정보] - 부하량 기준정보 List 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-20 
+		수  정   이  력	:  
+	-->
+	<select id="selectProductSegmentMappingList" parameterType="map" resultType="hashmap">
+			/*selectProductSegmentMappingList - 공정 부하 기준 정보 - [부하량 기준정보] - 부하량 기준정보 List 조회 */
+				--
+				-- Id : SelectProductSegmentMappingList
+				-- Version : 10001
+				
+				SELECT  PD.PRODUCTDEFID
+					,   PD.PRODUCTDEFVERSION				
+				    ,   PD.PRODUCTDEFNAME
+				    ,   PP.USERSEQUENCE
+				    ,	PP.PLANTID							AS PROCESSPATHPLANTID
+				    ,   PS.PROCESSSEGMENTID
+				    ,   D4.DICTIONARYNAME                   AS PROCESSSEGMENTNAME
+				    ,   U1.USER_NM                         	AS OWNER
+				    ,   NVL(LPS.TOPLOADSEGMENTCLASSID, LSR.LOADTOPSEGMENTCLASSID)      AS LOADTOPSEGMENTCLASSID
+				    ,   NVL(D1.DICTIONARYNAME, D11.DICTIONARYNAME)                     AS LOADTOPSEGMENTCLASSNAME
+				    ,   NVL(D1.DICTIONARYNAME, D11.DICTIONARYNAME)                     AS LOADTOPSEGMENTCLASSNAME_COPY
+				    ,   NVL(LPS.MIDDLESEGMENTCLASSID, LSR.LOADMIDDLESEGMENTCLASSID)    AS LOADMIDDLESEGMENTCLASSID
+				    ,   NVL(D2.DICTIONARYNAME, D22.DICTIONARYNAME)                     AS LOADMIDDLESEGMENTCLASSNAME
+				    ,   NVL(D2.DICTIONARYNAME, D22.DICTIONARYNAME)                     AS LOADMIDDLESEGMENTCLASSNAME_COPY
+				    ,   NVL(LPS.SMALLSEGMENTCLASSID, LSR.LOADSMALLSEGMENTCLASSID)      AS LOADSMALLSEGMENTCLASSID
+				    ,   NVL(D3.DICTIONARYNAME, D33.DICTIONARYNAME)                     AS LOADSMALLSEGMENTCLASSNAME
+				    ,   NVL(D3.DICTIONARYNAME, D33.DICTIONARYNAME)                     AS LOADSMALLSEGMENTCLASSNAME_COPY
+				    ,   NVL(LPS.OUTSOUCINGRATIO, 0)    		AS OUTSOUCINGRATIO
+				    ,   NVL(LPS.TARGETPANELQTY, 0)     		AS TARGETPANELQTY
+				    ,   NVL(LPS.TARGETSEGMENTQTY, 0)   		AS TARGETSEGMENTQTY
+				    ,   LPS.DESCRIPTION
+				    ,   LPS.ENTERPRISEID
+				    ,   LPS.PLANTID
+				    ,   U2.USER_NM                         	AS CREATOR
+				    ,	TO_CHAR(LPS.CREATEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS CREATEDTIME
+				    ,   U3.USER_NM                         	AS MODIFIER
+				    ,	TO_CHAR(LPS.MODIFIEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS MODIFIEDTIME
+				    
+				    ,   LPS.VALIDSTATE
+				    
+				    ,   '' AS X_T_BTN
+                    ,   '' AS X_M_BTN
+                    ,   '' AS X_S_BTN
+                    
+                    ,   '' AS CHK			-- 21.04.26 체크 박스 추가
+				    
+				FROM    BAS_PRODUCTDEFINITION                PD
+				INNER JOIN BAS_PROCESSPATH                   PP      ON PD.PRODUCTDEFID = PP.PROCESSDEFID				-- (21.06.03) PROCESSDEFID 			-> PRODUCTDEFID (변경))
+				                                                    AND PD.PRODUCTDEFVERSION = PP.PROCESSDEFVERSION			-- (21.06.03) PROCESSDEFVERSION 	-> PRODUCTDEFVERSION(변경)
+				INNER JOIN BAS_PROCESSSEGMENT                PS      ON  PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+				                                                    AND PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN BAS_LOADPRODUCTSEGMENT       LPS     ON  PD.PRODUCTDEFID = LPS.PRODUCTDEFID
+				                                                    AND PD.PRODUCTDEFVERSION = LPS.PRODUCTDEFVERSION 
+				                                                    AND PS.PROCESSSEGMENTID = LPS.PROCESSSEGMENTID				                                                    
+				                                                    
+																	<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+				                                                    	AND		LPS.VALIDSTATE = #{P_VALIDSTATE}
+				                                                   	</if>				                                                    
+                                                                    
+				LEFT OUTER JOIN BAS_LOADSEGMENTREL           LSR     ON  PS.PROCESSSEGMENTID = LSR.PROCESSSEGMENTID
+				                                                    AND LSR.VALIDSTATE = 'Valid'
+				LEFT OUTER JOIN BAS_LOADSEGMENTCLASS         LSC1    ON  LPS.TOPLOADSEGMENTCLASSID = LSC1.LOADSEGMENTCLASSID
+				                                                    AND LSC1.LOADSEGMENTCLASSTYPE = 'TopLoadSegmentClass'
+				LEFT OUTER JOIN CMD_DICTIONARY               D1      ON  LSC1.LOADSEGMENTCLASSNAME = D1.DICTIONARYID
+				                                                    AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN BAS_LOADSEGMENTCLASS         LSC11   ON  LSR.LOADTOPSEGMENTCLASSID = LSC11.LOADSEGMENTCLASSID
+				                                                    AND LSC11.LOADSEGMENTCLASSTYPE = 'TopLoadSegmentClass'
+				LEFT OUTER JOIN CMD_DICTIONARY               D11     ON  LSC11.LOADSEGMENTCLASSNAME = D11.DICTIONARYID
+				                                                    AND D11.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN BAS_LOADSEGMENTCLASS         LSC2    ON  LPS.MIDDLESEGMENTCLASSID = LSC2.LOADSEGMENTCLASSID
+				                                                    AND LSC2.LOADSEGMENTCLASSTYPE = 'MiddleLoadSegmentClass'
+				LEFT OUTER JOIN CMD_DICTIONARY               D2      ON  LSC2.LOADSEGMENTCLASSNAME = D2.DICTIONARYID
+				                                                    AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN BAS_LOADSEGMENTCLASS         LSC22   ON  LSR.LOADMIDDLESEGMENTCLASSID = LSC22.LOADSEGMENTCLASSID
+				                                                    AND LSC22.LOADSEGMENTCLASSTYPE = 'MiddleLoadSegmentClass'
+				LEFT OUTER JOIN CMD_DICTIONARY               D22     ON  LSC22.LOADSEGMENTCLASSNAME = D22.DICTIONARYID
+				                                                    AND D22.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN BAS_LOADSEGMENTCLASS         LSC3    ON  LPS.SMALLSEGMENTCLASSID = LSC3.LOADSEGMENTCLASSID
+				                                                    AND LSC3.LOADSEGMENTCLASSTYPE = 'SmallLoadSegmentClass'
+				LEFT OUTER JOIN CMD_DICTIONARY               D3      ON  LSC3.LOADSEGMENTCLASSNAME = D3.DICTIONARYID
+				                                                    AND D3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN BAS_LOADSEGMENTCLASS         LSC33   ON  LSR.LOADSMALLSEGMENTCLASSID = LSC33.LOADSEGMENTCLASSID
+				                                                    AND LSC33.LOADSEGMENTCLASSTYPE = 'SmallLoadSegmentClass'
+				LEFT OUTER JOIN CMD_DICTIONARY               D33     ON  LSC33.LOADSEGMENTCLASSNAME = D33.DICTIONARYID
+				                                                    AND D33.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN CMD_DICTIONARY               D4      ON  PS.PROCESSSEGMENTNAME = D4.DICTIONARYID
+				                                                    AND D4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN CMD_USERS                     U1      ON  PD.LOADOWNER = U1.USER_ID
+				LEFT OUTER JOIN CMD_USERS                     U2      ON  LPS.CREATOR  = U2.USER_ID
+				LEFT OUTER JOIN CMD_USERS                     U3      ON  LPS.MODIFIER = U3.USER_ID
+				WHERE	1 = 1
+				AND		NVL(PD.ISLOADMNG, 'N') = 'Y'
+				
+				
+				
+				AND		NVL(PD.VALIDSTATELOAD, 'Invalid') = 'Valid'		-- 21.04.27 유효여부_공정부하 추가(담당자 Tab 설정 정보)
+				
+				-- (21.08.10) ROUTING 의 유효 한 것만 조회
+                AND 		PP.VALIDSTATE = 'Valid'
+				
+				<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+					AND		LPS.VALIDSTATE = 	#{P_VALIDSTATE}	-- 21.05.03 필터의 유효 여부 설정
+                </if>
+				AND		PD.PLANTID = #{P_PLANTID} 
+                
+				<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' and !(P_PRODUCTDEFID eq '*'.toString()) ">
+					AND EXISTS (
+								SELECT	1
+								FROM	(
+										 SELECT  VALUE
+											     ,  VALUE2
+											  FROM  UFN_SELECTSTRINGTOSPLIT2(#{P_PRODUCTDEFID}, ',', '|')  
+										) LMP
+								WHERE	PD.PRODUCTDEFID 		= LMP.VALUE
+								   AND   PD.PRODUCTDEFVERSION = LMP.VALUE2			-- 21.05.24 Rev도 추가 조회시
+								
+						   		)
+				</if>
+				<if test="P_PRODUCTIONTYPE != null and P_PRODUCTIONTYPE !='' and !(P_PRODUCTIONTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTIONTYPE = #{P_PRODUCTIONTYPE} 
+				</if>
+				<if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND EXISTS (
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PROCESSSEGMENTID}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	PS.PROCESSSEGMENTID = LMP.VALUE
+						   		)
+				</if>
+				
+				<if test="P_NOINPUT != null and P_NOINPUT !='' and !(P_NOINPUT eq '*'.toString()) ">
+					<if test="P_NOINPUT != null and P_NOINPUT !='' and (P_NOINPUT eq 'Y'.toString()) ">
+						AND 	(
+								 NVL(LPS.TARGETPANELQTY, '0') = '0'
+						OR		 NVL(LPS.TARGETSEGMENTQTY, '0') = '0')
+					</if>
+					<if test="P_NOINPUT != null and P_NOINPUT !='' and (P_NOINPUT eq 'N'.toString()) ">
+						AND		 NVL(LPS.TARGETPANELQTY, '0') != '0'
+						AND		 NVL(LPS.TARGETSEGMENTQTY, '0') != '0'
+					</if>
+				</if>
+				
+				
+				--담당자(21.06.30)  추가
+				<if test="USERID != null and USERID !='' and !(USERID eq '*'.toString()) ">
+					AND EXISTS (
+								SELECT	1
+									FROM	(SELECT DATA AS VALUE 
+											  FROM TABLE(CAST(FN_TO_ROWS(#{USERID}) AS TP_SIMPLE_TABLE)) 
+											) LMP
+									WHERE	PD.LOADOWNER  = LMP.VALUE		-- OWNER ->LOADOWNER 변경 
+							   )
+				</if>
+				
+				--제품구분
+				<if test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' and !(P_PRODUCTDEFTYPE eq '*'.toString()) ">
+					AND 	PD.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE} 
+				</if>
+				ORDER BY PD.PRODUCTDEFID,PD.PRODUCTDEFVERSION, PP.PATHSEQUENCE  
+				
+				
+				
+	</select>
+	
+	
+	
+	<!--
+		설		명	: 공정 부하 기준 정보 - 부하량 기준정보 신규등록
+		생	성	자	: 김진현 
+		생	성	일	: 2020-04-20 
+		수  정   이  력	: 
+	-->
+	<insert id="insertLoadProdSegment" parameterType="map">
+	    /*insertLoadProdSegment - 공정 부하 기준 정보 - 부하량 기준정보 신규등록*/
+		INSERT INTO BAS_LOADPRODUCTSEGMENT( 
+			  PRODUCTDEFID
+			, PRODUCTDEFVERSION
+			, PROCESSSEGMENTID
+			, OUTSOUCINGRATIO
+			, TARGETPANELQTY
+			, TOPLOADSEGMENTCLASSID
+			, MIDDLESEGMENTCLASSID
+			, SMALLSEGMENTCLASSID
+			, TARGETSEGMENTQTY
+			, ENTERPRISEID
+			, PLANTID
+			, DESCRIPTION
+			, CREATOR
+			, CREATEDTIME
+			, MODIFIER
+			, MODIFIEDTIME
+			, LASTTXNHISTKEY
+			, LASTTXNID
+			, LASTTXNUSER
+			, LASTTXNTIME
+			, LASTTXNCOMMENT
+			, VALIDSTATE
+			) 
+	    VALUES( 
+	         #{PRODUCTDEFID}  
+	        ,#{PRODUCTDEFVERSION}  
+	        ,#{PROCESSSEGMENTID}  
+	        ,#{OUTSOUCINGRATIO}  			
+	        ,#{TARGETPANELQTY}
+	        ,#{LOADTOPSEGMENTCLASSID}
+	        ,#{LOADMIDDLESEGMENTCLASSID} 
+			,#{LOADSMALLSEGMENTCLASSID}
+			,#{TARGETSEGMENTQTY}
+			,#{ENTERPRISEID}
+			,#{PLANTID}			
+			,#{DESCRIPTION}
+			,#{CREATOR}
+            ,SYSDATE
+            ,#{MODIFIER}
+            ,SYSDATE
+			,#{LASTTXNHISTKEY}
+			,#{TXNID}
+            ,#{CREATOR}
+            ,SYSDATE
+            ,NULL
+			,#{VALIDSTATE}
+			)
+    </insert>
+    
+    <!--
+		설		명	: 공정 부하 기준 정보 - 부하량 기준정보 수정
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-20 
+		수  정   이  력	:
+	-->
+    <update id="updateLoadProdSegment" parameterType="map">
+			
+			 UPDATE BAS_LOADPRODUCTSEGMENT  /*updateLoadProdSegment - 공정 부하 기준 정보 - 부하량 기준정보 수정*/
+			SET   TOPLOADSEGMENTCLASSID		= #{LOADTOPSEGMENTCLASSID} 
+				, MIDDLESEGMENTCLASSID			= #{LOADMIDDLESEGMENTCLASSID} 
+				, SMALLSEGMENTCLASSID			= #{LOADSMALLSEGMENTCLASSID} 
+				, DESCRIPTION							= #{DESCRIPTION} 
+			    , VALIDSTATE							= #{VALIDSTATE} 
+				, TARGETPANELQTY					= #{TARGETPANELQTY} 
+				, TARGETSEGMENTQTY				= #{TARGETSEGMENTQTY} 
+				, MODIFIER								= #{MODIFIER} 
+				, MODIFIEDTIME							= SYSDATE
+				, LASTTXNHISTKEY 					= #{LASTTXNHISTKEY}
+			WHERE PRODUCTDEFID 					= #{PRODUCTDEFID}
+			  AND PRODUCTDEFVERSION			= #{PRODUCTDEFVERSION}
+			  AND PROCESSSEGMENTID				= #{PROCESSSEGMENTID}
+    </update>
+    
+    
+    <!--
+		설		명	: 공정 부하 기준 정보 - 부하량 기준 정보 (기존 내역 조회)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-20 
+		수  정   이  력	:  
+	-->
+	<select id="selectLoadProdSegmentList" parameterType="map" resultType="hashmap">
+			/*selectLoadProdSegmentList - 공정 부하 기준 정보 - 부하량 기준 정보 (기존 내역 조회)*/
+				SELECT 
+					  PRODUCTDEFID
+					, PRODUCTDEFVERSION
+					, PROCESSSEGMENTID
+					, OUTSOUCINGRATIO
+					, TARGETPANELQTY
+					, TOPLOADSEGMENTCLASSID	AS LOADTOPSEGMENTCLASSID
+					, MIDDLESEGMENTCLASSID	    AS LOADMIDDLESEGMENTCLASSID
+					, SMALLSEGMENTCLASSID	    AS LOADSMALLSEGMENTCLASSID
+					, TARGETSEGMENTQTY
+					, ENTERPRISEID
+					, PLANTID
+					, DESCRIPTION
+					, CREATOR
+					, CREATEDTIME
+					, MODIFIER
+					, MODIFIEDTIME
+					, LASTTXNHISTKEY
+					, LASTTXNID
+					, LASTTXNUSER
+					, LASTTXNTIME
+					, LASTTXNCOMMENT
+					, VALIDSTATE
+
+				  FROM BAS_LOADPRODUCTSEGMENT   --표준공정 공정부하공정 그룹 매핑
+				 WHERE 1 = 1
+				   AND 	PRODUCTDEFID 			= #{PRODUCTDEFID}
+				   AND PRODUCTDEFVERSION		= #{PRODUCTDEFVERSION}
+				   AND PROCESSSEGMENTID			= #{PROCESSSEGMENTID}
+	</select>
+	
+	
+	<!--
+		설		명	: 대/중/소 공정부하 그룹조회(복사 붙여넣기시 코드 찾기 위한 용도)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-23 
+		수  정   이  력	:
+	-->
+	<select id="selectLoadSegmentGroupList" parameterType="map" resultType="hashmap">
+				/*selectLoadSegmentGroupList - 대/중/소 공정부하 그룹조회(복사 붙여넣기시 코드 찾기 위한 용도) */
+				
+				SELECT	WSC.LOADSEGMENTCLASSID
+						,	D1.DICTIONARYNAME		    AS LOADSEGMENTCLASSNAME
+						, 	WSC.LOADSEGMENTCLASSTYPE
+				FROM	BAS_LOADSEGMENTCLASS		WSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	
+				ON	WSC.LOADSEGMENTCLASSNAME = D1.DICTIONARYID
+				AND D1.LANGUAGETYPE 								= #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+				WHERE	1 = 1
+				AND		WSC.ENTERPRISEID    						= #{ENTERPRISEID}
+				AND		WSC.PLANTID         						= #{PLANTID}
+				
+				AND		WSC.VALIDSTATE = 'Valid'
+	</select>
+    
+    <!--
+		설		명	: 부하 기분 대/중/소 ID 구분자 이외의 값 숫자인지 판단
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-29 
+		수  정   이  력	:
+	-->
+    <select id="selectChkSeparator" parameterType="map" resultType="hashmap">
+			/* selectChkSeparator - 부하 기준 대/중/소 ID 구분자 이외에 숫자인지 판다. */
+			
+			SELECT  
+				CASE WHEN		-- [대/중/소 앞에 필수 입력되어야 하는 값이 존재 하는지 체크]
+	                    (
+	                        INSTR(UPPER(TRIM(#{LOADSEGMENTCLASSID})), 
+	                        CASE 	WHEN #{LOADSEGMENTCLASSTYPE} = 'TopLoadSegmentClass'
+	                                THEN 	'TOP'
+	                                WHEN #{LOADSEGMENTCLASSTYPE} = 'MiddleLoadSegmentClass'
+	                                THEN 	'MIDDLE'
+	                                ELSE 	'SMALL'
+	                                END
+	                        ,1,1)
+	                    ) = 0
+                    THEN 
+                    	-1
+                    ELSE			-- [대/중/소 앞 필수 입력값 이외에 숫자만 있는지 판단]
+						to_number(  
+						REGEXP_INSTR(SUBSTR( UPPER(TRIM(#{LOADSEGMENTCLASSID})), INSTR(UPPER(TRIM(#{LOADSEGMENTCLASSID})), 
+		                CASE 	WHEN #{LOADSEGMENTCLASSTYPE} = 'TopLoadSegmentClass'
+		                     	THEN 	'TOP'
+		                     	WHEN #{LOADSEGMENTCLASSTYPE} = 'MiddleLoadSegmentClass'
+		                     	THEN 	'MIDDLE'
+		                     	ELSE 	'SMALL'
+		                     	END
+		                ,1,1)+(
+                                CASE 	WHEN 	#{LOADSEGMENTCLASSTYPE} = 'TopLoadSegmentClass'
+		                                	THEN 		3
+		                                WHEN 	#{LOADSEGMENTCLASSTYPE} = 'MiddleLoadSegmentClass'
+			                                THEN 		6
+		                                	ELSE 		5
+		                                END
+                        		)
+		                 , LENGTH(TRIM(#{LOADSEGMENTCLASSID}))),'[^0-9]') 
+		                ) 
+	                END
+	                AS CHK
+                         FROM DUAL
+    </select>
+    
+    
+    <!--
+		설		명	: 공정부하기준정보 - 담당자 필터 품목그룹
+		생	성	자	: 김진현
+		생	성	일	: 2021-07-27 
+		수  정   이  력	:  
+	-->
+	<select id="selectProdGrp" parameterType="map" resultType="hashmap">
+			/*selectProdGrp - 공정부하기준정보 - 담당자 필터 품목그룹*/
+				
+				SELECT 		DISTINCT  PD.PRODUCTDEFCLASSGROUPNAME  
+				 FROM 		BAS_PRODUCTDEFINITION PD           -- 제품정보
+				WHERE 		1=1
+					AND		PD.PLANTID 				= #{PLANTID}
+					AND		PD.VALIDSTATE 	    = 'Valid'			-- 추가 (화면에서 값이 안넘어옴.)
+					AND     	PD.PRODUCTDEFCLASSGROUPNAME IS NOT NULL
+					<if test="PRODCLASSGROUP != null and PRODCLASSGROUP !='' and !(PRODCLASSGROUP eq '*'.toString()) ">
+					AND 		PD.PRODUCTDEFCLASSGROUPNAME LIKE  '%' || UPPER(#{PRODCLASSGROUP})|| '%' 
+					</if>
+					  ORDER BY PD.PRODUCTDEFCLASSGROUPNAME
+	</select>
+	
+	
+	
+	
+	
+	
+	 
+
+</mapper>

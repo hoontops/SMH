@@ -1,0 +1,628 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM01400Dao">
+<!-- 출하검사LRR현황-->
+	
+	<!--
+	************************************************************
+	* 출하검사 이력 sql
+	************************************************************
+	-->
+	<sql id="selectShipmentInspHistoryList_sql">
+            /* smh.qam.dao.QAM01400Dao.selectShipmentInspHistoryList_sql  */
+            SELECT TO_CHAR(INSPECTIONDATE, 'YYYY/MM')   AS STDMON
+                 , TO_CHAR(INSPECTIONDATE, 'YYYYMMDD')  AS STDDATE
+                 , ST.TARGETVALUE
+                 , IR.RESOURCEID                        AS LOTID
+                 , IR.INSPECTIONRESULT
+                 , FID.DICTIONARYNAME                   AS VENDORNAME
+                 , FIA.AREAID                           AS VENDORID
+                 , L.LOTTYPE
+                 , LTD.DICTIONARYNAME                   AS LOTTYPENAME
+                 , IR.PRODUCTDEFID
+                 , IR.PRODUCTDEFVERSION
+                 , P.PRODUCTDEFNAME
+                 , PO.CUSTOMERID
+                 , C.CUSTOMERNAME
+                 , IR.INSPECTIONQTY
+                 , IR.SPECOUTQTY
+                 , IR.TXNGROUPHISTKEY
+                 , IR.RESOURCEID
+                 , IR.RESOURCETYPE
+                 , IR.PROCESSRELNO
+            FROM     QAM_INSPECTIONRESULT               IR
+            INNER JOIN PCM_LOT                          L    ON   L.LOTID                   = IR.RESOURCEID
+            LEFT OUTER JOIN BAS_PRODUCTDEFINITION       P    ON   IR.PRODUCTDEFID           = P.PRODUCTDEFID
+                                                             AND  IR.PRODUCTDEFVERSION      = P.PRODUCTDEFVERSION
+            LEFT OUTER JOIN MFM_PRODUCTIONORDER         PO   ON   L.ENTERPRISEID            = PO.ENTERPRISEID
+                                                             AND  L.PLANTID                 = PO.PLANTID
+                                                             AND  L.PRODUCTIONORDERID       = PO.PRODUCTIONORDERID
+                                                             AND  L.LINENO                  = PO.LINENO
+            LEFT OUTER JOIN BAS_CUSTOMER                C    ON   PO.ENTERPRISEID           = C.ENTERPRISEID
+                                                             AND  PO.PLANTID                = C.PLANTID
+                                                             AND  PO.CUSTOMERID             = C.CUSTOMERID
+            <!-- LEFT OUTER JOIN QAM_QCINSPECTOR        QI   ON   IR.INSPECTIONUSER         = QI.INSPECTORID
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES           PDT  ON   P.PRODUCTDEFTYPE          = PDT.LOOKUP_CODE
+                                                             AND  PDT.LOOKUP_TYPE           = 'ProductDefType'
+            LEFT OUTER JOIN CMD_DICTIONARY              PCD  ON   PDT.DICTIONARYID          = PCD.DICTIONARYID
+                                                             AND  PCD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE} -->
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES           LTC  ON   L.LOTTYPE                 = LTC.LOOKUP_CODE
+                                                             AND  LTC.LOOKUP_TYPE           = 'LotType'
+            LEFT OUTER JOIN CMD_DICTIONARY              LTD  ON   LTC.DICTIONARYID          = LTD.DICTIONARYID
+                                                             AND  LTD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            <!-- LEFT OUTER JOIN BAS_AREA               TA   ON   IR.AREAID                 = TA.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY              TAD  ON   TA.AREANAME               = TAD.DICTIONARYID
+                                                             AND  TAD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE} -->
+            <!-- LEFT OUTER JOIN BAS_PROCESSSEGMENT     PS   ON   IR.PROCESSSEGMENTID       = PS.PROCESSSEGMENTID
+                                                             AND  IR.PROCESSSEGMENTVERSION  = PS.PROCESSSEGMENTVERSION
+            LEFT OUTER JOIN CMD_DICTIONARY              PD   ON   PS.PROCESSSEGMENTNAME     = PD.DICTIONARYID
+                                                             AND  PD.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE} -->
+            <!-- LEFT OUTER JOIN PCM_LOTWORKRESULT      LWR  ON   IR.RESOURCEID             = LWR.LOTID
+                                                             AND  IR.PROCESSSEGMENTID       = LWR.PROCESSSEGMENTID
+                                                             AND  IR.PROCESSSEGMENTVERSION  = LWR.PROCESSSEGMENTVERSION
+                                                             AND  IR.PLANTID                = LWR.PLANTID
+                                                             AND  IR.WORKCOUNT              = LWR.WORKCOUNT
+            LEFT OUTER JOIN BAS_AREA                    A    ON   LWR.AREAID                = A.AREAID
+            LEFT OUTER JOIN FN_AREA(#{SESSION_USER_ID}) FA   ON   LWR.AREAID                = FA.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY              AD   ON   A.AREANAME                = AD.DICTIONARYID
+                                                             AND  AD.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE} -->
+            LEFT OUTER JOIN (
+                            SELECT DISTINCT
+                                   A.RESOURCEID
+                                 , A.PROCESSRELNO
+                                 , RANK() OVER (PARTITION BY A.RESOURCEID ORDER BY A.INSPECTIONDATE DESC, A."degree" DESC) AS RNK
+                                 , A.AREAID
+                            FROM       QAM_INSPECTIONRESULT   A
+                            INNER JOIN PCM_LOT                L   ON   A.RESOURCEID              = L.LOTID
+                            INNER JOIN BAS_PRODUCTDEFINITION  P   ON   L.PRODUCTDEFID            = P.PRODUCTDEFID
+                                                                  AND  L.PRODUCTDEFVERSION       = P.PRODUCTDEFVERSION
+                            WHERE 1 = 1
+                            AND A.RESOURCETYPE = 'FinishInspection' <!--2021.07.15 TOBE Modify 'ShipmentInspection'-->
+                            <if test="PLANTID != null and PLANTID !='' ">
+                            AND   A.PLANTID = #{PLANTID}
+                            </if>
+                            <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+                            AND   A.ENTERPRISEID = #{ENTERPRISEID}
+                            </if>
+                            <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' and  !'*'.equals(PRODUCTDEFTYPE) ">
+                            AND   P.PRODUCTDEFTYPE = #{PRODUCTDEFTYPE}
+                            </if>
+                            <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+                            AND   L.PRODUCTDEFID = #{PRODUCTDEFID}
+                            </if>
+                            <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+                            AND   L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+                            </if>
+                            GROUP BY A.RESOURCEID,A.PROCESSRELNO,A."degree",A.INSPECTIONDATE,A.AREAID
+            )                                                 FI  ON   IR.RESOURCEID             = FI.RESOURCEID
+                                                                  AND  FI.RNK                    = 1
+            LEFT OUTER JOIN BAS_AREA                          FIA ON   FI.AREAID                 = FIA.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY                    FID ON   FIA.AREANAME              = FID.DICTIONARYID
+                                                                  AND  FID.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+            <!-- LEFT OUTER JOIN BAS_PROCESSSEGMENT           FPS ON   FI.PROCESSRELNO           = FPS.PROCESSSEGMENTID
+                                                                  AND  FPS.PROCESSSEGMENTVERSION = '*'
+            LEFT OUTER JOIN CMD_DICTIONARY                    FPD ON   FPS.PROCESSSEGMENTNAME    = FPD.DICTIONARYID
+                                                                  AND  FPD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE} -->
+            LEFT OUTER JOIN QAM_SHIPINSPECTIONTARGET          ST  ON   TO_CHAR(INSPECTIONDATE, 'YYYYMM') = ST.TARGETMONTH
+            WHERE 1 = 1
+            AND   IR.INSPECTIONTYPE = 'ShipmentInspection'
+            <choose>
+            <when test='SEARCH_TYPE == "MONTH" '>
+            AND   (TO_CHAR(IR.INSPECTIONDATE, 'YYYYMM')   BETWEEN #{PERIODFR} AND #{PERIODTO})
+            </when>
+            <when test='SEARCH_TYPE == "DATE" '>
+            AND   TO_CHAR(IR.INSPECTIONDATE, 'YYYYMM')   = #{SEARCHMONTH}
+            </when>
+            <when test='SEARCH_TYPE == "PERIOD" '>
+            AND   (TO_CHAR(IR.INSPECTIONDATE, 'YYYYMMDD')  BETWEEN #{WORKPERIODFR} AND #{WORKPERIODTO})
+            </when>
+            <otherwise>
+            AND 1 != 1
+            </otherwise>
+            </choose>
+            <if test="PLANTID != null and PLANTID !='' ">
+            AND   IR.PLANTID = #{PLANTID}
+            </if>
+            <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+            AND   IR.ENTERPRISEID = #{ENTERPRISEID}
+            </if>
+            <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' ">
+            AND   P.PRODUCTDEFTYPE = #{PRODUCTDEFTYPE}
+            </if>
+            <if test="CUSTOMERID != null and CUSTOMERID !='' ">
+            AND   C.CUSTOMERID = #{CUSTOMERID}
+            </if>
+            <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+            AND   L.PRODUCTDEFID = #{PRODUCTDEFID}
+            </if>
+            <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+            AND   L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+            </if>
+	</sql>
+    
+    <!-- 출하검사LRR현황 > 종합현황 조회 > 월별 LRR 조회 -->
+    <select id="selectQamOverallStatusList" parameterType="map" resultType="hashmap">
+    	/* smh.qam.dao.QAM01400Dao.selectQamOverallStatusList  */
+        SELECT X.SEARCHGROUP
+             , X.INSPECTIONCNT
+             , (X.INSPECTIONCNT-X.NGCNT) AS NORMALCNT
+             , X.NGCNT
+             , X.RJRATE
+             , X.TARGETVALUE
+        FROM   (
+                SELECT STDMON       AS SEARCHGROUP
+                     , COUNT(LOTID) AS INSPECTIONCNT 
+                     , NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END),0) AS NGCNT
+                     , CASE WHEN SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) > 0 
+                            THEN ROUND((SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) / COUNT(LOTID) * 100) , 1) 
+                            ELSE 0 
+                            END     AS RJRATE
+                     , TARGETVALUE
+                FROM (
+                      <include refid="selectShipmentInspHistoryList_sql" />
+                     ) Z
+                GROUP BY STDMON, TARGETVALUE
+                
+               )X
+        WHERE  1=1
+        ORDER BY X.SEARCHGROUP
+    </select>
+        
+    <!-- 출하검사LRR현황 > 종합현황 조회 > 일별 LRR 조회 -->
+    <select id="selectQamOverallStatusDetailList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01400Dao.selectQamOverallStatusDetailList  */
+        WITH TAB AS (
+                      SELECT TO_NUMBER(SUBSTR(STDDATE, 7, 2)) AS SEARCHGROUP 
+                           , COUNT(LOTID) AS INSPECTIONCNT 
+                           , NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END),0) AS NGCNT
+                           , CASE WHEN SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) > 0 
+                                 THEN ROUND((SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) / COUNT(LOTID) * 100) , 1) 
+                                 ELSE 0 
+                                 END     AS RJRATE
+                          , TARGETVALUE
+                      FROM (
+                            <include refid="selectShipmentInspHistoryList_sql" />
+                           ) Z
+                      GROUP BY STDDATE, TARGETVALUE
+                      ORDER BY STDDATE
+        ) 
+        SELECT *
+        FROM (
+                SELECT SEARCHGROUP
+                     , INSPECTIONCNT
+                     , NGCNT
+                     , RJRATE
+                FROM
+                       TAB 
+            )
+            PIVOT 
+            ( 
+                  SUM (INSPECTIONCNT)  AS INSPECTIONCNT
+                , SUM (NGCNT)          AS NGCNT
+                , SUM (RJRATE)         AS RJRATE 
+                
+                FOR SEARCHGROUP IN (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31)
+            )
+    </select>
+    
+    <!-- 출하검사LRR현황 > 종합현황 조회 > 일별 LRR chart 조회 -->
+    <select id="selectQamOverallStatusDetailChartList" parameterType="map" resultType="hashmap">
+    	/* smh.qam.dao.QAM01400Dao.selectQamOverallStatusDetailChartList  */
+    	WITH TAB AS (
+            SELECT X.SEARCHGROUP
+                 , X.INSPECTIONCNT                 
+                 , X.NGCNT
+                 , X.RJRATE
+                 , X.TARGETVALUE
+                 , (X.INSPECTIONCNT-X.NGCNT) AS NORMALCNT
+            FROM   (
+                    SELECT TO_NUMBER(SUBSTR(STDDATE, 7, 2)) AS SEARCHGROUP
+                         , COUNT(LOTID) AS INSPECTIONCNT 
+                         , NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END),0) AS NGCNT
+                         , CASE WHEN SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) > 0 
+                                THEN ROUND((SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) / COUNT(LOTID) * 100) , 1) 
+                                ELSE 0 
+                                END     AS RJRATE
+                         , TARGETVALUE
+                    FROM (
+                          <include refid="selectShipmentInspHistoryList_sql" />
+                         ) Z
+                    GROUP BY STDDATE, TARGETVALUE
+                    
+                   )X
+            WHERE  1=1
+            ORDER BY X.SEARCHGROUP
+        )	
+    	SELECT * FROM TAB
+    </select>
+    
+    <!-- 출하검사LRR현황 > 업체별 현황(월) 조회 -->
+    <select id="selectQamOverallStatusVendorMonList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01400Dao.selectQamOverallStatusVendorMonList  */
+        SELECT STDMON            AS SEARCHGROUP
+             , COUNT(LOTID)      AS INSPECTIONCNT 
+             , NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END),0)
+                                 AS NGCNT
+             , CASE WHEN SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) > 0 
+                    THEN ROUND((SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) / COUNT(LOTID) * 100) , 1) 
+                    ELSE 0 
+               END               AS RJRATE
+             , VENDORNAME
+             , VENDORID
+        FROM
+        (
+            <include refid="selectShipmentInspHistoryList_sql" />
+        ) Z
+        GROUP BY STDMON,VENDORNAME,VENDORID
+        HAVING VENDORNAME IS NOT NULL
+        ORDER BY VENDORNAME, STDMON
+    </select>
+    
+    <!-- 출하검사LRR현황 > 업체별 현황(일) 조회 -->
+    <select id="selectQamOverallStatusVendorDateList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01400Dao.selectQamOverallStatusVendorDateList  */
+        WITH TAB AS (
+                        SELECT TO_NUMBER(SUBSTR(STDDATE, 7, 2))   AS SEARCHGROUP 
+                             , COUNT(LOTID)                       AS INSPECTIONCNT
+                             , NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END),0) 
+                                                                  AS NGCNT
+                             , CASE WHEN SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) > 0 
+                                     THEN ROUND((SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) / COUNT(LOTID) * 100) , 1) 
+                                     ELSE 0 
+                               END                                AS RJRATE
+                             , VENDORNAME
+                             , VENDORID
+                             , SUM(COUNT(LOTID)) OVER(PARTITION BY VENDORID) 
+                                                                  AS SUM_INSPECTIONCNT
+                             , SUM(NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END), 0)) OVER(PARTITION BY VENDORID)
+                                                                  AS SUM_NGCNT
+                             , ROUND(  SUM(NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END), 0)) OVER(PARTITION BY VENDORID) / 
+                                     (SUM(COUNT(LOTID)) OVER(PARTITION BY VENDORID)) * 100, 1)
+                                                                  AS SUM_RJRATE
+                        FROM
+                        (
+                            <include refid="selectShipmentInspHistoryList_sql" />
+                        ) Z
+                        GROUP BY STDDATE,VENDORNAME,VENDORID
+                        HAVING VENDORID IS NOT NULL
+                        ORDER BY STDDATE
+                    )
+        SELECT *
+        FROM
+            (
+                SELECT SEARCHGROUP
+                    , INSPECTIONCNT
+                    , NGCNT
+                    , RJRATE
+                    , VENDORNAME
+                    , VENDORID
+                    , SUM_INSPECTIONCNT
+                    , SUM_NGCNT
+                    , SUM_RJRATE
+                FROM  TAB 
+            )
+            PIVOT 
+            ( 
+                  SUM (INSPECTIONCNT) AS INSPECTIONCNT
+                , SUM (NGCNT)         AS NGCNT
+                , SUM (RJRATE)        AS RJRATE  
+                FOR SEARCHGROUP IN (1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29,30,31)
+            ) 
+    </select>
+    
+    <!-- 출하검사LRR현황 > 업체별 현황(일) Chart 조회 -->
+    <select id="selectQamOverallStatusVendorDateChartList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01400Dao.selectQamOverallStatusVendorDateChartList  */
+        SELECT SUBSTR(STDDATE, 7,2)    AS SEARCHGROUP 
+             , COUNT(LOTID)            AS INSPECTIONCNT 
+             , NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END),0) 
+                                       AS NGCNT
+             , CASE WHEN SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) > 0 
+                     THEN ROUND((SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END)  / COUNT(LOTID) * 100) , 1) 
+                     ELSE 0 
+               END                     AS RJRATE
+             , VENDORNAME
+             , VENDORID
+             , SUM(COUNT(LOTID)) OVER(PARTITION BY VENDORID) 
+                                       AS SUM_INSPECTIONCNT
+             , SUM(NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END), 0)) OVER(PARTITION BY VENDORID)
+                                       AS SUM_NGCNT
+             , ROUND(  SUM(NVL(SUM(CASE WHEN INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END), 0)) OVER(PARTITION BY VENDORID) / 
+                     (SUM(COUNT(LOTID)) OVER(PARTITION BY VENDORID)) * 100, 1) 
+                                       AS SUM_RJRATE
+        FROM     
+        (
+            <include refid="selectShipmentInspHistoryList_sql" />
+        ) Z
+        GROUP BY STDDATE,VENDORNAME,VENDORID
+        HAVING VENDORNAME IS NOT NULL
+        ORDER BY VENDORNAME,STDDATE
+    </select>
+    
+    <!-- 출하검사LRR현황 > 그룹 품목별 현황 조회 (Master) -->
+    <select id="selectQamOverallStatusGroupItemList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01400Dao.selectQamOverallStatusGroupItemList  */
+        SELECT COUNT(Z.LOTID)          AS INSPECTIONCNT 
+             , NVL(SUM(CASE WHEN Z.INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END),0) 
+                                       AS NGCNT
+             , CASE WHEN SUM(CASE WHEN Z.INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) > 0 
+                    THEN ROUND((SUM(CASE WHEN Z.INSPECTIONRESULT = 'NG' THEN 1 ELSE 0 END) / COUNT(Z.LOTID) * 100) , 1) 
+                    ELSE 0 
+                    END                 AS RJRATE
+             , LOTTYPENAME
+             , PRODUCTDEFID
+             , PRODUCTDEFVERSION
+             , PRODUCTDEFNAME
+             , CUSTOMERID
+             , CUSTOMERNAME
+             , SUM(Z.INSPECTIONQTY)     AS INSPECTIONQTY
+             , SUM(Z.SPECOUTQTY)        AS SPECOUTQTY
+        FROM 	
+        (
+            <include refid="selectShipmentInspHistoryList_sql" />
+        ) Z
+        GROUP BY Z.LOTTYPENAME,Z.PRODUCTDEFID,Z.PRODUCTDEFVERSION,Z.PRODUCTDEFNAME,Z.CUSTOMERID,Z.CUSTOMERNAME
+        ORDER BY Z.LOTTYPENAME,Z.PRODUCTDEFID,Z.PRODUCTDEFVERSION,Z.PRODUCTDEFNAME,Z.CUSTOMERNAME
+    </select>
+    
+    <!-- 출하검사LRR현황 > 품목별 현황 조회 (Detail) -->
+    <select id="selectQamOverallStatusItemList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01400Dao.selectQamOverallStatusItemList  */
+        SELECT LOTTYPENAME
+             , PRODUCTDEFID
+             , PRODUCTDEFVERSION
+             , PRODUCTDEFNAME
+             , CUSTOMERID
+             , CUSTOMERNAME
+             , Z.TXNGROUPHISTKEY
+             , ID.DEFECTQTY AS SPECOUTQTY
+             , ID.QCSEGMENTID || ID.DEFECTCODE AS DEFECTCODE
+             , DDC.DICTIONARYNAME ||'-'||DDC2.DICTIONARYNAME  AS DEFECTCODENAME
+        FROM
+        (
+            <include refid="selectShipmentInspHistoryList_sql" />
+        ) Z
+        INNER JOIN QAM_INSPECTIONDEFECT         ID   ON   ID.TXNGROUPHISTKEY = Z.TXNGROUPHISTKEY
+                                                     AND  ID.RESOURCEID      = Z.RESOURCEID
+                                                     AND  ID.RESOURCETYPE    = Z.RESOURCETYPE
+                                                     AND  ID.PROCESSRELNO    = Z.PROCESSRELNO
+                                                     AND  ID.INSPECTIONRESULT IS NOT NULL
+        LEFT OUTER JOIN BAS_DEFECTCODE          DC   ON   ID.DEFECTCODE      = DC.DEFECTCODE
+        LEFT OUTER JOIN CMD_DICTIONARY          DDC  ON   DC.DICTIONARYID    = DDC.DICTIONARYID
+                                                     AND  DDC.LANGUAGETYPE   = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION QD   ON   QD.QCSEGMENTID     = ID.QCSEGMENTID
+          LEFT OUTER JOIN CMD_DICTIONARY        DDC2 ON   DDC2.DICTIONARYID  = QD.QCSEGMENTNAME
+                                                     AND  DDC2.LANGUAGETYPE  = #{SESSION_LANGUAGETYPE}
+        GROUP BY Z.LOTTYPENAME
+               , Z.PRODUCTDEFID
+               , Z.PRODUCTDEFVERSION
+               , Z.PRODUCTDEFNAME
+               , Z.CUSTOMERID
+               , Z.CUSTOMERNAME
+               , Z.TXNGROUPHISTKEY
+               , ID.QCSEGMENTID
+               , ID.DEFECTCODE
+               , DDC.DICTIONARYNAME
+               , DDC2.DICTIONARYNAME
+               , ID.DEFECTQTY
+        ORDER BY Z.LOTTYPENAME,Z.PRODUCTDEFID,Z.PRODUCTDEFVERSION,Z.PRODUCTDEFNAME,Z.CUSTOMERNAME,Z.TXNGROUPHISTKEY,ID.DEFECTCODE,DDC.DICTIONARYNAME
+    </select>
+
+    <!-- 출하검사LRR현황 > 품목별 현황 조회 -->
+    <select id="selectQamOverallStatusProductDefList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01400Dao.selectQamOverallStatusProductDefList  */
+        WITH PRODUCTDEFLIST AS
+        (
+          SELECT P.PRODUCTIONTYPE
+               , PCD.DICTIONARYNAME                      AS PRODUCTIONTYPENAME
+               , IR.PRODUCTDEFID
+               , IR.PRODUCTDEFVERSION
+               , P.PRODUCTDEFNAME
+               , C.CUSTOMERID
+               , C.CUSTOMERNAME
+               , IR.INSPECTIONQTY
+               , IR.SPECOUTQTY
+               , QID.DEFECTQTY
+               , 1                                         AS INSPECTIONCNT
+               , DECODE(IR.INSPECTIONRESULT, 'NG', 1, 0)   AS NGCNT
+               , QID.QCSEGMENTID || QID.DEFECTCODE         AS DEFECTCODE
+               , DDC.DICTIONARYNAME || NVL2(QDC.DICTIONARYNAME, '-'||QDC.DICTIONARYNAME,QDC.DICTIONARYNAME)  AS DEFECTCODENAME
+               , IR.RESOURCEID                           AS LOTID
+               , ROW_NUMBER() OVER(PARTITION BY IR.RESOURCEID,IR."degree" ORDER BY IR.RESOURCEID, IR."degree") AS RNK
+               , RANK() OVER(PARTITION BY IR.PRODUCTDEFID, IR.PRODUCTDEFVERSION, C.CUSTOMERID,P.PRODUCTIONTYPE ORDER BY NVL(QID.DEFECTQTY, 0) DESC, QID.QCSEGMENTID || QID.DEFECTCODE) DEFECT_RNK
+          FROM       QAM_INSPECTIONRESULT             IR
+          INNER JOIN PCM_LOT                          L     ON   L.LOTID                   = IR.RESOURCEID
+          LEFT OUTER JOIN BAS_PRODUCTDEFINITION       P     ON   IR.PRODUCTDEFID           = P.PRODUCTDEFID
+                                                            AND  IR.PRODUCTDEFVERSION      = P.PRODUCTDEFVERSION
+          LEFT OUTER JOIN MFM_PRODUCTIONORDER         PO    ON   L.ENTERPRISEID            = PO.ENTERPRISEID
+                                                            AND  L.PLANTID                 = PO.PLANTID
+                                                            AND  L.PRODUCTIONORDERID       = PO.PRODUCTIONORDERID
+                                                            AND  L.LINENO                  = PO.LINENO
+          LEFT OUTER JOIN BAS_CUSTOMER                C     ON   PO.ENTERPRISEID           = C.ENTERPRISEID
+                                                            AND  PO.PLANTID                = C.PLANTID
+                                                            AND  PO.CUSTOMERID             = C.CUSTOMERID
+          LEFT OUTER JOIN (SELECT DISTINCT A.RESOURCEID
+                                , A.PROCESSRELNO
+                                , RANK() OVER (PARTITION BY A.RESOURCEID ORDER BY A.INSPECTIONDATE DESC, A."degree" DESC) AS RNK
+                                , A.AREAID
+                            FROM QAM_INSPECTIONRESULT  A
+                            INNER JOIN PCM_LOT                     L  ON  A.RESOURCEID = L.LOTID
+                            INNER JOIN BAS_PRODUCTDEFINITION P        ON  L.PRODUCTDEFID = P.PRODUCTDEFID
+                                                                      AND L.PRODUCTDEFVERSION = P.PRODUCTDEFVERSION
+                            WHERE 1 = 1
+                            AND   A.RESOURCETYPE = 'FinishInspection' <!--2021.07.15 TOBE Modify 'ShipmentInspection'-->
+                            <if test="PLANTID != null and PLANTID !='' ">
+                            AND   A.PLANTID = #{PLANTID}
+                            </if>
+                            <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+                            AND   A.ENTERPRISEID = #{ENTERPRISEID}
+                            </if>
+                            <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' and  !'*'.equals(PRODUCTDEFTYPE) ">
+                            AND   P.PRODUCTDEFTYPE = #{PRODUCTDEFTYPE}
+                            </if>
+                            <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+                            AND   L.PRODUCTDEFID = #{PRODUCTDEFID}
+                            </if>
+                            <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+                            AND   L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+                            </if>
+                            GROUP BY A.RESOURCEID
+                                   , A.PROCESSRELNO
+                                   , A."degree"
+                                   , A.INSPECTIONDATE
+                                   , A.AREAID)        FI    ON   IR.RESOURCEID             = FI.RESOURCEID
+                                                            AND  FI.RNK                    = 1
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES           PDT   ON   P.PRODUCTIONTYPE          = PDT.LOOKUP_CODE
+                                                            AND  PDT.LOOKUP_TYPE           = 'ProductionType'
+          LEFT OUTER JOIN CMD_DICTIONARY              PCD   ON   PDT.DICTIONARYID          = PCD.DICTIONARYID
+                                                            AND  PCD.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN QAM_INSPECTIONDEFECT        QID   ON   QID.TXNGROUPHISTKEY       = IR.TXNGROUPHISTKEY
+                                                            AND  QID.RESOURCEID            = IR.RESOURCEID
+                                                            AND  QID.RESOURCETYPE          = IR.RESOURCETYPE
+                                                            AND  QID.PROCESSRELNO          = IR.PROCESSRELNO
+                                                            AND  QID.DEGREE                = IR."degree"
+                                                            AND  QID.INSPECTIONRESULT      IS NOT NULL
+          LEFT OUTER JOIN BAS_DEFECTCODE          DC        ON   QID.DEFECTCODE            = DC.DEFECTCODE
+          LEFT OUTER JOIN CMD_DICTIONARY          DDC       ON   DC.DICTIONARYID           = DDC.DICTIONARYID
+                                                            AND  DDC.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION QD        ON   QD.QCSEGMENTID            = QID.QCSEGMENTID
+          LEFT OUTER JOIN CMD_DICTIONARY          QDC       ON   QDC.DICTIONARYID          = QD.QCSEGMENTNAME
+                                                            AND  QDC.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+
+          WHERE 1 = 1
+          AND   IR.INSPECTIONTYPE = 'ShipmentInspection'
+          <choose>
+          <when test='SEARCH_TYPE == "MONTH" '>
+          AND   (TO_CHAR(IR.INSPECTIONDATE, 'YYYYMM')   BETWEEN #{PERIODFR} AND #{PERIODTO})
+          </when>
+          <when test='SEARCH_TYPE == "DATE" '>
+          AND   TO_CHAR(IR.INSPECTIONDATE, 'YYYYMM')   = #{SEARCHMONTH}
+          </when>
+          <when test='SEARCH_TYPE == "PERIOD" '>
+          AND   (TO_CHAR(IR.INSPECTIONDATE, 'YYYYMMDD')  BETWEEN #{WORKPERIODFR} AND #{WORKPERIODTO})
+          </when>
+          <otherwise>
+          AND 1 != 1
+          </otherwise>
+          </choose>
+          <if test="PLANTID != null and PLANTID !='' ">
+          AND   IR.PLANTID = #{PLANTID}
+          </if>
+          <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+          AND   IR.ENTERPRISEID = #{ENTERPRISEID}
+          </if>
+          <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' ">
+          AND   P.PRODUCTDEFTYPE = #{PRODUCTDEFTYPE}
+          </if>
+          <if test="CUSTOMERID != null and CUSTOMERID !='' ">
+          AND   C.CUSTOMERID = #{CUSTOMERID}
+          </if>
+          <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+          AND   L.PRODUCTDEFID = #{PRODUCTDEFID}
+          </if>
+          <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+          AND   L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+          </if>
+        )
+        SELECT Z.*
+          FROM (
+                 SELECT Y.PRODUCTIONTYPENAME
+                      , Y.PRODUCTDEFID
+                      , Y.PRODUCTDEFVERSION
+                      , Y.PRODUCTDEFNAME
+                      , Y.CUSTOMERNAME
+                      , SUM(Y.INSPECTIONCNT)                                  AS  INSPECTIONCNT
+                      , SUM(Y.NGCNT)                                          AS  NGCNT
+                      , ROUND((SUM(Y.NGCNT)/SUM(Y.INSPECTIONCNT))*100, 1)     AS  RJRATE
+                      , ROUND((SUM(Y.SPECOUTQTY)/MAX(TOTALDEFECTQTY))*100, 1) AS  RJARATEOCCUPANCY
+                      , MAX(TOTALDEFECTQTY)
+                      , SUM(Y.INSPECTIONQTY)                                  AS  INSPECTIONQTY
+                      , SUM(Y.SPECOUTQTY)                                     AS  SPECOUTQTY
+                      , MAX(DEFECTCODE_1)                                     AS  DEFECTCODE_1
+                      , MAX(DEFECTCODENAME_1)                                 AS  DEFECTCODENAME_1
+                      , MAX(DEFECTQTY_1)                                      AS  DEFECTQTY_1
+                      , MAX(DEFECTCODE_2)                                     AS  DEFECTCODE_2
+                      , MAX(DEFECTCODENAME_2)                                 AS  DEFECTCODENAME_2
+                      , MAX(DEFECTQTY_2)                                      AS  DEFECTQTY_2
+                      , MAX(DEFECTCODE_3)                                     AS  DEFECTCODE_3
+                      , MAX(DEFECTCODENAME_3)                                 AS  DEFECTCODENAME_3
+                      , MAX(DEFECTQTY_3  )                                    AS  DEFECTQTY_3
+                      , MAX(DEFECTCODE_4)                                     AS  DEFECTCODE_4
+                      , MAX(DEFECTCODENAME_4)                                 AS  DEFECTCODENAME_4
+                      , MAX(DEFECTQTY_4)                                      AS  DEFECTQTY_4
+                      , MAX(DEFECTCODE_5)                                     AS  DEFECTCODE_5
+                      , MAX(DEFECTCODENAME_5)                                 AS  DEFECTCODENAME_5
+                      , MAX(DEFECTQTY_5)                                      AS  DEFECTQTY_5
+                      , MAX(DEFECTCODE_6)                                     AS  DEFECTCODE_6
+                      , MAX(DEFECTCODENAME_6)                                 AS  DEFECTCODENAME_6
+                      , MAX(DEFECTQTY_6)                                      AS  DEFECTQTY_6
+                      , MAX(DEFECTCODE_7)                                     AS  DEFECTCODE_7
+                      , MAX(DEFECTCODENAME_7)                                 AS  DEFECTCODENAME_7
+                      , MAX(DEFECTQTY_7)                                      AS  DEFECTQTY_7
+                      , MAX(DEFECTCODE_8)                                     AS  DEFECTCODE_8
+                      , MAX(DEFECTCODENAME_8)                                 AS  DEFECTCODENAME_8
+                      , MAX(DEFECTQTY_8)                                      AS  DEFECTQTY_8
+                      , MAX(DEFECTCODE_9)                                     AS  DEFECTCODE_9
+                      , MAX(DEFECTCODENAME_9)                                 AS  DEFECTCODENAME_9
+                      , MAX(DEFECTQTY_9)                                      AS  DEFECTQTY_9
+                      , MAX(DEFECTCODE_10)                                    AS  DEFECTCODE_10
+                      , MAX(DEFECTCODENAME_10)                                AS  DEFECTCODENAME_10
+                      , MAX(DEFECTQTY_10)                                     AS  DEFECTQTY_10
+                      , MAX(DEFECTQTY_ETC)                                    AS  DEFECTQTY_ETC
+                  FROM (
+                         SELECT X.PRODUCTIONTYPENAME
+                              , X.PRODUCTDEFID
+                              , X.PRODUCTDEFVERSION
+                              , X.PRODUCTDEFNAME
+                              , X.CUSTOMERNAME
+                              , DECODE(X.RNK, 1, X.INSPECTIONQTY, 0)                               AS  INSPECTIONQTY
+                              , DECODE(X.RNK, 1, X.SPECOUTQTY, 0)                                  AS  SPECOUTQTY
+                              , DECODE(X.RNK, 1, X.INSPECTIONCNT, 0)                               AS  INSPECTIONCNT
+                              , DECODE(X.RNK, 1, X.NGCNT, 0)                                       AS  NGCNT
+                              , X.DEFECTQTY
+                              , CASE WHEN X.DEFECT_RNK = 1  THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_1
+                              , CASE WHEN X.DEFECT_RNK = 1  THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_1
+                              , CASE WHEN X.DEFECT_RNK = 1  THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_1
+                              , CASE WHEN X.DEFECT_RNK = 2  THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_2
+                              , CASE WHEN X.DEFECT_RNK = 2  THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_2
+                              , CASE WHEN X.DEFECT_RNK = 2  THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_2
+                              , CASE WHEN X.DEFECT_RNK = 3  THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_3
+                              , CASE WHEN X.DEFECT_RNK = 3  THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_3
+                              , CASE WHEN X.DEFECT_RNK = 3  THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_3
+                              , CASE WHEN X.DEFECT_RNK = 4  THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_4
+                              , CASE WHEN X.DEFECT_RNK = 4  THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_4
+                              , CASE WHEN X.DEFECT_RNK = 4  THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_4
+                              , CASE WHEN X.DEFECT_RNK = 5  THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_5
+                              , CASE WHEN X.DEFECT_RNK = 5  THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_5
+                              , CASE WHEN X.DEFECT_RNK = 5  THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_5
+                              , CASE WHEN X.DEFECT_RNK = 6  THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_6
+                              , CASE WHEN X.DEFECT_RNK = 6  THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_6
+                              , CASE WHEN X.DEFECT_RNK = 6  THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_6
+                              , CASE WHEN X.DEFECT_RNK = 7  THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_7
+                              , CASE WHEN X.DEFECT_RNK = 7  THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_7
+                              , CASE WHEN X.DEFECT_RNK = 7  THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_7
+                              , CASE WHEN X.DEFECT_RNK = 8  THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_8
+                              , CASE WHEN X.DEFECT_RNK = 8  THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_8
+                              , CASE WHEN X.DEFECT_RNK = 8  THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_8
+                              , CASE WHEN X.DEFECT_RNK = 9  THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_9
+                              , CASE WHEN X.DEFECT_RNK = 9  THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_9
+                              , CASE WHEN X.DEFECT_RNK = 9  THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_9
+                              , CASE WHEN X.DEFECT_RNK = 10 THEN X.DEFECTCODE      ELSE ''   END   AS  DEFECTCODE_10
+                              , CASE WHEN X.DEFECT_RNK = 10 THEN X.DEFECTCODENAME  ELSE ''   END   AS  DEFECTCODENAME_10
+                              , CASE WHEN X.DEFECT_RNK = 10 THEN X.DEFECTQTY       ELSE NULL END   AS  DEFECTQTY_10
+                              , SUM(X.DEFECTQTY) OVER ()                                           AS  TOTALDEFECTQTY
+                              , SUM(CASE WHEN X.DEFECT_RNK > 3 THEN NVL(X.DEFECTQTY, 0) ELSE NULL END) OVER (PARTITION BY X.PRODUCTIONTYPE, X.PRODUCTDEFID, X.PRODUCTDEFVERSION, X.CUSTOMERID)
+                                                                                                   AS DEFECTQTY_ETC
+                           FROM PRODUCTDEFLIST X
+                    )Y
+                GROUP BY Y.PRODUCTIONTYPENAME
+                       , Y.PRODUCTDEFID
+                       , Y.PRODUCTDEFVERSION
+                       , Y.PRODUCTDEFNAME
+                       , Y.CUSTOMERNAME
+              ) Z
+        ORDER BY Z.INSPECTIONCNT DESC, Z.PRODUCTDEFID, Z.PRODUCTDEFVERSION, Z.CUSTOMERNAME     
+    </select>
+</mapper>

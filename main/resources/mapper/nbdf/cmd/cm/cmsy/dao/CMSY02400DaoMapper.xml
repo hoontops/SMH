@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="nbdf.cmd.cm.cmsy.dao.CMSY02400Dao">
+<!-- 공지사항-->
+
+    <!-- 공지사항등록 -->
+    <insert id="insertCmdNotice" parameterType="map">
+    <selectKey keyProperty="NOTICE_ID" resultType="Integer" order="BEFORE">
+      SELECT  /* "nbdf.cmd.cm.cmsy.dao.CMSY02400Dao.CMD_NOTICE_S" */
+                  CMD_NOTICE_S.nextval
+      FROM     DUAL
+    </selectKey>      
+    
+    INSERT /*nbdf.cmd.cm.cmsy.dao.CMSY02400Dao.insertCmdNotice */ INTO 
+    CMD_NOTICE( 
+        NOTICE_ID  
+        ,TITLE  
+        ,JOB_CD  
+        ,COMMENTS
+        ,NOTICE_STRT_DATE
+        ,NOTICE_END_DATE  
+        ,CREATED_BY  
+        ,CREATION_DATE  
+        ,LAST_UPDATED_BY  
+        ,LAST_UPDATE_DATE        ) 
+    VALUES( 
+        #{NOTICE_ID}  
+        ,#{TITLE}  
+        ,#{JOB_CD}  
+        ,#{COMMENTS}  
+        ,#{NOTICE_STRT_DATE}
+        ,#{NOTICE_END_DATE}  
+        ,#{CREATED_BY}  
+        ,SYSDATE  
+        ,#{LAST_UPDATED_BY}  
+        ,SYSDATE    )
+    </insert>
+
+    <!-- 공지사항변경 -->
+    <update id="updateCmdNotice" parameterType="map" >
+    UPDATE /* nbdf.cmd.cm.cmsy.dao.CMSY02400Dao.updateCmdNotice */ CMD_NOTICE 
+    SET 
+        TITLE = #{TITLE}     
+        ,COMMENTS = #{COMMENTS}                     
+        ,JOB_CD = #{JOB_CD}                     
+        ,NOTICE_STRT_DATE = #{NOTICE_STRT_DATE}     
+        ,NOTICE_END_DATE  = #{NOTICE_END_DATE}     
+        ,LAST_UPDATED_BY = #{LAST_UPDATED_BY}     
+        ,LAST_UPDATE_DATE = SYSDATE
+    WHERE NOTICE_ID = #{NOTICE_ID}
+    </update>
+
+    <!-- 공지사항삭제 -->
+    <update id="deleteCmdNotice" parameterType="map" > 
+    DELETE /* nbdf.cmd.cm.cmsy.dao.CMSY02400Dao.deleteCmdNotice */  
+    FROM CMD_NOTICE 
+    WHERE NOTICE_ID = #{NOTICE_ID}
+    </update>
+
+    <!-- 공지사항조회-->
+    <select id="selectCmdNoticeList" parameterType="map" resultType="hashmap">
+       SELECT 
+           Z.*
+	      FROM
+	         (
+	           SELECT Y.*
+	                , ROWNUM RNUM
+	                , LAST_VALUE(ROWNUM) OVER (ORDER BY ROWNUM ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS TOTAL_ROWS
+	             FROM
+	                (
+
+    SELECT X.* FROM (
+	    SELECT /* nbdf.cmd.cm.cmsy.dao.CMSY02400Dao.selectCmdNoticeList */
+	        A.NOTICE_ID 
+	        ,A.JOB_CD 
+	        ,A.TITLE  
+	        ,A.COMMENTS  
+	        ,NOTICE_STRT_DATE
+	        ,NOTICE_END_DATE  
+	        ,A.CREATED_BY  
+	        ,(SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT= A.CREATED_BY) AS WRITER_NM  
+	        ,to_char(A.CREATION_DATE,'yyyy/mm/dd') as CREATION_DATE  
+	        ,A.LAST_UPDATED_BY  
+	        ,to_char(A.LAST_UPDATE_DATE,'yyyy/mm/dd') as LAST_UPDATE_DATE
+	        ,(SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT=A.LAST_UPDATED_BY) AS UPDATER_NM
+	        <!-- 
+	        ,(SELECT COUNT(*) FROM CMD_NOTICE_CFM WHERE NOTICE_ID = A.NOTICE_ID AND CFM_YN = 'Y') AS CFM_CNT 
+	        ,(SELECT COUNT(*) FROM CMD_NOTICE_CFM WHERE NOTICE_ID = A.NOTICE_ID AND CFM_YN = 'Y' AND USER_ID=#{SESSION_USER_ID}) AS USER_CFM_CNT 
+	    	-->
+	    FROM  CMD_NOTICE A 
+	    WHERE 1=1 
+        <if test="ALL_YN != null and ALL_YN != '' and ALL_YN eq 'N'.toString()"> 
+	        AND SYSDATE BETWEEN NOTICE_STRT_DATE AND NOTICE_END_DATE+0.99999
+	    </if>
+	    <if test="NOTICE_ID != null and NOTICE_ID != '' "> 
+			AND A.NOTICE_ID = #{NOTICE_ID} 
+	    </if>
+	    <if test="KEY_TYPE != null and KEY_TYPE !='' and KEY_WORD != null and KEY_WORD !='' ">  
+	        <choose>
+	            <when test="KEY_TYPE eq 'A'.toString()">
+	                AND A.TITLE LIKE '%'||#{KEY_WORD}||'%'
+	            </when>
+	            <when test="KEY_TYPE eq 'B'.toString()">
+	                AND ( A.TITLE LIKE '%'||#{KEY_WORD}||'%' OR A.COMMENTS LIKE '%'||#{KEY_WORD}||'%')
+	            </when>
+	            <otherwise>
+	            </otherwise>
+	        </choose>
+	    </if>
+    ) X
+    where 1=1
+	order by NOTICE_ID desc
+	
+	                ) Y
+	            WHERE 1=1
+	         ) Z
+	     WHERE 1=1
+	    <if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+	       AND Z.RNUM <![CDATA[>]]> ( #{PAGE_NUMBER} - 1 ) * #{PAGE_SIZE}
+	       AND Z.RNUM <![CDATA[<=]]> #{PAGE_NUMBER} * #{PAGE_SIZE}
+	    </if>
+    </select>
+
+
+</mapper>

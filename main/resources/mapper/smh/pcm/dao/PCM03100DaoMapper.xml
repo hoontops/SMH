@@ -1,0 +1,489 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM03100Dao">
+
+    <!--  -->
+    <select id="selectLotInfoByLotID" parameterType="map" resultType="hashmap">
+    	/* SelectLotInfoByLotID 10003  */
+		WITH PROCESSSEGMENT AS
+				(
+					SELECT
+							L.LOTID
+						,	L.ENTERPRISEID
+						,	L.PLANTID
+						,	PP.PROCESSPATHID
+						,	LAG(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)		AS PREVPROCESSSEGMENTID
+						,	LAG(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)	AS PREVPROCESSSEGMENTVERSION
+						,	PP.PROCESSSEGMENTID
+						,	PP.PROCESSSEGMENTVERSION
+						,	LEAD(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)		AS NEXTPROCESSSEGMENTID
+						,	LEAD(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)	AS NEXTPROCESSSEGMENTVERSION
+					FROM	PCM_LOT						L
+					LEFT OUTER JOIN BAS_PROCESSPATH		PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+															AND	L.PLANTID = PP.PLANTID
+															AND	L.PROCESSDEFID = PP.PROCESSDEFID
+															AND L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+					WHERE	L.LOTID = #{LOTID}
+					UNION ALL
+					SELECT
+							L.LOTID
+						,	L.ENTERPRISEID
+						,	L.PLANTID
+						,	PP.PROCESSPATHID
+						,	LAG(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)		AS PREVPROCESSSEGMENTID
+						,	LAG(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)	AS PREVPROCESSSEGMENTVERSION
+						,	PP.PROCESSSEGMENTID
+						,	PP.PROCESSSEGMENTVERSION
+						,	LEAD(PP.PROCESSSEGMENTID) OVER (ORDER BY PP.PATHSEQUENCE ASC)		AS NEXTPROCESSSEGMENTID
+						,	LEAD(PP.PROCESSSEGMENTVERSION) OVER (ORDER BY PP.PATHSEQUENCE ASC)	AS NEXTPROCESSSEGMENTVERSION
+					FROM	PCM_LOT						L
+					LEFT OUTER JOIN BAS_PROCESSPATH		PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+															AND	L.PLANTID = PP.PLANTID
+															AND	L.SUBPROCESSDEFID = PP.PROCESSDEFID
+															AND L.SUBPROCESSDEFVERSION = PP.PROCESSDEFVERSION
+					WHERE	L.LOTID = #{LOTID}
+				)
+				SELECT
+						L.LOTID
+					,	PP.PROCESSPATHID
+					,	PSP.PROCESSSEGMENTNAME						AS PREVPROCESSSEGMENTNAME
+					,	PS.PROCESSSEGMENTID
+					,	PS.PROCESSSEGMENTNAME
+					,	PS.PROCESSSEGMENTVERSION
+					,	PSN.PROCESSSEGMENTNAME						AS NEXTPROCESSSEGMENTNAME
+					,	L.USERSEQUENCE
+					,	L.PRODUCTDEFID
+					,	L.PRODUCTDEFVERSION
+					,	PD.PRODUCTDEFNAME
+					,	'Main'										AS PRODUCTTYPE
+					,	TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD')		AS INPUTDATE
+					,	L.PRODUCTIONORDERID
+					,	L.LINENO
+					,	TO_CHAR(L.DUEDATE, 'YYYY-MM-DD')			AS DUEDATE
+					,	DTD.DICTIONARYNAME							AS PRODUCTDEFTYPE
+					,	OTD.DICTIONARYNAME							AS PRODUCTIONTYPE
+					,	NVL(L.ISLOCKING, 'N')					AS ISLOCKING
+					,	NVL(DC1.DICTIONARYNAME, A.AREANAME)	AS AREANAME
+					,	C.CUSTOMERNAME
+					,	L.UNIT
+					,	L.DEFECTUNIT
+					,	ROUND(L.PANELQTY)						AS PNLQTY
+					,	ROUND(L.PANELPERQTY)					AS PANELPERQTY
+					,	ROUND(L.QTY)							AS PCSQTY
+					,	ROUND(L.QTY / PD.PCSMM, 2)				AS MM
+					,	PD.PCSPNL
+					,	PS.PROCESSSEGMENTTYPE
+					,	NVL(ST2.STEPTYPE, ST1.STEPTYPE)		AS STEPTYPE	
+				FROM	PROCESSSEGMENT					PP
+				INNER JOIN PCM_LOT						L	ON	PP.ENTERPRISEID = L.ENTERPRISEID
+															AND	PP.PLANTID = L.PLANTID
+															AND	PP.LOTID = L.LOTID
+															AND	PP.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+															AND PP.PROCESSSEGMENTVERSION = L.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PSP	ON	PP.PREVPROCESSSEGMENTID = PSP.PROCESSSEGMENTID
+															AND	PP.PREVPROCESSSEGMENTVERSION = PSP.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS	ON	PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+															AND	PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN 	FN_GETSTEPTYPE() ST1 ON PS.STEPCLASS=ST1.CODE
+				LEFT OUTER JOIN BAS_RESOURCE				RC	ON	L.ENTERPRISEID = RC.ENTERPRISEID
+															AND	L.PLANTID = RC.PLANTID
+															AND	L.RESOURCEID = RC.RESOURCEID
+				LEFT OUTER JOIN 	FN_GETSTEPTYPE() ST2 ON RC.STEPCLASS=ST2.CODE																						
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PSN	ON	PP.NEXTPROCESSSEGMENTID = PSN.PROCESSSEGMENTID
+															AND	PP.NEXTPROCESSSEGMENTVERSION = PSN.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD	ON	L.ENTERPRISEID = PD.ENTERPRISEID
+															AND	L.ORIGINALPLANTID = PD.PLANTID
+															AND	L.PRODUCTDEFID = PD.PRODUCTDEFID
+															AND	L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT OUTER JOIN MFM_PRODUCTIONORDER		PO	ON	L.ENTERPRISEID = PO.ENTERPRISEID
+															AND	L.ORIGINALPLANTID = PO.PLANTID
+															AND	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+															AND	L.LINENO = PO.LINENO
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES		DT	ON	PD.PRODUCTDEFTYPE = DT.LOOKUP_CODE
+															AND	DT.LOOKUP_TYPE = 'ProductDefType'
+				LEFT OUTER JOIN CMD_DICTIONARY			DTD	ON	DT.DICTIONARYID = DTD.DICTIONARYID
+															AND	DTD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES		OT	ON	L.LOTTYPE = OT.LOOKUP_CODE
+															AND	OT.LOOKUP_TYPE = 'ProductionType'
+				LEFT OUTER JOIN CMD_DICTIONARY			OTD	ON	OT.DICTIONARYID = OTD.DICTIONARYID
+															AND	OTD.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_AREA					A	ON	L.ENTERPRISEID = A.ENTERPRISEID
+															AND	L.PLANTID = A.PLANTID
+															AND L.AREAID = A.AREAID
+				LEFT OUTER JOIN CMD_DICTIONARY			DC1 ON  A.AREANAME = DC1.DICTIONARYID
+															AND	DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_CUSTOMER				C	ON	PO.ENTERPRISEID = C.ENTERPRISEID
+															AND	PO.PLANTID = C.PLANTID
+															AND	PO.CUSTOMERID = C.CUSTOMERID
+													
+    </select>
+    
+	<select id="selectLotGenealTreeList" parameterType="map" resultType="hashmap">
+		/* SelectLotGenealTreeList 10001 */
+		    	SELECT Z.*
+				FROM
+				(
+				    SELECT  LOTID
+				    	,	LOTID			AS LOTNAME
+				        ,   PARENTLOTID
+				        ,   LLEVEL
+				        ,	PPATH
+				    FROM FN_LOTGENEAL_TOPDOWN(#{LOTID})  LT
+				) Z
+				LEFT JOIN PCM_LOT	L	ON 	Z.LOTID = L.LOTID
+				WHERE COALESCE(L.ISDEFECTED, 'N') = 'N'
+				AND     L.LOTCREATEDTYPE NOT IN ('Defect')
+				ORDER BY Z.PPATH
+	</select>
+	
+    <select id="selectLotWorkHistoryList" parameterType="map" resultType="hashmap">
+		/* SelectLotWorkHistoryList 10001 */
+		    	WITH WORKRESULT AS
+				(
+				    SELECT  *
+				    FROM 	FN_GETLOTHISTORY12(#{LOTID}, #{LANGUAGETYPE})
+				),
+				DEFECTLIST AS
+				(
+				    SELECT  WR.LOTID
+				        ,   WR.PRODUCTDEFID
+				        ,   WR.PRODUCTDEFVERSION
+				        ,   WR.PROCESSDEFID
+				        ,   WR.PROCESSDEFVERSION
+				        ,   WR.PROCESSSEGMENTID
+				        ,   WR.USERSEQUENCE
+				        ,	WR.WORKCOUNT
+				        ,   SUM(DF.DEFECTQTY)       AS DEFECTQTY
+				    FROM    WORKRESULT          WR
+				    INNER JOIN PCM_LOT			L	ON  WR.LOTID = L.LOTID
+				    LEFT  JOIN PCM_LOT			DL	ON 	L.LOTID = DL.PARENTLOTID
+				    LEFT  JOIN PCM_LOTDEFECT     DF  ON  DL.LOTID = DF.LOTID
+				                                    AND WR.PRODUCTDEFID = DF.PRODUCTDEFID
+                                                    AND WR.PRODUCTDEFVERSION = DF.PRODUCTDEFVERSION
+                                                    --AND (WR.PROCESSDEFID = DF.PROCESSDEFID OR WR.SUBPROCESSDEFID = DF.PROCESSDEFID)
+                                                    --AND (WR.PROCESSDEFVERSION = COALESCE(DF.PROCESSDEFVERSION, DL.PROCESSDEFVERSION) OR WR.SUBPROCESSDEFVERSION = COALESCE(DF.PROCESSDEFVERSION, DL.PROCESSDEFVERSION))
+                                                    AND WR.PROCESSSEGMENTID = DF.PROCESSSEGMENTID
+                                                    AND WR.WORKCOUNT = NVL(DF.WORKCOUNT, DL.WORKCOUNT)
+				    GROUP BY WR.LOTID
+				        ,   WR.PRODUCTDEFID
+				        ,   WR.PRODUCTDEFVERSION
+				        ,   WR.PROCESSDEFID
+				        ,   WR.PROCESSDEFVERSION
+				        ,   WR.PROCESSSEGMENTID
+				        ,   WR.USERSEQUENCE
+				        ,	WR.WORKCOUNT
+				)
+				SELECT  *
+                FROM
+                (
+                    SELECT  LOTID
+                        ,   PARENTLOTID
+                        ,   ROOTLOTID
+                        ,   PRODUCTDEFID
+                        ,   PRODUCTDEFVERSION
+                        ,   PROCESSDEFID
+                        ,   PROCESSDEFVERSION
+                        ,   PROCESSSEGMENTID
+                        ,   PROCESSSEGMENTNAME
+                        ,   USERSEQUENCE
+                        ,   SUBPROCESSDEFID
+                        ,   SUBPROCESSDEFVERSION
+                        ,   SUBPROCESSSEGMENTID
+                        ,   SUBUSERSEQUENCE
+                        ,   CASE WHEN SUBUSERSEQUENCE = 0 AND ISREWORK ='IsRework' THEN USERSEQUENCE || '.' || WORKCOUNT ELSE PROCESSSEQUENCE END AS PROCESSSEQUENCE
+                        ,   PLANTID
+                        ,   AREAID
+                        ,   AREANAME
+                        ,   RESOURCEID
+                        ,   RESOURCENAME
+                        ,   WORKTYPE
+                        ,   WORKCOUNT
+                        ,   ISREWORK
+                        ,   REWORKTYPE
+                        ,   REWORKCOUNT
+                        ,   TO_CHAR(RECEIVEDATE,'YYYY-MM-DD HH24:MI:SS') 	AS RECEIVEDATE
+                        ,   TO_CHAR(STARTDATE,'YYYY-MM-DD HH24:MI:SS') 		AS STARTDATE
+                        ,   TO_CHAR(WORKENDDATE,'YYYY-MM-DD HH24:MI:SS') 	AS WORKENDDATE
+                        ,   TO_CHAR(LOTSENDDATE,'YYYY-MM-DD HH24:MI:SS') 	AS LOTSENDDATE
+                        ,   RECEIVEPCSQTY
+                        ,   RECEIVEPANELQTY
+                        ,   WORKSTARTPCSQTY
+                        ,   WORKSTARTPANELQTY
+                        ,   WORKENDPCSQTY
+                        ,   WORKENDPANELQTY
+                        ,   SENDPCSQTY
+                        ,   SENDPANELQTY
+                        ,   RECEIVELEADTIME
+                        ,   WORKSTARTLEADTIME
+                        ,   WORKENDLEADTIME
+                        ,   SENDLEADTIME
+                        ,   LEADTIME
+                        ,   ROUND((NVL(RECEIVELEADTIME, 0) + NVL(WORKSTARTLEADTIME, 0) + NVL(WORKENDLEADTIME, 0) + NVL(SENDLEADTIME, 0)) / 24, 2) AS LEADTIMESUM
+                        ,   CUM_LEADTIME
+                        ,   DEFECTQTY
+                        ,   CUM_DEFECTQTY
+                    FROM  WORKRESULT                WR 
+                    WHERE   1=1
+                    UNION ALL
+                    SELECT LOTID
+                        ,   PARENTLOTID
+                        ,   ROOTLOTID
+                        ,   PRODUCTDEFID
+                        ,   PRODUCTDEFVERSION
+                        ,   PROCESSDEFID
+                        ,   PROCESSDEFVERSION
+                        ,   PROCESSSEGMENTID
+                        ,   PROCESSSEGMENTNAME
+                        ,   USERSEQUENCE
+                        ,   SUBPROCESSDEFID
+                        ,   SUBPROCESSDEFVERSION
+                        ,   SUBPROCESSSEGMENTID
+                        ,   SUBUSERSEQUENCE
+                        ,   PROCESSSEQUENCE
+                        ,   PLANTID
+                        ,   AREAID
+                        ,   AREANAME
+                        ,   RESOURCEID
+                        ,   RESOURCENAME
+                        ,   WORKTYPE
+                        ,   WORKCOUNT
+                        ,   ISREWORK
+                        ,   REWORKTYPE
+                        ,   REWORKCOUNT
+                        ,   RECEIVEDATE
+                        ,   STARTDATE
+                        ,   WORKENDDATE
+                        ,   LOTSENDDATE
+                        ,   RECEIVEPCSQTY
+                        ,   RECEIVEPANELQTY
+                        ,   WORKSTARTPCSQTY
+                        ,   WORKSTARTPANELQTY
+                        ,   WORKENDPCSQTY
+                        ,   WORKENDPANELQTY
+                        ,   SENDPCSQTY
+                        ,   SENDPANELQTY
+                        ,   RECEIVELEADTIME
+                        ,   WORKSTARTLEADTIME
+                        ,   WORKENDLEADTIME
+                        ,   SENDLEADTIME
+                        ,   LEADTIME
+                        ,   ROUND((NVL(RECEIVELEADTIME, 0) + NVL(WORKSTARTLEADTIME, 0) + NVL(WORKENDLEADTIME, 0) + NVL(SENDLEADTIME, 0)) / 24, 2) AS LEADTIMESUM
+                        ,   CUM_LEADTIME
+                        ,   DEFECTQTY
+                        ,   CUM_DEFECTQTY
+                    FROM
+                    (
+                        WITH ROUTING AS
+                        (
+                            SELECT  L.LOTID
+                                ,   MAX(WR.USERSEQUENCE)    AS MAXSEQUENCE
+                            FROM    PCM_LOT                  L
+                            LEFT  JOIN FN_GETLOTHISTORY4(L.LOTID, #{LANGUAGETYPE})      WR   ON  L.LOTID = WR.LOTID
+                            WHERE   L.LOTID = #{LOTID}
+                            GROUP BY L.LOTID
+                        )
+                        SELECT  L.LOTID
+                            ,   L.PARENTLOTID
+                            ,   L.ROOTLOTID
+                            ,   L.PRODUCTDEFID
+                            ,   L.PRODUCTDEFVERSION
+                            ,   L.PROCESSDEFID
+                            ,   L.PROCESSDEFVERSION
+                            ,   PP.PROCESSSEGMENTID
+                            ,   NVL(DC1.DICTIONARYNAME, SG.PROCESSSEGMENTNAME)     AS PROCESSSEGMENTNAME
+                            ,   TO_NUMBER(PP.USERSEQUENCE)                                    AS USERSEQUENCE
+                            ,   NULL                                                    AS SUBPROCESSDEFID
+                            ,   NULL                                                    AS SUBPROCESSDEFVERSION
+                            ,   NULL                                                    AS SUBPROCESSSEGMENTID
+                            ,   NULL                                               AS SUBUSERSEQUENCE
+                            ,   PP.USERSEQUENCE                                         AS PROCESSSEQUENCE
+                            ,   PP.PLANTID
+                            ,   NULL                                                    AS AREAID
+                            ,   NULL                                                    AS AREANAME
+                            ,   NULL                                                    AS RESOURCEID
+                            ,   NULL                                                    AS RESOURCENAME
+                            ,   NULL                                                    AS WORKTYPE
+                            ,   NULL                                               AS WORKCOUNT
+                            ,   NULL                                                    AS ISREWORK
+                            ,   NULL                                                    AS REWORKTYPE
+                            ,   NULL                                               AS REWORKCOUNT
+                            ,   NULL                                         				AS RECEIVEDATE
+                            ,   NULL                                         				AS STARTDATE
+                            ,   NULL                                         				AS WORKENDDATE
+                            ,   NULL                                         				AS LOTSENDDATE
+                            ,   NULL                                               		AS RECEIVEPCSQTY
+                            ,   NULL                                              		AS RECEIVEPANELQTY
+                            ,   NULL                                               		AS WORKSTARTPCSQTY
+                            ,   NULL                                               		AS WORKSTARTPANELQTY
+                            ,   NULL                                               AS WORKENDPCSQTY
+                            ,   NULL                                               AS WORKENDPANELQTY
+                            ,   NULL                                               AS SENDPCSQTY
+                            ,   NULL                                               AS SENDPANELQTY
+                            ,   NULL                                               AS RECEIVELEADTIME
+                            ,   NULL                                               AS WORKSTARTLEADTIME
+                            ,   NULL                                               AS WORKENDLEADTIME
+                            ,   NULL                                               AS SENDLEADTIME
+                            ,   NULL                                           AS LEADTIME
+                            ,   NULL                                           AS CUM_LEADTIME
+                            ,   NULL                                               AS DEFECTQTY
+                            ,   NULL                                               AS CUM_DEFECTQTY
+                        FROM    PCM_LOT                  L
+                        INNER JOIN BAS_PROCESSPATH       PP  ON  L.PROCESSDEFID = PP.PROCESSDEFID
+                                                            AND L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+                                                            AND PP.VALIDSTATE = 'Valid'
+                        LEFT  JOIN FN_GETLOTHISTORY4(L.LOTID, #{LANGUAGETYPE})               WR   ON  PP.PROCESSDEFID = WR.PROCESSDEFID
+                                                                                         AND PP.PROCESSSEGMENTID = WR.PROCESSSEGMENTID
+                        LEFT  JOIN ROUTING              RT  ON  L.LOTID = RT.LOTID
+                        LEFT  JOIN BAS_PROCESSSEGMENT    SG  ON  PP.PROCESSSEGMENTID = SG.PROCESSSEGMENTID AND SG.VALIDSTATE = 'Valid'
+                        LEFT  JOIN CMD_DICTIONARY        DC1 ON  SG.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+                                                            AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+                        WHERE   L.LOTID = #{LOTID}
+                        AND     RT.MAXSEQUENCE <![CDATA[<]]> TO_NUMBER(PP.USERSEQUENCE)
+                    ) RT
+                ) X
+                ORDER BY TO_NUMBER(X.USERSEQUENCE), NVL(X.RECEIVEDATE, X.LOTSENDDATE), TO_NUMBER(X.SUBUSERSEQUENCE), X.WORKCOUNT
+	</select>
+	
+	<select id="selectLotSplitMergeHistory" parameterType="map" resultType="hashmap">
+		/* SelectLotSplitMergeHistory 10001 */
+		    	SELECT  'SPLIT'                                          AS SPLITTYPE
+				    ,   LG.ROOTLOTID
+				    ,   LG.LOTID                                         AS SOURCELOTID
+				    ,   LG.DESTINATIONLOTID
+				    ,   LG.PLANTID
+				    ,   LG.PROCESSDEFID
+				    ,   LG.PROCESSDEFVERSION
+				    ,   LG.PROCESSPATHID
+				    ,   LG.USERSEQUENCE
+				    ,   LG.PROCESSSEGMENTID
+				    ,   NVL(DC1.DICTIONARYNAME, SG.DESCRIPTION)     AS PROCESSSEGMENTNAME
+				    ,   LG.AREAID
+				    ,   NVL(DC2.DICTIONARYNAME, AR.DESCRIPTION)     AS AREANAME
+				    ,   LG.QTY
+				    ,   L.CREATEDQTY
+				    ,   NVL(US1.USER_NM, LG.TXNUSER)                AS USERNAME
+				    ,   TO_CHAR(LG.TXNTIME,'YYYY-MM-DD HH24:MI:SS') AS TXNTIME
+				    ,   LG."DEPTH"  AS DEPTH1
+				FROM    PCM_LOTGENEAL            LG
+				LEFT JOIN PCM_LOT                L   ON  LG.DESTINATIONLOTID = L.LOTID
+				LEFT JOIN BAS_PROCESSSEGMENT     SG  ON  LG.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+				LEFT JOIN CMD_DICTIONARY         DC1 ON  SG.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+				                                    AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT JOIN BAS_AREA               AR  ON  LG.AREAID = AR.AREAID
+				LEFT JOIN CMD_DICTIONARY         DC2 ON  AR.AREANAME = DC2.DICTIONARYID
+				                                    AND DC2.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT JOIN CMD_USERS              US1 ON  LG.TXNUSER = US1.USER_ID
+				LEFT JOIN PCM_LOTMERGEAPPROVAL   LA  ON  LG.SOURCELOTID = LA.LOTID
+													AND  LG.DESTINATIONLOTID = LA.CHILDLOTID 
+				WHERE   1=1
+				AND     LG.LOTID = #{LOTID}
+				AND     LG.DESTINATIONLOTID IS NOT NULL
+				AND     LA.LOTID IS NULL
+				UNION 
+				SELECT  'MERGE'                                         AS SPLITTYPE
+				    ,   L.ROOTLOTID
+				    ,   LM.CHILDLOTID                                   AS SOURCELOTID
+				    ,   LM.LOTID                                        AS DESTINATIONLOTID
+				    ,   LM.PLANTID
+				    ,   LG.PROCESSDEFID
+				    ,   LG.PROCESSDEFVERSION
+				    ,   LG.PROCESSPATHID
+				    ,   LG.USERSEQUENCE
+				    ,   LG.PROCESSSEGMENTID
+				    ,   COALESCE(DC1.DICTIONARYNAME, SG.DESCRIPTION)     AS PROCESSSEGMENTNAME
+				    ,   LG.AREAID
+				    ,   COALESCE(DC2.DICTIONARYNAME, AR.DESCRIPTION)     AS AREANAME
+				    ,   LG.QTY
+				    ,   L.CREATEDQTY
+				    ,   COALESCE(US1.USER_NM, LG.TXNUSER)               AS USERNAME
+				    ,   TO_CHAR(LG.TXNTIME,'YYYY-MM-DD HH24:MI:SS') 	AS TXNTIME
+				    ,   LG."DEPTH"  AS DEPTH1
+				FROM PCM_LOTMERGEAPPROVAL        LM
+				INNER JOIN PCM_LOT               L   ON  LM.LOTID = L.LOTID
+				LEFT  JOIN PCM_LOTGENEAL         LG  ON  LM.LOTID = LG.LOTID
+				                                    AND LG.DESTINATIONLOTID IS NULL
+				LEFT JOIN BAS_PROCESSSEGMENT     SG  ON  LG.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+				LEFT JOIN CMD_DICTIONARY         DC1 ON  SG.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+				                                    AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT JOIN BAS_AREA               AR  ON  LG.AREAID = AR.AREAID
+				LEFT JOIN CMD_DICTIONARY         DC2 ON  AR.AREANAME = DC2.DICTIONARYID
+				                                    AND DC2.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT JOIN CMD_USERS               US1 ON  LG.TXNUSER = US1.USER_ID
+				WHERE   LM.LOTID = #{LOTID}
+				ORDER BY TXNTIME , DEPTH1
+				
+	</select>
+	
+	<select id="selectLotHistoryDefectPop" parameterType="map" resultType="hashmap">
+		/* SelectLotHistoryDefectPop  10001 */
+				WITH WORKRESULT AS
+                (
+                    SELECT  *
+                    FROM    FN_GETLOTHISTORY3(#{LOTID}, #{LANGUAGETYPE})
+                )
+                SELECT  WR.LOTID
+                    ,   WR.PROCESSDEFID
+                    ,   WR.PROCESSDEFVERSION
+                    ,   WR.PROCESSSEGMENTID
+                    ,   NVL(DT3.DICTIONARYNAME, SG.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+                    ,   WR.PROCESSSEQUENCE                                  AS USERSEQUENCE
+                    ,   WR.WORKCOUNT
+                    ,   WR.AREAID
+                    ,   NVL(DT4.DICTIONARYNAME, AR.DESCRIPTION)        AS AREANAME
+                    ,   DF.DEFECTCODE
+                    ,   NVL(DT1.DICTIONARYNAME, DC.DEFECTCODENAME)     AS DEFECTCODENAME
+                    ,   DF.QCSEGMENTID
+                    ,   NVL(DT2.DICTIONARYNAME, QS.QCSEGMENTNAME)      AS QCSEGMENTNAME
+                    ,   DF.DEFECTQTY
+                    ,   DF.REASONCONSUMABLEDEFID
+                    ,   CASE WHEN DF.REASONCONSUMABLEDEFID IS NOT NULL THEN
+                            CASE WHEN PD.PRODUCTDEFID IS NOT NULL THEN 
+                                NVL(DT5.DICTIONARYNAME, PD.PRODUCTDEFNAME)
+                            ELSE 
+                                NVL(DT6.DICTIONARYNAME, CD.DESCRIPTION)
+                            END
+                        ELSE NULL END                                       AS REASONCONSUMABLEDEFNAME
+                    ,   DF.REASONCONSUMABLELOTID
+                    ,   NVL(DT7.DICTIONARYNAME, SG2.PROCESSSEGMENTNAME) AS REASONSEGMENT
+                    ,   DF.REASONAREAID
+                    ,   NVL(DT8.DICTIONARYNAME, AR2.DESCRIPTION)       AS REASONAREA
+                FROM    WORKRESULT                  WR
+                INNER JOIN PCM_LOT                   L   ON  WR.LOTID = L.PARENTLOTID
+                                                        AND L.ISDEFECTED = 'Y'
+                INNER JOIN PCM_LOTDEFECT             DF  ON  L.LOTID = DF.LOTID
+                                                        AND WR.PRODUCTDEFID = DF.PRODUCTDEFID
+                                                        AND WR.PRODUCTDEFVERSION = DF.PRODUCTDEFVERSION
+                                                        AND WR.PROCESSSEGMENTID = DF.PROCESSSEGMENTID
+                                                        AND WR.WORKCOUNT = NVL(DF.WORKCOUNT, L.WORKCOUNT)
+                LEFT  JOIN BAS_DEFECTCODE            DC  ON  DF.DEFECTCODE = DC.DEFECTCODE
+                LEFT  JOIN CMD_DICTIONARY            DT1 ON  DC.DICTIONARYID = DT1.DICTIONARYID
+                                                        AND DT1.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN QAM_QCSEGMENTDEFINITION   QS  ON  DF.QCSEGMENTID = QS.QCSEGMENTID
+                LEFT  JOIN CMD_DICTIONARY            DT2 ON  QS.QCSEGMENTNAME = DT2.DICTIONARYID
+                                                        AND DT2.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_PROCESSSEGMENT        SG  ON  WR.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+                LEFT  JOIN CMD_DICTIONARY            DT3 ON  SG.PROCESSSEGMENTNAME = DT3.DICTIONARYID
+                                                        AND DT3.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_AREA                  AR  ON  WR.AREAID = AR.AREAID
+                LEFT  JOIN CMD_DICTIONARY            DT4 ON  AR.AREANAME = DT4.DICTIONARYID
+                                                        AND DT4.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_PRODUCTDEFINITION     PD  ON  DF.REASONCONSUMABLEDEFID = PD.PRODUCTDEFID
+                                                        AND DF.REASONCONSUMABLEDEFVERSION = PD.PRODUCTDEFVERSION
+                LEFT  JOIN CMD_DICTIONARY            DT5 ON  PD.PRODUCTDEFNAME = DT5.DICTIONARYID
+                                                        AND DT5.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_CONSUMABLEDEFINITION  CD  ON  DF.REASONCONSUMABLEDEFID = CD.CONSUMABLEDEFID
+                                                        AND DF.REASONCONSUMABLEDEFVERSION = CD.CONSUMABLEDEFVERSION
+                LEFT  JOIN CMD_DICTIONARY            DT6 ON  CD.CONSUMABLEDEFNAME = DT6.DICTIONARYID
+                                                        AND DT6.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_PROCESSSEGMENT        SG2  ON DF.REASONSEGMENTID = SG2.PROCESSSEGMENTID
+                LEFT  JOIN CMD_DICTIONARY            DT7 ON  SG2.PROCESSSEGMENTNAME = DT7.DICTIONARYID
+                                                        AND DT7.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_AREA                  AR2 ON  DF.REASONAREAID = AR2.AREAID
+                LEFT  JOIN CMD_DICTIONARY            DT8 ON  AR2.AREANAME = DT8.DICTIONARYID
+                                                        AND DT8.LANGUAGETYPE = #{LANGUAGETYPE}
+				ORDER BY TO_NUMBER(WR.USERSEQUENCE), TO_NUMBER(WR.SUBUSERSEQUENCE), WR.WORKCOUNT		
+	</select>
+	
+</mapper>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM07700Dao">
+   <select id="GetTransitNextAreaList" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM07700Dao.GetTransitNextAreaList */ 
+			<![CDATA[
+		        --
+               -- Id : GetTransitNextAreaList
+                -- Version : 10001
+                WITH PROCESSSEGMENT AS
+                (
+                    SELECT	PROCESSDEFID
+                        ,	PROCESSDEFVERSION
+                        ,	PROCESSSEGMENTID
+                        ,	LEAD(PROCESSSEGMENTID) OVER (ORDER BY PATHSEQUENCE ASC) AS NEXTPROCESSSEGMENTID
+                        ,	PATHSEQUENCE
+                    FROM	BAS_PROCESSPATH
+                    WHERE 	PROCESSDEFID = #{PROCESSDEFID}
+                    AND 	PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+                    AND     VALIDSTATE = 'Valid'
+                )
+                SELECT  RS.AREAID
+                    ,	BOR.RESOURCEID
+                    ,	COALESCE(AN.DICTIONARYNAME, A.AREANAME)	AS AREANAME
+                    ,	BOR.ISPRIMARYRESOURCE					AS ISPRIMARYRESOURCE
+                FROM    BAS_BILLOFRESOURCE			BOR
+                LEFT  JOIN PROCESSSEGMENT		    PP	ON 	BOR.PROCESSDEFID = PP.PROCESSDEFID
+                                                        AND BOR.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+                                                        AND BOR.PROCESSSEGMENTID = PP.NEXTPROCESSSEGMENTID
+                                                        
+                LEFT  JOIN BAS_RESOURCE			    RS	ON 	BOR.RESOURCEID = RS.RESOURCEID 
+                LEFT  JOIN BAS_AREA				    A	ON	BOR.ENTERPRISEID = A.ENTERPRISEID
+                                                        AND	BOR.PLANTID = A.PLANTID
+                                                        AND	RS.AREAID = A.AREAID
+                                                        AND     A.VALIDSTATE = 'Valid'
+                LEFT  JOIN CMD_DICTIONARY	        AN	ON	A.AREANAME = AN.DICTIONARYID
+                                                        AND AN.LANGUAGETYPE = #{LANGUAGETYPE}
+                WHERE	1 = 1
+                AND		(BOR.ENTERPRISEID = #{ENTERPRISEID} OR BOR.ENTERPRISEID = '*')
+                AND		(BOR.PLANTID = #{PLANTID} OR BOR.PLANTID = '*')
+                AND		(BOR.PRODUCTDEFID = #{PRODUCTDEFID} OR BOR.PRODUCTDEFID = '*')
+                AND		(BOR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} OR BOR.PRODUCTDEFVERSION = '*')
+                AND		(BOR.PROCESSDEFID = #{PROCESSDEFID} OR BOR.PROCESSDEFID = '*')
+                AND		(BOR.PROCESSDEFVERSION = #{PROCESSDEFVERSION} OR BOR.PROCESSDEFVERSION = '*')
+                AND		BOR.RESOURCETYPE = #{RESOURCETYPE}
+                AND 	PP.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+                AND     BOR.VALIDSTATE = 'Valid'
+                ORDER BY BOR."sequence"
+			]]>
+    </select>
+    
+</mapper>

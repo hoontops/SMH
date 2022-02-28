@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nbdf.cmd.cm.cmsa.dao.CMSA00302Dao">
+
+  <!-- 년도조회-->
+    <select id="selectYearList" parameterType="map" resultType="hashmap">
+    /* "com.nbdf.cmd.cm.cmsa.dao.CMSA00302Dao.selectYearList"  */
+	 SELECT TO_CHAR(LEVEL) AS YYYY,
+	 			TO_CHAR(LEVEL) AS YYYY_NM,
+	       TO_DATE(LEVEL||'0101', 'YYYYMMDD') YYYY_SDAY,
+	       TO_DATE(LEVEL||'1231', 'YYYYMMDD') YYYY_EDAY
+	  FROM DUAL
+	 WHERE LEVEL <![CDATA[>=]]> #{YEAR_START}
+	 CONNECT BY LEVEL  <![CDATA[<=]]> TO_NUMBER(TO_CHAR(SYSDATE, 'YYYY'))
+	 ORDER BY LEVEL DESC
+	</select>
+
+  <!-- 현재일시분초-->
+    <select id="selectCurrentSystemTime" parameterType="map"  resultType="hashmap">
+    /* "com.nbdf.cmd.cm.cmsa.dao.CMSA00302Dao.selectCurrentSystemTime"  */
+     SELECT TO_CHAR(ADD_MONTHS(SYSDATE + nvl(#{TIME_CALC_DAY},0), nvl(#{TIME_CALC_MONTH},0)),'YYYYMMDDHH24MISS') AS TODATE
+      ,TO_CHAR(decode(#{CODE},'today',sysdate
+                      ,'yesterday',sysdate-1
+                      ,'thisweek',TRUNC(sysdate, 'iw')
+                      ,'lastweek',TRUNC(sysdate-7, 'iw')
+                      ,'thismonth',TRUNC(sysdate,'MM')
+                      ,'lastmonth',TRUNC(ADD_MONTHS(SYSDATE, -1),'MM'))
+                      ,'YYYYMMDD') AS DATE_FROM
+      ,TO_CHAR(decode(#{CODE},'today',sysdate+1
+                      ,'yesterday',sysdate
+                      ,'thisweek',TRUNC(sysdate+7, 'iw')
+                      ,'lastweek',TRUNC(sysdate, 'iw')
+                      ,'thismonth',LAST_DAY(sysdate)+1
+                      ,'lastmonth',LAST_DAY(ADD_MONTHS(SYSDATE, -1))+1)
+                      ,'YYYYMMDD') AS DATE_TO
+     FROM DUAL
+    </select>
+
+  <!-- 현재일시분초-->
+    <select id="selectSystemDate" parameterType="map"  resultType="hashmap">
+    /* "com.nbdf.cmd.cm.cmsa.dao.CMSA00302Dao.selectSystemDate"  */
+     SELECT
+        TO_CHAR(ADD_MONTHS(SYSDATE, #{TIME_CALC_MONTH}),'YYYYMMDDHH24MISS') AS CURR_DATE
+        ,TO_CHAR(LAST_DAY(ADD_MONTHS(SYSDATE, #{TIME_CALC_MONTH}),'YYYYMMDDHH24MISS')) AS LAST_DATE
+        ,TO_CHAR(SYSDATE + ADD_DAYS,'YYYYMMDDHH24MISS')) AS ADD_DATE
+     FROM DUAL
+    </select>
+
+    <!-- 코드조회-->
+    <select id="selectCmdCmCdsList" parameterType="map" resultType="hashmap">
+    <if test="CMB_TYPE != null">
+    SELECT
+        NULL AS GRP_CD
+        ,NULL AS LOOKUP_CODE
+        ,NULL AS DESCRIPTION
+        ,DECODE(#{CMB_TYPE},'ALL','전체','SEL','선택','NAN','해당없음') AS DESCRIPTION2
+        ,NULL AS CD_DESC
+        ,NULL AS ORDR
+        ,NULL AS RM
+        ,NULL AS USE_YN
+    FROM DUAL
+    UNION ALL
+    </if>
+    SELECT
+        A.GRP_CD
+        ,A.CM_CD	AS LOOKUP_CODE
+        ,A.CD_NM   AS DESCRIPTION
+        ,A.CM_CD||'.'||A.CD_NM   AS DESCRIPTION2
+        ,A.CD_DESC
+        ,A.ORDR
+        ,A.RM
+        ,A.USE_YN
+    FROM	CMD_CM_CDS A
+    WHERE 1=1
+    <if test="GRP_CD != null">
+        AND A.GRP_CD = #{GRP_CD}
+    </if>
+    <if test="USE_YN != null">
+        AND A.USE_YN = #{USE_YN}
+    </if>
+    <if test="LOOKUP_CODE != null">
+        AND A.CM_CD LIKE #{LOOKUP_CODE}||'%'
+    </if>
+    <if test="DESCRIPTION != null">
+        AND A.CD_NM LIKE '%'||#{DESCRIPTION}||'%'
+    </if>
+    <if test="GRP_CD == 'CMD_JOB_SYSCD'">
+        AND (A.RM LIKE 'E%' OR A.CM_CD ='CMD')
+    </if>
+    </select>
+
+  <!-- 회계구분리스트 조회-->
+    <select id="selectAcctGubunList" parameterType="map"  resultType="hashmap">
+    <if test="CMB_TYPE != null and CMB_TYPE != ''">
+    SELECT
+         NULL AS ACCT_GUBUN_ID
+        ,NULL AS LEDGER_ID
+        ,NULL AS ORG_ID
+        ,NULL AS LOOKUP_CODE
+        ,DECODE(#{CMB_TYPE},'ALL','전체','SEL','선택','NAN','해당없음') AS MEANING
+        ,DECODE(#{CMB_TYPE},'ALL','전체','SEL','선택','NAN','해당없음') AS MEANING2
+        ,NULL AS ABBR
+        ,NULL AS USE_YN
+        ,NULL AS REMAIN_AMOUNT_SEGMNT
+        ,NULL AS ACCT_DIV_CD
+        ,NULL AS USE_GUBUN
+        ,NULL AS GRRSP_PTY_REGSTR
+        ,NULL AS GDS_AST_REGSTR
+    FROM DUAL
+    UNION ALL
+    </if>
+    SELECT *
+    FROM(
+			    SELECT
+			        A.ACCT_GUBUN_ID
+			        ,A.LEDGER_ID
+			        ,A.ORG_ID
+			        ,A.ACCT_DIV_CD AS LOOKUP_CODE
+			        ,A.ABBR AS MEANING   /*,A.ACCT_DIV_CD||'.'||A.ABBR AS MEANING*/
+                    ,A.ABBR AS MEANING2
+			        ,A.ABBR
+			        ,A.USE_YN
+			        ,A.REMAIN_AMOUNT_SEGMNT
+			        ,A.ACCT_DIV_CD
+			        ,ROW_NUMBER() OVER(ORDER BY A.ACCT_DIV_CD) AS USE_GUBUN
+			        ,(SELECT BOOK_TYPE_CODE
+			        FROM   FA_BOOK_CONTROLS
+			        WHERE  ATTRIBUTE1 = '1'
+			        AND    SET_OF_BOOKS_ID = A.LEDGER_ID
+			        AND    ECM_COMMON_PKG.GET_COA_ACCOUNT_F(SET_OF_BOOKS_ID, FLEXBUILDER_DEFAULTS_CCID, '1') = A.ACCT_DIV_CD) AS GRRSP_PTY_REGSTR
+			        ,(SELECT BOOK_TYPE_CODE
+			        FROM   FA_BOOK_CONTROLS
+			        WHERE  ATTRIBUTE1 = '2'
+			        AND    SET_OF_BOOKS_ID = A.LEDGER_ID
+			        AND    ECM_COMMON_PKG.GET_COA_ACCOUNT_F(SET_OF_BOOKS_ID, FLEXBUILDER_DEFAULTS_CCID, '1') = A.ACCT_DIV_CD) AS GDS_AST_REGSTR
+			    FROM  ECM_ACCT_GUBUN A
+			    WHERE 1=1
+			    AND A.USE_YN = NVL(#{ENABLED_FLAG},'Y')
+	    <choose>
+	        <when test="JOB_SYS_CD eq 'EGL'.toString() ">
+	        </when>
+	        <otherwise>
+	           AND A.ORG_ID IS NOT NULL
+	        </otherwise>
+	    </choose>
+        <if test="ACCT_DIV_CD != null and ACCT_DIV_CD !='' ">
+                AND A.ACCT_DIV_CD =  #{ACCT_DIV_CD}
+        </if>
+
+			    ORDER BY A.ACCT_DIV_CD)
+    </select>
+
+  <!-- 회계구분 -->
+    <select id="selectAccountGubunInformation" parameterType="map"  resultType="hashmap">
+	SELECT A.ACCT_GUBUN_ID
+	      ,A.LEDGER_ID
+	      ,A.ORG_ID
+	      ,A.REMAIN_AMOUNT_SEGMNT
+	      ,A.ACCT_DIV_CD
+	      ,A.ACCT_DIV_NM
+	      ,A.ABBR
+	      ,A.USE_YN
+	  FROM ECM_ACCT_GUBUN A
+	 WHERE A.ACCT_DIV_CD = #{ACCT_DIV_CD}
+	   AND A.USE_YN = 'Y'
+    </select>
+    
+        
+        
+</mapper>
+
+

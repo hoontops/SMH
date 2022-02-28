@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+  
+<mapper namespace="smh.ben.dao.BEN60110Dao">
+    
+    <!-- 단체상해보험 데이터 조회 -->
+	<select id="selectAddInsuraceList" parameterType="map" resultType="hashmap">
+		/* smh.ben.dao.BEN60110Dao.selectAddInsuraceList */
+		SELECT DEF.HJSBEN_GROUP_INSURANCE_SEQ  /* PK 일련번호              */
+		      ,DEF.YYYY                        /* 년도                     */
+		      ,DEF.EFFECTIVE_DATE              /* 가입일자                 */
+		      ,DEF.STATUS                      /* 상태CODE                 */ 
+		      ,DEF.STATUS_NAME                 /* 상태                     */
+		      ,DEF.LIFE_INSURANCE              /* 생명보험                 */
+		      ,DEF.CANCER_INSURANCE            /* 암보험                   */
+		      ,DEF.ADD_INSURANCE_DATE          /* 신청일자                 */
+		      ,DEF.ADD_SELF_LIFE_INSURANCE     /* 추가 생명(본인)          */
+		      ,DEF.ADD_SELF_LIFE_AMOUNT        /* 추가 생명(본인)-금액     */
+		      ,DEF.ADD_SELF_CANCER_INSURANCE   /* 추가 암보험(본인)        */
+		      ,DEF.ADD_SELF_CANCER_AMOUNT      /* 추가 암보험(본인)-금액   */
+		      ,DEF.ADD_WIFE_LIFE_INSURANCE     /* 추가 생명(배우자)        */
+		      ,DEF.ADD_WIFE_LIFE_AMOUNT        /* 추가 생명(배우자)-금액   */
+		      ,DEF.ADD_WIFE_CANCER_INSURANCE   /* 추가 암보험(배우자)      */
+		      ,DEF.ADD_WIFE_CANCER_AMOUNT      /* 추가 암보험(배우자)-금액 */
+		  FROM ( SELECT HBGI.YYYY                                                                              AS  YYYY
+		               ,TO_CHAR(HBGI.EFFECTIVE_DATE, 'YYYY/MM/DD')                                             AS  EFFECTIVE_DATE
+		               ,HBGI.STATUS                                                                            AS  STATUS
+		               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_INSURANCE1', HBGI.LIFE_INSURANCE )                    AS LIFE_INSURANCE
+		               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_INSURANCE2', HBGI.CANCER_INSURANCE )                  AS CANCER_INSURANCE
+		               ,TO_CHAR(HBGI.ADD_INSURANCE_DATE, 'YYYY/MM/DD')                                         AS  ADD_INSURANCE_DATE
+		               ,HBGI.ADD_SELF_LIFE_INSURANCE                                                           AS  ADD_SELF_LIFE_INSURANCE
+		               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ADD_INSURANCE1', HBGI.ADD_SELF_LIFE_INSURANCE)        AS  ADD_SELF_LIFE_AMOUNT
+		               ,HBGI.ADD_SELF_CANCER_INSURANCE                                                         AS  ADD_SELF_CANCER_INSURANCE
+		               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ADD_INSURANCE2', HBGI.ADD_SELF_CANCER_INSURANCE)      AS  ADD_SELF_CANCER_AMOUNT
+		               ,HBGI.ADD_WIFE_LIFE_INSURANCE                                                           AS  ADD_WIFE_LIFE_INSURANCE
+		               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ADD_MATE_INSURANCE1', HBGI.ADD_SELF_CANCER_INSURANCE) AS  ADD_WIFE_LIFE_AMOUNT
+		               ,HBGI.ADD_WIFE_CANCER_INSURANCE                                                         AS  ADD_WIFE_CANCER_INSURANCE
+		               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ADD_MATE_INSURANCE2', HBGI.ADD_WIFE_CANCER_INSURANCE) AS  ADD_WIFE_CANCER_AMOUNT
+		               ,HBGI.OBJECT_VERSION_NUMBER                                                             AS  OBJECT_VERSION_NUMBER
+		               ,HBGI.HJSBEN_GROUP_INSURANCE_SEQ                                                        AS  HJSBEN_GROUP_INSURANCE_SEQ
+		               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_APPROVAL_STATUS', HBGI.STATUS)                        AS  STATUS_NAME
+		            FROM HJSBEN_GROUP_INSURANCE HBGI
+		           WHERE HBGI.PERSON_ID = #{PERSON_ID}
+		             AND EXISTS ( SELECT 'X'
+		                            FROM HJSBEN_GROUP_INSURANCE XBGI
+		                           WHERE HBGI.PERSON_ID  = XBGI.PERSON_ID
+		                          HAVING MAX(XBGI.YYYY)  = HBGI.YYYY  )
+		       ) DEF
+		 WHERE 1=1
+	</select>
+
+    <!-- 단체상해보험 신청 마감일자 체크 -->
+    <!-- Y:오류, N:정상  -->
+	<select id="selectCloseDateCheck" parameterType="map" resultType="string">
+		/* smh.ben.dao.BEN60110Dao.selectCloseDateCheck */
+		SELECT CASE WHEN FND_DATE.CANONICAL_TO_DATE(HJSPFM_COMMON_PKG.GET_GLOBALS_VALUE('HJS_BEN_상해보험기간')) <![CDATA[ < ]]> TO_DATE(#{EFFECTIVE_DATE}, 'YYYY/MM/DD') THEN 'Y' ELSE 'N' END
+  		FROM DUAL
+	</select>
+	
+    <!-- 단체상해보험 신청내역 업데이트 -->
+	<update id="updateAddInsurace" parameterType="map">
+        /* smh.ben.dao.BEN60110Dao.updateVarificationLetter */
+		UPDATE HJSBEN_GROUP_INSURANCE
+		   SET ADD_SELF_LIFE_INSURANCE   = #{ADD_SELF_LIFE_INSURANCE}  
+		      ,ADD_SELF_CANCER_INSURANCE = #{ADD_SELF_CANCER_INSURANCE}
+		      ,ADD_SELF_TOTAL_AMOUNT     = 0
+		      ,ADD_SELF_TOTAL_POINT      = 0
+		      ,ADD_WIFE_LIFE_INSURANCE   = #{ADD_WIFE_LIFE_INSURANCE}
+		      ,ADD_WIFE_CANCER_INSURANCE = #{ADD_WIFE_CANCER_INSURANCE}
+		      ,ADD_WIFE_TOTAL_AMOUNT     = 0
+		      ,ADD_WIFE_TOTAL_POINT      = 0
+		      ,ADD_TOTAL_AMOUNT          = 0 
+		      ,ADD_TOTAL_POINT           = 0
+		      ,ADD_INSURANCE_DATE        = SYSDATE 
+		      ,OBJECT_VERSION_NUMBER     = OBJECT_VERSION_NUMBER + 1
+		 WHERE 1=1
+		   AND HJSBEN_GROUP_INSURANCE_SEQ = #{HJSBEN_GROUP_INSURANCE_SEQ}
+	</update>
+	
+</mapper>

@@ -1,0 +1,1802 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM01100Dao">
+<!-- 품질규격 측정값 정보-->
+
+    <!-- 데이터 측정 이력 상세조회-->
+    <select id="selectBasDaresult" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM01100Dao.selectBasDaresult  */
+    SELECT DISTINCT 
+			A.RESOURCEID AS LOTID,
+			A.PRODUCTDEFID ,
+			A.PRODUCTDEFVERSION ,
+			NVL(PD.PRODUCTDEFNAME, A.PRODUCTDEFID) AS PRODUCTDEFNAME ,
+			A.PLANTID ,
+			FAC.FACTORYID ,
+			FAC.FACTORYNAME ,
+			A.PROCESSSEGMENTID,
+			NVL(DC1.DICTIONARYNAME, A.PROCESSSEGMENTID) AS PROCESSSEGMENTNAME ,
+			A.AREAID ,
+			A.ENTERPRISEID ,
+			NVL(DC4.DICTIONARYNAME, A.AREAID) AS AREANAME ,
+			LE.EQUIPMENTID ,
+			NVL(DC5.DICTIONARYNAME, LE.EQUIPMENTID) AS EQUIPMENTUNIT ,
+			A.REWORKCOUNT ,
+			A.LOTTYPE ,
+			B.SUBNAME 
+	FROM
+			BAS_DARESULT A
+	LEFT
+	JOIN 	FN_AREA(#{SESSION_USER_ID})	FN			ON	A.AREAID = FN.AREAID
+												AND	FN.ISMODIFY = 'Y'
+	LEFT JOIN	BAS_FACTORY 				FAC		ON	FN.FACTORYID = FAC.FACTORYID
+															AND A.PLANTID  = FAC.PLANTID 
+															AND A.ENTERPRISEID = FAC.ENTERPRISEID 
+															AND FAC.VALIDSTATE = 'Valid'
+	LEFT
+	JOIN	PCM_LOTEQUIPMENT 		LE			ON	A.RESOURCEID = LE.LOTID
+												AND A.PROCESSSEGMENTID = LE.PROCESSSEGMENTID
+												AND A.EQUIPMENTID = LE.EQUIPMENTID
+	LEFT
+	JOIN 	(	SELECT	C.LOOKUP_CODE
+					,D.DICTIONARYNAME		AS SUBNAME
+				FROM	CMD_LOOKUP_VALUES		C
+				LEFT OUTER 
+				JOIN	CMD_DICTIONARY	D		ON	C.DICTIONARYID = D.DICTIONARYID
+				WHERE	1=1
+				AND		C.LOOKUP_TYPE = 'ProductionType'
+				AND		C.ENABLED_FLAG = 'Y'
+				AND		D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+			) 						B			ON	A.LOTTYPE = B.LOOKUP_CODE
+	LEFT 
+	JOIN	BAS_PRODUCTDEFINITION	PD		ON 	A.PRODUCTDEFID = PD.PRODUCTDEFID
+											AND	A.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+	LEFT
+	JOIN	BAS_PROCESSSEGMENT		PS		ON  PS.PROCESSSEGMENTID = A.PROCESSSEGMENTID
+											AND PS.PROCESSSEGMENTVERSION = A.PROCESSSEGMENTVERSION
+	LEFT
+	JOIN 	BAS_EQUIPMENT			EQ		ON	EQ.EQUIPMENTID = LE.EQUIPMENTID
+	LEFT
+	JOIN	CMD_DICTIONARY			DC1		ON  DC1.DICTIONARYID = PS.PROCESSSEGMENTNAME
+											AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+	LEFT 
+	JOIN 	CMD_DICTIONARY			DC4		ON	FN.AREANAME = DC4.DICTIONARYID
+											AND DC4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+	LEFT
+	JOIN 	CMD_DICTIONARY			DC5		ON DC5.DICTIONARYID = EQ.EQUIPMENTNAME
+											AND DC5.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+	WHERE 	A.RESOURCEID = #{LOTID}
+   	 <if test="EQUIPMENTID != null and EQUIPMENTID !='' ">
+   	 	AND		LE.EQUIPMENTID = #{EQUIPMENTID}
+   	 </if>
+   	 <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+		AND		UPPER(A.PRODUCTDEFID) LIKE ('%' || UPPER(#{PRODUCTDEFID}) || '%')
+   	 </if>
+   	 <if test="RESOURCETYPE != null and RESOURCETYPE !='' ">
+   	 	AND		A.RESOURCETYPE = #{RESOURCETYPE}
+   	 </if>
+    </select>
+    
+    <!-- 품질규격 측정값 정보 변경 -->
+    <update id="updateQamMeasureValue" parameterType="map" >
+    UPDATE QAM_QCINSPECTORGRADE 
+    SET 
+        UPPERSCORE = #{UPPERSCORE}     
+        ,LOWERSCORE = #{LOWERSCORE}     
+        ,DESCRIPTION = #{DESCRIPTION}             
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+        ,VALIDSTATE = #{VALIDSTATE}
+    WHERE ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    AND INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+    AND GRADE = #{GRADE}
+    </update>
+
+    <!-- 품질규격 측정값 정보 삭제 -->
+    <update id="deleteQamMeasureValue" parameterType="map" > 
+    DELETE FROM QAM_QCINSPECTORGRADE 
+    WHERE ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    AND INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+    AND GRADE = #{GRADE}
+    </update>
+
+    <!-- 품질규격 측정값 정보 조회  GetQualitySpecification : 10001 -->
+    <select id="selectQamMeasureValueList" parameterType="map" resultType="hashmap">
+     /* smh.qam.dao.QAM01100Dao.selectQamMeasureValueList  */
+   		 WITH MEASURELIST AS
+				(
+					SELECT	PROCESSSEGMENTID
+						,PLANTID
+						,AREAID
+						,EQUIPMENTID
+						,CUSTOMERID
+						,PRODUCTDEFID
+						,LOTTYPE
+						,RESOURCEID
+						,RESOURCETYPE
+						,MAX(REWORKCOUNT)		AS REWORKCOUNT
+					FROM 	BAS_DARESULT 
+					WHERE	1=1
+					AND		MEASUREDATETIME	BETWEEN TO_DATE(SUBSTR(#{PERIODFR}, 1, 12), 'YYYYMMDDHH24MISS') AND TO_DATE(SUBSTR(#{PERIODTO}, 1, 12), 'YYYYMMDDHH24MISS')
+					<!-- TO_TIMESTAMP(#{PERIODFR}, 'YYYYMMDDHH24MISSFF3')	 AND		TO_TIMESTAMP(#{PERIODTO}, 'YYYYMMDDHH24MISSFF3') -->
+					AND		DESCRIPTION IS NULL
+					<if test="PLANTID != null and PLANTID !='' "> 
+				       AND	PLANTID = #{PLANTID}
+				    </if>
+				    <if test="AREAID != null and AREAID !='' "> 
+				        AND	AREAID = #{AREAID}
+				    </if>
+				    <if test="CUSTOMERID != null and CUSTOMERID !='' "> 
+				        AND	CUSTOMERID = #{CUSTOMERID}
+				    </if>
+				    <if test="RESOURCEID != null and RESOURCEID !='' "> 
+				        AND	RESOURCEID = #{RESOURCEID}
+				    </if>
+					GROUP  BY		PROCESSSEGMENTID
+							,PLANTID
+							,AREAID
+							,EQUIPMENTID
+							,CUSTOMERID
+							,PRODUCTDEFID						
+							,LOTTYPE
+							,RESOURCEID
+							,RESOURCETYPE
+				)
+				SELECT	TO_CHAR(MAX(A.MEASUREDATETIME), 'YYYY-MM-DD HH24:MI:SS') AS MEASUREDATETIME
+					,A.PROCESSSEGMENTID
+					,A.PROCESSSEGMENTNAME
+					,A.PLANTID
+					,A.AREAID
+					,A.AREANAME
+					,A.FACTORYNAME AS FACTORYID
+					,A.EQUIPMENTID
+					,A.EQUIPMENTUNIT
+					,A.MEASURER
+					,A.CUSTOMERID
+					,A.CUSTOMERNAME
+					,A.PRODUCTDEFID
+					,A.PRODUCTDEFNAME
+					,A.PRODUCTDEFVERSION
+					,A.REWORKCOUNT
+					,A.LOTTYPE
+					,A.LOTID
+					,A.SUBNAME
+					,A.DAITEMID
+					,A.DAITEMNAME
+					,A.SPECRANGE
+					<!-- ,A.INSPECTIONRESULT -->
+					,DECODE(A.NG_CNT, 0, 'OK', 'NG') AS INSPECTIONRESULT
+					,A.AVERAGEVALUE
+					,A.MAXVALUE
+					,A.MINVALUE
+					,A.DEVIATION
+					,A.RESOURCETYPE
+					,SUM(A.MEASUREVALUE_1)		AS	MEASUREVALUE_1
+					,SUM(A.MEASUREVALUE_2)		AS	MEASUREVALUE_2
+					,SUM(A.MEASUREVALUE_3)		AS	MEASUREVALUE_3
+					,SUM(A.MEASUREVALUE_4)		AS	MEASUREVALUE_4
+					,SUM(A.MEASUREVALUE_5)		AS	MEASUREVALUE_5
+					,SUM(A.MEASUREVALUE_6)		AS	MEASUREVALUE_6
+					,SUM(A.MEASUREVALUE_7)		AS	MEASUREVALUE_7
+					,SUM(A.MEASUREVALUE_8)		AS	MEASUREVALUE_8
+					,SUM(A.MEASUREVALUE_9)		AS	MEASUREVALUE_9
+					,SUM(A.MEASUREVALUE_10)		AS	MEASUREVALUE_10
+					,SUM(A.MEASUREVALUE_11)		AS	MEASUREVALUE_11
+					,SUM(A.MEASUREVALUE_12)		AS	MEASUREVALUE_12
+					,SUM(A.MEASUREVALUE_13)		AS	MEASUREVALUE_13
+					,SUM(A.MEASUREVALUE_14)		AS	MEASUREVALUE_14
+					,SUM(A.MEASUREVALUE_15)		AS	MEASUREVALUE_15
+					,SUM(A.MEASUREVALUE_16)		AS	MEASUREVALUE_16
+					,SUM(A.MEASUREVALUE_17)		AS	MEASUREVALUE_17
+					,SUM(A.MEASUREVALUE_18)		AS	MEASUREVALUE_18
+					,SUM(A.MEASUREVALUE_19)		AS	MEASUREVALUE_19
+					,SUM(A.MEASUREVALUE_20)		AS	MEASUREVALUE_20
+					,SUM(A.MEASUREVALUE_21)		AS	MEASUREVALUE_21
+					,SUM(A.MEASUREVALUE_22)		AS	MEASUREVALUE_22
+					,SUM(A.MEASUREVALUE_23)		AS	MEASUREVALUE_23
+					,SUM(A.MEASUREVALUE_24)		AS	MEASUREVALUE_24
+					,SUM(A.MEASUREVALUE_25)		AS	MEASUREVALUE_25
+					,SUM(A.MEASUREVALUE_26)		AS	MEASUREVALUE_26
+					,SUM(A.MEASUREVALUE_27)		AS	MEASUREVALUE_27
+					,SUM(A.MEASUREVALUE_28)		AS	MEASUREVALUE_28
+					,SUM(A.MEASUREVALUE_29)		AS	MEASUREVALUE_29
+					,SUM(A.MEASUREVALUE_30)		AS	MEASUREVALUE_30
+					,SUM(A.MEASUREVALUE_31)		AS	MEASUREVALUE_31
+					,SUM(A.MEASUREVALUE_32)		AS	MEASUREVALUE_32
+					,SUM(A.MEASUREVALUE_33)		AS	MEASUREVALUE_33
+					,SUM(A.MEASUREVALUE_34)		AS	MEASUREVALUE_34
+					,SUM(A.MEASUREVALUE_35)		AS	MEASUREVALUE_35
+					,SUM(A.MEASUREVALUE_36)		AS	MEASUREVALUE_36
+					,SUM(A.MEASUREVALUE_37)		AS	MEASUREVALUE_37
+					,SUM(A.MEASUREVALUE_38)		AS	MEASUREVALUE_38
+					,SUM(A.MEASUREVALUE_39)		AS	MEASUREVALUE_39
+					,SUM(A.MEASUREVALUE_40)		AS	MEASUREVALUE_40
+					,SUM(A.MEASUREVALUE_41)		AS	MEASUREVALUE_41
+					,SUM(A.MEASUREVALUE_42)		AS	MEASUREVALUE_42
+					,SUM(A.MEASUREVALUE_43)		AS	MEASUREVALUE_43
+					,SUM(A.MEASUREVALUE_44)		AS	MEASUREVALUE_44
+					,SUM(A.MEASUREVALUE_45)		AS	MEASUREVALUE_45
+					,SUM(A.MEASUREVALUE_46)		AS	MEASUREVALUE_46
+					,SUM(A.MEASUREVALUE_47)		AS	MEASUREVALUE_47
+					,SUM(A.MEASUREVALUE_48)		AS	MEASUREVALUE_48
+					,SUM(A.MEASUREVALUE_49)		AS	MEASUREVALUE_49
+					,SUM(A.MEASUREVALUE_50)		AS	MEASUREVALUE_50
+					,SUM(A.MEASUREVALUE_51)		AS	MEASUREVALUE_51
+					,SUM(A.MEASUREVALUE_52)		AS	MEASUREVALUE_52
+					,SUM(A.MEASUREVALUE_53)		AS	MEASUREVALUE_53
+					,SUM(A.MEASUREVALUE_54)		AS	MEASUREVALUE_54
+					,SUM(A.MEASUREVALUE_55)		AS	MEASUREVALUE_55
+					,SUM(A.MEASUREVALUE_56)		AS	MEASUREVALUE_56
+					,SUM(A.MEASUREVALUE_57)		AS	MEASUREVALUE_57
+					,SUM(A.MEASUREVALUE_58)		AS	MEASUREVALUE_58
+					,SUM(A.MEASUREVALUE_59)		AS	MEASUREVALUE_59
+					,SUM(A.MEASUREVALUE_60)		AS	MEASUREVALUE_60
+                    , MAX(RESULT_AVERAGE)       AS  RESULT_AVERAGE
+                    , MAX(RESULT_MAX)           AS  RESULT_MAX
+                    , MAX(RESULT_MIN)           AS  RESULT_MIN
+                    , MAX(RESULT_DEVIATION)     AS  RESULT_DEVIATION
+                    , MAX(RESULT_1)             AS  RESULT_1
+                    , MAX(RESULT_2)             AS  RESULT_2
+                    , MAX(RESULT_3)             AS  RESULT_3
+                    , MAX(RESULT_4)             AS  RESULT_4
+                    , MAX(RESULT_5)             AS  RESULT_5
+                    , MAX(RESULT_6)             AS  RESULT_6
+                    , MAX(RESULT_7)             AS  RESULT_7
+                    , MAX(RESULT_8)             AS  RESULT_8
+                    , MAX(RESULT_9)             AS  RESULT_9
+                    , MAX(RESULT_10)            AS  RESULT_10
+                    , MAX(RESULT_11)            AS  RESULT_11
+                    , MAX(RESULT_12)            AS  RESULT_12
+                    , MAX(RESULT_13)            AS  RESULT_13
+                    , MAX(RESULT_14)            AS  RESULT_14
+                    , MAX(RESULT_15)            AS  RESULT_15
+                    , MAX(RESULT_16)            AS  RESULT_16
+                    , MAX(RESULT_17)            AS  RESULT_17
+                    , MAX(RESULT_18)            AS  RESULT_18
+                    , MAX(RESULT_19)            AS  RESULT_19
+                    , MAX(RESULT_20)            AS  RESULT_20
+                    , MAX(RESULT_21)            AS  RESULT_21
+                    , MAX(RESULT_22)            AS  RESULT_22
+                    , MAX(RESULT_23)            AS  RESULT_23
+                    , MAX(RESULT_24)            AS  RESULT_24
+                    , MAX(RESULT_25)            AS  RESULT_25
+                    , MAX(RESULT_26)            AS  RESULT_26
+                    , MAX(RESULT_27)            AS  RESULT_27
+                    , MAX(RESULT_28)            AS  RESULT_28
+                    , MAX(RESULT_29)            AS  RESULT_29
+                    , MAX(RESULT_30)            AS  RESULT_30
+                    , MAX(RESULT_31)            AS  RESULT_31
+                    , MAX(RESULT_32)            AS  RESULT_32
+                    , MAX(RESULT_33)            AS  RESULT_33
+                    , MAX(RESULT_34)            AS  RESULT_34
+                    , MAX(RESULT_35)            AS  RESULT_35
+                    , MAX(RESULT_36)            AS  RESULT_36
+                    , MAX(RESULT_37)            AS  RESULT_37
+                    , MAX(RESULT_38)            AS  RESULT_38
+                    , MAX(RESULT_39)            AS  RESULT_39
+                    , MAX(RESULT_40)            AS  RESULT_40
+                    , MAX(RESULT_41)            AS  RESULT_41
+                    , MAX(RESULT_42)            AS  RESULT_42
+                    , MAX(RESULT_43)            AS  RESULT_43
+                    , MAX(RESULT_44)            AS  RESULT_44
+                    , MAX(RESULT_45)            AS  RESULT_45
+                    , MAX(RESULT_46)            AS  RESULT_46
+                    , MAX(RESULT_47)            AS  RESULT_47
+                    , MAX(RESULT_48)            AS  RESULT_48
+                    , MAX(RESULT_49)            AS  RESULT_49
+                    , MAX(RESULT_50)            AS  RESULT_50
+                    , MAX(RESULT_51)            AS  RESULT_51
+                    , MAX(RESULT_52)            AS  RESULT_52
+                    , MAX(RESULT_53)            AS  RESULT_53
+                    , MAX(RESULT_54)            AS  RESULT_54
+                    , MAX(RESULT_55)            AS  RESULT_55
+                    , MAX(RESULT_56)            AS  RESULT_56
+                    , MAX(RESULT_57)            AS  RESULT_57
+                    , MAX(RESULT_58)            AS  RESULT_58
+                    , MAX(RESULT_59)            AS  RESULT_59
+                    , MAX(RESULT_60)            AS  RESULT_60
+				FROM 
+				(
+					SELECT	A.MEASUREDATETIME
+						,A.PROCESSSEGMENTID
+						,D1.DICTIONARYNAME AS PROCESSSEGMENTNAME
+						,A.PLANTID
+						,A.AREAID
+						,D2.DICTIONARYNAME AS AREANAME
+						,C.FACTORYNAME
+						,A.EQUIPMENTID
+						,D3.DICTIONARYNAME AS EQUIPMENTUNIT
+						,SU.USER_NM AS MEASURER
+						,A.CUSTOMERID
+						,CT.CUSTOMERNAME
+						,A.PRODUCTDEFID
+						,PD.PRODUCTDEFNAME
+						,PD.PRODUCTDEFVERSION
+						,NVL(A.REWORKCOUNT, 0) AS REWORKCOUNT
+						,A.LOTTYPE
+						,B.SUBNAME
+						,A.RESOURCEID AS LOTID
+						,A.DAITEMID
+						,DIC.DICTIONARYNAME    AS DAITEMNAME
+						,A.SPECRANGE
+						<!-- ,A.RESULT              AS INSPECTIONRESULT -->
+						, NVL( (SELECT COUNT(1) AS NG_CNT 
+							FROM BAS_DARESULT BD 
+							<!-- WHERE BD.TXNHISTKEY = A.TXNHISTKEY 
+							AND BD.RESOURCETYPE = A.RESOURCETYPE 
+							AND BD.RESOURCEID = A.RESOURCEID  -->
+							WHERE BD.DAITEMID = A.DAITEMID 
+							AND BD.RESOURCEID = A.RESOURCEID
+							AND RESULT = 'NG') , 0) AS NG_CNT
+						,A.AVERAGEVALUE
+						,A.MAXVALUE
+						,A.MINVALUE
+						,A.DEVIATION
+						,A.RESOURCETYPE
+						,CASE 	WHEN A.DAPOINTID = '1' AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '1'  THEN A.VALUE
+									END AS MEASUREVALUE_1
+						,CASE WHEN A.DAPOINTID = '2'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '2' THEN A.VALUE 
+									END AS MEASUREVALUE_2
+						,CASE WHEN A.DAPOINTID = '3'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '3' THEN A.VALUE 
+									END AS MEASUREVALUE_3
+						,CASE WHEN A.DAPOINTID = '4'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '4' THEN A.VALUE 
+									END AS MEASUREVALUE_4
+						,CASE WHEN A.DAPOINTID = '5'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '5' THEN A.VALUE 
+									END AS MEASUREVALUE_5
+						,CASE WHEN A.DAPOINTID = '6'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '6' THEN A.VALUE 
+									END AS MEASUREVALUE_6
+						,CASE WHEN A.DAPOINTID = '7'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '7' THEN A.VALUE 
+									END AS MEASUREVALUE_7
+						,CASE WHEN A.DAPOINTID = '8'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '8' THEN A.VALUE 
+									END AS MEASUREVALUE_8
+						,CASE WHEN A.DAPOINTID = '9'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '9' THEN A.VALUE 
+									END AS MEASUREVALUE_9
+						,CASE WHEN A.DAPOINTID = '10'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '10' THEN A.VALUE 
+									END AS MEASUREVALUE_10
+						,CASE WHEN A.DAPOINTID = '11'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '11' THEN A.VALUE 
+									END AS MEASUREVALUE_11
+						,CASE WHEN A.DAPOINTID = '12'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '12' THEN A.VALUE 
+									END AS MEASUREVALUE_12														
+						,CASE WHEN A.DAPOINTID = '13'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '13' THEN A.VALUE 
+									END AS MEASUREVALUE_13
+						,CASE WHEN A.DAPOINTID = '14'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '14' THEN A.VALUE 
+									END AS MEASUREVALUE_14
+						,CASE WHEN A.DAPOINTID = '15'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '15' THEN A.VALUE 
+									END AS MEASUREVALUE_15
+						,CASE WHEN A.DAPOINTID = '16'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '16' THEN A.VALUE 
+									END AS MEASUREVALUE_16
+						,CASE WHEN A.DAPOINTID = '17'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '17' THEN A.VALUE 
+									END AS MEASUREVALUE_17
+						,CASE WHEN A.DAPOINTID = '18'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '18' THEN A.VALUE 
+									END AS MEASUREVALUE_18
+						,CASE WHEN A.DAPOINTID = '19'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '19' THEN A.VALUE 
+									END AS MEASUREVALUE_19
+						,CASE WHEN A.DAPOINTID = '20'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '20' THEN A.VALUE 
+									END AS MEASUREVALUE_20
+						,CASE WHEN A.DAPOINTID = '21'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '21' THEN A.VALUE 
+									END AS MEASUREVALUE_21
+						,CASE WHEN A.DAPOINTID = '22'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '22' THEN A.VALUE 
+									END AS MEASUREVALUE_22
+						,CASE WHEN A.DAPOINTID = '23'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '23' THEN A.VALUE 
+									END AS MEASUREVALUE_23
+						,CASE WHEN A.DAPOINTID = '24'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '24' THEN A.VALUE 
+									END AS MEASUREVALUE_24
+						,CASE WHEN A.DAPOINTID = '25'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '25' THEN A.VALUE 
+									END AS MEASUREVALUE_25
+						,CASE WHEN A.DAPOINTID = '26'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '26' THEN A.VALUE 
+									END AS MEASUREVALUE_26
+						,CASE WHEN A.DAPOINTID = '27'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '27' THEN A.VALUE 
+									END AS MEASUREVALUE_27
+						,CASE WHEN A.DAPOINTID = '28'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '28' THEN A.VALUE 
+									END AS MEASUREVALUE_28
+						,CASE WHEN A.DAPOINTID = '29'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '29' THEN A.VALUE 
+									END AS MEASUREVALUE_29								
+						,CASE WHEN A.DAPOINTID = '30'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '30' THEN A.VALUE 
+									END AS MEASUREVALUE_30
+						,CASE WHEN A.DAPOINTID = '31'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '31' THEN A.VALUE 
+									END AS MEASUREVALUE_31																		
+						,CASE WHEN A.DAPOINTID = '32'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '32' THEN A.VALUE 
+									END AS MEASUREVALUE_32									
+						,CASE WHEN A.DAPOINTID = '33'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '33' THEN A.VALUE 
+									END AS MEASUREVALUE_33
+						,CASE WHEN A.DAPOINTID = '34'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '34' THEN A.VALUE 
+									END AS MEASUREVALUE_34
+						,CASE WHEN A.DAPOINTID = '35'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '35' THEN A.VALUE 
+									END AS MEASUREVALUE_35
+						,CASE WHEN A.DAPOINTID = '36'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '36' THEN A.VALUE 
+									END AS MEASUREVALUE_36
+						,CASE WHEN A.DAPOINTID = '37'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '37' THEN A.VALUE 
+									END AS MEASUREVALUE_37
+						,CASE WHEN A.DAPOINTID = '38'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '38' THEN A.VALUE 
+									END AS MEASUREVALUE_38
+						,CASE WHEN A.DAPOINTID = '39'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '39' THEN A.VALUE 
+									END AS MEASUREVALUE_39
+						,CASE WHEN A.DAPOINTID = '40'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '40' THEN A.VALUE 
+									END AS MEASUREVALUE_40																		
+						,CASE WHEN A.DAPOINTID = '41'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '41' THEN A.VALUE 
+									END AS MEASUREVALUE_41									
+						,CASE WHEN A.DAPOINTID = '42'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '42' THEN A.VALUE 
+									END AS MEASUREVALUE_42									
+						,CASE WHEN A.DAPOINTID = '43'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '43' THEN A.VALUE 
+									END AS MEASUREVALUE_43									
+						,CASE WHEN A.DAPOINTID = '44'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '44' THEN A.VALUE 
+									END AS MEASUREVALUE_44
+						,CASE WHEN A.DAPOINTID = '45'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '45' THEN A.VALUE 
+									END AS MEASUREVALUE_45
+						,CASE WHEN A.DAPOINTID = '46'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '46' THEN A.VALUE 
+									END AS MEASUREVALUE_46
+						,CASE WHEN A.DAPOINTID = '47'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '47' THEN A.VALUE 
+									END AS MEASUREVALUE_47
+						,CASE WHEN A.DAPOINTID = '48'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '48' THEN A.VALUE 
+									END AS MEASUREVALUE_48																																													
+						,CASE WHEN A.DAPOINTID = '49'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '49' THEN A.VALUE 
+									END AS MEASUREVALUE_49
+						,CASE WHEN A.DAPOINTID = '50'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '50' THEN A.VALUE 
+									END AS MEASUREVALUE_50																											
+						,CASE WHEN A.DAPOINTID = '51'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '51' THEN A.VALUE 
+									END AS MEASUREVALUE_51									
+						,CASE WHEN A.DAPOINTID = '52'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '52' THEN A.VALUE 
+									END AS MEASUREVALUE_52									
+						,CASE WHEN A.DAPOINTID = '53'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '53' THEN A.VALUE 
+									END AS MEASUREVALUE_53
+						,CASE WHEN A.DAPOINTID = '54'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '54' THEN A.VALUE 
+									END AS MEASUREVALUE_54
+						,CASE WHEN A.DAPOINTID = '55'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '55' THEN A.VALUE 
+									END AS MEASUREVALUE_55																											
+						,CASE WHEN A.DAPOINTID = '56'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '56' THEN A.VALUE 
+									END AS MEASUREVALUE_56
+						,CASE WHEN A.DAPOINTID = '57'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '57' THEN A.VALUE 
+									END AS MEASUREVALUE_57
+						,CASE WHEN A.DAPOINTID = '58'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '58' THEN A.VALUE 
+									END AS MEASUREVALUE_58
+						,CASE WHEN A.DAPOINTID = '59'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '59' THEN A.VALUE 
+									END AS MEASUREVALUE_59				
+						,CASE WHEN A.DAPOINTID = '60'  AND A.TOPBOTTOMYN = 'Y' AND A.CIRCUITSTD = 'Bottom' THEN A.VALUE2
+									WHEN A.DAPOINTID = '60' THEN A.VALUE 
+									END AS MEASUREVALUE_60
+                        ,QAM_COMMON_PKG.GET_MEASURERESULT(A.AVERAGEVALUE, A.LOWERSPECLIMIT, A.UPPERSPECLIMIT)
+                                    AS RESULT_AVERAGE
+                        ,QAM_COMMON_PKG.GET_MEASURERESULT(A.MAXVALUE, A.LOWERSPECLIMIT, A.UPPERSPECLIMIT)
+                                    AS RESULT_MAX
+                        ,QAM_COMMON_PKG.GET_MEASURERESULT(A.MINVALUE, A.LOWERSPECLIMIT, A.UPPERSPECLIMIT)
+                                    AS RESULT_MIN
+                        ,QAM_COMMON_PKG.GET_MEASURERESULT(A.DEVIATION, A.LOWERSPECLIMIT, A.UPPERSPECLIMIT)
+                                    AS RESULT_DEVIATION									
+                        ,DECODE(A.DAPOINTID, '1',   A.RESULT) AS RESULT_1
+                        ,DECODE(A.DAPOINTID, '2',   A.RESULT) AS RESULT_2
+                        ,DECODE(A.DAPOINTID, '3',   A.RESULT) AS RESULT_3
+                        ,DECODE(A.DAPOINTID, '4',   A.RESULT) AS RESULT_4
+                        ,DECODE(A.DAPOINTID, '5',   A.RESULT) AS RESULT_5
+                        ,DECODE(A.DAPOINTID, '6',   A.RESULT) AS RESULT_6
+                        ,DECODE(A.DAPOINTID, '7',   A.RESULT) AS RESULT_7
+                        ,DECODE(A.DAPOINTID, '8',   A.RESULT) AS RESULT_8
+                        ,DECODE(A.DAPOINTID, '9',   A.RESULT) AS RESULT_9
+                        ,DECODE(A.DAPOINTID, '10',  A.RESULT) AS RESULT_10
+                        ,DECODE(A.DAPOINTID, '11',  A.RESULT) AS RESULT_11
+                        ,DECODE(A.DAPOINTID, '12',  A.RESULT) AS RESULT_12
+                        ,DECODE(A.DAPOINTID, '13',  A.RESULT) AS RESULT_13
+                        ,DECODE(A.DAPOINTID, '14',  A.RESULT) AS RESULT_14
+                        ,DECODE(A.DAPOINTID, '15',  A.RESULT) AS RESULT_15
+                        ,DECODE(A.DAPOINTID, '16',  A.RESULT) AS RESULT_16
+                        ,DECODE(A.DAPOINTID, '17',  A.RESULT) AS RESULT_17
+                        ,DECODE(A.DAPOINTID, '18',  A.RESULT) AS RESULT_18
+                        ,DECODE(A.DAPOINTID, '19',  A.RESULT) AS RESULT_19
+                        ,DECODE(A.DAPOINTID, '20',  A.RESULT) AS RESULT_20
+                        ,DECODE(A.DAPOINTID, '21',  A.RESULT) AS RESULT_21
+                        ,DECODE(A.DAPOINTID, '22',  A.RESULT) AS RESULT_22
+                        ,DECODE(A.DAPOINTID, '23',  A.RESULT) AS RESULT_23
+                        ,DECODE(A.DAPOINTID, '24',  A.RESULT) AS RESULT_24
+                        ,DECODE(A.DAPOINTID, '25',  A.RESULT) AS RESULT_25
+                        ,DECODE(A.DAPOINTID, '26',  A.RESULT) AS RESULT_26
+                        ,DECODE(A.DAPOINTID, '27',  A.RESULT) AS RESULT_27
+                        ,DECODE(A.DAPOINTID, '28',  A.RESULT) AS RESULT_28
+                        ,DECODE(A.DAPOINTID, '29',  A.RESULT) AS RESULT_29
+                        ,DECODE(A.DAPOINTID, '30',  A.RESULT) AS RESULT_30
+                        ,DECODE(A.DAPOINTID, '31',  A.RESULT) AS RESULT_31
+                        ,DECODE(A.DAPOINTID, '32',  A.RESULT) AS RESULT_32
+                        ,DECODE(A.DAPOINTID, '33',  A.RESULT) AS RESULT_33
+                        ,DECODE(A.DAPOINTID, '34',  A.RESULT) AS RESULT_34
+                        ,DECODE(A.DAPOINTID, '35',  A.RESULT) AS RESULT_35
+                        ,DECODE(A.DAPOINTID, '36',  A.RESULT) AS RESULT_36
+                        ,DECODE(A.DAPOINTID, '37',  A.RESULT) AS RESULT_37
+                        ,DECODE(A.DAPOINTID, '38',  A.RESULT) AS RESULT_38
+                        ,DECODE(A.DAPOINTID, '39',  A.RESULT) AS RESULT_39
+                        ,DECODE(A.DAPOINTID, '40',  A.RESULT) AS RESULT_40
+                        ,DECODE(A.DAPOINTID, '41',  A.RESULT) AS RESULT_41
+                        ,DECODE(A.DAPOINTID, '42',  A.RESULT) AS RESULT_42
+                        ,DECODE(A.DAPOINTID, '43',  A.RESULT) AS RESULT_43
+                        ,DECODE(A.DAPOINTID, '44',  A.RESULT) AS RESULT_44
+                        ,DECODE(A.DAPOINTID, '45',  A.RESULT) AS RESULT_45
+                        ,DECODE(A.DAPOINTID, '46',  A.RESULT) AS RESULT_46
+                        ,DECODE(A.DAPOINTID, '47',  A.RESULT) AS RESULT_47
+                        ,DECODE(A.DAPOINTID, '48',  A.RESULT) AS RESULT_48
+                        ,DECODE(A.DAPOINTID, '49',  A.RESULT) AS RESULT_49
+                        ,DECODE(A.DAPOINTID, '50',  A.RESULT) AS RESULT_50
+                        ,DECODE(A.DAPOINTID, '51',  A.RESULT) AS RESULT_51
+                        ,DECODE(A.DAPOINTID, '52',  A.RESULT) AS RESULT_52
+                        ,DECODE(A.DAPOINTID, '53',  A.RESULT) AS RESULT_53
+                        ,DECODE(A.DAPOINTID, '54',  A.RESULT) AS RESULT_54
+                        ,DECODE(A.DAPOINTID, '55',  A.RESULT) AS RESULT_55
+                        ,DECODE(A.DAPOINTID, '56',  A.RESULT) AS RESULT_56
+                        ,DECODE(A.DAPOINTID, '57',  A.RESULT) AS RESULT_57
+                        ,DECODE(A.DAPOINTID, '58',  A.RESULT) AS RESULT_58
+                        ,DECODE(A.DAPOINTID, '59',  A.RESULT) AS RESULT_59
+                        ,DECODE(A.DAPOINTID, '60',  A.RESULT) AS RESULT_60
+					FROM	    BAS_DARESULT	        A
+					INNER  JOIN MEASURELIST             ML	     ON	  A.PROCESSSEGMENTID         = ML.PROCESSSEGMENTID 
+														         AND  A.PLANTID                  = ML.PLANTID
+														         AND  A.AREAID                   = ML.AREAID
+														         <!-- NULL 일경우 조회되지 않아서 추가 -->
+														         AND  NVL(A.EQUIPMENTID, 'NULL') = NVL(ML.EQUIPMENTID, 'NULL')
+														         AND  A.CUSTOMERID               = ML.CUSTOMERID
+														         AND  A.PRODUCTDEFID             = ML.PRODUCTDEFID
+														         AND  A.LOTTYPE                  = ML.LOTTYPE
+														         AND  A.RESOURCEID               = ML.RESOURCEID
+														         AND  A.REWORKCOUNT              = ML.REWORKCOUNT
+														         AND  A.RESOURCEID               = ML.RESOURCEID
+														         AND  A.RESOURCETYPE             = ML.RESOURCETYPE
+					LEFT  JOIN	(	SELECT C.LOOKUP_CODE
+									 	 , D.DICTIONARYNAME			AS SUBNAME
+								      FROM CMD_LOOKUP_VALUES	C
+								      LEFT JOIN	CMD_DICTIONARY	D	 ON	C.DICTIONARYID = D.DICTIONARYID
+								     WHERE 1=1
+								       AND C.LOOKUP_TYPE = 'ProductionType'
+								       AND C.ENABLED_FLAG = 'Y'
+								       AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+							    )						B	     ON  A.LOTTYPE = B.LOOKUP_CODE		
+					LEFT JOIN	(	SELECT A.PLANTID
+								  	     , A.AREANAME
+									     , A.FACTORYID
+									     , B.FACTORYNAME
+									     , A.AREAID
+								     FROM BAS_AREA A
+								     LEFT JOIN	BAS_FACTORY	B ON A.FACTORYID = B.FACTORYID
+							    )                       C        ON  A.PLANTID = C.PLANTID
+					                                             AND A.AREAID  = C.AREAID
+					LEFT JOIN	BAS_PRODUCTDEFINITION	PD	     ON	 PD.PRODUCTDEFID          = A.PRODUCTDEFID
+															     AND PD.PRODUCTDEFVERSION     = A.PRODUCTDEFVERSION
+					LEFT JOIN	BAS_PROCESSSEGMENT 		PS 	     ON	 PS.PROCESSSEGMENTID      = A.PROCESSSEGMENTID
+												   			     AND PS.PROCESSSEGMENTVERSION = A.PROCESSSEGMENTVERSION						
+					LEFT JOIN	BAS_INSPITEM    		D 	     ON  A.DAITEMID               = D.INSPITEMID
+					LEFT JOIN	CMD_USERS 				SU	     ON	 A.MEASURER               = SU.USER_ID
+				    LEFT JOIN	CMD_DICTIONARY		    DIC	     ON	 D.INSPITEMNAME           = DIC.DICTIONARYID
+															     AND DIC.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+					LEFT JOIN	CMD_DICTIONARY    	    D1	     ON  D1.DICTIONARYID          = PS.PROCESSSEGMENTNAME
+															     AND D1.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+					LEFT JOIN	CMD_DICTIONARY   		D2 	     ON  D2.DICTIONARYID          = C.AREANAME
+															     AND D2.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+					LEFT JOIN 	BAS_CUSTOMER			CT	     ON  A.CUSTOMERID             = CT.CUSTOMERID
+					LEFT JOIN 	BAS_EQUIPMENT	    	EP	     ON	 A.EQUIPMENTID            = EP.EQUIPMENTID
+					LEFT JOIN 	CMD_DICTIONARY 	    	D3 	     ON  D3.DICTIONARYID          = EP.EQUIPMENTNAME
+															     AND D3.LANGUAGETYPE          = #{SESSION_LANGUAGETYPE}
+					LEFT JOIN 	FN_AREA(#{SESSION_USER_ID})	FN	 ON	 A.AREAID                 = FN.AREAID
+				)	A
+				GROUP BY
+					 	A.PROCESSSEGMENTID
+						,A.PROCESSSEGMENTNAME
+						,A.PLANTID
+						,A.AREAID
+						,A.AREANAME
+						,A.FACTORYNAME
+						,A.EQUIPMENTID
+						,A.EQUIPMENTUNIT
+						,A.MEASURER
+						,A.CUSTOMERID
+						,A.CUSTOMERNAME
+						,A.PRODUCTDEFID
+						,A.PRODUCTDEFNAME
+						,A.PRODUCTDEFVERSION
+						,A.REWORKCOUNT
+						,A.LOTTYPE
+						,A.LOTID
+						,A.SUBNAME
+						,A.DAITEMID
+						,A.DAITEMNAME
+						,A.SPECRANGE
+						<!-- ,A.INSPECTIONRESULT -->
+						,A.NG_CNT
+						,A.AVERAGEVALUE
+						,A.MAXVALUE
+						,A.MINVALUE
+						,A.DEVIATION
+						,A.RESOURCETYPE
+					ORDER BY MAX(A.MEASUREDATETIME) DESC
+    </select>
+    
+    <!--LOT 정보 조회 "LOTID"로 조회 GetSFLotList Ver. 10001-->
+    <select id="selectQamLotByLotId" parameterType="map" resultType="hashmap">
+     	/* smh.qam.dao.QAM01100Dao.selectQamLotByLotId  */
+        SELECT A.LOTID
+             , A.PRODUCTDEFID
+             , A.PRODUCTDEFVERSION
+             , NVL(PD.PRODUCTDEFNAME, A.PRODUCTDEFID)             AS PRODUCTDEFNAME
+             , A.PLANTID
+             , A.FACTORYID
+             , FAC.FACTORYNAME
+             , A.PROCESSSEGMENTID
+             , NVL(DC1.DICTIONARYNAME, A.PROCESSSEGMENTID)        AS PROCESSSEGMENTNAME
+             , A.AREAID
+             , A.ENTERPRISEID 
+             , NVL(DC4.DICTIONARYNAME, A.AREAID)                  AS  AREANAME
+             , LE.EQUIPMENTID
+             , NVL(DC5.DICTIONARYNAME, LE.EQUIPMENTID)            AS  EQUIPMENTUNIT
+             , A.REWORKCOUNT
+             , A.LOTTYPE
+             , B.SUBNAME
+        FROM       PCM_LOT                        A
+        LEFT JOIN  FN_AREA(#{SESSION_USER_ID})    FN   ON   A.AREAID                 = FN.AREAID
+                                                       AND  FN.ISMODIFY              = 'Y'
+        LEFT JOIN  BAS_FACTORY                    FAC  ON   A.FACTORYID              = FAC.FACTORYID 
+                                                       AND  A.PLANTID                = FAC.PLANTID 
+                                                       AND  A.ENTERPRISEID           = FAC.ENTERPRISEID 
+                                                       AND  FAC.VALIDSTATE           = 'Valid'
+        LEFT JOIN  PCM_LOTEQUIPMENT               LE   ON   A.LOTID                  = LE.LOTID
+                                                       AND  A.PROCESSSEGMENTID       = LE.PROCESSSEGMENTID
+                                                       AND  A.WORKCOUNT              = LE.WORKCOUNT
+        LEFT JOIN  (SELECT C.LOOKUP_CODE
+                         , D.DICTIONARYNAME        AS SUBNAME
+                    FROM      CMD_LOOKUP_VALUES  C
+                    LEFT JOIN CMD_DICTIONARY     D ON   C.DICTIONARYID = D.DICTIONARYID
+                    WHERE 1=1
+                    AND   C.LOOKUP_TYPE = 'ProductionType'
+                    AND   C.ENABLED_FLAG = 'Y'
+                    AND   D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE} 
+                   )                              B    ON   A.LOTTYPE                = B.LOOKUP_CODE
+        LEFT JOIN  BAS_PRODUCTDEFINITION          PD   ON   A.PRODUCTDEFID           = PD.PRODUCTDEFID
+                                                       AND  A.PRODUCTDEFVERSION      = PD.PRODUCTDEFVERSION
+        LEFT JOIN  BAS_PROCESSSEGMENT             PS   ON   PS.PROCESSSEGMENTID      = A.PROCESSSEGMENTID
+                                                       AND  PS.PROCESSSEGMENTVERSION = A.PROCESSSEGMENTVERSION
+        LEFT JOIN  BAS_EQUIPMENT                  EQ   ON   EQ.EQUIPMENTID           = LE.EQUIPMENTID
+        LEFT JOIN  CMD_DICTIONARY                 DC1  ON   DC1.DICTIONARYID         = PS.PROCESSSEGMENTNAME
+                                                       AND  DC1.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN  CMD_DICTIONARY                 DC4  ON   FN.AREANAME              = DC4.DICTIONARYID
+                                                       AND  DC4.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN  CMD_DICTIONARY                 DC5  ON   DC5.DICTIONARYID         = EQ.EQUIPMENTNAME
+                                                       AND  DC5.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+        <!-- 측정공정일 경우에만 2021.07.02-->
+        <if test="PROCESSSEGMENTID == null or PROCESSSEGMENTID =='' ">
+        INNER JOIN (
+                    SELECT X.PROCESSSEGMENTID 
+                    FROM BAS_INSPECTIONCLASS SIC 
+                    LEFT JOIN BAS_INSPECTIONSEGMENTREL       MIS  ON  MIS.INSPECTIONCLASSID = SIC.INSPECTIONCLASSID
+                    LEFT JOIN BAS_PROCESSSEGMENTID_HIERAR_V  X    ON  MIS.PROCESSSEGMENTID  = (CASE MIS.PROCESSSEGMENTTYPE WHEN 'TopProcessSegmentClass' THEN X.TOP_PROCESSSEGMENTID 
+                                                                                                                          WHEN 'MiddleProcessSegmentClass' THEN X.MID_PROCESSSEGMENTID 
+                                                                                               ELSE X.PROCESSSEGMENTID END)                                                                  
+                    WHERE SIC.INSPECTIONCLASSID = 'OperationInspection' 
+                    AND SIC.VALIDSTATE          = 'Valid' 
+                    AND SIC.ENTERPRISEID        = #{SESSION_ENTERPRISEID}
+                    AND MIS.VALIDSTATE          = 'Valid'
+                    AND MIS.ISREQUIRED          = 'Y'
+                   ) P                                 ON A.PROCESSSEGMENTID = P.PROCESSSEGMENTID 
+        </if>
+        WHERE 1=1
+        <if test="LOTID != null and LOTID !='' ">
+        AND   UPPER(A.LOTID) LIKE ('%' || UPPER(#{LOTID}) || '%') 
+        </if>
+        <!-- 2021.05.13 PCM_LOTEQUIPMENT 의 데이터가 여러 건일 경우가 있음 -->
+        <if test="EQUIPMENTID != null and EQUIPMENTID !='' ">
+        AND   LE.EQUIPMENTID = #{EQUIPMENTID}
+        </if>
+        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+        AND   UPPER(A.PRODUCTDEFID) LIKE ('%' || UPPER(#{PRODUCTDEFID}) || '%')
+        </if>
+        AND   A.LOTSTATE IN ('InTransit','InProduction')
+        <!-- 2021.06.04 불량여부 아닌경우에만 조회 -->
+        AND   NVL(ISDEFECTED, 'N') = 'N'
+        <!-- 2021.07.013 TOBE Add LOT의 공정에 매핑된 설비가 여러건일 경우 이미 등록된 LOT에 대해 추가입력이 가능하여 LOT에 대해 1건만 입력이 가능하도록 추가  -->
+        <if test="ISEXISTS != null and ISEXISTS !='' ">
+        AND NOT EXISTS (SELECT 'x'
+                          FROM BAS_DARESULT BD
+                         WHERE BD.RESOURCEID        = A.LOTID
+                           AND BD.PROCESSDEFID      = A.PROCESSDEFID
+                           AND BD.PROCESSDEFVERSION = A.PROCESSDEFVERSION
+                           AND BD.PRODUCTDEFID      = A.PRODUCTDEFID
+                           AND BD.PRODUCTDEFVERSION = A.PRODUCTDEFVERSION
+                           AND BD.PROCESSSEGMENTID  = A.PROCESSSEGMENTID
+                           AND BD.REWORKCOUNT       = A.REWORKCOUNT
+                        )
+        </if>
+    </select>
+    
+    <!--검사원본파일 조회 as-is : GetInspectionOriginalFile Ver. 100001 -->
+    <select id="selectQamInspectionOriginalFile" parameterType="map" resultType="hashmap">
+    	/* smh.qam.dao.QAM01100Dao.selectQamInspectionOriginalFile  */
+    	SELECT SI.RESOURCETYPE
+    		 , SI.TXNHISTKEY
+		FROM   QAM_INSPECTIONRESULT 	SI
+		WHERE  1=1
+		AND    SI.RESOURCETYPE	   = 'OperationInspection'
+		AND    SI.RESOURCEID 	   = #{LOTID}
+		AND    SI.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		AND    SI.PROCESSRELNO	   = '*'
+    </select>
+    
+    <!--품질규격 측정값 등록시에 검사항목 List (spc) 신규 GetInsepctionSpecListByItem Ver. 10001
+        TOBE Modify : 2021.08.11 공정SPEC기준값 변환으로  SL, USL LSL 컬럼을 OSL, OUSL OLSL로 수정
+    -->
+    <select id="selectQamInsepctionSpecListByItemAdd" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01100Dao.selectQamInsepctionSpecListByItemAdd  */
+        SELECT DISTINCT
+               LT.LOTID
+              ,MSD.PRODUCTDEFID
+              ,LT.PRODUCTDEFVERSION
+              ,PD.PRODUCTDEFNAME
+              ,MSD.PROCESSSEGMENTID
+              ,LT.PROCESSSEGMENTVERSION
+              ,DC1.DICTIONARYNAME             AS PROCESSSEGMENTNAME
+              ,LT.PROCESSDEFID
+              ,LT.PROCESSDEFVERSION
+              ,SI.ENTERPRISEID
+              ,MSD.PLANTID
+              ,ARE.AREAID
+              ,#{EQUIPMENTID}                 AS EQUIPMENTID
+              ,#{LOTTYPE}                     AS LOTTYPE
+              ,PD.CUSTOMERID
+              ,#{MEASURER}                    AS MEASURER
+              ,SU.USER_NM                     AS MEASURER_NM
+              ,SI.INSPITEMID
+              ,SI.INSPITEMVERSION
+              ,SI.EQPINSPITEMID
+              ,NVL(SI.TOPBOTTOMYN, 'N')       AS TOPBOTTOMYN
+              ,SI.CIRCUITSTD
+              ,DIC.DICTIONARYNAME             AS INSPITEMNAME
+              ,MSVA.CONTROLTYPE
+              ,CASE WHEN MSVA.OUSL IS NULL
+                      THEN RTRIM(TO_CHAR(MSVA.OLSL, 'FM9990.9999'),'.') || DC2.DICTIONARYNAME
+                      ELSE CASE WHEN MSVA.OLSL IS NULL
+                          THEN RTRIM(TO_CHAR(MSVA.OUSL, 'FM9990.9999'),'.') || DC3.DICTIONARYNAME
+                          ELSE RTRIM(TO_CHAR(MSVA.OLSL, 'FM9990.9999'),'.') || '~' || RTRIM(TO_CHAR(MSVA.OUSL, 'FM9990.9999'),'.') || '(' ||  RTRIM(TO_CHAR(MSVA.OSL, 'FM9990.9999'),'.') || ')' 
+                      END
+                  END                         AS SPECRANGE
+              ,TO_NUMBER(MSVA.OSL)            AS SL
+              ,TO_NUMBER(MSVA.OUSL)           AS USL
+              ,TO_NUMBER(MSVA.OLSL)           AS LSL
+              ,ID.INSPECTIONDEFID
+              ,ID.INSPECTIONDEFVERSION
+              ,IC.INSPECTIONCLASSID
+              ,IC.RESOURCETYPE                AS INSPECTIONTYPE
+              ,SIR.NCRDECISIONDEGREE
+              ,SIR.DESCRIPTION
+        FROM    BAS_INSPECTIONCLASS         IC
+        INNER
+        JOIN    BAS_INSPECTIONDEFINITION    ID        ON    ID.INSPECTIONCLASSID    = IC.INSPECTIONCLASSID
+                                                      AND   ID.VALIDSTATE           = 'Valid'
+        INNER
+        JOIN    BAS_INSPECTIONMETHOD        IM        ON    IM.INSPECTIONMETHODID    = ID.INSPECTIONMETHODID
+                                                      AND   IM.INSPECTIONCLASSID     = IC.INSPECTIONCLASSID
+        INNER                                                                       
+        JOIN    BAS_INSPECTIONMETHODITEM    IMI       ON    IMI.INSPECTIONMETHODID   = ID.INSPECTIONMETHODID
+                                                      AND   IMI.INSPECTIONCLASSID    = ID.INSPECTIONCLASSID
+        INNER                                                                       
+        JOIN    BAS_INSPITEM                SI        ON    SI.INSPITEMID            = IMI.INSPITEMID
+        INNER                                                                       
+        JOIN    BAS_INSPECTIONITEMREL       SIR       ON    SIR.INSPITEMID           = SI.INSPITEMID
+        INNER                                                                       
+        JOIN    PCM_LOT                     LT        ON    SIR.PROCESSSEGID         = LT.PROCESSSEGMENTID
+                                                      AND   SIR.PROCESSEGVERSION     = LT.PROCESSSEGMENTVERSION
+                                                      AND   SIR.RESOURCEID           = LT.PRODUCTDEFID
+                                                      AND   SIR.RESOURCEVERSION      = LT.PRODUCTDEFVERSION
+        LEFT                                                                        
+        JOIN    BAS_SPECDEFINITION          MSD       ON    SIR.SPECSEQUENCE         = MSD.SPECSEQUENCE
+        LEFT                                                                        
+        JOIN    BAS_SPECDETAIL              MSVA      ON    SIR.SPECSEQUENCE         = MSVA.SPECSEQUENCE
+        LEFT                                                                        
+        JOIN    BAS_AREA                    ARE       ON    MSD.PLANTID              = ARE.PLANTID
+        LEFT                                                                        
+        JOIN    BAS_FACTORY                 FAC       ON    ARE.FACTORYID            = FAC.FACTORYID
+        LEFT                                                                        
+        JOIN    CMD_DICTIONARY              DIC       ON    SI.INSPITEMNAME          = DIC.DICTIONARYID
+                                                      AND   DIC.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+        LEFT                                                                        
+        JOIN    BAS_PRODUCTDEFINITION       PD        ON    PD.PRODUCTDEFID          = LT.PRODUCTDEFID
+                                                      AND   PD.PRODUCTDEFVERSION     = LT.PRODUCTDEFVERSION
+        LEFT                                                                        
+        JOIN    BAS_PROCESSSEGMENT          PS        ON    PS.PROCESSSEGMENTID      = LT.PROCESSSEGMENTID
+                                                      AND   PS.PROCESSSEGMENTVERSION = LT.PROCESSSEGMENTVERSION
+        LEFT
+        JOIN    CMD_DICTIONARY              DC1       ON    DC1.DICTIONARYID         = PS.PROCESSSEGMENTNAME
+                                                      AND   DC1.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+        LEFT                                                                      
+        JOIN    CMD_DICTIONARY              DC2       ON    DC2.DICTIONARYID         = '80F1DB9D01C24602AC5FCC560315432F'
+                                                      AND   DC2.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+        LEFT                                                                      
+        JOIN    CMD_DICTIONARY              DC3       ON    DC3.DICTIONARYID         = 'D77FCD568F3D4F0C9BF0B73E43AB3DB7'
+                                                      AND   DC3.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+        LEFT                                                                      
+        JOIN    CMD_USERS                   SU        ON    SU.USER_ID               = #{MEASURER}
+        WHERE   1=1
+        AND     LT.LOTID             = #{LOTID}
+        --AND     LT.PROCESSSTATE = 'WaitForSend'  --인계대기 상태
+        AND     IC.INSPECTIONCLASSID = 'OperationInspection'
+        AND     MSD.PLANTID          = #{PLANTID}
+        AND     MSD.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+        AND     MSD.PRODUCTDEFID     = #{PRODUCTDEFID}
+        AND     ARE.AREAID           = #{AREAID}
+        <!-- 2021.05.18 추가요청사항 : SL, USL, LSL이 NULL일 경우는 보여지지 않게 처리 -->
+        AND 'Y' = ( CASE WHEN (MSVA.OSL IS NULL AND MSVA.OUSL IS  NULL AND MSVA.OLSL IS  NULL) THEN 'N'
+                    ELSE 'Y'  END )
+    </select>
+    
+     <!--품질규격 측정값 등록시에 검사항목 List (spc)  GetInsepctionSpecListByItem : 10002-->
+    <select id="selectQamInsepctionSpecListByItem" parameterType="map" resultType="hashmap">
+    	/* smh.qam.dao.QAM01100Dao.selectQamInsepctionSpecListByItem  */
+        SELECT A.RESOURCEID               AS LOTID
+             , A.PRODUCTDEFID
+             , A.PRODUCTDEFVERSION
+             , ''                         AS PRODUCTDEFNAME
+             , A.PROCESSSEGMENTID
+             , A.PROCESSSEGMENTVERSION
+             , ''                         AS PROCESSSEGMENTNAME
+             , A.PROCESSDEFID
+             , A.PROCESSDEFVERSION
+             , A.ENTERPRISEID
+             , A.PLANTID
+             , A.AREAID
+             , A.EQUIPMENTID
+             , A.LOTTYPE
+             , A.CUSTOMERID
+             , A.MEASURER
+             , SU.USER_NM                 AS MEASURER_NM
+             , A.DAITEMID                 AS INSPITEMID
+             , A.DAITEMVERSION            AS INSPITEMVERSION
+             , C.EQPINSPITEMID
+             , A.TOPBOTTOMYN
+             , A.CIRCUITSTD
+             , D.DICTIONARYNAME           AS INSPITEMNAME
+             , A.CONTROLTYPE
+             , CASE WHEN A.UPPERSPECLIMIT IS NULL
+                      THEN RTRIM(TO_CHAR(A.LOWERSPECLIMIT, 'FM9990.9999'),'.') || DC2.DICTIONARYNAME
+                      ELSE CASE WHEN A.LOWERSPECLIMIT IS NULL
+                          THEN RTRIM(TO_CHAR(A.UPPERSPECLIMIT, 'FM9990.9999'),'.') || DC3.DICTIONARYNAME
+                          ELSE RTRIM(TO_CHAR(A.LOWERSPECLIMIT, 'FM9990.9999'),'.') || '~' || RTRIM(TO_CHAR(A.UPPERSPECLIMIT, 'FM9990.9999'),'.') || '(' ||  RTRIM(TO_CHAR(A.TARGET, 'FM9990.9999'),'.') || ')'
+                      END
+                  END                     AS SPECRANGE
+             , A.TARGET                   AS SL
+             , A.UPPERSPECLIMIT           AS USL
+             , A.LOWERSPECLIMIT           AS LSL
+             , ID.INSPECTIONDEFID         AS INSPECTIONDEFID
+             , ID.INSPECTIONDEFVERSION    AS INSPECTIONDEFVERSION
+             , A.DADEFID                  AS INSPECTIONCLASSID
+             , IC.RESOURCETYPE            AS INSPECTIONTYPE
+             , SIR.NCRDECISIONDEGREE
+             , SIR.DESCRIPTION
+        FROM       BAS_DARESULT                 A
+        INNER JOIN BAS_INSPECTIONCLASS          IC    ON   IC.INSPECTIONCLASSID     = 'OperationInspection'
+        INNER JOIN BAS_INSPECTIONDEFINITION     ID    ON   IC.INSPECTIONCLASSID     = ID.INSPECTIONCLASSID
+                                                      AND  ID.VALIDSTATE            = 'Valid'
+        INNER JOIN BAS_INSPECTIONMETHODITEM     IMI   ON   ID.INSPECTIONCLASSID     = IMI.INSPECTIONCLASSID
+                                                      AND  ID.INSPECTIONMETHODID    = IMI.INSPECTIONMETHODID
+                                                      AND  IMI.INSPITEMID           = A.DAITEMID
+        LEFT JOIN  BAS_INSPITEM                 C     ON   A.DAITEMID               = C.INSPITEMID
+        INNER JOIN BAS_INSPECTIONITEMREL        SIR   ON   SIR.PROCESSSEGID         = A.PROCESSSEGMENTID
+                                                      AND  SIR.PROCESSEGVERSION     = A.PROCESSSEGMENTVERSION
+                                                      AND  SIR.RESOURCEID           = A.PRODUCTDEFID
+                                                      AND  SIR.RESOURCEVERSION      = A.PRODUCTDEFVERSION
+                                                      AND  SIR.INSPITEMID           = C.INSPITEMID
+        LEFT JOIN  CMD_DICTIONARY               D     ON   C.INSPITEMNAME           = D.DICTIONARYID
+                                                      AND  D.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN  CMD_DICTIONARY               DC2   ON   DC2.DICTIONARYID         = '80F1DB9D01C24602AC5FCC560315432F'
+                                                      AND  DC2.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN  CMD_DICTIONARY               DC3   ON   DC3.DICTIONARYID         = 'D77FCD568F3D4F0C9BF0B73E43AB3DB7'
+                                                      AND  DC3.LANGUAGETYPE         = #{SESSION_LANGUAGETYPE}
+        LEFT JOIN  CMD_USERS                    SU    ON   SU.USER_ID               = A.MEASURER
+        WHERE      1=1
+        AND        A.RESOURCEID       = #{LOTID}
+        AND        A.RESOURCETYPE     = #{RESOURCETYPE}
+        AND        A.PLANTID          = #{PLANTID}
+        AND        A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+        AND        A.PRODUCTDEFID     = #{PRODUCTDEFID}
+        AND        A.AREAID           = #{AREAID}
+        AND        A.DESCRIPTION IS NULL
+        GROUP BY A.RESOURCEID
+                ,A.DADEFID
+                ,A.PRODUCTDEFID
+                ,A.PROCESSSEGMENTID
+                ,A.PROCESSSEGMENTVERSION
+                ,A.ENTERPRISEID
+                ,A.PLANTID
+                ,A.AREAID
+                ,A.EQUIPMENTID
+                ,A.LOTTYPE
+                ,A.CUSTOMERID
+                ,A.MEASURER
+                ,SU.USER_NM
+                ,A.DAITEMID
+                ,A.DAITEMVERSION
+                ,A.TOPBOTTOMYN
+                ,A.CIRCUITSTD
+                ,C.EQPINSPITEMID
+                ,A.PRODUCTDEFVERSION
+                ,A.PROCESSDEFID
+                ,A.PROCESSDEFVERSION
+                ,A.CONTROLTYPE
+                ,A.UPPERSPECLIMIT
+                ,A.TARGET
+                ,A.LOWERSPECLIMIT
+                ,D.DICTIONARYNAME
+                ,DC2.DICTIONARYNAME
+                ,DC3.DICTIONARYNAME
+                ,ID.INSPECTIONDEFID
+                ,ID.INSPECTIONDEFVERSION
+                ,IC.RESOURCETYPE
+                ,SIR.NCRDECISIONDEGREE
+                ,SIR.DESCRIPTION
+        ORDER BY A.DAITEMID
+    </select>
+    
+    <!--품질규격 측정값 조회  GetQualitySpecificationValue : 10001-->
+    <select id="selectQamQualitySpecificationValueList" parameterType="map" resultType="hashmap">
+    	/* smh.qam.dao.QAM01100Dao.selectQamQualitySpecificationValueList  */
+        SELECT ROW_NUMBER() OVER(ORDER BY A.DAITEMID, TO_NUMBER(A.DAPOINTID)) 
+             , NVL(A.REWORKCOUNT, 0) AS REWORKCOUNT
+             , A.TXNHISTKEY
+             , A.RESOURCETYPE
+             , A.DAITEMID            AS INSPITEMID
+             , A.VALUE               AS MEASUREVALUE
+             , A.VALUE2              AS MEASUREVALUE2
+             , TO_CHAR(A.MEASUREDATETIME, 'YYYY-MM-DD HH24:MI:SS') AS MEASUREDATETIME
+             , A.RESULT
+             , B2.OC_FILE_NM         AS FILENAME
+             , CASE WHEN A.UPPERSPECLIMIT IS NULL 
+                      THEN RTRIM(TO_CHAR(A.LOWERSPECLIMIT, 'FM9990.9999'),'.') || DC2.DICTIONARYNAME
+                      ELSE CASE WHEN A.LOWERSPECLIMIT IS NULL 
+                          THEN RTRIM(TO_CHAR(A.UPPERSPECLIMIT, 'FM9990.9999'),'.') || DC3.DICTIONARYNAME 
+                          ELSE RTRIM(TO_CHAR(A.LOWERSPECLIMIT, 'FM9990.9999'),'.') || '~' || RTRIM(TO_CHAR(A.UPPERSPECLIMIT, 'FM9990.9999'),'.') || '(' ||  RTRIM(TO_CHAR(A.TARGET, 'FM9990.9999'),'.') || ')'  
+                      END
+                  END                AS SPECRANGE
+             , BI.TOPBOTTOMYN 
+             , BI.CIRCUITSTD 
+             , CASE WHEN BI.TOPBOTTOMYN = 'Y' AND BI.CIRCUITSTD = 'Top' THEN
+	                   QAM_COMMON_PKG.GET_MEASURERESULT(A.VALUE2, A.LOWERSPECLIMIT, A.UPPERSPECLIMIT)
+				    WHEN  BI.TOPBOTTOMYN = 'Y' AND BI.CIRCUITSTD = 'Bottom' THEN
+	                   QAM_COMMON_PKG.GET_MEASURERESULT(A.VALUE, A.LOWERSPECLIMIT, A.UPPERSPECLIMIT)
+			   END               AS ETCRESULT
+            FROM      BAS_DARESULT             A
+            LEFT JOIN BAS_INSPITEM             BI   ON   A.DAITEMID         = BI.INSPITEMID
+            AND BI.VALIDSTATE  = 'Valid'
+            <!--LEFT JOIN CMD_OBJECTFILE_V        B    ON    B.RESOURCETYPE = A.RESOURCETYPE
+                                                                    AND B.RESOURCEID = A.TXNHISTKEY
+                                                                    AND B.RESOURCEVERSION = '*'
+                                                                    AND TO_CHAR(B.SEQUENCE) = A.DAPOINTID
+             LEFT JOIN SF_OBJECTFILE           B    ON   OM.FILEID = B.FILEID -->
+            LEFT JOIN CMD_ATCH_FILES_MPNGS     B1   ON   B1.ATCH_SRC_KEY    = (A.TXNHISTKEY || '|' || A.RESOURCETYPE || '|*' )
+                                                    AND  B1.ATCH_TY_CD      = 'BAS_DARESULT' 
+            LEFT JOIN CMD_ATCH_FILES           B2   ON   B1.ATCH_FILE_ID    = B2.ATCH_FILE_ID
+                                                    AND  B2.USE_YN          = 'Y'
+            LEFT JOIN CMD_DICTIONARY           DC2  ON   DC2.DICTIONARYID   = '80F1DB9D01C24602AC5FCC560315432F'
+                                                    AND  DC2.LANGUAGETYPE   = #{SESSION_LANGUAGETYPE}                            
+            LEFT JOIN CMD_DICTIONARY           DC3  ON   DC3.DICTIONARYID   = 'D77FCD568F3D4F0C9BF0B73E43AB3DB7'
+                                                    AND  DC3.LANGUAGETYPE   = #{SESSION_LANGUAGETYPE}
+            WHERE  1=1
+			AND	   A.RESOURCETYPE       = #{RESOURCETYPE}	
+            AND    A.RESOURCEID         = #{LOTID}
+            AND    A.DADEFID            = 'OperationInspection'
+            AND    A.PRODUCTDEFID       = #{PRODUCTDEFID}
+            AND    A.PROCESSSEGMENTID   = #{PROCESSSEGMENTID}
+            AND    A.PLANTID            = #{PLANTID}
+            AND    A.AREAID             = #{AREAID}
+            AND    A.LOTTYPE            = #{LOTTYPE}
+            AND    A.DESCRIPTION        IS NULL
+            <if test="EQUIPMENTID != null and EQUIPMENTID !='' ">
+            AND    A.EQUIPMENTID        = #{EQUIPMENTID}<!-- 2021.07.13 TOBE Add 설비별 조회를 위해 추가 -->
+            </if>
+            ORDER BY A.DAITEMID, TO_NUMBER(A.DAPOINTID)
+    </select>
+
+
+    <!-- 데이터 측정 이력 등록 -->
+    <insert id="insertBasDaresult" parameterType="map">
+    /* smh.qam.dao.QAM01100Dao.insertBasDaresult  */
+    INSERT INTO BAS_DARESULT( 
+        TXNHISTKEY  
+        ,RESOURCETYPE  
+        ,RESOURCEID  
+        ,DADEFID  
+        ,DADEFVERSION  
+        ,DAITEMID  
+        ,DAITEMVERSION  
+        ,DAPOINTID  
+        ,PRODUCTDEFID  
+        ,PRODUCTDEFVERSION  
+        ,PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,PROCESSPATHID  
+        ,PROCESSSEGMENTID  
+        ,PROCESSSEGMENTVERSION  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,AREAID  
+        ,EQUIPMENTID  
+        ,VALUE  
+        ,VALUE2
+        ,DIFFERENCEOFTARGET  
+        ,INSPEC  
+        ,INCONTROL  
+        ,INSCREEN  
+        ,LOTTYPE  
+        ,CUSTOMERID  
+        ,MEASURER  
+        ,SPECRANGE  
+        ,CONTROLTYPE  
+        ,TARGET  
+        ,LOWERSPECLIMIT  
+        ,UPPERSPECLIMIT  
+        ,INSPECTIONRESULT  
+        ,AVERAGEVALUE  
+        ,MAXVALUE  
+        ,MINVALUE  
+        ,DEVIATION  
+        ,MEASUREDATETIME  
+        ,MEASUREVALUE  
+        ,RESULT  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,TXNGROUPHISTKEY  
+        ,TXNID  
+        ,TXNUSER  
+        ,TXNTIME  
+        ,TXNREASONCODECLASS  
+        ,TXNREASONCODE  
+        ,TXNCOMMENT  
+        ,REWORKCOUNT
+        ,TOPBOTTOMYN
+        ,CIRCUITSTD        ) 
+    VALUES( 
+        #{TXNHISTKEY}  
+        ,#{RESOURCETYPE}  
+        ,#{RESOURCEID}  
+        ,#{DADEFID}  
+        ,#{DADEFVERSION}  
+        ,#{DAITEMID}  
+        ,#{DAITEMVERSION}  
+        ,#{DAPOINTID}  
+        ,#{PRODUCTDEFID}  
+        ,#{PRODUCTDEFVERSION}  
+        ,#{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{PROCESSPATHID}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PROCESSSEGMENTVERSION}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{AREAID}  
+        ,#{EQUIPMENTID}  
+        ,#{VALUE}  
+        ,#{VALUE2}  
+        ,#{DIFFERENCEOFTARGET}  
+        ,#{INSPEC}  
+        ,#{INCONTROL}  
+        ,#{INSCREEN}  
+        ,#{LOTTYPE}  
+        ,#{CUSTOMERID}  
+        ,#{MEASURER}  
+        ,#{SPECRANGE}  
+        ,#{CONTROLTYPE}  
+        ,#{TARGET}  
+        ,#{LOWERSPECLIMIT}  
+        ,#{UPPERSPECLIMIT}  
+        <!-- RESULT 와  INSPECTIONRESULT 같음.. 예전 소스? INSPECTIONRESULT :RESULT로 바꿈  -->
+        ,#{INSPECTIONRESULT}  
+        ,#{AVERAGEVALUE}  
+        ,#{MAXVALUE}  
+        ,#{MINVALUE}  
+        ,#{DEVIATION}  
+        ,TO_DATE(#{MEASUREDATETIME} , 'YYYYMMDDHH24MISS')
+        ,#{MEASUREVALUE}  
+        ,#{RESULT}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{TXNGROUPHISTKEY}  
+        ,#{TXNID}  
+        ,#{TXNUSER}  
+        ,SYSDATE  
+        ,#{TXNREASONCODECLASS}  
+        ,#{TXNREASONCODE}  
+        ,#{TXNCOMMENT}  
+        ,#{REWORKCOUNT}
+        ,#{TOPBOTTOMYN}
+        ,#{CIRCUITSTD}    )
+    </insert>
+        
+    <!-- 검사결과 등록 -->
+    <insert id="insertQamInspectionresult" parameterType="map">
+    /* smh.qam.dao.QAM01100Dao.insertQamInspectionresult  */
+    INSERT INTO QAM_INSPECTIONRESULT( 
+        TXNHISTKEY  
+        ,RESOURCETYPE  
+        ,RESOURCEID  
+        ,PROCESSRELNO  
+        ,INSPECTIONDEFID  
+        ,INSPECTIONDEFVERSION  
+        ,"degree"  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,INSPECTIONTYPE  
+        ,PRODUCTDEFID  
+        ,PRODUCTDEFVERSION  
+        ,PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,PROCESSSEGMENTID  
+        ,PROCESSSEGMENTVERSION  
+        ,EQUIPMENTID  
+        ,REQUESTUSER  
+        ,REQUESTDATE  
+        ,ACCEPTUSER  
+        ,ACCEPTDATE  
+        ,INSPECTIONQTY  
+        ,SAMPLEQTY  
+        ,SPECOUTQTY  
+        ,INSPECTIONRESULT  
+        ,INSPECTIONDATE  
+        ,INSPECTIONUSER  
+        ,ISSEND  
+        ,AREAID  
+        ,ISNCRPUBLISH  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,TXNGROUPHISTKEY  
+        ,TXNID  
+        ,TXNUSER  
+        ,TXNTIME  
+        ,TXNCOMMENT  
+        ,ISCOMPLETION  
+        ,RESULTITEM  
+        ,JUDGMENTCRITERIA  
+        ,WORKCOUNT  
+        ,INSPECTIONCLASSID        ) 
+    VALUES( 
+        #{RESULTTXNHISTKEY}  
+        ,#{RESOURCETYPE}  
+        ,#{RESOURCEID}  
+        ,#{PROCESSRELNO}  
+        ,#{INSPECTIONDEFID}  
+        ,#{INSPECTIONDEFVERSION}  
+        ,#{DEGREE}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{INSPECTIONTYPE}  
+        ,#{PRODUCTDEFID}  
+        ,#{PRODUCTDEFVERSION}  
+        ,#{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PROCESSSEGMENTVERSION}  
+        ,#{EQUIPMENTID}  
+        ,#{REQUESTUSER}  
+        ,#{REQUESTDATE}  
+        ,#{ACCEPTUSER}  
+        ,#{ACCEPTDATE}  
+        ,#{INSPECTIONQTY}  
+        ,#{SAMPLEQTY}  
+        ,#{SPECOUTQTY}  
+        ,#{INSPECTIONRESULT}  
+        ,TO_DATE(#{INSPECTIONDATE} , 'YYYYMMDDHH24MISS')
+        ,#{INSPECTIONUSER}  
+        ,#{ISSEND}  
+        ,#{AREAID}  
+        ,#{ISNCRPUBLISH}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{TXNGROUPHISTKEY}  
+        ,#{TXNID}  
+        ,#{TXNUSER}  
+        ,SYSDATE  
+        ,#{TXNCOMMENT}  
+        ,#{ISCOMPLETION}  
+        ,#{RESULTITEM}  
+        ,#{JUDGMENTCRITERIA}  
+        ,#{WORKCOUNT}  
+        ,#{INSPECTIONCLASSID}    )
+    </insert>
+    
+     <!-- 검사결과 변경 -->
+    <update id="updateQamInspectionresult" parameterType="map">
+   	 /* smh.qam.dao.QAM01100Dao.updateQamInspectionresult  */
+   	UPDATE QAM_INSPECTIONRESULT 
+    SET 
+        INSPECTIONDEFID = #{INSPECTIONDEFID}     
+        ,INSPECTIONDEFVERSION = #{INSPECTIONDEFVERSION}     
+        ,"degree" = #{DEGREE}     
+        ,ENTERPRISEID = #{ENTERPRISEID}     
+        ,PLANTID = #{PLANTID}     
+        ,INSPECTIONTYPE = #{INSPECTIONTYPE}     
+        ,PRODUCTDEFID = #{PRODUCTDEFID}     
+        ,PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}     
+        ,PROCESSDEFID = #{PROCESSDEFID}     
+        ,PROCESSDEFVERSION = #{PROCESSDEFVERSION}     
+        ,PROCESSSEGMENTID = #{PROCESSSEGMENTID}     
+        ,PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}     
+        ,EQUIPMENTID = #{EQUIPMENTID}     
+        ,REQUESTUSER = #{REQUESTUSER}     
+        ,REQUESTDATE = #{REQUESTDATE}     
+        ,ACCEPTUSER = #{ACCEPTUSER}     
+        ,ACCEPTDATE = #{ACCEPTDATE}     
+        ,INSPECTIONQTY = #{INSPECTIONQTY}     
+        ,SAMPLEQTY = #{SAMPLEQTY}     
+        ,SPECOUTQTY = #{SPECOUTQTY}     
+        ,INSPECTIONRESULT = #{INSPECTIONRESULT}     
+        ,INSPECTIONDATE = #{INSPECTIONDATE}     
+        ,INSPECTIONUSER = #{INSPECTIONUSER}     
+        ,ISSEND = #{ISSEND}     
+        ,AREAID = #{AREAID}     
+        ,ISNCRPUBLISH = #{ISNCRPUBLISH}     
+        ,DESCRIPTION = #{DESCRIPTION}             
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,TXNGROUPHISTKEY = #{TXNGROUPHISTKEY}     
+        ,TXNID = #{TXNID}     
+        ,TXNUSER = #{TXNUSER}     
+        ,TXNTIME = SYSDATE     
+        ,TXNCOMMENT = #{TXNCOMMENT}     
+        ,ISCOMPLETION = #{ISCOMPLETION}     
+        ,RESULTITEM = #{RESULTITEM}     
+        ,JUDGMENTCRITERIA = #{JUDGMENTCRITERIA}     
+        ,WORKCOUNT = #{WORKCOUNT}     
+        ,INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+    WHERE TXNHISTKEY = #{TXNHISTKEY}
+    AND RESOURCETYPE = #{RESOURCETYPE}
+    AND RESOURCEID = #{RESOURCEID}
+    AND PROCESSRELNO = #{PROCESSRELNO}
+    </update>
+    
+    <!-- 검사결과 조회-->
+    <select id="selectQamInspectionresultList" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.TXNHISTKEY	
+        ,A.RESOURCETYPE	
+        ,A.RESOURCEID	
+        ,A.PROCESSRELNO	
+        ,A.INSPECTIONDEFID	
+        ,A.INSPECTIONDEFVERSION	
+        ,A."degree"	
+        ,A.ENTERPRISEID	
+        ,A.PLANTID	
+        ,A.INSPECTIONTYPE	
+        ,A.PRODUCTDEFID	
+        ,A.PRODUCTDEFVERSION	
+        ,A.PROCESSDEFID	
+        ,A.PROCESSDEFVERSION	
+        ,A.PROCESSSEGMENTID	
+        ,A.PROCESSSEGMENTVERSION	
+        ,A.EQUIPMENTID	
+        ,A.REQUESTUSER	
+        ,A.REQUESTDATE	
+        ,A.ACCEPTUSER	
+        ,A.ACCEPTDATE	
+        ,A.INSPECTIONQTY	
+        ,A.SAMPLEQTY	
+        ,A.SPECOUTQTY	
+        ,A.INSPECTIONRESULT	
+        ,A.INSPECTIONDATE	
+        ,A.INSPECTIONUSER	
+        ,A.ISSEND	
+        ,A.AREAID	
+        ,A.ISNCRPUBLISH	
+        ,A.DESCRIPTION	
+        ,A.CREATOR	
+        ,A.CREATEDTIME	
+        ,A.MODIFIER	
+        ,A.MODIFIEDTIME	
+        ,A.TXNGROUPHISTKEY	
+        ,A.TXNID	
+        ,A.TXNUSER	
+        ,A.TXNTIME	
+        ,A.TXNCOMMENT	
+        ,A.ISCOMPLETION	
+        ,A.RESULTITEM	
+        ,A.JUDGMENTCRITERIA	
+        ,A.WORKCOUNT	
+        ,A.INSPECTIONCLASSID	
+    FROM	QAM_INSPECTIONRESULT A 
+    WHERE 1=1 
+    <if test="RESOURCETYPE != null and RESOURCETYPE !='' "> 
+        AND A.RESOURCETYPE = #{RESOURCETYPE}
+    </if>
+    <if test="RESOURCEID != null and RESOURCEID !='' "> 
+        AND A.RESOURCEID = #{RESOURCEID}
+    </if>
+    <if test="PROCESSRELNO != null and PROCESSRELNO !='' "> 
+        AND A.PROCESSRELNO = #{PROCESSRELNO}
+    </if>
+    <if test="INSPECTIONDEFID != null and INSPECTIONDEFID !='' "> 
+        AND A.INSPECTIONDEFID = #{INSPECTIONDEFID}
+    </if>
+    <if test="INSPECTIONDEFVERSION != null and INSPECTIONDEFVERSION !='' "> 
+        AND A.INSPECTIONDEFVERSION = #{INSPECTIONDEFVERSION}
+    </if>
+    <if test="DEGREE != null and DEGREE !='' "> 
+        AND A."degree" = #{DEGREE}
+    </if>
+    <if test="ENTERPRISEID != null and ENTERPRISEID !='' "> 
+        AND A.ENTERPRISEID = #{ENTERPRISEID}
+    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND A.PLANTID = #{PLANTID}
+    </if>
+    <if test="INSPECTIONTYPE != null and INSPECTIONTYPE !='' "> 
+        AND A.INSPECTIONTYPE = #{INSPECTIONTYPE}
+    </if>
+    <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+        AND A.PRODUCTDEFID = #{PRODUCTDEFID}
+    </if>
+    <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' "> 
+        AND A.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+    </if>
+    <if test="PROCESSDEFID != null and PROCESSDEFID !='' "> 
+        AND A.PROCESSDEFID = #{PROCESSDEFID}
+    </if>
+    <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' "> 
+        AND A.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </if>
+    <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+        AND A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </if>
+    <if test="PROCESSSEGMENTVERSION != null and PROCESSSEGMENTVERSION !='' "> 
+        AND A.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+    </if>
+    <if test="EQUIPMENTID != null and EQUIPMENTID !='' "> 
+        AND A.EQUIPMENTID = #{EQUIPMENTID}
+    </if>
+    <if test="REQUESTUSER != null and REQUESTUSER !='' "> 
+        AND A.REQUESTUSER = #{REQUESTUSER}
+    </if>
+    <if test="REQUESTDATE != null and REQUESTDATE !='' "> 
+        AND A.REQUESTDATE = #{REQUESTDATE}
+    </if>
+    <if test="ACCEPTUSER != null and ACCEPTUSER !='' "> 
+        AND A.ACCEPTUSER = #{ACCEPTUSER}
+    </if>
+    <if test="ACCEPTDATE != null and ACCEPTDATE !='' "> 
+        AND A.ACCEPTDATE = #{ACCEPTDATE}
+    </if>
+    <if test="INSPECTIONQTY != null and INSPECTIONQTY !='' "> 
+        AND A.INSPECTIONQTY = #{INSPECTIONQTY}
+    </if>
+    <if test="SAMPLEQTY != null and SAMPLEQTY !='' "> 
+        AND A.SAMPLEQTY = #{SAMPLEQTY}
+    </if>
+    <if test="SPECOUTQTY != null and SPECOUTQTY !='' "> 
+        AND A.SPECOUTQTY = #{SPECOUTQTY}
+    </if>
+    <if test="INSPECTIONRESULT != null and INSPECTIONRESULT !='' "> 
+        AND A.INSPECTIONRESULT = #{INSPECTIONRESULT}
+    </if>
+    <if test="INSPECTIONDATE != null and INSPECTIONDATE !='' "> 
+        AND A.INSPECTIONDATE = #{INSPECTIONDATE}
+    </if>
+    <if test="INSPECTIONUSER != null and INSPECTIONUSER !='' "> 
+        AND A.INSPECTIONUSER = #{INSPECTIONUSER}
+    </if>
+    <if test="ISSEND != null and ISSEND !='' "> 
+        AND A.ISSEND = #{ISSEND}
+    </if>
+    <if test="AREAID != null and AREAID !='' "> 
+        AND A.AREAID = #{AREAID}
+    </if>
+    <if test="ISNCRPUBLISH != null and ISNCRPUBLISH !='' "> 
+        AND A.ISNCRPUBLISH = #{ISNCRPUBLISH}
+    </if>
+    <if test="DESCRIPTION != null and DESCRIPTION !='' "> 
+        AND A.DESCRIPTION = #{DESCRIPTION}
+    </if>
+    <if test="ISCOMPLETION != null and ISCOMPLETION !='' "> 
+        AND A.ISCOMPLETION = #{ISCOMPLETION}
+    </if>
+    <if test="RESULTITEM != null and RESULTITEM !='' "> 
+        AND A.RESULTITEM = #{RESULTITEM}
+    </if>
+    <if test="JUDGMENTCRITERIA != null and JUDGMENTCRITERIA !='' "> 
+        AND A.JUDGMENTCRITERIA = #{JUDGMENTCRITERIA}
+    </if>
+    <if test="WORKCOUNT != null and WORKCOUNT !='' "> 
+        AND A.WORKCOUNT = #{WORKCOUNT}
+    </if>
+    <if test="INSPECTIONCLASSID != null and INSPECTIONCLASSID !='' "> 
+        AND A.INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+    </if>
+    </select>
+    
+    <!-- LOT 정보 조회-->
+    <select id="selectPcmLotList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM01100Dao.selectPcmLotList  */
+    SELECT 
+        A.LOTID	
+        ,A.PRODUCTDEFID
+        ,A.PRODUCTDEFVERSION
+        ,A.PROCESSSEGMENTID
+        ,A.WORKCOUNT
+        ,A.PROCESSDEFID
+        ,A.PROCESSDEFVERSION
+        ,A.REWORKCOUNT
+        ,A.AREAID 
+        ,A.EQUIPMENTID 
+        ,A.LOTTYPE
+        ,PD.CUSTOMERID 
+    FROM	PCM_LOT A
+    LEFT JOIN	BAS_PRODUCTDEFINITION	PD		ON  PD.PRODUCTDEFID = A.PRODUCTDEFID
+                                                AND PD.PRODUCTDEFVERSION = A.PRODUCTDEFVERSION 
+    WHERE 1=1 
+    <if test="LOTID != null and LOTID !='' "> 
+        AND A.LOTID = #{LOTID}
+    </if>
+    </select>
+
+    <!-- LOTWORKRESULT 정보 조회-->
+    <select id="selectPcmLotWorkResultInfo" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM01100Dao.selectPcmLotWorkResultInfo  */
+        SELECT LWR.TXNHISTKEY
+             , LWR.LOTID
+          FROM PCM_LOTWORKRESULT LWR
+         WHERE LWR.LOTID              = #{LOTID}              /*LOT ID*/
+           AND LWR.PRODUCTDEFID       = #{PRODUCTDEFID}       /*제품 정의 ID*/
+           AND LWR.PRODUCTDEFVERSION  = #{PRODUCTDEFVERSION}  /*제품 정의 Version*/
+           AND LWR.PROCESSSEGMENTID   = #{PROCESSSEGMENTID}   /*공정 ID*/
+           AND LWR.WORKCOUNT          = #{WORKCOUNT}          /*작업차수*/
+           AND LWR.PROCESSDEFID       = #{PROCESSDEFID}       /*라우팅 ID*/
+           AND LWR.PROCESSDEFVERSION  = #{PROCESSDEFVERSION}  /*라우팅 Version*/
+    </select>
+
+    <!-- LOT 작업실적 변경 -->
+    <update id="updatePcmLotworkresult" parameterType="map" >
+        /* smh.qam.dao.QAM01100Dao.updatePcmLotworkresult  */
+        UPDATE PCM_LOTWORKRESULT 
+        SET    MEASUREINSPRESULT = #{MEASUREINSPRESULT}
+              ,MODIFIER = #{MODIFIER}     
+              ,MODIFIEDTIME = SYSDATE
+        WHERE 1=1
+        AND TXNHISTKEY = #{TXNHISTKEY}
+        AND LOTID = #{LOTID}
+    </update>
+    
+    <!-- LOT 작업실적 변경 - 기존 백업 -->
+    <update id="updatePcmLotworkresult_back" parameterType="map" >
+    /* smh.qam.dao.QAM01100Dao.updatePcmLotworkresult  */
+    UPDATE PCM_LOTWORKRESULT 
+    SET 
+        PRODUCTDEFID = #{PRODUCTDEFID}     
+        ,PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+        ,WORKCOUNT = #{WORKCOUNT}     
+        ,MEASUREINSPRESULT = #{MEASUREINSPRESULT}
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE
+    WHERE 1=1
+    <!--AND  TXNHISTKEY = #{TXNHISTKEY} -->
+    AND LOTID = #{LOTID}
+    </update>
+        
+    <!-- 품질 규격 등록시 NG발생시 메일전송 Data , AS-IS : GetMeasureValueNgMailData ver. 10001 -->
+    <select id="selectMeasureValueNgMailData" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM01100Dao.selectMeasureValueNgMailData  */
+    SELECT	PD.PRODUCTDEFID					AS PRODUCTDEFID --"품목코드"
+				,PD.PRODUCTDEFNAME				AS PRODUCTDEFNAME -- "품목명"
+				,PD.PRODUCTDEFVERSION			AS PRODUCTDEFVERSION --"내부 Rev"
+				,#{RESOURCEID}				AS RESOURCEID -- "LOT"
+				,#{MEASUREDATETIME}			AS MEASUREDATETIME -- "측정일시"
+				,DIC.DICTIONARYNAME				AS INSPITEMID -- "측정항목"
+				,SU.USER_NM 					AS MEASURER -- "측정자"
+				,#{PLANTID}					AS PLANTID -- "SITE"
+				,D1.DICTIONARYNAME				AS PROCESSSEGMENTID -- "표준공정"
+				,D2.DICTIONARYNAME				AS AREAID -- "작업장"
+				,D3.DICTIONARYNAME 				AS EQUIPMENTID -- "작업설비"
+				,#{MEASUREVALUELIST}		AS MEASUREVALUELIST -- "측정값"
+				,#{SPECRANGE}				AS SPECRANGE -- "범위"
+				,SU.LANGUAGETYPE
+	FROM	BAS_PRODUCTDEFINITION		PD	
+	LEFT
+	JOIN	CMD_USERS 					SU	ON	SU.USER_ID = #{MEASURER}
+	LEFT
+	JOIN	BAS_INSPITEM    				D 	ON 	D.INSPITEMID = #{INSPITEMID} 
+	LEFT
+	JOIN	CMD_DICTIONARY				DIC	ON	D.INSPITEMNAME = DIC.DICTIONARYID
+											AND DIC.LANGUAGETYPE = SU.LANGUAGETYPE
+	LEFT
+	JOIN	BAS_PROCESSSEGMENT 			PS 	ON	PS.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+							   				AND PS.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	LEFT
+	JOIN	CMD_DICTIONARY    			D1	ON D1.DICTIONARYID = PS.PROCESSSEGMENTNAME
+											AND D1.LANGUAGETYPE = SU.LANGUAGETYPE
+	LEFT
+	JOIN	(	SELECT	A.PLANTID
+					,A.AREANAME
+					,A.FACTORYID
+					,B.FACTORYNAME
+					,A.AREAID
+				FROM	BAS_AREA A
+				LEFT
+				JOIN	BAS_FACTORY 		B	ON	A.FACTORYID = B.FACTORYID
+			)							C	ON	C.PLANTID = #{PLANTID}
+											AND	C.AREAID = #{AREAID}
+	LEFT
+	JOIN	CMD_DICTIONARY				D2 	ON D2.DICTIONARYID = C.AREANAME
+											AND D2.LANGUAGETYPE = SU.LANGUAGETYPE
+	LEFT
+	JOIN 	BAS_EQUIPMENT				EP	ON	EP.EQUIPMENTID = #{EQUIPMENTID}
+	LEFT
+	JOIN 	CMD_DICTIONARY 				D3 	ON 	D3.DICTIONARYID = EP.EQUIPMENTNAME
+											AND D3.LANGUAGETYPE = SU.LANGUAGETYPE
+	WHERE 	PD.PRODUCTDEFID = #{PRODUCTDEFID}
+	AND		PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+    </select>
+    
+    <!-- 약품이상발생화면에서 이상 발생 회차 전 시작시간~ 이상발생 회차 시작시간 전 까지의 시간을 구하는 쿼리. , AS-IS : SelectNGCycleTime ver. 10001 -->
+    <select id="selectNGCycleTime" parameterType="map" resultType="hashmap">
+    	SELECT  CY.CYCLESEQUENCE	
+					,LAG(CY.TIMECYCLE) OVER (ORDER BY CY.INSPECTIONCLASSID	)		AS BEFORETIMECYCLE
+					,CY.TIMECYCLE  
+		FROM 	BAS_QCCHEMICALCYCLE 					CY
+		INNER JOIN BAS_QCCHEMICALITEMCYCLE 			CI ON  CY.INSPECTIONCLASSID = CI.INSPECTIONCLASSID
+													   AND CY.CYCLESEQUENCE = CI.CYCLESEQUENCE
+													   AND CY.ENTERPRISEID = CI.ENTERPRISEID
+													   AND CY.PLANTID = CI.PLANTID
+		 WHERE 	1 = 1
+		 AND 	CI.INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+	     AND 	CI.EQUIPMENTID =#{INSPITEMCLASSID}
+	     AND	CI.INSPITEMID =#{INSPITEMID}
+	     AND	CI.INSPITEMVERSION ='*'
+	     AND 	CY.PLANTID =#{PLANTID}
+	     AND 	CY.ENTERPRISEID =#{ENTERPRISEID}
+	     AND 	CI.VALIDSTATE = 'Valid' 
+    </select>
+    
+    <!-- 약품이상발생화면에서 이상 발생 회차 전 시작시간~ 이상발생 회차 시작시간 전 까지의 시간사이에 작업시작된 LOT, AS-IS : SelecToAffectLotCycleTime ver. 10001 -->
+    <select id="selecToAffectLotCycleTime" parameterType="map" resultType="hashmap">
+	WITH WORKLOT AS 
+					(
+						SELECT
+								LR.LOTID
+						FROM	PCM_LOTWORKRESULT 							LR
+						INNER JOIN PCM_LOTEQUIPMENT          				LE 	ON  LR.LOTID = LE.LOTID
+											                                           				   AND LR.PROCESSSEGMENTID = LE.PROCESSSEGMENTID
+											                                           				   AND LR.PROCESSSEGMENTVERSION = LE.PROCESSSEGMENTVERSION
+											                                           				   AND LR.WORKCOUNT = LE.WORKCOUNT
+						WHERE 	1 = 1
+						<![CDATA[ AND 	TO_DATE(LR.WORKSTARTTIME) < TO_DATE(#{TOWORKTIME}) ]]>
+						AND 	LE.EQUIPMENTID = #{EQUIPMENTID}
+						GROUP BY LR.LOTID
+					)
+					
+					SELECT 
+							L.LOTID
+						,NULL						AS LOCKINGTXNHISTKEY
+						,L.PRODUCTDEFID
+						,   L.PRODUCTDEFVERSION					
+						,PD.PRODUCTDEFNAME
+						,L.PANELQTY
+						,L.PCSQTY
+						,L.PROCESSSEGMENTID
+						,PSD.DICTIONARYNAME 							AS PROCESSSEGMENTNAME
+						,L.AREAID
+						,AD.DICTIONARYNAME 							AS AREANAME
+						,NULL							AS RESULTCODE 
+						,'N'							AS ISLOCKING					
+						,NULL							AS ISADDED
+						,NULL 							AS ABNOCRNO
+						,NULL 							AS ABNOCRTYPE
+						,TO_NUMBER(NULL) SEQUENCE
+						,L.PLANTID
+						,L.ENTERPRISEID
+						,NULL 							AS LASTTXNID
+						,L.ISLOCKING									AS ISLOTLOCKING					
+					FROM	PCM_LOT										L
+					INNER JOIN WORKLOT 									LR   ON  L.LOTID = LR.LOTID
+																			   
+					LEFT OUTER JOIN BAS_PROCESSSEGMENT  				    PS  ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+																		    AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+					LEFT OUTER JOIN CMD_DICTIONARY 						PSD ON  PS.PROCESSSEGMENTNAME = PSD.DICTIONARYID
+																			AND PSD.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}
+					LEFT OUTER JOIN BAS_PRODUCTDEFINITION 				PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+																			AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+					LEFT OUTER JOIN BAS_AREA 							A   ON  L.AREAID = A.AREAID
+					LEFT OUTER JOIN CMD_DICTIONARY 						AD  ON  A.AREANAME = AD.DICTIONARYID
+																			AND AD.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}
+																			
+					
+					WHERE	1 = 1 
+					
+					--AND 	L.LOTSTATE IN ('InProduction', 'InTransit','Finished') 							
+					AND 	L.LOTSTATE IN ('InProduction', 'InTransit') 							
+					AND		L.ENTERPRISEID = #{ENTERPRISEID}
+					AND 	L.PLANTID = #{PLANTID}
+					AND 	 NOT EXISTS
+							(
+								SELECT	1 
+								FROM 	QAM_AFFECTLOT AL
+								WHERE 	1 = 1
+								AND   	AL.LOTID = L.LOTID
+								AND   	AL.ABNOCRNO =#{ABNOCRNO}
+								AND   	AL.ABNOCRTYPE = #{ABNOCRTYPE}
+								AND   	AL.ENTERPRISEID = #{ENTERPRISEID}
+								AND   	AL.PLANTID = #{PLANTID}					
+							)
+							
+					UNION ALL
+			
+	
+					
+					SELECT 
+							AL.LOTID
+						,AL.LOCKINGTXNHISTKEY
+						,L.PRODUCTDEFID
+						,   L.PRODUCTDEFVERSION					
+						,PD.PRODUCTDEFNAME
+						,L.PANELQTY
+						,L.PCSQTY
+						,L.PROCESSSEGMENTID
+						,PSD.DICTIONARYNAME 							AS PROCESSSEGMENTNAME
+						,L.AREAID
+						,AD.DICTIONARYNAME 							AS AREANAME
+						,AL.RESULTCODE 
+						,AL.ISLOCKING					
+						,NULL							AS ISADDED
+						,AL.ABNOCRNO
+						,AL.ABNOCRTYPE
+						,AL.SEQUENCE
+						,AL.PLANTID
+						,AL.ENTERPRISEID
+						,AL.LASTTXNID
+						,L.ISLOCKING									AS ISLOTLOCKING						
+					FROM 	QAM_AFFECTLOT 								AL
+					INNER JOIN PCM_LOT 									L ON AL.LOTID = L.LOTID
+	
+					LEFT OUTER JOIN BAS_PROCESSSEGMENT  				    PS  ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+																			AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+					LEFT OUTER JOIN CMD_DICTIONARY 						PSD ON  PS.PROCESSSEGMENTNAME = PSD.DICTIONARYID
+																			AND PSD.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}
+					LEFT OUTER JOIN BAS_PRODUCTDEFINITION 				PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+																			AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+					LEFT OUTER JOIN BAS_AREA 							A   ON  L.AREAID = A.AREAID
+					LEFT OUTER JOIN CMD_DICTIONARY 						AD  ON  A.AREANAME = AD.DICTIONARYID
+																			AND AD.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}
+																	
+					WHERE 	1 = 1
+					AND   	AL.ABNOCRNO =#{ABNOCRNO}
+					AND   	AL.ABNOCRTYPE = #{ABNOCRTYPE}
+					AND   	AL.ENTERPRISEID = #{ENTERPRISEID}
+					AND   	AL.PLANTID = #{PLANTID}		
+	   	
+    </select>
+    
+    <!-- 신뢰성 검사에서 affectLot 대상을 조회, AS-IS : GetAffectLotReliability ver. 10001 -->
+    <select id="selectAffectLotReliability" parameterType="map" resultType="hashmap">
+   	SELECT Z.*
+			FROM
+			(
+			    SELECT  LOTID
+			    	,LOTID			AS LOTNAME
+			        ,   PARENTLOTID
+			        ,   LEVEL
+			    FROM FN_LOTGENEAL_TOPDOWN(#{LOTID})  LT
+			) Z
+			LEFT JOIN PCM_LOT	L	ON 	Z.LOTID = L.LOTID
+			WHERE NVL(L.ISDEFECTED, 'N') = 'N'
+	UNION ALL
+	
+	SELECT  	
+				LOTID
+	    	,LOTID			AS LOTNAME
+	        ,   PARENTLOTID
+	        ,   1				AS LEVEL
+	FROM  PCM_LOT 
+	WHERE LOTID = #{LOTID}
+    </select>
+    
+    <!-- SPC I/F 에 INSERT -->
+    <insert id="insertInfDaresultSpc" parameterType="map">
+    /* smh.qam.dao.QAM01100Dao.insertInfDaresultSpc  */
+    INSERT INTO INF_DARESULT_SPC (
+		LOT_ID
+		, INSPECT_CODE
+		, PROCESS_ID
+		, MACHINE_ID
+		, INSPECT_VAL
+		, INSPECT_VAL2
+		, INSPECT_EMP
+		, INSPECT_DATETIME
+		, IF_CRUD
+		, IF_DATE
+		, IF_PROCESS_TYPE
+		, IF_PROCESS_TIME
+		, IF_PROCESS_COMMENT
+		, IF_SEQUENCE
+	) VALUES ( 
+		#{RESOURCEID}
+		, #{DAITEMID}
+		, #{PROCESSSEGMENTID}
+		, #{EQUIPMENTID}
+		, #{VALUE}
+		, #{VALUE2}
+		, #{MEASURER}
+		, TO_DATE(#{MEASUREDATETIME} , 'YYYYMMDDHH24MISS')
+		, 'C'
+		, SYSDATE
+		, 'N'
+		, NULL
+		, NULL
+		, inf_qam_seq.nextval
+	)
+    </insert>
+    
+    <!-- 품질규격 등록 후 (정기)신뢰성 의뢰 등록 시 사외외주 체크 AS-IS : GetCheckNotOutsideOsp ver. 10001 -->
+    <select id="selectCheckNotOutsideOsp" parameterType="map" resultType="hashmap">
+     /* smh.qam.dao.QAM01100Dao.selectCheckNotOutsideOsp  */
+   	SELECT 
+			AREAID 
+	FROM BAS_AREA
+	WHERE
+		OWNTYPE != 'OutsideOSP'
+		AND AREAID = #{AREAID}		
+   	</select>
+   	
+</mapper>

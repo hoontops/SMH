@@ -1,0 +1,567 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.tom.dao.TOM00300Dao">
+<!-- 치공구 제작 입고 -->    
+
+	<!-- 첫번째 탭 Grid -->
+	<select id="selectGridReceiptInput" parameterType="map" resultType="hashmap">
+    	--
+        -- GetToolRequestListForReceiptByTool
+        -- Version:10001
+            SELECT
+            		TRQT.ENTERPRISEID
+            	,	TRQT.PLANTID	
+                ,   TO_CHAR(TRQT.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE           --의뢰일자
+                 ,   TO_CHAR(TRQT.REQUESTDATE,'YYYY-MM-DD')||' '||TO_CHAR(TRQT.CREATEDTIME,'HH24:MI:SS') AS REQUESTDATE2           --의뢰일자
+                ,   TRQT.REQUESTSEQUENCE                AS REQUESTSEQUENCE          --의뢰순번
+                ,	TRSD.REQUESTIDX						AS REQUESTIDX						--의뢰IDX
+                ,   TRDL.DURABLELOTID                   AS TOOLNUMBER               --Tool코드
+                ,   DCDF.DICTIONARYNAME                 AS TOOLNAME                 --Tool명칭
+                ,   DRDF.PRODUCTDEFID                   AS PRODUCTDEFID             --품목코드
+                ,	DRDF.PRODUCTDEFVERSION			    AS PRODUCTDEFVERSION		--품목Ver
+                ,   PDDF.PRODUCTDEFNAME                 AS PRODUCTDEFNAME           --품목명
+                ,   DRDF.DURABLEDEFID                   AS DURABLEDEFID             --치공구ID
+                ,   TRDL.DURABLEDEFVERSION              AS DURABLEDEFVERSION        --치공구 Ver.
+                ,   TRDL.DURABLELOTID                   AS TOOLCODE             	--Tool Code
+                ,   DCDF.DICTIONARYNAME                 AS TOOLNAME
+                ,   DRDF.DURABLECLASSID                 AS TOOLCATEGORYID           --Tool구분
+                ,   FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLCATEGORY             			--Tool구분명
+                ,   DRDF.FORM                           AS TOOLFORMCODE             --Tool형식코드
+                ,   FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS TOOLFORM                --Tool형식                
+                ,   DRDF.TOOLKIND					    AS TOOLKINDID							
+                ,   FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND	--Toll종류
+                ,   TRQT.REQUESTDEPARTMENT              AS REQUESTDEPARTMENT        --의뢰부서
+                ,   TRQT.REQUESTUSER                    AS REQUESTUSERID            --의뢰자아이디
+                ,   USRI.USER_NM                        AS REQUESTUSER              --의뢰자
+                ,   TRSD.VENDORID                       AS VENDORID                 --제작업체아이디
+                ,   VNDR.VENDORNAME                     AS VENDORNAME               --제작업체
+                ,   TO_CHAR(TRSD.REQUESTDELIVERYDATE,'YYYY-MM-DD') AS REQUESTDELIVERYDATE      --입고요청일
+                ,   TO_CHAR(TRSD.PLANDELIVERYDATE,'YYYY-MM-DD') AS PLANDELIVERYDATE         	--입고예정일
+                ,   TRSD.AREAID                         AS AREAID                   --입고작업장아이디
+                ,   DCAI.DICTIONARYNAME                 AS AREANAME                 --입고작업장 
+                ,   TRQT.TOOLMAKETYPE                   AS TOOLMAKETYPE             --제작구분
+                ,   DICD.DICTIONARYNAME                 AS TOOLMAKETYPENAME         --제작구분명
+            <if test="CURRENTLOGINID != null and CURRENTLOGINID !='' ">
+                ,   NVL(SAR.ISMODIFY,'N')               AS ISMODIFY
+            </if>
+                ,   TRSD.OWNSHIPTYPE                    AS OWNSHIPTYPE              --소유구분
+                ,   '0'									AS CHK
+            FROM    TOM_TOOLREQUEST                      TRQT
+            INNER JOIN TOM_TOOLREQUESTDETAIL             TRSD    ON TRQT.REQUESTSEQUENCE        = TRSD.REQUESTSEQUENCE
+                                                                					AND  TRQT.REQUESTDATE           = TRSD.REQUESTDATE
+            LEFT OUTER JOIN TOM_TOOLREQUESTDETAILLOT     TRDL    	ON 	TRSD.DURABLEDEFID           = TRDL.DURABLEDEFID
+                                                                						AND  TRSD.DURABLEDEFVERSION     = TRDL.DURABLEDEFVERSION                                                                
+                                                                						AND  TRSD.REQUESTDATE           = TRDL.REQUESTDATE
+                                                                						AND  TRSD.REQUESTSEQUENCE       = TRDL.REQUESTSEQUENCE
+                                                                						AND  TRSD.REQUESTIDX       		= TRDL.REQUESTIDX
+            INNER JOIN TOM_DURABLEDEFINITION             DRDF    ON TRSD.DURABLEDEFID           = DRDF.DURABLEDEFID
+                                                                AND  TRSD.DURABLEDEFVERSION     = DRDF.DURABLEDEFVERSION
+            INNER JOIN CMD_DICTIONARY                    DCDF    ON DRDF.DURABLEDEFNAME         = DCDF.DICTIONARYID
+                                                                AND  DCDF.LANGUAGETYPE          = #{LANGUAGETYPE}                   
+                                                                AND  DCDF.USE_YN                = 'Y'                                                    
+            INNER JOIN BAS_PRODUCTDEFINITION             PDDF    ON TRQT.PRODUCTDEFID           = PDDF.PRODUCTDEFID
+                                                                AND  TRQT.PRODUCTDEFVERSION     = PDDF.PRODUCTDEFVERSION            
+            LEFT OUTER JOIN CMD_USERS                    USRI    ON TRQT.REQUESTUSER            = USRI.USER_ID
+            LEFT OUTER JOIN BAS_VENDOR                   VNDR    ON TRSD.VENDORID               = VNDR.VENDORID
+            LEFT OUTER JOIN BAS_AREA                     ARAI    ON TRSD.AREAID                 = ARAI.AREAID
+            LEFT OUTER JOIN CMD_DICTIONARY               DCAI    ON ARAI.AREANAME               = DCAI.DICTIONARYID
+                                                                AND  DCAI.LANGUAGETYPE          = #{LANGUAGETYPE}            
+                                                                AND  DCAI.USE_YN                = 'Y'
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES            TMCD    ON TRQT.TOOLMAKETYPE           = TMCD.LOOKUP_CODE
+                                                                AND  TMCD.LOOKUP_TYPE           = 'ToolMakeType'
+            LEFT OUTER JOIN CMD_DICTIONARY               DICD    ON TMCD.DICTIONARYID           = DICD.DICTIONARYID
+                                                                AND  DICD.USE_YN            	= 'Y'
+                                                                AND  DICD.LANGUAGETYPE          = #{LANGUAGETYPE}                                                                
+        <if test="CURRENTLOGINID != null and CURRENTLOGINID !='' ">                                                             
+            LEFT OUTER JOIN FN_AREA(#{CURRENTLOGINID}) 
+                                                         SAR     ON  SAR.ENTERPRISEID           = TRSD.ENTERPRISEID
+                                                                AND SAR.PLANTID                 = TRSD.PLANTID
+                                                                AND SAR.AREAID                  = TRSD.AREAID
+        </if>
+            WHERE 1=1
+            AND	   TRQT.VALIDSTATE           			= 'Valid'
+            AND     TRDL.VALIDSTATE             		= 'Valid'
+            AND     TRSD.VALIDSTATE             		= 'Valid'
+            AND     TRQT.TOOLMAKETYPE           	IN ('Add', 'New')                   --신규, 증작만 검색
+            AND     TRQT.TOOLPROGRESSSTATUS     	= 'DetailRegist'                    --내역등록된 항목만 검색
+            AND     TRDL.RECEIPTDATE            		IS NULL                             --입고일이 정해지지 않은 항목만 검색
+            <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+                AND     TRQT.ENTERPRISEID           = #{ENTERPRISEID}
+            </if>
+            <if test="P_PLANTID != null and P_PLANTID !='' ">
+                AND     TRQT.PLANTID                = #{P_PLANTID}
+            </if>
+            <if test="P_REQUESTDATE_PERIODFR != null and P_REQUESTDATE_PERIODFR !='' ">
+                AND     TRQT.REQUESTDATE            <![CDATA[>=]]> TO_DATE(REPLACE(#{P_REQUESTDATE_PERIODFR},'-',''), 'YYYYMMDD')
+            </if>
+            <if test="P_REQUESTDATE_PERIODTO != null and P_REQUESTDATE_PERIODTO !='' ">
+                AND     TRQT.REQUESTDATE            <![CDATA[<=]]> TO_DATE(REPLACE(#{P_REQUESTDATE_PERIODTO},'-',''), 'YYYYMMDD')
+            </if>
+            <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+                AND     UPPER(TRQT.PRODUCTDEFID)           LIKE '%' || UPPER(#{PRODUCTDEFID}) || '%'
+            </if>
+            <if test="P_TOOLNO != null and P_TOOLNO !='' ">
+                AND     UPPER(TRDL.DURABLELOTID)           LIKE '%' || UPPER(#{P_TOOLNO}) || '%'
+            </if>
+            <if test="VENDORID != null and VENDORID !='' ">
+                AND     TRSD.VENDORID               = #{VENDORID}
+            </if>
+            <if test="AREAID != null and AREAID !='' ">
+                AND     TRSD.AREAID               	= #{AREAID}
+            </if>
+            <if test="CURRENTLOGINID != null and CURRENTLOGINID !='' ">
+            AND     EXISTS (
+                        SELECT
+                            1
+                        FROM    FN_AREA(#{CURRENTLOGINID}) SAR
+                        WHERE   SAR.ENTERPRISEID        = TRSD.ENTERPRISEID
+                        AND     SAR.PLANTID             = TRSD.PLANTID
+                        AND     SAR.AREAID              = TRSD.AREAID
+            )   
+            </if>
+            AND     NOT EXISTS (
+                        SELECT
+                                TMRC.DURABLELOTID
+                        FROM    TOM_TOOLMAKERECEIPT      TMRC
+                        WHERE   TMRC.DURABLELOTID       = TRDL.DURABLELOTID
+                    )                                                                           --제작입고에 등록되지 않은 치공구만 조회
+            AND     NOT EXISTS (
+                        SELECT
+                                TRSL.DURABLELOTID
+                        FROM    TOM_TOOLREPAIRSENDLOT    TRSL
+                        WHERE   TRSL.DURABLELOTID       = TRDL.DURABLELOTID
+                    )                                                                           --수정출고,수리출고에 등록되지 않은 치공구만 조회
+            ORDER BY        TRQT.REQUESTDATE,   TRQT.REQUESTSEQUENCE,   TRDL.DURABLELOTID
+    </select>		
+    
+    <!-- 두번째 탭 Grid -->
+	<select id="selectToolRequestReceipt" parameterType="map" resultType="hashmap">
+	       --
+           -- GetToolMakeReceiptListByTool (두번째탭)
+           -- Version:10001
+               SELECT  TREQ.ENTERPRISEID
+            	   ,   TREQ.PLANTID
+                   ,   TO_CHAR(TMRC.RECEIPTDATE,'YYYY-MM-DD') AS RECEIPTDATE           --입고일자
+                   ,   TO_CHAR(TMRC.RECEIPTDATE,'YYYY-MM-DD')||' '||TO_CHAR(TMRC.CREATEDTIME,'HH24:MI:SS') AS RECEIPTDATE2           --입고일자
+                   ,   TREQ.TOOLMAKETYPE                   AS TOOLMAKETYPE             --제작구분
+                   ,   DICD.DICTIONARYNAME                 AS TOOLMAKETYPENAME         --제작구분명 
+                   ,   TMRC.DURABLELOTID                   AS TOOLNUMBER               --Tool번호
+                   ,   TRDL.DURABLEDEFID                   AS DURABLEDEFID             --치공구ID
+                   ,   TRDL.DURABLEDEFVERSION              AS DURABLEDEFVERSION        --치공구 Ver.
+                   ,   TMRC.DURABLELOTID                   AS TOOLCODE
+                   ,   DCDF.DICTIONARYNAME                 AS TOOLNAME
+                   ,   TREQ.PRODUCTDEFID                   AS PRODUCTDEFID             --품목코드
+                   ,   PRDF.PRODUCTDEFNAME                 AS PRODUCTDEFNAME           --품목명
+                   ,   DRDF.DURABLECLASSID                 AS TOOLCATEGORYID
+                   ,   FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLCATEGORY             			--Tool구분
+                   ,   DRDF.FORM                           AS TOOLFORMCODE             --Tool형식코드
+                   ,   FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS TOOLFORM					--Tool형식
+                   ,   DRDF.TOOLKIND					   AS TOOLKINDID							
+                   ,   FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND	--Toll종류
+                   ,   TRDT.VENDORID                       AS VENDORID                 --제작업체
+                   ,   VNDR.VENDORNAME                     AS MAKEVENDOR               --제작업체명
+                   ,   TMRC.AREAID                         AS AREAID                   --입고작업장
+                   ,   DCAI.DICTIONARYNAME                 AS RECEIPTAREA              --입고작업장명
+                   ,   TMRC.RECEIPTUSER                    AS RECEIPTERID              --입고자 : 현재 필드가 존재하지 않음
+                   ,   USRI.USER_NM                        AS RECEIPTUSER              --입고자 : 현재 필드가 존재하지 않음
+                   ,   TMRC.WEIGHT                         AS WEIGHT                   --무게(G)
+                   ,   TMRC.HORIZONTAL                     AS HORIZONTAL               --치수(가로)
+                   ,   TMRC.VERTICAL                       AS VERTICAL                 --치수(세로)
+                   ,   TMRC.HEIGHT                         AS THEIGHT                  --치수(높이)
+                   ,   TMRC.THICKNESS                      AS CREATEDTHICKNESS         --최초두께
+                   ,   TREQ.REQUESTCOMMENT                 AS REQUESTCOMMENT           --제작사유
+                   ,   DRDF.PRODUCTDEFVERSION			   AS PRODUCTDEFVERSION		   --품목Ver
+                   ,   DRDF.SUMMARY						   AS SUMMARY 				   --합수
+                   ,   TRDT.DESCRIPTION                    AS DESCRIPTION			   --설명(특이사항)
+                   --##############################################################################################################################
+                   ,   '0'								   AS CHK
+                   ,	TMRC.LOTHISTKEY					   AS LOTHISTKEY			   --제작입고시의LOTHISTKEY
+                   ,	TO_CHAR(TRDT.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE
+                   ,	TRDT.REQUESTSEQUENCE 			   AS REQUESTSEQUENCE
+                   ,TRDT.REQUESTIDX						AS REQUESTIDX
+               FROM    TOM_TOOLMAKERECEIPT                  TMRC
+               INNER JOIN TOM_TOOLREQUESTDETAILLOT          TRDL    ON TMRC.DURABLELOTID           = TRDL.DURABLELOTID
+               LEFT OUTER JOIN TOM_TOOLREQUESTDETAIL        TRDT    ON TRDL.DURABLEDEFID           = TRDT.DURABLEDEFID
+                                                                   						AND  TRDL.DURABLEDEFVERSION     = TRDT.DURABLEDEFVERSION                                                                   
+                                                                   						AND  TRDL.REQUESTDATE           	= TRDT.REQUESTDATE
+                                                                   						AND  TRDL.REQUESTSEQUENCE   	= TRDT.REQUESTSEQUENCE
+                                                                   						AND  TRDL.REQUESTIDX       		= TRDT.REQUESTIDX
+               INNER JOIN TOM_TOOLREQUEST                   TREQ    ON TRDT.REQUESTDATE            = TREQ.REQUESTDATE
+                                                                   AND  TRDT.REQUESTSEQUENCE       = TREQ.REQUESTSEQUENCE
+               INNER JOIN TOM_DURABLEDEFINITION             DRDF    ON TRDL.DURABLEDEFID           = DRDF.DURABLEDEFID
+                                                                   AND  TRDL.DURABLEDEFVERSION     = DRDF.DURABLEDEFVERSION
+               INNER JOIN CMD_DICTIONARY                    DCDF    ON DRDF.DURABLEDEFNAME         = DCDF.DICTIONARYID
+                                                                   AND  DCDF.LANGUAGETYPE          = #{LANGUAGETYPE}     
+                                                                   AND  DCDF.USE_YN                = 'Y'                                                                      
+               INNER JOIN BAS_PRODUCTDEFINITION             PRDF    ON TREQ.PRODUCTDEFID           = PRDF.PRODUCTDEFID
+                                                                   AND  TREQ.PRODUCTDEFVERSION     = PRDF.PRODUCTDEFVERSION
+               LEFT OUTER JOIN CMD_LOOKUP_VALUES            TMCD    ON TREQ.TOOLMAKETYPE           = TMCD.LOOKUP_CODE
+                                                                   AND  TMCD.LOOKUP_TYPE           = 'ToolMakeType'
+               LEFT OUTER JOIN CMD_DICTIONARY               DICD    ON TMCD.DICTIONARYID           = DICD.DICTIONARYID
+                                                                   AND  DICD.USE_YN            	   = 'Y'
+                                                                   AND  DICD.LANGUAGETYPE          = #{LANGUAGETYPE}
+               LEFT OUTER JOIN BAS_VENDOR                   VNDR    ON TRDT.VENDORID               = VNDR.VENDORID
+               LEFT OUTER JOIN BAS_AREA                     ARAI    ON  TMRC.AREAID                = ARAI.AREAID
+               LEFT OUTER JOIN CMD_DICTIONARY               DCAI    ON ARAI.AREANAME               = DCAI.DICTIONARYID
+                                                                   AND  DCAI.LANGUAGETYPE          = #{LANGUAGETYPE}
+                                                                   AND  DCAI.USE_YN                = 'Y'
+               LEFT OUTER JOIN CMD_USERS                    USRI    ON TMRC.RECEIPTUSER            = USRI.USER_ID
+               WHERE   TMRC.VALIDSTATE = 'Valid'
+               AND     TREQ.TOOLMAKETYPE IN ('Add', 'New')	--증작/신규                 
+               <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+                   AND     TMRC.ENTERPRISEID           = #{ENTERPRISEID}
+               </if>
+               <if test="P_PLANTID != null and P_PLANTID !='' ">
+                   AND     TMRC.PLANTID                = #{P_PLANTID}
+               </if>
+               
+               
+               <if test="P_RECEIPTDATE_PERIODFR2 != null and P_RECEIPTDATE_PERIODFR2 !='' ">
+                   AND     TMRC.RECEIPTDATE            <![CDATA[>=]]> TO_DATE(REPLACE(#{P_RECEIPTDATE_PERIODFR2},'-',''), 'YYYYMMDD')
+               </if>
+               <if test="P_RECEIPTDATE_PERIODTO2 != null and P_RECEIPTDATE_PERIODTO2 !='' ">
+                   AND     TMRC.RECEIPTDATE            <![CDATA[<=]]> TO_DATE(REPLACE(#{P_RECEIPTDATE_PERIODTO2},'-',''), 'YYYYMMDD')
+               </if>
+               
+               
+               <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+                   AND     PRDF.PRODUCTDEFID           = #{PRODUCTDEFID}
+               </if>
+               <if test="VENDORID != null and VENDORID !='' ">
+                   AND     TRDT.VENDORID               = #{VENDORID}
+               </if>
+               <if test="AREAID != null and AREAID !='' ">
+                   AND     TRDT.AREAID                 = #{AREAID}
+               </if>
+               <if test="P_TOOLNO != null and P_TOOLNO !='' ">
+                   AND     UPPER(TMRC.DURABLELOTID)    LIKE '%' || UPPER(#{P_TOOLNO}) || '%'
+               </if>
+               <if test="USERID != null and USERID !='' ">
+                   AND     TMRC.RECEIPTUSER            = #{USERID}
+               </if>
+               <if test="CURRENTLOGINID != null and CURRENTLOGINID !='' ">
+               AND     EXISTS (
+                           SELECT
+                               1
+                           FROM    MESMGR.FN_AREA(#{CURRENTLOGINID}) SAR
+                           WHERE   SAR.ENTERPRISEID        = TMRC.ENTERPRISEID
+                           AND     SAR.PLANTID             = TMRC.PLANTID
+                           AND     SAR.AREAID              = TMRC.AREAID
+               )
+               </if>
+               ORDER BY    TMRC.RECEIPTDATE,   TMRC.DURABLELOTID
+    </select>    
+    
+    <update id="updateDurableLot" parameterType="map">
+		UPDATE TOM_DURABLELOT
+		SET DURABLELOTGROUPID 	= NULL,
+			DURABLEDEFID		= #{DURABLEDEFID},		--치공구ID
+			DURABLEDEFVERSION	= #{DURABLEDEFVERSION},	--치공구Ver
+			DURABLELOTNAME		= #{DURABLELOTNAME},
+			ENTERPRISEID		= #{ENTERPRISEID},
+			PLANTID				= #{PLANTID},
+			AREAID				= #{AREAID},
+			VENDORID			= #{VENDORID},
+			ISHOLD				= 'N',
+			DURABLELOTQTY	= 1,
+			POLISHTHICKNESS 	= 0,
+			TOTALPOLISHTHICKNESS = 0,
+			DURABLESTATE		= 'Available',
+			
+			MODIFIER 			= #{CREATOR},
+			MODIFIEDTIME 		= SYSDATE,
+			LASTTXNHISTKEY 		= #{LASTTXNHISTKEY},
+			LASTTXNID			= #{LASTTXNID},
+			LASTTXNUSER 		= #{LASTTXNUSER},
+			LASTTXNTIME 		= SYSDATE,
+			LASTTXNCOMMENT		= #{LASTTXNCOMMENT}
+		WHERE DURABLELOTID = #{DURABLELOTID}
+    </update>
+    
+    <!-- @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ -->
+    <insert id="insertDurableLotHistory" parameterType="map">
+		INSERT INTO TOM_DURABLELOTHISTORY
+			(
+			 TXNHISTKEY,
+			 DURABLELOTID, 			--PK
+			 
+			 DURABLELOTGROUPID,
+			 DURABLEDEFID, 			--치공구ID
+			 DURABLEDEFVERSION, 	--치공구Ver
+			 DURABLELOTNAME, 
+			 ENTERPRISEID, 
+			 PLANTID, 
+			 AREAID,
+			 VENDORID,
+			 ISHOLD,
+			 DURABLELOTQTY,
+			 POLISHTHICKNESS,
+			 TOTALPOLISHTHICKNESS,
+			 DURABLESTATE,
+			 
+			 CREATOR,
+		     CREATEDTIME,
+		     MODIFIER,
+		     MODIFIEDTIME, 
+			 TXNGROUPHISTKEY, 
+		     TXNID,
+		     TXNUSER, 
+		     TXNTIME,
+		     TXNREASONCODECLASS, 
+		     TXNREASONCODE,
+		     TXNCOMMENT,
+		     
+		     TXNID2,
+		     TXNCOMMENT2
+		 	) VALUES (
+		 	 #{LASTTXNHISTKEY},
+		 	 #{DURABLELOTID},
+		 	 
+		 	 NULL,
+		 	 #{DURABLEDEFID},
+		 	 #{DURABLEDEFVERSION},
+		 	 #{DURABLELOTNAME},
+		 	 #{ENTERPRISEID},
+		 	 #{PLANTID},
+		 	 #{AREAID},
+		 	 #{VENDORID},
+		 	 'N',
+		 	 1,
+		 	 0,
+		 	 0,
+		 	 'Available',
+		 	 
+		 	 #{CREATOR},
+			 SYSDATE,
+			 #{MODIFIER},
+			 SYSDATE,
+		 	 #{TXNGROUPHISTKEY},
+		 	 #{LASTTXNID},
+		 	 #{LASTTXNUSER},		 	 
+		 	 SYSDATE,
+		 	 '',
+		 	 '',
+		 	 '',
+		 	 #{TXNID2},
+		 	 #{TXNCOMMENT2}
+			)
+    </insert>
+    
+    <insert id="cancelDurableLotHistory" parameterType="map">
+		DELETE FROM TOM_DURABLELOTHISTORY WHERE TXNHISTKEY = (SELECT LOTHISTKEY FROM TOM_TOOLMAKERECEIPT WHERE DURABLELOTID = #{DURABLELOTID})
+	</insert>
+    
+    <insert id="insertToolMakeReceipt" parameterType="map">
+		INSERT INTO TOM_TOOLMAKERECEIPT
+			(
+			 DURABLEDEFID, 
+			 DURABLEDEFVERSION, 
+			 REQUESTDATE, 
+			 REQUESTSEQUENCE,
+			 REQUESTIDX,
+			 DURABLELOTID,
+			 
+			 PLANTID, 
+			 ENTERPRISEID, 
+			 RECEIPTDATE, 
+			 RECEIPTUSER, 
+			 AREAID,
+			 		 
+			 WEIGHT, 
+			 HORIZONTAL, 
+			 VERTICAL, 
+			 HEIGHT, 
+			 THICKNESS, 
+			 LOTHISTKEY, 
+			 DESCRIPTION, 
+			 
+			 CREATOR, 
+			 CREATEDTIME, 
+			 MODIFIER, 
+			 MODIFIEDTIME, 
+			 LASTTXNHISTKEY, 
+			 LASTTXNID, 
+			 LASTTXNUSER, 
+			 LASTTXNTIME, 
+			 LASTTXNCOMMENT, 
+			 VALIDSTATE
+		 	) VALUES (		 	 
+		 	 #{DURABLEDEFID},
+		 	 #{DURABLEDEFVERSION},
+		 	 #{REQUESTDATE},			
+		 	 #{REQUESTSEQUENCE},
+		 	 #{REQUESTIDX},
+		 	 #{DURABLELOTID},
+		 	 
+		 	 #{PLANTID},
+		 	 #{ENTERPRISEID},
+		 	 TO_DATE(#{RECEIPTDATE},'YYYY-MM-DD'),	<!-- 입고일자 -->
+		 	 #{RECEIPTUSER},						<!-- 입고자 -->
+		 	 #{AREAID},								<!-- 입고 작업장 -->
+		 	 
+		 	 #{WEIGHT},
+		 	 #{HORIZONTAL},
+		 	 #{VERTICAL},
+		 	 #{HEIGHT},
+		 	 #{THICKNESS},
+		 	 #{LOTHISTKEY},
+		 	 '',
+		 	 
+			 #{CREATOR},				<!-- 생성자 -->
+			 SYSDATE,					<!-- 생성일 -->
+			 #{MODIFIER},				<!-- 수정자 -->
+			 SYSDATE,					<!-- 수정일 -->
+			 #{LASTTXNHISTKEY},			<!-- 마지막TXN HistKey -->
+			 #{LASTTXNID},				<!-- 마지막TXN ID -->
+			 #{LASTTXNUSER},			<!-- 마지막TXN 사용자 -->
+			 SYSDATE,					<!-- 마지막TXN 시간 -->
+			 #{LASTTXNCOMMENT},			<!-- 마지막TXN 코멘트 -->
+			 'Valid'
+			)
+    </insert>
+    
+    <update id="updateToolReqDetailLot" parameterType="map">
+		UPDATE TOM_TOOLREQUESTDETAILLOT
+		SET  RECEIPTDATE		= TO_DATE(#{RECEIPTDATE},'YYYY-MM-DD'), 		<!-- 입고일자 -->
+			 
+			 MODIFIER			= #{MODIFIER}, 
+			 MODIFIEDTIME		= SYSDATE, 
+			 LASTTXNHISTKEY		= #{LASTTXNHISTKEY}, 
+			 LASTTXNID			= #{LASTTXNID}, 
+			 LASTTXNUSER		= #{LASTTXNUSER}, 
+			 LASTTXNTIME		= SYSDATE, 
+			 LASTTXNCOMMENT		= #{LASTTXNCOMMENT}, 
+			 VALIDSTATE			= 'Valid'
+		WHERE DURABLEDEFID 		= #{DURABLEDEFID}
+		AND DURABLEDEFVERSION 	= #{DURABLEDEFVERSION}
+		AND REQUESTDATE 		= #{REQUESTDATE}
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}
+		AND REQUESTIDX 			= #{REQUESTIDX}
+		AND DURABLELOTID 		= #{DURABLELOTID}
+    </update>
+    
+    <select id="selectExistsToolMakeReceiptByTool" parameterType="map" resultType="hashmap">
+		--
+		-- "GetExistsToolMakeReceiptByTool"
+		-- Version:10001
+			SELECT
+				COUNT(TRDL.DURABLELOTID) AS RECEIPTCOUNT				--입력받은 DurableLotID 갯수와 같아야 한다.
+			FROM	TOM_TOOLREQUEST					TRQT 
+			INNER JOIN TOM_TOOLREQUESTDETAILLOT		TRDL		ON	TRQT.REQUESTDATE		= TRDL.REQUESTDATE
+																AND	TRQT.REQUESTSEQUENCE	= TRDL.REQUESTSEQUENCE
+			WHERE	TRDL.VALIDSTATE					= 'Valid'
+			AND		TRQT.VALIDSTATE					= 'Valid'
+			AND		TRQT.TOOLMAKETYPE 				IN ('Add', 'New')
+			AND		TRDL.RECEIPTDATE 				IS NULL
+			AND		TRQT.TOOLPROGRESSSTATUS			= 'DetailRegist'
+			AND		TRDL.DURABLELOTID				IN (
+								     					SELECT DATA AS COL_VALUE 
+								                        FROM TABLE(CAST(FN_TO_ROWS(#{DURABLELOTIDS}) AS TP_SIMPLE_TABLE))
+								                       )
+	</select>
+	
+	<delete id="deleteToolMakeReceipt" parameterType="map">
+		DELETE FROM TOM_TOOLMAKERECEIPT
+		WHERE DURABLELOTID = #{DURABLELOTID}
+    </delete>
+    
+	<delete id="updateDurableLotCancel" parameterType="map">
+		UPDATE TOM_DURABLELOT
+		SET DURABLESTATE 	= 'Available',			 
+		
+			MODIFIER		= #{MODIFIER}, 
+			MODIFIEDTIME	= SYSDATE, 
+			LASTTXNHISTKEY	= #{LASTTXNHISTKEY}, 
+			LASTTXNID		= #{LASTTXNID}, 
+			LASTTXNUSER		= #{LASTTXNUSER}, 
+			LASTTXNTIME		= SYSDATE, 
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT}
+		WHERE DURABLELOTID = #{DURABLELOTID}
+    </delete>
+    
+    <update id="updateToolReqDetailLotCancel" parameterType="map">
+		UPDATE TOM_TOOLREQUESTDETAILLOT
+		SET  RECEIPTDATE		= NULL, 		<!-- 입고일자 -->
+			 
+			 MODIFIER			= #{MODIFIER}, 
+			 MODIFIEDTIME		= SYSDATE, 
+			 LASTTXNHISTKEY		= #{LASTTXNHISTKEY}, 
+			 LASTTXNID			= #{LASTTXNID}, 
+			 LASTTXNUSER		= #{LASTTXNUSER}, 
+			 LASTTXNTIME		= SYSDATE, 
+			 LASTTXNCOMMENT		= #{LASTTXNCOMMENT}, 
+			 VALIDSTATE			= 'Valid'
+		WHERE DURABLEDEFID 		= #{DURABLEDEFID}
+		AND DURABLEDEFVERSION 	= #{DURABLEDEFVERSION}
+		AND REQUESTDATE 		= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}
+		AND REQUESTIDX = #{REQUESTIDX}
+		AND DURABLELOTID 		= #{DURABLELOTID}
+    </update>
+	
+	<select id="selectExistsToolMakeReceiptCancelByTool" parameterType="map" resultType="hashmap">
+		--
+		-- "GetExistsToolMakeReceiptByTool"
+		-- Version:10001
+			SELECT
+				COUNT(TRDL.DURABLELOTID) AS RECEIPTCOUNT				--입력받은 DurableLotID 갯수와 같아야 한다.
+			FROM	TOM_TOOLREQUEST					TRQT 
+			INNER JOIN TOM_TOOLREQUESTDETAILLOT		TRDL		ON	TRQT.REQUESTDATE		= TRDL.REQUESTDATE
+																					AND	TRQT.REQUESTSEQUENCE	= TRDL.REQUESTSEQUENCE
+			WHERE	TRDL.VALIDSTATE					= 'Valid'
+			AND		TRQT.VALIDSTATE					= 'Valid'
+			AND		TRQT.TOOLMAKETYPE 				IN ('Add', 'New')
+			AND		TRDL.RECEIPTDATE 					IS NOT NULL
+			AND		TRQT.TOOLPROGRESSSTATUS		IN ('DetailRegist', 'Income')	--의뢰수량 대비 내역등록/입고 2개 상태 걸쳐 있을수도 있으므로,,,2021-06-22 EDITED
+			AND		TRDL.DURABLELOTID				IN (
+											     					SELECT DATA AS COL_VALUE 
+											                        FROM TABLE(CAST(FN_TO_ROWS(#{DURABLELOTIDS}) AS TP_SIMPLE_TABLE))
+											                       	)
+	</select>    
+	
+	<!-- ###################################################  -->
+	<!-- ###################################################  -->
+	<!-- ###################################################  -->
+	<!-- 제작입고 / 취소 처리시 매번 호출 -->
+	<!-- 해당 요청건의 의뢰건수 vs 입고건수 확인  -->
+	<!-- 진행상태 : DetailRegist (내역등록) / Income (입고) / Outbound (출고) -->
+	<!-- ###################################################  -->
+	<!-- ###################################################  -->
+	<!-- ###################################################  -->
+	<update id="updatePerRequestStatus" parameterType="map">
+		UPDATE TOM_TOOLREQUEST A
+		SET  TOOLPROGRESSSTATUS		= CASE WHEN NVL((SELECT SUM(QTY) --의뢰건수
+													                     FROM TOM_TOOLREQUESTDETAIL B
+													                     WHERE B.REQUESTDATE = A.REQUESTDATE
+													                     AND B.REQUESTSEQUENCE = A.REQUESTSEQUENCE
+													                     ),0) = NVL((SELECT COUNT(*)		--제작입고Lot건수
+														                     		 FROM TOM_TOOLREQUESTDETAIL C,
+														                     		 		 TOM_TOOLREQUESTDETAILLOT D
+														                     		 WHERE 1=1
+														                     		 -- ****************************************************************
+														                     		 AND C.REQUESTDATE 			= A.REQUESTDATE
+														                     		 AND C.REQUESTSEQUENCE 		= A.REQUESTSEQUENCE
+														                     		 -- ****************************************************************
+														                     		 AND C.DURABLEDEFID			= D.DURABLEDEFID
+																				     AND C.DURABLEDEFVERSION	= D.DURABLEDEFVERSION                                                                   
+																				     AND C.REQUESTDATE           	= D.REQUESTDATE
+																				     AND C.REQUESTSEQUENCE   	= D.REQUESTSEQUENCE
+																				     AND C.REQUESTIDX       		= D.REQUESTIDX        
+																				     AND D.RECEIPTDATE IS NOT NULL
+																				     -- ****************************************************************
+																				     ),0) THEN 'Income' ELSE 'DetailRegist' END,
+			 
+			 MODIFIER					= #{MODIFIER}, 
+			 MODIFIEDTIME				= SYSDATE, 
+			 LASTTXNHISTKEY			= #{LASTTXNHISTKEY}, 
+			 LASTTXNID					= #{LASTTXNID}, 
+			 LASTTXNUSER				= #{LASTTXNUSER}, 
+			 LASTTXNTIME				= SYSDATE, 
+			 VALIDSTATE					= 'Valid'
+		WHERE REQUESTDATE 		= #{REQUESTDATE}
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}
+    </update>
+    
+</mapper>

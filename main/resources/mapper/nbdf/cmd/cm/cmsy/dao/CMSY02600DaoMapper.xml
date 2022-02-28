@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="nbdf.cmd.cm.cmsy.dao.CMSY02600Dao">
+<!-- 게시판-->
+
+    <!-- 게시판등록 -->
+    <insert id="insertCmdBoard" parameterType="map">
+    <selectKey keyProperty="BOARD_ID" resultType="Integer" order="BEFORE">
+      SELECT  /* "nbdf.cmd.cm.cmsy.dao.CMSY02400Dao.CMD_BOARD_S" */
+                  CMD_BOARD_S.nextval
+      FROM     DUAL
+    </selectKey>      
+
+    INSERT /*nbdf.cmd.cm.cmsy.dao.CMSY02600Dao.insertCmdBoard */ INTO 
+    CMD_BOARD( 
+        BOARD_ID  
+        ,BOARD_KND  
+        ,TITLE  
+        ,COMMENTS  
+        ,UPPER_BOARD_ID  
+        ,CREATED_BY  
+        ,CREATION_DATE  
+        ,LAST_UPDATED_BY  
+        ,LAST_UPDATE_DATE        ) 
+    VALUES( 
+        #{BOARD_ID}  
+        ,#{BOARD_KND}  
+        ,#{TITLE}  
+        ,#{COMMENTS}  
+        ,#{UPPER_BOARD_ID}  
+        ,#{CREATED_BY}  
+        ,SYSDATE  
+        ,#{LAST_UPDATED_BY}  
+        ,SYSDATE    )
+    </insert>
+
+    <!-- 게시판변경 -->
+    <update id="updateCmdBoard" parameterType="map" >
+    UPDATE /* nbdf.cmd.cm.cmsy.dao.CMSY02600Dao.updateCmdBoard */ CMD_BOARD 
+    SET 
+        BOARD_KND = #{BOARD_KND}     
+        ,TITLE = #{TITLE}     
+        ,COMMENTS = #{COMMENTS}     
+        ,UPPER_BOARD_ID = #{UPPER_BOARD_ID}                     
+        ,LAST_UPDATED_BY = #{LAST_UPDATED_BY}     
+        ,LAST_UPDATE_DATE = SYSDATE
+    WHERE BOARD_ID = #{BOARD_ID}
+    </update>
+
+    <!-- 게시판삭제 -->
+    <update id="deleteCmdBoard" parameterType="map" > 
+    DELETE /* nbdf.cmd.cm.cmsy.dao.CMSY02600Dao.deleteCmdBoard */  
+    FROM CMD_BOARD 
+    WHERE BOARD_ID = #{BOARD_ID}
+    </update>
+
+    <!-- 게시판조회-->
+    <select id="selectCmdBoardList" parameterType="map" resultType="hashmap">
+       SELECT 
+           Z.*
+	      FROM
+	         (
+	           SELECT Y.*
+	                , ROWNUM RNUM
+	                , LAST_VALUE(ROWNUM) OVER (ORDER BY ROWNUM ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS TOTAL_ROWS
+	             FROM
+	                (
+
+    SELECT X.* FROM (
+	    SELECT /* nbdf.cmd.cm.cmsy.dao.CMSY02600Dao.selectCmdBoardList */
+	        A.BOARD_ID  
+	        ,A.TITLE  
+	        ,A.COMMENTS  
+	        ,A.CREATED_BY  
+	        ,(SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT= A.CREATED_BY) AS WRITER_NM  
+	        ,to_char(A.CREATION_DATE,'yyyy/mm/dd') as CREATION_DATE  
+	        ,A.LAST_UPDATED_BY  
+	        ,to_char(A.LAST_UPDATE_DATE,'yyyy/mm/dd') as LAST_UPDATE_DATE
+	        ,(SELECT USER_NM FROM CMD_USERS WHERE USER_ACNT=A.LAST_UPDATED_BY) AS UPDATER_NM
+	        ,(SELECT COUNT(*) FROM CMD_BOARD_CFM WHERE BOARD_ID = A.BOARD_ID AND CFM_YN = 'Y') AS CFM_CNT 
+	        ,(SELECT COUNT(*) FROM CMD_BOARD_CFM WHERE BOARD_ID = A.BOARD_ID AND CFM_YN = 'Y' AND USER_ID=#{SESSION_USER_ID}) AS USER_CFM_CNT 
+	    FROM  CMD_BOARD A 
+	    WHERE 1=1 
+	    AND CMD_PKG_COMMON.GET_NOTICE_YN(A.BOARD_ID, #{SESSION_USER_ID}) = 'Y'
+	    <if test="BOARD_ID != null and BOARD_ID != '' "> 
+			AND A.BOARD_ID = #{BOARD_ID} 
+	    </if>
+	    <if test="KEY_TYPE != null and KEY_TYPE !='' "> 
+	        <choose>
+	            <when test="KEY_TYPE equals 'A'.toString()">
+	                AND A.TITLE = #{TITLE}
+	            </when>
+	            <when test="KEY_TYPE equals 'B'.toString()">
+	                AND ( A.TITLE LIKE '%'||#{TITLE}||'%' OR A.COMMENTS LIKE '%'||#{COMMENTS}||'%')
+	            </when>
+	            <when test="KEY_TYPE equals 'C'.toString()">
+	                AND A.CREATED_BY <![CDATA[>=]]> 10
+	            </when>
+	            <otherwise>
+	            </otherwise>
+	        </choose>
+	    </if>
+    ) X
+    where 1=1
+    <if test="CFM_YN != null and CFM_YN != '' "> 
+		AND X.USER_CFM_CNT = DECODE(#{CFM_YN},'Y',1,0) 
+    </if>
+	order by BOARD_ID desc
+	
+	                ) Y
+	            WHERE 1=1
+	         ) Z
+	     WHERE 1=1
+	    <if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+	       AND Z.RNUM <![CDATA[>]]> ( #{PAGE_NUMBER} - 1 ) * #{PAGE_SIZE}
+	       AND Z.RNUM <![CDATA[<=]]> #{PAGE_NUMBER} * #{PAGE_SIZE}
+	    </if>
+    </select>
+
+
+</mapper>

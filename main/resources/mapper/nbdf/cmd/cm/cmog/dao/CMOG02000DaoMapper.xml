@@ -1,0 +1,950 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 조직매핑
+    설명          : 조직매핑 테이블 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2017.07.02
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.07.02     진성하     최초  생성
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao">
+    <sql id="whoCol" >
+         , CREATED_BY
+         , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD') as CREATION_DATE
+         , LAST_UPDATED_BY, TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DATE
+    </sql>
+
+     <!--조직매핑 정보 전체  카운트  -->
+    <select id="selectOrgsMpngCount" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.selectOrgsMpngCount"  */
+                   COUNT(*) as CNT
+        FROM CMD_ORGS A, CMD_ORGS_MPNGS B
+        --LEFT OUTER JOIN CMD_ORGS_MPNGS B
+        --ON A.OFFICE_ID = B.OFFICE_ID
+        WHERE 1=1
+        AND A.OFFICE_ID = B.OFFICE_ID
+        <if test= "MPNG_SYS_CD != null and MPNG_SYS_CD != ''">
+        AND B.MPNG_SYS_CD = #{MPNG_SYS_CD}   /* 매핑시스템 코드 */
+        </if>
+        <if test= "OFFICE_ID != null and OFFICE_ID != ''">
+        AND A.OFFICE_ID = #{OFFICE_ID}   /* 통합조직 관서ID */
+        </if>
+        <if test= "MPNG_OFFICE_CODE != null and MPNG_OFFICE_CODE != ''">
+        AND B.MPNG_OFFICE_CODE = #{MPNG_OFFICE_CODE}   /* 매핑 관서코드 */
+        </if>
+        <if test= "SEQ_NO != null and SEQ_NO != ''">
+        AND B.SEQ_NO = #{SEQ_NO}   /* 순서 */
+        </if>
+        <if test= "MAST_USE_YN != null and MAST_USE_YN != ''">
+        AND A.USE_YN = #{MAST_USE_YN}  /* 통합조직 사용여부*/
+        </if>
+        --WHERE 1=1
+        <if test= "USE_YN != null and USE_YN != ''">
+        AND B.USE_YN = #{USE_YN}       /* 매핑조직 사용여부 */
+        </if>
+        <if test="CND != '' and CND !=null ">
+             <if test="CND.equals('OFFICE_CODE') and TEXT != '' ">
+                     AND A.OFFICE_CODE = #{TEXT}
+             </if>
+              <if test="CND.equals('OFFICE_NAME') and TEXT != '' ">
+                     AND B.OFFICE_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+              </if>
+              <if test="CND.equals('MPNG_OFFICE_CODE') and TEXT != '' ">
+                     AND B.MPNG_OFFICE_CODE = #{TEXT}
+              </if>
+              <if test="CND.equals('MPNG_OFFICE_NAME') and TEXT != null ">
+                     AND B.MPNG_OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+              </if>
+              <if test="CND.equals('PAST_OFFICE_CODE') and TEXT != '' ">
+                     AND A.PAST_OFFICE_CODE = #{TEXT}
+              </if>
+        </if>
+    </select>
+
+    <!-- 조직매핑 정보 조회 리스트 -->
+    <select id="selectOrgsMpngList" resultType="hashmap">
+     SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.selectOrgsMpngList" */
+		    *
+		    FROM (
+		        SELECT
+		            ROWNUM AS RNUM,
+		            T.* FROM (
+		            SELECT
+		                A.OFFICE_ID                          /* 관서ID (SEQNUM) */
+		              , A.OFFICE_CODE                      /* 관서코드 */
+		              , A.OFFICE_NAME                      /* 관서명 */
+		              , A.PAST_OFFICE_CODE             /* 과거관서코드(ERP코드) */
+		              , A.ORG_GUBUN_CD                    /* 통합조직구분 코드 */
+		              , GET_CODE_F('CMD_ORG_SEC', ORG_GUBUN_CD) as ORG_GUBUN_NM    /* 통합조직구분명 */
+		              , A.DEPT_GUBUN_CD                   /* 부서구분 코드 */
+		              , GET_CODE_F('CMD_DEPT_SEC', DEPT_GUBUN_CD) as DEPT_GUBUN_NM /* 부서구분명 */
+		              , B.MPNG_SYS_CD                    /* 매핑시스템 코드 */
+		              , GET_CODE_F('CMD_MPNG_SYS', B.MPNG_SYS_CD) as MPNG_SYS_NM    /* 매핑시스템명 */
+		              , B.MPNG_OFFICE_CODE             /* 매핑시스템 관서코드 */
+		              , B.MPNG_OFFICE_NAME             /* 매핑시스템 관서명 */
+		              , B.SEQ_NO
+		              , TO_CHAR(TO_DATE(B.START_DATEC, 'YYYYMMDD'), 'YYYY.MM.DD') as  START_DATEC  /* 매핑 시작일자 */
+                      , TO_CHAR(TO_DATE(B.END_DATEC, 'YYYYMMDD'), 'YYYY.MM.DD') as  END_DATEC         /* 매핑 종료일자 */
+		              , B.USE_YN                              /* 매핑관서 사용여부 */
+		              , A.USE_YN as MAST_USE_YN     /* 조직마스터 사용여부 */
+                      , TO_CHAR(TO_DATE(A.START_DATEC, 'YYYYMMDD'), 'YYYY.MM.DD') as  MAST_START_DATEC  /* 조직마스터 시작일자 */
+                      , TO_CHAR(TO_DATE(A.END_DATEC, 'YYYYMMDD'), 'YYYY.MM.DD') as  MAST_END_DATEC         /* 조직마스터  종료일자 */
+                      , TO_CHAR(TO_DATE(A.ACCT_START_DATEC, 'YYYYMMDD'), 'YYYY.MM.DD') as  MAST_ACCT_START_DATEC  /* 조직마스터 회계시작일자 */
+                      , TO_CHAR(TO_DATE(A.ACCT_END_DATEC, 'YYYYMMDD'), 'YYYY.MM.DD') as  MAST_ACCT_END_DATEC         /* 조직마스터  회계종료일자 */
+		            FROM CMD_ORGS A, CMD_ORGS_MPNGS B
+		            --LEFT OUTER JOIN CMD_ORGS_MPNGS B
+		            --ON A.OFFICE_ID = B.OFFICE_ID
+                    WHERE 1=1
+                    AND A.OFFICE_ID = B.OFFICE_ID
+		            <if test= "MPNG_SYS_CD != null and MPNG_SYS_CD != ''">
+		            AND B.MPNG_SYS_CD = #{MPNG_SYS_CD}   /* 매핑시스템 코드 */
+		            </if>
+		            <if test= "OFFICE_ID != null and OFFICE_ID != ''">
+                    AND A.OFFICE_ID = #{OFFICE_ID}   /* 통합조직 관서ID */
+                    </if>
+                    <if test= "MPNG_OFFICE_CODE != null and MPNG_OFFICE_CODE != ''">
+                    AND B.MPNG_OFFICE_CODE = #{MPNG_OFFICE_CODE}   /* 매핑 관서코드 */
+                    </if>
+                    <if test= "SEQ_NO != null and SEQ_NO != ''">
+                    AND B.SEQ_NO = #{SEQ_NO}   /* 순서 */
+                    </if>
+                    <if test= "MAST_USE_YN != null and MAST_USE_YN != ''">
+		            AND A.USE_YN = #{MAST_USE_YN}  /* 통합조직 사용여부*/
+		            </if>
+		            --WHERE 1=1
+		            <if test= "USE_YN != null and USE_YN != ''">
+		            AND B.USE_YN = #{USE_YN}          /* 매핑조직 사용여부 */
+		            </if>
+				    <if test="CND != '' and CND !=null ">
+			             <if test="CND.equals('OFFICE_CODE') and TEXT != '' ">
+			                    AND A.OFFICE_CODE = #{TEXT}
+			            </if>
+			             <if test="CND.equals('OFFICE_NAME') and TEXT != '' ">
+			                    AND B.OFFICE_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+			             </if>
+			             <if test="CND.equals('MPNG_OFFICE_CODE') and TEXT != '' ">
+			                    AND B.MPNG_OFFICE_CODE = #{TEXT}
+			             </if>
+			             <if test="CND.equals('MPNG_OFFICE_NAME') and TEXT != null ">
+                                AND B.MPNG_OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+                         </if>
+                         <if test="CND.equals('PAST_OFFICE_CODE') and TEXT != '' ">
+                                AND A.PAST_OFFICE_CODE = #{TEXT}
+                         </if>
+	                </if>
+		            ORDER BY OFFICE_ID
+		        ) T WHERE 1=1
+		        <if test= "P_END != null and P_END != ''">
+                 AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+                </if>
+		    ) WHERE 1=1
+		 <if test= "P_START != null and P_START != ''">
+         AND  RNUM >= #{P_START}
+         </if>
+    </select>
+
+    <!-- 조직매핑 등록/수정 MergeQuery(엑설 import 업로드용) -->
+    <update id="updateOrgMpngInfo"  parameterType="hashmap">
+	    MERGE /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.updateOrgMpngInfo" */
+	        INTO CMD_ORGS_MPNGS T1
+	        USING DUAL
+	        ON
+	        (
+	          T1.OFFICE_ID = #{OFFICE_ID}
+	          AND T1.MPNG_SYS_CD = #{MPNG_SYS_CD}
+	          AND T1.SEQ_NO = 1
+	          AND T1.MPNG_OFFICE_CODE = #{MPNG_OFFICE_CODE}
+	        )
+	        WHEN MATCHED THEN
+	            UPDATE SET
+	                   T1.LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+	                 , T1.LAST_UPDATE_DATE = SYSDATE
+	                 , T1.USE_YN = #{USE_YN}
+	                 , T1.OFFICE_NAME = #{OFFICE_NAME}
+	                 , T1.MPNG_OFFICE_NAME = #{MPNG_OFFICE_NAME}
+	                 , T1.START_DATEC = #{START_DATEC}
+	                 , T1.END_DATEC = #{END_DATEC}
+	        WHEN NOT MATCHED THEN
+            INSERT
+            (
+                 T1.OFFICE_ID
+               , T1.MPNG_SYS_CD
+               , T1.MPNG_OFFICE_CODE
+               , T1.SEQ_NO
+               , T1.OFFICE_NAME
+               , T1.MPNG_OFFICE_NAME
+               , T1.START_DATEC
+               , T1.END_DATEC
+               , T1.USE_YN
+               , T1.CREATED_BY
+               , T1.CREATION_DATE
+            )
+            VALUES
+            (
+                 #{OFFICE_ID}
+               , #{MPNG_SYS_CD}
+               , #{MPNG_OFFICE_CODE}
+               , 1
+               , #{OFFICE_NAME}
+               , #{MPNG_OFFICE_NAME}
+               , #{START_DATEC}
+               , #{END_DATEC}
+               , #{USE_YN}
+               , #{CREATED_BY}
+               , SYSDATE
+            )
+   </update>
+
+    <!-- 조직매핑 정보 조회 (단건) -->
+    <select id="selectOrgsMpngInfo" resultType="hashmap">
+       SELECT /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.selectOrgsMpngInfo" */
+               A.OFFICE_ID                          /* 관서ID */
+             , A.OFFICE_CODE                      /* 관서코드 */
+             , A.OFFICE_NAME                      /* 관서명 */
+             , A.ORG_GUBUN_CD                   /* 통합조직구분 코드 */
+             , A.DEPT_GUBUN_CD                  /* 부서구분 코드 */
+             , B.MPNG_SYS_CD                     /* 매핑시스템 코드 */
+             , GET_CODE_F('CMD_MPNG_SYS', B.MPNG_SYS_CD) as MPNG_SYS_NM    /* 매핑시스템명 */
+             , B.MPNG_OFFICE_CODE             /* 매핑시스템 관서코드 */
+             , B.MPNG_OFFICE_NAME             /* 매핑시스템 관서명 */
+             , B.RM                                     /* 참고사항 */
+             , B.SEQ_NO
+             , B.START_DATEC                     /* 시작일자 */
+             , B.END_DATEC                        /* 종료일자 */
+             , B.USE_YN                             /* 매핑관서 사용여부 */
+             , B.CREATED_BY
+             , TO_CHAR(B.CREATION_DATE, 'YYYY-MM-DD') as CREATION_DATE
+             , B.LAST_UPDATED_BY
+             , TO_CHAR(B.LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DATE
+             , (SELECT USER_NM FROM PES_PORTAL_USERS WHERE PORTAL_USER_ID = B.CREATED_BY) as CREATE_USER_NM             /* 최초생성자명 */
+             , (SELECT USER_NM FROM PES_PORTAL_USERS WHERE PORTAL_USER_ID = B.LAST_UPDATED_BY) as UPDATE_USER_NM    /* 최종수정자명 */
+       FROM CMD_ORGS A, CMD_ORGS_MPNGS B
+       WHERE 1=1
+       AND A.OFFICE_ID = B.OFFICE_ID
+       AND B.MPNG_SYS_CD = #{MPNG_SYS_CD}   /* 매핑시스템 코드 */
+       AND A.OFFICE_ID = #{OFFICE_ID}   /* 통합조직 관서ID */
+       AND B.MPNG_OFFICE_CODE = #{MPNG_OFFICE_CODE}   /* 매핑 관서코드 */
+       <if test="SEQ_NO != null and SEQ_NO != ''">
+       AND B.SEQ_NO = #{SEQ_NO}         /* 순서 */
+       </if>
+       <if test="USE_YN != null and USE_YN != ''">
+       AND A.USE_YN = #{USE_YN}                      /* 통합조직 사용여부 = Y(Default) */
+       </if>
+       <if test="TRAN_ID != null and TRAN_ID != ''">
+       AND B.OFFICE_NAME = #{TRAN_ID}         /* 트랜젝션ID (연계 수신후 미매핑 관서 검색을 위한 TRAN_ID) - SP에서  구분을 위해 OFFICE_NAME에 TRAN_ID를 집어넣음.(HRM제외) */
+       </if>
+    </select>
+
+   <!-- 조직매핑 수정(단건) -->
+   <update id="updateOrgMpngOne"  parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.updateOrgMpngOne" */  CMD_ORGS_MPNGS
+        SET
+              LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+            , LAST_UPDATE_DATE = SYSDATE
+            <if test="OFFICE_ID != null and OFFICE_ID != ''">
+            , OFFICE_ID = #{OFFICE_ID}
+            </if>
+            <if test="MPNG_SYS_CD != null and MPNG_SYS_CD != ''">
+            , MPNG_SYS_CD = #{MPNG_SYS_CD}
+            </if>
+            <if test="MPNG_OFFICE_CODE != null and MPNG_OFFICE_CODE != ''">
+            , MPNG_OFFICE_CODE = #{MPNG_OFFICE_CODE}
+            </if>
+            <if test="NEW_SEQ_NO != null and NEW_SEQ_NO != ''">
+            , SEQ_NO = #{NEW_SEQ_NO}
+            </if>
+            , OFFICE_NAME = #{OFFICE_NAME}
+	        , MPNG_OFFICE_NAME = #{MPNG_OFFICE_NAME}
+	        , START_DATEC = #{START_DATEC}
+	        , END_DATEC = #{END_DATEC}
+	        , USE_YN = #{USE_YN}
+        WHERE  1=1
+        AND OFFICE_ID = #{OLD_OFFICE_ID}
+        AND MPNG_SYS_CD = #{OLD_MPNG_SYS_CD}
+        AND MPNG_OFFICE_CODE = #{OLD_MPNG_OFFICE_CODE}
+        AND SEQ_NO = #{SEQ_NO}
+   </update>
+
+   <!-- 조직미매핑 처리후 연계 테이블 수정-등기용국기호 (단건)-성공건으로 처리 -->
+   <update id="updateOrgMpngPostIf"  parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.updateOrgMpngPostIf" */  CMD_ORG_POST_IFR
+        SET
+            LINK_STAT_CD = #{LINK_STAT_CD}
+        WHERE  1=1
+        AND TRAN_ID = #{TRAN_ID}
+   </update>
+
+   <!-- 조직미매핑 처리후 연계 테이블 수정-금융국기호 (단건) -성공건으로 처리 -->
+   <update id="updateOrgMpngFnceIf"  parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.updateOrgMpngFnceIf" */  CMD_ORG_FNCE_IFR
+        SET
+            LINK_STAT_CD = #{LINK_STAT_CD}
+        WHERE  1=1
+        AND TRAN_ID = #{TRAN_ID}
+   </update>
+
+   <!-- 조직매핑 삭제(단건) -->
+   <update id="deleteOrgMpngOne"  parameterType="hashmap">
+        DELETE /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.deleteOrgMpngOne" */
+        FROM CMD_ORGS_MPNGS
+        WHERE 1=1
+        AND OFFICE_ID = #{OFFICE_ID}
+        AND MPNG_SYS_CD = #{MPNG_SYS_CD}
+        AND MPNG_OFFICE_CODE = #{MPNG_OFFICE_CODE}
+        AND SEQ_NO = #{SEQ_NO}
+   </update>
+
+   <!--조직매핑 연계결과 전체  카운트  -->
+    <select id="selectOrgsMpngEaiCount" resultType="hashmap">
+      SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.selectOrgsMpngEaiCount" */
+          COUNT(*) as CNT
+      FROM (
+                  SELECT
+                             'FNC' as MPNG_SYS_CD
+                           , '금융국기호' as MPNG_SYS_NM
+                           , BRN_CODE   as OFFICE_CODE     /*국코드*/
+                           , BRN_NM  as  OFFICE_NAME       /*국명*/
+                           , HIGH_BRN_CODE as UPPER_OFFICE_CODE /*상위국코드*/
+                           /*, CLOS_DVSN as USE_GUBUN*/     /*폐쇄구분(사용구분)*/
+                           , DECODE(CLOS_DVSN, '2', '정상', '1', '폐국', '기타') as USE_GUBUN
+                           , POFC_INFO_VALD_STRT_DATE as START_DATEC /*우체국정보유효시작일자*/
+                           , CLOS_DATE as END_DATEC /*유효종료일자(X) : 폐쇄일자*/
+                           , ADDR            /*주소*/
+                           , TRAN_ID        /*EAI트랜잭션ID*/
+                           , TO_CHAR(TO_DATE(SUBSTR(LINK_DEAL_DTM,0,12), 'YYYYMMDDHH24MI'), 'YYYY.MM.DD HH24:MI') as  LINK_DEAL_DTM  /* EAI발생일시*/
+                           , SUBSTR(LINK_DEAL_DTM, 1,8 ) as LINK_DEAL_DTM2 /*EAI발생일시(검색용)*/
+                           , LINK_STAT_CD    /*EAI처리상태*/
+                           , CUD_KEY         /*EAI입력조건*/
+                           , DECODE(LINK_STAT_CD, 'N','신규', 'P','진행', 'S','성공', 'F','실패', '') as LINK_STAT_NM
+                           ,NVL((SELECT '1'
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'FNC'
+                         AND X.MPNG_VALUE  = A.BRN_CODE),'0') EXCEPTION_FLAG
+                        FROM CMD_ORG_FNCE_IFR A
+                        WHERE 1= 1
+                          AND A.LINK_DEAL_DTM = (SELECT MAX(LINK_DEAL_DTM)
+                                          FROM CMD_ORG_FNCE_IFR)
+                  <if test="EXCEPTION_FLAG != 0 and EXCEPTION_FLAG != '0'">
+                  AND NOT EXISTS
+                      (
+                      SELECT *
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'FNC'
+                         AND X.MPNG_VALUE  = A.BRN_CODE
+                      )
+                  </if>
+                UNION ALL
+               /*사업자등록번호 추가*/
+                SELECT
+                             'BSNO' as MPNG_SYS_CD
+                   , '사업자등록번호' as MPNG_SYS_NM
+                   , BSNO   as OFFICE_CODE     /*국코드*/
+                   , BRN_NM  as  OFFICE_NAME       /*국명*/
+                   , HIGH_BRN_CODE as UPPER_OFFICE_CODE  /*상위국코드*/
+                  /*, CLOS_DVSN as USE_GUBUN     폐쇄구분(사용구분)*/
+                   , DECODE(CLOS_DVSN, '2', '정상', '1', '폐국', '기타') as USE_GUBUN
+                   , POFC_INFO_VALD_STRT_DATE as START_DATEC /*우체국정보유효시작일자*/
+                   , CLOS_DATE as END_DATEC /*유효종료일자(X) : 폐쇄일자*/
+                   , ADDR            /*주소*/
+                   , TRAN_ID         /*EAI트랜잭션ID*/
+                   , TO_CHAR(TO_DATE(SUBSTR(LINK_DEAL_DTM,0,12), 'YYYYMMDDHH24MI'), 'YYYY.MM.DD HH24:MI') as  LINK_DEAL_DTM   /*EAI발생일시*/
+                   , SUBSTR(LINK_DEAL_DTM, 1,8 ) as LINK_DEAL_DTM2 /*EAI발생일시(검색용)*/
+                   , LINK_STAT_CD   /* EAI처리상태*/
+                   , CUD_KEY         /*EAI입력조건*/
+                   , DECODE(LINK_STAT_CD, 'N','신규', 'P','진행', '실패') as LINK_STAT_NM
+                   ,NVL((SELECT '1'
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'BSNO'
+                         AND X.MPNG_VALUE  = A.BRN_CODE),'0') EXCEPTION_FLAG
+                FROM CMD_ORG_FNCE_IFR A
+                WHERE 1= 1
+                  AND A.LINK_DEAL_DTM = (SELECT MAX(LINK_DEAL_DTM)
+                                          FROM CMD_ORG_FNCE_IFR)
+                  AND ((LINK_STAT_CD = 'F') OR (LINK_STAT_CD <![CDATA[<>]]> 'F' AND A.BSNO IS NULL))
+                  <if test="EXCEPTION_FLAG != 0 and EXCEPTION_FLAG != '0'">
+                  AND NOT EXISTS
+                      (
+                      SELECT *
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'BSNO'
+                         AND X.MPNG_VALUE  = A.BRN_CODE
+                      )
+                  </if>
+                        UNION ALL
+                        SELECT
+                             'POST' as MPNG_SYS_CD
+                           , '등기용국기호' as MPNG_SYS_NM
+                           , REGIPOCD as OFFICE_CODE /*등기용국기호*/
+                           , PONM  as OFFICE_NAME  /*우체국명*/
+                           , HRNKORREGIPOCD as UPPER_OFFICE_CODE /*상위관서 등기용국기호*/
+                           /*, DSCDPOYN as USE_GUBUN  폐국여부*/
+                           , DECODE(DSCDPOYN, 'N', '정상', 'Y', '폐국', '기타') as USE_GUBUN
+                           , STRTPOYMD as START_DATEC /*개국일자C*/
+                           , ENDPOYMD as END_DATEC    /*폐국일자C*/
+                           , POADDR  as  ADDR /*주소*/
+                           , TRAN_ID         /* EAI트랜잭션ID*/
+                           , TO_CHAR(TO_DATE(SUBSTR(LINK_DEAL_DTM,0,12), 'YYYYMMDDHH24MI'), 'YYYY.MM.DD HH24:MI') as  LINK_DEAL_DTM   /* EAI발생일시*/
+                           , SUBSTR(LINK_DEAL_DTM, 1,8 ) as LINK_DEAL_DTM2 /*EAI발생일시(검색용)*/
+                           , LINK_STAT_CD    /* EAI처리상태*/
+                           , CUD_KEY         /* EAI입력조건*/
+                           , DECODE(LINK_STAT_CD, 'N','신규', 'P','진행', 'S','성공', 'F','실패', '') as LINK_STAT_NM
+                           ,NVL((SELECT '1'
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'POST'
+                         AND X.MPNG_VALUE  = B.REGIPOCD),'0') EXCEPTION_FLAG
+                        FROM CMD_ORG_POST_IFR B
+                        WHERE 1=1
+                 AND B.LINK_DEAL_DTM = (SELECT MAX(LINK_DEAL_DTM)
+                                          FROM CMD_ORG_POST_IFR)
+                 <if test="EXCEPTION_FLAG != 0 and EXCEPTION_FLAG != '0'">
+                 AND NOT EXISTS
+                      (
+                      SELECT *
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'POST'
+                         AND X.MPNG_VALUE  = B.REGIPOCD
+                      )
+                 </if>
+                        UNION ALL
+                        SELECT
+                             MPNG_SYS_CD
+                           , GET_CODE_F('CMD_MPNG_SYS', MPNG_SYS_CD) as MPNG_SYS_NM
+                           , MPNG_OFFICE_CODE as OFFICE_CODE /*매핑 관서코드*/
+                           , MPNG_OFFICE_NAME as OFFICE_NAME  /*매핑 관서명*/
+                           , '' as UPPER_OFFICE_CODE
+                           , DECODE(USE_YN, 'Y', '정상', 'N', '폐국', '기타') as USE_GUBUN
+                           , START_DATEC
+                           , END_DATEC
+                           , '' as ADDR
+                           ,  CASE WHEN LAST_UPDATE_DATE IS NULL THEN
+                                  'CMD' || TO_CHAR(CREATION_DATE, 'YYYYMMDDHH24MISSsss') || '000001'
+                              ELSE
+                                  'CMD' || TO_CHAR(LAST_UPDATE_DATE, 'YYYYMMDDHH24MISSsss') || '000001'
+                              END as TRAN_ID  /* TRAN_ID = 수정시간(임시)*/
+                          ,  CASE WHEN LAST_UPDATE_DATE IS NULL THEN
+                                  TO_CHAR(CREATION_DATE, 'YYYY.MM.DD HH24:MI')
+                             ELSE
+                                  TO_CHAR(LAST_UPDATE_DATE, 'YYYY.MM.DD HH24:MI')
+                             END as LINK_DEAL_DTM  /*연계발생일시 (등록시간 또는 수정시간)*/
+                           , CASE WHEN LAST_UPDATE_DATE IS NULL THEN
+                                 TO_CHAR(CREATION_DATE, 'YYYYMMDD')
+                             ELSE
+                                 TO_CHAR(LAST_UPDATE_DATE, 'YYYYMMDD')
+                             END as LINK_DEAL_DTM2 /*연계발생일시 (검색용)*/
+                           , 'F' as LINK_STAT_CD      /*알 수 없는  미매핑관서(Unknown)*/
+                           , 'C' as CUD_KEY
+                           , '실패' as LINK_STAT_NM /* 미매핑관서*/
+                           ,NVL((SELECT '1'
+                               FROM CMD_ORG_IFR_EXCEPTIONS X
+                              WHERE X.MPNG_SYS_CD = C.MPNG_SYS_CD
+                                AND X.MPNG_VALUE  = C.MPNG_OFFICE_CODE),'0') EXCEPTION_FLAG
+                        FROM CMD_ORGS_MPNGS C
+                        WHERE OFFICE_ID = 1000  /*Fix된 미팽관서ID*/
+                        AND MPNG_SYS_CD = 'HRM' /*HRM만*/
+                        <if test="EXCEPTION_FLAG != 0 and EXCEPTION_FLAG != '0'">
+                        AND NOT EXISTS
+                              (
+                              SELECT *
+                                FROM CMD_ORG_IFR_EXCEPTIONS X
+                               WHERE X.MPNG_SYS_CD = C.MPNG_SYS_CD
+                                 AND X.MPNG_VALUE  = C.MPNG_OFFICE_CODE
+                              )
+                      </if>
+                    ) DUAL
+                    WHERE 1=1
+                    <if test="MPNG_SYS_CD != null and MPNG_SYS_CD != ''">
+                    AND MPNG_SYS_CD = #{MPNG_SYS_CD}
+                    </if>
+                    <if test="LINK_STAT_CD != null and LINK_STAT_CD != ''">
+                    AND LINK_STAT_CD = #{LINK_STAT_CD}
+                    </if>
+                    <if test="START_DATEC != null and START_DATEC != ''">
+                    AND LINK_DEAL_DTM2 BETWEEN #{START_DATEC} AND #{END_DATEC}
+                    </if>
+                    <if test="CND != '' and CND !=null ">
+                        <if test="CND.equals('TRAN_ID') and TEXT != '' ">
+                        AND TRAN_ID = #{TEXT}
+                        </if>
+                        <if test="CND.equals('MPNG_OFFICE_CODE') and TEXT != '' ">
+                        AND OFFICE_CODE = #{TEXT}
+                        </if>
+                        <if test="CND.equals('MPNG_OFFICE_NAME') and TEXT != '' ">
+                        AND OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+                        </if>
+                    </if>
+    </select>
+
+    <!-- 조직매핑 연계결과 조회 리스트 -->
+    <select id="selectOrgsMpngEaiList" resultType="hashmap">
+     SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.selectOrgsMpngEaiList" */
+        *
+     FROM (
+            SELECT
+                ROWNUM AS RNUM,
+                T.* FROM (
+                SELECT
+                    *
+                FROM (
+                  SELECT
+                             'FNC' as MPNG_SYS_CD
+                           , '금융국기호' as MPNG_SYS_NM
+                           , BRN_CODE   as OFFICE_CODE     /*국코드*/
+                           , BRN_NM  as  OFFICE_NAME       /*국명*/
+                           , HIGH_BRN_CODE as UPPER_OFFICE_CODE /*상위국코드*/
+                           /*, CLOS_DVSN as USE_GUBUN*/     /*폐쇄구분(사용구분)*/
+                           , DECODE(CLOS_DVSN, '2', '정상', '1', '폐국', '기타') as USE_GUBUN
+                           , POFC_INFO_VALD_STRT_DATE as START_DATEC /*우체국정보유효시작일자*/
+                           , CLOS_DATE as END_DATEC /*유효종료일자(X) : 폐쇄일자*/
+                           , ADDR            /*주소*/
+                           , TRAN_ID        /*EAI트랜잭션ID*/
+                           , TO_CHAR(TO_DATE(SUBSTR(LINK_DEAL_DTM,0,12), 'YYYYMMDDHH24MI'), 'YYYY.MM.DD HH24:MI') as  LINK_DEAL_DTM  /* EAI발생일시*/
+                           , SUBSTR(LINK_DEAL_DTM, 1,8 ) as LINK_DEAL_DTM2 /*EAI발생일시(검색용)*/
+                           , LINK_STAT_CD    /*EAI처리상태*/
+                           , CUD_KEY         /*EAI입력조건*/
+                           , DECODE(LINK_STAT_CD, 'N','신규', 'P','진행', 'S','성공', 'F','실패', '') as LINK_STAT_NM
+                           ,NVL((SELECT '1'
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'FNC'
+                         AND X.MPNG_VALUE  = A.BRN_CODE),'0') EXCEPTION_FLAG
+                        FROM CMD_ORG_FNCE_IFR A
+                        WHERE 1= 1
+                          AND A.LINK_DEAL_DTM = (SELECT MAX(LINK_DEAL_DTM)
+                                          FROM CMD_ORG_FNCE_IFR)
+                  <if test="EXCEPTION_FLAG != 0 and EXCEPTION_FLAG != '0'">
+                  AND NOT EXISTS
+                      (
+                      SELECT *
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'FNC'
+                         AND X.MPNG_VALUE  = A.BRN_CODE
+                      )
+                  </if>
+                UNION ALL
+               /*사업자등록번호 추가*/
+                /*SELECT
+                     'BSNO' as MPNG_SYS_CD
+                   , '사업자등록번호 누락' as MPNG_SYS_NM
+                   , BRN_CODE   as OFFICE_CODE     \*국코드*\
+                   , BRN_NM  as  OFFICE_NAME       \*국명*\
+                   , HIGH_BRN_CODE as UPPER_OFFICE_CODE  \*상위국코드*\
+                   , DECODE(CLOS_DVSN, '2', '정상', '1', '폐국', '기타') as USE_GUBUN
+                   , POFC_INFO_VALD_STRT_DATE as START_DATEC \*우체국정보유효시작일자*\
+                   , CLOS_DATE as END_DATEC \*유효종료일자(X) : 폐쇄일자*\
+                   , ADDR            \*주소*\
+                   , TRAN_ID         \*EAI트랜잭션ID*\
+                   , TO_CHAR(TO_DATE(SUBSTR(LINK_DEAL_DTM,0,12), 'YYYYMMDDHH24MI'), 'YYYY.MM.DD HH24:MI') as  LINK_DEAL_DTM   \*EAI발생일시*\
+                   , SUBSTR(LINK_DEAL_DTM, 1,8 ) as LINK_DEAL_DTM2 \*EAI발생일시(검색용)*\
+                   , LINK_STAT_CD   \* EAI처리상태*\
+                   , CUD_KEY         \*EAI입력조건*\
+                   , DECODE(LINK_STAT_CD, 'N','신규', 'P','진행', 'S','성공', 'F','실패', '') as LINK_STAT_NM
+                   ,NVL((SELECT '1'
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'BSNO'
+                         AND X.MPNG_VALUE  = A.BRN_CODE),'0') EXCEPTION_FLAG
+                FROM CMD_ORG_FNCE_IFR A
+                WHERE 1= 1
+                  AND A.LINK_DEAL_DTM = (SELECT MAX(LINK_DEAL_DTM)
+                                          FROM CMD_ORG_FNCE_IFR)
+                  AND A.BSNO IS NULL \* 사업자등록번호가 null인것만 조회 *\
+                  and CLOS_DVSN = 2  \* 정상관서만 조회함 *\
+                  <if test="EXCEPTION_FLAG != 0 and EXCEPTION_FLAG != '0'">
+                  AND NOT EXISTS
+                      (
+                      SELECT *
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'BSNO'
+                         AND X.MPNG_VALUE  = A.BRN_CODE
+                      )
+                  </if>
+                 UNION ALL
+               \*종료일자 미반영 추가*\
+                SELECT
+                     'END_DATE' AS MPNG_SYS_CD
+                   ,'종료일자 미반영' AS MPNG_SYS_NM
+                   , BRN_CODE   as OFFICE_CODE     \*국코드*\
+                   , BRN_NM  as  OFFICE_NAME       \*국명*\
+                   , HIGH_BRN_CODE as UPPER_OFFICE_CODE  \*상위국코드*\
+                   , DECODE(CLOS_DVSN, '2', '정상', '1', '폐국', '기타') as USE_GUBUN
+                   , POFC_INFO_VALD_STRT_DATE as START_DATEC \*우체국정보유효시작일자*\
+                   , CLOS_DATE as END_DATEC \*유효종료일자(X) : 폐쇄일자*\
+                   , ADDR            \*주소*\
+                   , TRAN_ID         \*EAI트랜잭션ID*\
+                   , TO_CHAR(TO_DATE(SUBSTR(LINK_DEAL_DTM,0,12), 'YYYYMMDDHH24MI'), 'YYYY.MM.DD HH24:MI') as  LINK_DEAL_DTM   \*EAI발생일시*\
+                   , SUBSTR(LINK_DEAL_DTM, 1,8 ) as LINK_DEAL_DTM2 \*EAI발생일시(검색용)*\
+                   , LINK_STAT_CD   \* EAI처리상태*\
+                   , CUD_KEY         \*EAI입력조건*\
+                   , DECODE(LINK_STAT_CD, 'N','신규', 'P','진행', 'S','성공', 'F','실패', '') as LINK_STAT_NM
+                   ,NVL((SELECT '1'
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'END_DATE'
+                         AND X.MPNG_VALUE  = A.BRN_CODE),'0') EXCEPTION_FLAG
+                FROM CMD_ORG_FNCE_IFR A
+                WHERE 1= 1
+                  AND A.LINK_DEAL_DTM = (SELECT MAX(LINK_DEAL_DTM)
+                                          FROM CMD_ORG_FNCE_IFR)
+                  and CLOS_DATE is not null
+                  and exists
+                      (
+                       select *
+                         from cmd_orgs_mpngs m
+                             ,cmd_orgs       o
+                        where m.mpng_sys_cd = 'FNC'
+                          and m.mpng_office_code = a.BRN_CODE
+                          and m.office_id = o.office_id
+                          and o.end_datec is null
+                      )
+                  <if test="EXCEPTION_FLAG != 0 and EXCEPTION_FLAG != '0'">
+                  AND NOT EXISTS
+                      (
+                      SELECT *
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'END_DATE'
+                         AND X.MPNG_VALUE  = A.BRN_CODE
+                      )
+                  </if>
+                        UNION ALL*/
+                        SELECT
+                             'POST' as MPNG_SYS_CD
+                           , '등기용국기호' as MPNG_SYS_NM
+                           , REGIPOCD as OFFICE_CODE /*등기용국기호*/
+                           , PONM  as OFFICE_NAME  /*우체국명*/
+                           , HRNKORREGIPOCD as UPPER_OFFICE_CODE /*상위관서 등기용국기호*/
+                           , DECODE(DSCDPOYN, 'N', '정상', 'Y', '폐국', '기타') as USE_GUBUN
+                           , STRTPOYMD as START_DATEC /*개국일자C*/
+                           , ENDPOYMD as END_DATEC    /*폐국일자C*/
+                           , POADDR  as  ADDR /*주소*/
+                           , TRAN_ID         /* EAI트랜잭션ID*/
+                           , TO_CHAR(TO_DATE(SUBSTR(LINK_DEAL_DTM,0,12), 'YYYYMMDDHH24MI'), 'YYYY.MM.DD HH24:MI') as  LINK_DEAL_DTM   /* EAI발생일시*/
+                           , SUBSTR(LINK_DEAL_DTM, 1,8 ) as LINK_DEAL_DTM2 /*EAI발생일시(검색용)*/
+                           , LINK_STAT_CD    /* EAI처리상태*/
+                           , CUD_KEY         /* EAI입력조건*/
+                           , DECODE(LINK_STAT_CD, 'N','신규', 'P','진행', 'S','성공', 'F','실패', '') as LINK_STAT_NM
+                           ,NVL((SELECT '1'
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'POST'
+                         AND X.MPNG_VALUE  = B.REGIPOCD),'0') EXCEPTION_FLAG
+                        FROM CMD_ORG_POST_IFR B
+                        WHERE 1=1
+                 AND B.LINK_DEAL_DTM = (SELECT MAX(LINK_DEAL_DTM)
+                                          FROM CMD_ORG_POST_IFR)
+                 <if test="EXCEPTION_FLAG != 0 and EXCEPTION_FLAG != '0'">
+                 AND NOT EXISTS
+                      (
+                      SELECT *
+                        FROM CMD_ORG_IFR_EXCEPTIONS X
+                       WHERE X.MPNG_SYS_CD = 'POST'
+                         AND X.MPNG_VALUE  = B.REGIPOCD
+                      )
+                 </if>
+                        UNION ALL
+                        SELECT
+                             MPNG_SYS_CD
+                           , GET_CODE_F('CMD_MPNG_SYS', MPNG_SYS_CD) as MPNG_SYS_NM
+                           , MPNG_OFFICE_CODE as OFFICE_CODE /*매핑 관서코드*/
+                           , MPNG_OFFICE_NAME as OFFICE_NAME  /*매핑 관서명*/
+                           , '' as UPPER_OFFICE_CODE
+                           , DECODE(USE_YN, 'Y', '정상', 'N', '폐국', '기타') as USE_GUBUN
+                           , START_DATEC
+                           , END_DATEC
+                           , '' as ADDR
+                           ,  CASE WHEN LAST_UPDATE_DATE IS NULL THEN
+                                  'CMD' || TO_CHAR(CREATION_DATE, 'YYYYMMDDHH24MISSsss') || '000001'
+                              ELSE
+                                  'CMD' || TO_CHAR(LAST_UPDATE_DATE, 'YYYYMMDDHH24MISSsss') || '000001'
+                              END as TRAN_ID  /* TRAN_ID = 수정시간(임시)*/
+                          ,  CASE WHEN LAST_UPDATE_DATE IS NULL THEN
+                                  TO_CHAR(CREATION_DATE, 'YYYY.MM.DD HH24:MI')
+                             ELSE
+                                  TO_CHAR(LAST_UPDATE_DATE, 'YYYY.MM.DD HH24:MI')
+                             END as LINK_DEAL_DTM  /*연계발생일시 (등록시간 또는 수정시간)*/
+                           , CASE WHEN LAST_UPDATE_DATE IS NULL THEN
+                                 TO_CHAR(CREATION_DATE, 'YYYYMMDD')
+                             ELSE
+                                 TO_CHAR(LAST_UPDATE_DATE, 'YYYYMMDD')
+                             END as LINK_DEAL_DTM2 /*연계발생일시 (검색용)*/
+                           , 'F' as LINK_STAT_CD      /*알 수 없는  미매핑관서(Unknown)*/
+                           , 'C' as CUD_KEY
+                           , '실패' as LINK_STAT_NM /* 미매핑관서*/
+                           ,NVL((SELECT '1'
+                               FROM CMD_ORG_IFR_EXCEPTIONS X
+                              WHERE X.MPNG_SYS_CD = C.MPNG_SYS_CD
+                                AND X.MPNG_VALUE  = C.MPNG_OFFICE_CODE),'0') EXCEPTION_FLAG
+                        FROM CMD_ORGS_MPNGS C
+                        WHERE OFFICE_ID = 1000  /*Fix된 미팽관서ID*/
+                        AND MPNG_SYS_CD = 'HRM' /*HRM만*/
+                        <if test="EXCEPTION_FLAG != 0 and EXCEPTION_FLAG != '0'">
+                        AND NOT EXISTS
+                          (
+                          SELECT *
+                            FROM CMD_ORG_IFR_EXCEPTIONS X
+                           WHERE X.MPNG_SYS_CD = C.MPNG_SYS_CD
+                             AND X.MPNG_VALUE  = C.MPNG_OFFICE_CODE
+                          )
+                      </if>
+                    ) DUAL
+                    WHERE 1=1
+                    <if test="MPNG_SYS_CD != null and MPNG_SYS_CD != ''">
+                    AND MPNG_SYS_CD = #{MPNG_SYS_CD}
+                    </if>
+                    <if test="LINK_STAT_CD != null and LINK_STAT_CD != ''">
+                    AND LINK_STAT_CD = #{LINK_STAT_CD}
+                    </if>
+                    <if test="START_DATEC != null and START_DATEC != ''">
+                    AND LINK_DEAL_DTM2 BETWEEN #{START_DATEC} AND #{END_DATEC}
+                    </if>
+                    <if test="CND != '' and CND !=null ">
+                        <if test="CND.equals('TRAN_ID') and TEXT != '' ">
+                        AND TRAN_ID = #{TEXT}
+                        </if>
+                        <if test="CND.equals('MPNG_OFFICE_CODE') and TEXT != '' ">
+                        AND OFFICE_CODE = #{TEXT}
+                        </if>
+                        <if test="CND.equals('MPNG_OFFICE_NAME') and TEXT != '' ">
+                        AND OFFICE_NAME LIKE '%' ||  #{TEXT} || '%'
+                        </if>
+                    </if>
+                    ORDER BY DECODE(LINK_STAT_CD, 'F',1, 'U',2, 3), DECODE(MPNG_SYS_CD,'HRM',4, 'FNC',5, 6), LINK_DEAL_DTM DESC
+                ) T WHERE 1=1
+                <if test= "P_END != null and P_END != ''">
+                 AND  ROWNUM <![CDATA[<=]]> #{P_END}
+                </if>
+            ) WHERE 1=1
+         <if test= "P_START != null and P_START != ''">
+         AND  RNUM <![CDATA[>=]]> #{P_START}
+         </if>
+    </select>
+
+
+    <!-- 조직매핑 연계 등록1(to 전략경영) -->
+    <insert id="insertOrgsMpngsIfs" parameterType="hashmap">
+    INSERT /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.insertOrgsMpngsIfs" */
+    INTO CMD_ORGS_MPNGS_IFS
+            (
+                 TRAN_ID
+               , OFFICE_ID
+               , MPNG_SYS_CD
+               , MPNG_OFFICE_CODE
+               , SEQ_NO
+               , OFFICE_NAME
+               , MPNG_OFFICE_NAME
+               , START_DATEC
+               , END_DATEC
+               , USE_YN
+               , CREATED_BY
+               , CREATION_DATE
+               , LINK_DEAL_DTM
+               , LINK_STAT_CD
+               , CUD_KEY
+            )
+            VALUES
+            (
+                 CMD_GET_TRAN_ID_F('CMD')
+               , #{OFFICE_ID}
+               , #{MPNG_SYS_CD}
+               , #{MPNG_OFFICE_CODE}
+               , 1
+               , #{OFFICE_NAME}
+               , #{MPNG_OFFICE_NAME}
+               , #{START_DATEC}
+               , #{END_DATEC}
+               , #{USE_YN}
+               , #{CREATED_BY}
+               , SYSDATE
+               ,  NULL
+               , #{LINK_STAT_CD}       /* N:신규,  P:진행,  S:성공,  F:실패  */
+               , #{CUD_KEY}               /* C:Create, U:Delete 후 Insert, D:Delete */
+            )
+    </insert>
+
+    <!-- 조직매핑 연계 등록1-2(to  이전 매핑코드 사용여부N 및 CUD_KEY=D 등록) -->
+    <insert id="insertOrgsMpngsIfsOld" parameterType="hashmap">
+    INSERT /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.insertOrgsMpngsIfsOld" */
+    INTO CMD_ORGS_MPNGS_IFS
+            (
+                 TRAN_ID
+               , OFFICE_ID
+               , MPNG_SYS_CD
+               , MPNG_OFFICE_CODE
+               , SEQ_NO
+               , OFFICE_NAME
+               , MPNG_OFFICE_NAME
+               , START_DATEC
+               , END_DATEC
+               , USE_YN
+               , CREATED_BY
+               , CREATION_DATE
+               , LINK_DEAL_DTM
+               , LINK_STAT_CD
+               , CUD_KEY
+            )
+            SELECT
+                 CMD_GET_TRAN_ID_F('CMD')
+               , OFFICE_ID
+               , MPNG_SYS_CD
+               , MPNG_OFFICE_CODE
+               , SEQ_NO
+               , OFFICE_NAME
+               , MPNG_OFFICE_NAME
+               , START_DATEC
+               , END_DATEC
+               , 'N'    /* 매핑코드가 바뀌는것이므로 사용안함으로 강제 변경 */
+               , #{CREATED_BY}
+               , SYSDATE
+               , NULL
+               , 'N'      /* N:신규,  P:진행,  S:성공,  F:실패  */
+               , 'D'      /* C:Create, U:Delete 후 Insert, D:Delete */
+             FROM CMD_ORGS_MPNGS
+             WHERE OFFICE_ID = #{OLD_OFFICE_ID}
+             AND MPNG_SYS_CD = #{OLD_MPNG_SYS_CD}
+             AND MPNG_OFFICE_CODE = #{OLD_MPNG_OFFICE_CODE}
+             AND SEQ_NO = #{SEQ_NO}
+    </insert>
+
+    <!-- 조직매핑 연계 등록2-1(to ITRMS) -->
+    <insert id="insertOrgsMpngsItrIfs" parameterType="hashmap">
+    INSERT /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.insertOrgsMpngsItrIfs" */
+    INTO CMD_ORGS_MPNGS_ITR_IFS
+            (
+                 TRAN_ID
+               , OFFICE_ID
+               , MPNG_SYS_CD
+               , MPNG_OFFICE_CODE
+               , SEQ_NO
+               , OFFICE_NAME
+               , MPNG_OFFICE_NAME
+               , START_DATEC
+               , END_DATEC
+               , USE_YN
+               , CREATED_BY
+               , CREATION_DATE
+               , LINK_DEAL_DTM
+               , LINK_STAT_CD
+               , CUD_KEY
+            )
+            VALUES
+            (
+                 CMD_GET_TRAN_ID_F('CMD')
+               , #{OFFICE_ID}
+               , #{MPNG_SYS_CD}
+               , #{MPNG_OFFICE_CODE}
+               , 1
+               , #{OFFICE_NAME}
+               , #{MPNG_OFFICE_NAME}
+               , #{START_DATEC}
+               , #{END_DATEC}
+               , #{USE_YN}
+               , #{CREATED_BY}
+               , SYSDATE
+               ,  NULL
+               , #{LINK_STAT_CD}       /* N:신규,  P:진행,  S:성공,  F:실패  */
+               , #{CUD_KEY}               /* C:Create, U:Delete 후 Insert, D:Delete */
+            )
+    </insert>
+
+   <!-- 조직매핑 연계 등록2-2(to ITRMS 이전 매핑코드 사용여부N으로 등록) -->
+    <insert id="insertOrgsMpngsItrIfsOld" parameterType="hashmap">
+    INSERT /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.insertOrgsMpngsItrIfsOld" */
+    INTO CMD_ORGS_MPNGS_ITR_IFS
+            (
+                 TRAN_ID
+               , OFFICE_ID
+               , MPNG_SYS_CD
+               , MPNG_OFFICE_CODE
+               , SEQ_NO
+               , OFFICE_NAME
+               , MPNG_OFFICE_NAME
+               , START_DATEC
+               , END_DATEC
+               , USE_YN
+               , CREATED_BY
+               , CREATION_DATE
+               , LINK_DEAL_DTM
+               , LINK_STAT_CD
+               , CUD_KEY
+            )
+            SELECT
+                 CMD_GET_TRAN_ID_F('CMD')
+               , OFFICE_ID
+               , MPNG_SYS_CD
+               , MPNG_OFFICE_CODE
+               , SEQ_NO
+               , OFFICE_NAME
+               , MPNG_OFFICE_NAME
+               , START_DATEC
+               , END_DATEC
+               , 'N'    /* 매핑코드가 바뀌는것이므로 사용안함으로 강제 변경 */
+               , #{CREATED_BY}
+               , SYSDATE
+               , NULL
+               , 'N'      /* N:신규,  P:진행,  S:성공,  F:실패  */
+               , 'U'      /* C:Create, U:Delete 후 Insert, D:Delete */
+             FROM CMD_ORGS_MPNGS
+             WHERE OFFICE_ID = #{OLD_OFFICE_ID}
+             AND MPNG_SYS_CD = #{OLD_MPNG_SYS_CD}
+             AND MPNG_OFFICE_CODE = #{OLD_MPNG_OFFICE_CODE}
+             AND SEQ_NO = #{SEQ_NO}
+    </insert>
+
+    <!-- 조직매핑IF 삭제(단건 to전략경영) X -->
+   <update id="deleteOrgMpngOneIfs"  parameterType="hashmap">
+        DELETE /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.deleteOrgMpngOneIf" */
+        FROM CMD_ORGS_MPNGS_IFS
+        WHERE 1=1
+        AND OFFICE_ID = #{OFFICE_ID}
+        AND MPNG_SYS_CD = #{MPNG_SYS_CD}
+        AND MPNG_OFFICE_CODE = #{MPNG_OFFICE_CODE}
+        AND SEQ_NO = #{SEQ_NO}
+        AND LINK_STAT_CD = 'S'   /* 연계성공건만 삭제 */
+   </update>
+
+    <!-- 조직매핑IF 삭제(단건 toITRMS) X -->
+   <update id="deleteOrgMpngOneItrIfs"  parameterType="hashmap">
+        DELETE /* "com.nbdf.cmd.cm.cmog.dao.CMOG02000Dao.deleteOrgMpngOneIf" */
+        FROM CMD_ORGS_MPNGS_ITR_IFS
+        WHERE 1=1
+        AND OFFICE_ID = #{OFFICE_ID}
+        AND MPNG_SYS_CD = #{MPNG_SYS_CD}
+        AND MPNG_OFFICE_CODE = #{MPNG_OFFICE_CODE}
+        AND SEQ_NO = #{SEQ_NO}
+        AND LINK_STAT_CD = 'S'   /* 연계성공건만 삭제 */
+   </update>
+    <insert id="insertOrgsMpngEaiList" parameterType="map">
+    INSERT INTO /*CMOG02000DaoMapper.insertOrgsMpngEaiList*/
+                CMD_ORG_IFR_EXCEPTIONS
+				(
+				MPNG_SYS_CD
+				,MPNG_SYS_NM
+				,MPNG_VALUE
+				,MPNG_NAME
+				,CREATED_BY
+				,CREATION_DATE
+				,LAST_UPDATED_BY
+				,LAST_UPDATE_DATE
+				)
+				VALUES
+				(
+				#{MPNG_SYS_CD}
+				,#{MPNG_SYS_NM}
+				,#{OFFICE_CODE}
+				,#{OFFICE_NAME}
+				,NVL(#{CREATED_BY},-1)
+				,SYSDATE
+				,NVL(#{LAST_UPDATED_BY},-1)
+				,SYSDATE
+				)
+    </insert>
+
+    <update id="deleteOrgsMpngEaiList" parameterType="map" >
+    DELETE /*CMOG02000DaoMapper.deleteOrgsMpngEaiList*/
+    FROM CMD_ORG_IFR_EXCEPTIONS
+    WHERE 1=1
+    AND      MPNG_SYS_CD = #{MPNG_SYS_CD}
+    AND      MPNG_VALUE = #{OFFICE_CODE}
+    </update>
+ </mapper>

@@ -1,0 +1,235 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.tom.dao.TOM00600Dao">
+<!-- 치공구 수리결과  -->    
+
+	<!-- 상단 Grid : 치공구 수리결과 목록을 조회한다. -->
+	<select id="selectRegistToolRepairListForResultByToolList" parameterType="map" resultType="hashmap">
+		--
+		-- GetRegistToolRepairListForResultByTool
+		-- Version:10001
+			SELECT
+                          TO_CHAR(TRSD.SENDDATE,'YYYY-MM-DD')||' '||TO_CHAR(TRSD.MODIFIEDTIME,'HH24:MI:SS')                     AS SENDDATE             	--출고일자
+                      ,   TRSD.SENDSEQUENCE                                       AS SENDSEQUENCE         	--출고순번
+                      ,   TRSL.TOOLREPAIRTYPE                                     AS TOOLREPAIRTYPEID     	--수리구분아이디
+                      
+                      ,   CASE WHEN NVL(TRSD.REPAIRTRTYPE, '1') = '2'		THEN
+                      					DICD.DICTIONARYNAME
+                      			 ELSE
+                      			 		''
+                      	  END AS TOOLREPAIRTYPE       	--수리구분            
+                      
+                      ,	  TO_CHAR(TRDT.REQUESTDATE,'YYYY-MM-DD')				  AS REQUESTDATE			--의뢰일
+                      ,	  TRDT.REQUESTSEQUENCE									  AS REQUESTSEQUENCE		--의뢰순번
+                      
+                      ,	  CASE WHEN TRSD.REPAIRTRTYPE = '2' THEN
+                                    'Repair'
+                               ELSE
+                                    TRDT.TOOLMAKETYPE
+                          END AS TOOLMAKETYPEID			--제작구분아이디
+                      	           
+                      ,	  CASE WHEN TRSD.REPAIRTRTYPE = '2' THEN
+                                   	' '
+                                ELSE
+                                    DCTQ.DICTIONARYNAME 
+                          END AS TOOLMAKETYPE			  --제작구분
+                      
+                      ,   TRSL.DURABLELOTID                                       AS TOOLNUMBER           	--Tool코드(화면에서는 이전 Tool 코드)
+                      ,   TRDL.NEXTDURABLELOTID                                 AS NEXTDURABLELOTID     --************수정의경우 수리입고 시점부터 보여일 Tool코드****************
+                      
+                      
+                      ,	CASE WHEN NVL(TRDL.NEXTDURABLELOTID, TRSL.DURABLELOTID) = TRSL.DURABLELOTID THEN --수리 라면
+									' ' --수리는 화면에 이전Tool코드 칸에 안보이게 한다.
+							ELSE --수정이라면
+									TRSL.DURABLELOTID
+						END AS TOOLNUMBER3
+					  ,	CASE WHEN NVL(TRDL.NEXTDURABLELOTID, TRSL.DURABLELOTID) = TRSL.DURABLELOTID THEN --수리 라면
+									TRSL.DURABLELOTID
+							ELSE --수정이라면
+									TRDL.NEXTDURABLELOTID
+						END AS NEXTDURABLELOTID3
+                      
+                      
+                      ,	  DRDF.DURABLEDEFID										  AS DURABLEDEFID			--치공구ID
+                      ,   DICF.DICTIONARYNAME                                     AS TOOLNAME             	--치공구명명
+                      ,	  TRSL.AREAID											  AS RECEIPTAREAID			--입고작업장아이디
+                      ,	  DCAR.DICTIONARYNAME									  AS RECEIPTAREA			--입고작업장
+                      
+                      ,	  NVL(SAR.ISMODIFY, 'N')								  AS ISMODIFY
+                      ,   TRSL.FINISHDATE                                         AS REPAIRFINISHDATE     	--수리완료일
+                      ,   TO_CHAR(TRSL.FINISHDATE,'YYYY-MM-DD HH24:MI:SS') AS REPAIRFINISHDATE2     	--수리완료일2
+                      ,   TRSL.FINISHER                                           AS REPAIRFINISHERID     	--수리자아이디
+                      ,   USRF.USER_NM                                            AS REPAIRFINISHER       	--수리자
+                      ,   TRSL.DESCRIPTION                                        AS REPAIRDESCRIPTION    	--수리요청사항
+                      ,	  TRSL.REPAIRRESULT										  AS REPAIRRESULT			--수리결과
+                      ,   PDDF.PRODUCTDEFID                                       AS PRODUCTDEFID         	--품목코드
+                      ,	  PDDF.PRODUCTDEFVERSION                                  AS PRODUCTDEFVERSION    	--품목Ver,20210330,PHW
+                      ,   PDDF.PRODUCTDEFNAME                                     AS PRODUCTDEFNAME       	--품목명
+                      ,   TRSL.WEIGHT                                             AS WEIGHT               	--무게
+                      ,   TRSL.HORIZONTAL                                         AS HORIZONTAL           	--가로
+                      ,   TRSL.VERTICAL                                           AS VERTICAL             	--세로
+                      ,   TRSL.HEIGHT                                             AS THEIGHT              	--높이
+                      ,   NVL(TRSL.TOTALPOLISHTHICKNESS, 0)                 	  AS POLISHTHICKNESS      	--연마 후 두께
+                      ,   NVL(DRLT.TOTALPOLISHTHICKNESS, 0)                  	  AS TOTALPOLISHTHICKNESS 	--연마 전 두께
+                      ,   NVL(DRLT.TOTALPOLISHTHICKNESS, 0)                  	  AS ORIGINTHICKNESS 		--연마 전 두께(히든)
+                      ,   DRDF.THICKNESSLIMIT                                     AS TOOLTHICKNESSLIMIT     --두께 기준
+                      ,   DRLT.CREATEDTHICKNESS                                   AS CREATEDTHICKNESS     	--연마 누적 두께
+                      ,   TO_CHAR(TRDL.REQUESTDATE,'YYYY-MM-DD')                  AS REQUESTDATE          	--의뢰일자
+                      ,   TRDL.REQUESTSEQUENCE                                    AS REQUESTSEQUENCE      	--의뢰순번
+                      ,   TRDT.REQUESTUSER                                        AS REQUESTUSERID        	--의뢰자아이디
+                      ,   USRR.USER_NM                                            AS REQUESTUSER          	--의뢰자
+                      ,   CASE 
+                              WHEN TRSL.FINISHDATE IS NULL THEN 'Y'
+                              ELSE 'N'
+                          END                                                     AS ISUPDATE             	--수정가능여부
+                      ,   TRSL.VENDORID                                           AS VENDORID
+                      ,   VNDR.VENDORNAME                                         AS MAKEVENDOR
+                                            
+                      ,	  DRDF.DURABLECLASSID									  AS TOOLTYPEID
+					  ,	  FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLTYPE								--Tool구분
+                      ,	  DRDF.FORM												  AS TOOLFORMCODE			
+					  ,	  FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS TOOLFORM					--Tool형식                      		
+					  ,   DRDF.TOOLKIND					    					  AS TOOLKINDID
+					  ,	  FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND 	--TOOL종류,20210330,PHW
+					  
+					  ,	  '0'													  AS CHK					--CHK
+					  ,   TRSL.ISPOLISH											  AS ISPOLISH				--연마여부,20210330,PHW
+                  FROM TOM_TOOLREPAIRSEND                  	TRSD
+                  INNER JOIN TOM_TOOLREPAIRSENDLOT         	TRSL	ON  TRSD.SENDDATE           = TRSL.SENDDATE
+                                                                  AND TRSD.SENDSEQUENCE       = TRSL.SENDSEQUENCE
+                  INNER JOIN TOM_DURABLELOT                	DRLT    ON  TRSL.DURABLELOTID       = DRLT.DURABLELOTID
+                  INNER JOIN TOM_DURABLELOTHISTORY         	DRLH    ON  TRSL.DURABLELOTID       = DRLH.DURABLELOTID
+                                                                  AND TRSL.LOTHISTKEY         = DRLH.TXNHISTKEY
+                  INNER JOIN TOM_DURABLEDEFINITION         	DRDF    ON  DRLH.DURABLEDEFID       = DRDF.DURABLEDEFID
+                                                                  AND DRLH.DURABLEDEFVERSION  = DRDF.DURABLEDEFVERSION
+				  LEFT OUTER JOIN CMD_DICTIONARY			DICF	ON	DRDF.DURABLEDEFNAME		= DICF.DICTIONARYID
+																	AND	DICF.LANGUAGETYPE		= #{LANGUAGETYPE}
+																	AND  DICF.USE_YN                = 'Y'	                                                                 
+                  INNER JOIN BAS_PRODUCTDEFINITION         	PDDF    ON  DRDF.PRODUCTDEFID       = PDDF.PRODUCTDEFID
+                                                                  AND DRDF.PRODUCTDEFVERSION  = PDDF.PRODUCTDEFVERSION
+                  LEFT OUTER JOIN TOM_TOOLREQUESTDETAILLOT 	TRDL    ON  TRSL.DURABLELOTID       = TRDL.DURABLELOTID
+                                                                  AND TRSL.SENDDATE           = TRDL.SENDDATE
+                                                                  AND TRSL.SENDSEQUENCE       = TRDL.SENDSEQUENCE
+                  LEFT OUTER JOIN TOM_TOOLREPAIRRECEIPTLOT 	TRRL    ON  TRSL.DURABLELOTID       = TRRL.DURABLELOTID		--WHY JOIN
+                                                                  AND TRSL.RECEIPTDATE           = TRRL.RECEIPTDATE
+                                                                  AND TRSL.RECEIPTSEQUENCE       = TRRL.RECEIPTSEQUENCE
+                  LEFT OUTER JOIN TOM_TOOLREQUEST          	TRDT    ON  TRDL.REQUESTDATE        = TRDT.REQUESTDATE
+                                                                  AND TRDL.REQUESTSEQUENCE    = TRDT.REQUESTSEQUENCE
+                  LEFT OUTER JOIN CMD_LOOKUP_VALUES         CDSD    ON  TRSL.TOOLREPAIRTYPE     = CDSD.LOOKUP_CODE
+                                                                  AND CDSD.LOOKUP_TYPE        = 'ToolRepairType'
+                  LEFT OUTER JOIN CMD_DICTIONARY           	DICD    ON  CDSD.DICTIONARYID       = DICD.DICTIONARYID
+                                                                  AND DICD.USE_YN         = 'Y'
+                                                                  AND DICD.LANGUAGETYPE       = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN CMD_USERS                 USRF    ON  TRSL.FINISHER           = USRF.USER_ID
+                  LEFT OUTER JOIN BAS_VENDOR               	VNDR    ON  TRSL.VENDORID           = VNDR.VENDORID
+                  LEFT OUTER JOIN CMD_USERS                 USRR    ON  TRDT.REQUESTUSER        = USRR.USER_ID 
+                  LEFT OUTER JOIN CMD_LOOKUP_VALUES			CDTQ	ON	TRDT.TOOLMAKETYPE		= CDTQ.LOOKUP_CODE
+                  													AND	CDTQ.LOOKUP_TYPE		= 'ToolMakeType'
+                  LEFT OUTER JOIN CMD_DICTIONARY			DCTQ	ON	CDTQ.DICTIONARYID		= DCTQ.DICTIONARYID
+                  													AND	DCTQ.LANGUAGETYPE		= #{LANGUAGETYPE}
+                  													AND  DCTQ.USE_YN                = 'Y'	                				
+				  LEFT OUTER JOIN BAS_AREA					ARAR	ON	TRSL.AREAID				= ARAR.AREAID
+				  LEFT OUTER JOIN CMD_DICTIONARY			DCAR	ON	ARAR.AREANAME			= DCAR.DICTIONARYID
+																	AND	DCAR.LANGUAGETYPE		= #{LANGUAGETYPE}
+																	AND  DCAR.USE_YN                = 'Y'
+					
+				LEFT OUTER JOIN FN_AREA(#{CURRENTLOGINID}) 	SAR		ON	SAR.ENTERPRISEID		= TRSL.ENTERPRISEID
+																	AND	SAR.PLANTID				= TRSL.PLANTID
+																	AND	SAR.AREAID				= TRSL.AREAID
+																	AND	SAR.ISMODIFY			= 'Y'
+			WHERE	1=1
+			AND 		TRSD.VALIDSTATE			= 'Valid'
+			AND		TRSL.VALIDSTATE			= 'Valid'
+			AND		(TRDT.TOOLMAKETYPE    	IN ('Repair', 'Modify') OR TRSD.REPAIRTRTYPE = '2')                  --수정/수리만 조회 OR 수리출고(TOOL선택)
+			AND		TRSL.RECEIPTDATE		IS NULL										--입고되기이전의 정보까지는 수정이 가능해야 한다.
+			AND		DRLT.DURABLESTATE		= 'Repairing'
+			<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+				AND		TRSD.ENTERPRISEID		= #{ENTERPRISEID}
+			</if>
+			<if test="P_PLANTID != null and P_PLANTID !='' ">
+				AND		TRSD.PLANTID			= #{P_PLANTID}
+			</if>
+			<if test="VENDORID != null and VENDORID !='' ">
+				AND		TRSL.VENDORID			= #{VENDORID}
+			</if>
+			<if test="P_SENDDATE_PERIODFR != null and P_SENDDATE_PERIODFR !='' ">
+				AND		TRSD.SENDDATE			<![CDATA[>=]]> TO_DATE(REPLACE(#{P_SENDDATE_PERIODFR},'-',''), 'YYYYMMDD')
+			</if>
+			<if test="P_SENDDATE_PERIODTO != null and P_SENDDATE_PERIODTO !='' "> 
+				AND		TRSD.SENDDATE 			<![CDATA[<=]]> TO_DATE(REPLACE(#{P_SENDDATE_PERIODTO},'-',''), 'YYYYMMDD')
+			</if>
+			<if test="P_TOOLNO != null and P_TOOLNO !='' "> 
+				AND		UPPER(TRSL.DURABLELOTID)		LIKE '%' || #{P_TOOLNO} || '%'
+			</if>
+			<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+				AND     DRDF.PRODUCTDEFID       = #{PRODUCTDEFID}
+			</if>
+			<if test="AREAID != null and AREAID !='' "> 
+				AND		TRSL.AREAID				= #{AREAID}
+			</if>
+			<if test="TOOLREGISTTYPE eq 'Y'.toString() ">
+				AND		TRSL.FINISHDATE			IS NOT NULL
+			</if>
+			<if test="TOOLREGISTTYPE eq 'N'.toString() ">
+				AND		TRSL.FINISHDATE			IS NULL
+			</if>
+			ORDER BY TRSD.SENDDATE, TRSD.SENDSEQUENCE, TRSL.DURABLELOTID
+	</select>
+				
+	<select id="selectExistsReceiptToolRepairLotResultByToolList"  parameterType="map" resultType="hashmap">
+		--
+		-- "GetExistsReceiptToolRepairLotResultByTool"
+		-- Version:10001
+			SELECT
+				COUNT(TRSL.DURABLELOTID)	AS REPAIRCOUNT			--입력받은 DurableLotIDs 와 갯수가 같아야 한다.
+			FROM	TOM_TOOLREPAIRSENDLOT	TRSL	
+			INNER JOIN TOM_DURABLELOT		DRLT	ON TRSL.DURABLELOTID = DRLT.DURABLELOTID
+			WHERE	DRLT.DURABLESTATE		= 'Repairing'
+			AND		TRSL.RECEIPTDATE		IS NULL
+			AND		DRLT.DURABLELOTID		IN (
+								     			SELECT DATA AS COL_VALUE 
+								                FROM TABLE(CAST(FN_TO_ROWS(#{DURABLELOTIDS}) AS TP_SIMPLE_TABLE))
+								               )
+	</select>
+	
+	<select id="selectToolRepairLot"  parameterType="map" resultType="hashmap">
+			SELECT
+					DURABLELOTID,
+					SENDDATE,
+					SENDSEQUENCE
+			FROM	TOM_TOOLREPAIRSENDLOT	TRSL	
+			WHERE	TRSL.DURABLELOTID = #{DURABLELOTID}
+			AND		TRSL.SENDDATE	  = TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+			AND		TRSL.SENDSEQUENCE = #{SENDSEQUENCE}
+	</select>
+	
+	<update id="updateRepareResult" parameterType="map">
+		UPDATE TOM_TOOLREPAIRSENDLOT
+		SET  FINISHDATE 			= SYSDATE,
+			 FINISHER				= #{FINISHER},
+			 TOOLREPAIRTYPE 		= #{TOOLREPAIRTYPE},
+			 REPAIRRESULT			= #{REPAIRRESULT},
+			 ISPOLISH					= #{ISPOLISH},
+			 
+			 MODIFIER				= #{MODIFIER}, 
+			 MODIFIEDTIME			= SYSDATE, 
+			 LASTTXNHISTKEY		= #{LASTTXNHISTKEY}, 
+			 LASTTXNID				= #{LASTTXNID}, 
+			 LASTTXNUSER			= #{LASTTXNUSER}, 
+			 LASTTXNTIME			= SYSDATE, 
+			 LASTTXNCOMMENT	= #{LASTTXNCOMMENT}, 
+			 VALIDSTATE				= #{VALIDSTATE}
+		WHERE DURABLELOTID 	= #{TOOLNUMBER}
+		AND SENDDATE 			= TO_DATE(REPLACE(#{SENDDATE},'-',''),'YYYYMMDD')
+		AND SENDSEQUENCE 		= #{SENDSEQUENCE}
+    </update>
+    
+    <update id="updateHoldProcess" parameterType="map">
+    	UPDATE TOM_DURABLELOT
+    	SET ISHOLD = 'Y'
+    	WHERE DURABLELOTID = #{TOOLNUMBER}
+    </update>
+    
+</mapper>

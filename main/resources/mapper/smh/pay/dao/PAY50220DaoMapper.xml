@@ -1,0 +1,529 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pay.dao.PAY50220Dao">
+
+	<select id="selectDetailData" parameterType="map" resultType="hashmap">
+	SELECT TO_CHAR (payout_date, 'YYYY/MM/DD') AS payout_date ,/* 지급월일 */
+      (SELECT ffvt.description
+          FROM fnd_flex_values ffv
+             , fnd_flex_value_sets ffvs
+             , fnd_flex_values_tl ffvt
+         WHERE ffv.flex_value_set_id = ffvs.flex_value_set_id
+           AND ffvt.flex_value_id = ffv.flex_value_id
+           AND ffv.enabled_flag = 'Y'
+           AND ffvt.LANGUAGE = 'US'
+           AND ffv.flex_value = hrr.pay_type
+           AND ffvs.flex_value_set_name = 'HJS_HR_PAY_TYPE'
+           AND ROWNUM = 1) AS pay_type_name /* Pay Type명 */
+     , earn_tot             AS earn_tot /* 지급총액 */
+     , ded_tot              AS ded_tot /* 공제총액 */
+     , diff_tot             AS diff_tot /* 실지급액 */
+     , pay_type             AS pay_type
+     , hrr.info44           AS info44  /* 원천징수 비율 */
+     ,BANK_NAME             AS bank_name /* 급여계좌 */
+     ,BANK_ACCOUNT          AS bank_account /* 계좌번호 */
+  FROM hjspay_run_results hrr
+        WHERE   HJSPAY_RUN_RESULT_SEQ = #{HJSPAY_RUN_RESULT_SEQ}
+	</select>
+	
+	
+	<select id="selectBasicInfo" parameterType="map" resultType="hashmap">
+	SELECT DECODE(#{SESSION_LANGUAGETYPE}, 'ko-KR', ppf.kor_name, ppf.eng_name)          AS name
+           , ppf.employee_number                                  AS employee_number
+           , ppf.organization_id                                  AS organization_id
+           , DECODE(#{SESSION_LANGUAGETYPE}, 'ko-KR', ppf.org_name    , ppf.org_eng_name)  AS dept
+           , DECODE(#{SESSION_LANGUAGETYPE}, 'ko-KR', ppf.job_name    , ppf.job_eng_name)  AS job_name
+           , DECODE(#{SESSION_LANGUAGETYPE}, 'ko-KR', ppf.kor_grade   , ppf.eng_grade   )  AS grade
+           , DECODE(#{SESSION_LANGUAGETYPE}, 'ko-KR', ppf.kor_position, ppf.eng_position)  AS position_name       
+           , ppf.employment_category                              AS employment_category
+           , ppf.person_id                                        AS person_id
+        FROM HJS_SSHR_EMPLOYEE_LOV_V  ppf
+       WHERE ppf.person_id   = #{PERSONID}
+         AND TRUNC(SYSDATE)  BETWEEN ppf.effective_start_date  AND ppf.effective_end_date
+	</select>
+	
+	
+	
+	<select id="selectDetailIn" parameterType="map" resultType="hashmap">
+	select *
+from (
+SELECT *
+FROM (
+    SELECT
+                HJSPAY_RUN_RESULT_SEQ      
+                ,EARN01                     
+                ,EARN02                     
+                ,EARN03                     
+                ,EARN04                     
+                ,EARN05                     
+                ,EARN06                     
+                ,EARN07                     
+                ,EARN08                     
+                ,EARN09                     
+                ,EARN10                     
+                ,EARN11                     
+                ,EARN12                     
+                ,EARN13                     
+                ,EARN14                     
+                ,EARN15                     
+                ,EARN16                     
+                ,EARN17                     
+                ,EARN18                     
+                ,EARN19                     
+                ,EARN20                     
+                ,EARN21                     
+                ,EARN22                     
+                ,EARN23                     
+                ,EARN24                     
+                ,EARN25                     
+                ,EARN26                     
+                ,EARN27                     
+                ,EARN28                     
+                ,EARN29                     
+                ,EARN30                     
+                ,EARN31                     
+                ,EARN32                     
+                ,EARN33                     
+                ,EARN34                     
+                ,EARN35                     
+                ,EARN36                     
+                ,EARN37                     
+                ,EARN38                     
+                ,EARN39                     
+                ,EARN40                     
+                ,EARN41                     
+                ,EARN42                     
+                ,EARN43                     
+                ,EARN44                     
+                ,EARN45                     
+                ,EARN46                     
+                ,EARN47                     
+                ,EARN48                     
+                ,EARN49                     
+                ,EARN50                     
+                ,EARN51                     
+                ,EARN52                     
+                ,EARN53                     
+                ,EARN54                     
+                ,EARN55                     
+                ,TAX01                      
+                ,TAX02                      
+                ,TAX03                      
+                ,TAX04                      
+                ,TAX05                      
+                ,TAX06                      
+                ,TAX07                      
+                ,TAX08                      
+                ,TAX09                      
+                ,TAX10                      
+                ,TAX11                      
+                ,TAX12                      
+                ,DED01                      
+                ,DED02                      
+                ,DED03                      
+                ,DED04                      
+                ,DED05                      
+                ,DED06                      
+                ,DED07                      
+                ,DED08                      
+                ,DED09                      
+                ,DED10                      
+                ,DED11                      
+                ,DED12                      
+                ,DED13                      
+                ,DED14                      
+                ,DED15                      
+                ,DED16                      
+                ,DED17                      
+                ,DED18                      
+                ,DED19                      
+                ,DED20                      
+                ,DED21                      
+                ,DED22                      
+                ,DED23                      
+                ,DED24                      
+                ,DED25                      
+                ,DED26                      
+                ,DED27                      
+                ,DED28                      
+                ,DED29                      
+                ,DED30                      
+                ,DED31                      
+                ,DED32                      
+                ,DED33                      
+                ,DED34                      
+                ,DED35                      
+                ,DED36                      
+                ,DED37                      
+                ,DED38                      
+                ,DED39
+    FROM HJSPAY_RUN_RESULTS
+    where HJSPAY_RUN_RESULT_SEQ = #{HJSPAY_RUN_RESULT_SEQ}
+)
+UNPIVOT (
+    ELE_VALUE FOR ELE_NAME IN (EARN01                     
+                ,EARN02                     
+                ,EARN03                     
+                ,EARN04                     
+                ,EARN05                     
+                ,EARN06                     
+                ,EARN07                     
+                ,EARN08                     
+                ,EARN09                     
+                ,EARN10                     
+                ,EARN11                     
+                ,EARN12                     
+                ,EARN13                     
+                ,EARN14                     
+                ,EARN15                     
+                ,EARN16                     
+                ,EARN17                     
+                ,EARN18                     
+                ,EARN19                     
+                ,EARN20                     
+                ,EARN21                     
+                ,EARN22                     
+                ,EARN23                     
+                ,EARN24                     
+                ,EARN25                     
+                ,EARN26                     
+                ,EARN27                     
+                ,EARN28                     
+                ,EARN29                     
+                ,EARN30                     
+                ,EARN31                     
+                ,EARN32                     
+                ,EARN33                     
+                ,EARN34                     
+                ,EARN35                     
+                ,EARN36                     
+                ,EARN37                     
+                ,EARN38                     
+                ,EARN39                     
+                ,EARN40                     
+                ,EARN41                     
+                ,EARN42                     
+                ,EARN43                     
+                ,EARN44                     
+                ,EARN45                     
+                ,EARN46                     
+                ,EARN47                     
+                ,EARN48                     
+                ,EARN49                     
+                ,EARN50                     
+                ,EARN51                     
+                ,EARN52                     
+                ,EARN53                     
+                ,EARN54                     
+                ,EARN55                     
+                ,TAX01                      
+                ,TAX02                      
+                ,TAX03                      
+                ,TAX04                      
+                ,TAX05                      
+                ,TAX06                      
+                ,TAX07                      
+                ,TAX08                      
+                ,TAX09                      
+                ,TAX10                      
+                ,TAX11                      
+                ,TAX12                      
+                ,DED01                      
+                ,DED02                      
+                ,DED03                      
+                ,DED04                      
+                ,DED05                      
+                ,DED06                      
+                ,DED07                      
+                ,DED08                      
+                ,DED09                      
+                ,DED10                      
+                ,DED11                      
+                ,DED12                      
+                ,DED13                      
+                ,DED14                      
+                ,DED15                      
+                ,DED16                      
+                ,DED17                      
+                ,DED18                      
+                ,DED19                      
+                ,DED20                      
+                ,DED21                      
+                ,DED22                      
+                ,DED23                      
+                ,DED24                      
+                ,DED25                      
+                ,DED26                      
+                ,DED27                      
+                ,DED28                      
+                ,DED29                      
+                ,DED30                      
+                ,DED31                      
+                ,DED32                      
+                ,DED33                      
+                ,DED34                      
+                ,DED35                      
+                ,DED36                      
+                ,DED37                      
+                ,DED38                      
+                ,DED39)
+)
+) ELE, (SELECT lookup_code, 
+               meaning
+        FROM   fnd_lookup_values
+        WHERE  lookup_type = 'HJS_HR_ELEMENT_MAPPING'
+        AND    enabled_flag = 'Y'
+        AND    attribute1  = 'Y' 
+        AND   ( lookup_code like 'E' || '%' OR  lookup_code like 'D' || '%' OR lookup_code like 'T' || '%') 
+        ORDER BY SUBSTR(lookup_code,0,1) DESC, to_number(attribute2) ) COD
+where ele.ELE_NAME = COD.lookup_code 
+and ele.ELE_VALUE <![CDATA[ <> ]]> 0
+AND substr(ele.ELE_NAME,1,1) in ('E')  -- 수당조회시
+
+	</select>
+	
+	
+	
+	<select id="selectDetailDed" parameterType="map" resultType="hashmap">
+	select ELE_VALUE as DED_ELE_VALUE
+         , MEANING  as DED_MEANING
+from (
+SELECT *
+FROM (
+    SELECT
+                HJSPAY_RUN_RESULT_SEQ      
+                ,EARN01                     
+                ,EARN02                     
+                ,EARN03                     
+                ,EARN04                     
+                ,EARN05                     
+                ,EARN06                     
+                ,EARN07                     
+                ,EARN08                     
+                ,EARN09                     
+                ,EARN10                     
+                ,EARN11                     
+                ,EARN12                     
+                ,EARN13                     
+                ,EARN14                     
+                ,EARN15                     
+                ,EARN16                     
+                ,EARN17                     
+                ,EARN18                     
+                ,EARN19                     
+                ,EARN20                     
+                ,EARN21                     
+                ,EARN22                     
+                ,EARN23                     
+                ,EARN24                     
+                ,EARN25                     
+                ,EARN26                     
+                ,EARN27                     
+                ,EARN28                     
+                ,EARN29                     
+                ,EARN30                     
+                ,EARN31                     
+                ,EARN32                     
+                ,EARN33                     
+                ,EARN34                     
+                ,EARN35                     
+                ,EARN36                     
+                ,EARN37                     
+                ,EARN38                     
+                ,EARN39                     
+                ,EARN40                     
+                ,EARN41                     
+                ,EARN42                     
+                ,EARN43                     
+                ,EARN44                     
+                ,EARN45                     
+                ,EARN46                     
+                ,EARN47                     
+                ,EARN48                     
+                ,EARN49                     
+                ,EARN50                     
+                ,EARN51                     
+                ,EARN52                     
+                ,EARN53                     
+                ,EARN54                     
+                ,EARN55                     
+                ,TAX01                      
+                ,TAX02                      
+                ,TAX03                      
+                ,TAX04                      
+                ,TAX05                      
+                ,TAX06                      
+                ,TAX07                      
+                ,TAX08                      
+                ,TAX09                      
+                ,TAX10                      
+                ,TAX11                      
+                ,TAX12                      
+                ,DED01                      
+                ,DED02                      
+                ,DED03                      
+                ,DED04                      
+                ,DED05                      
+                ,DED06                      
+                ,DED07                      
+                ,DED08                      
+                ,DED09                      
+                ,DED10                      
+                ,DED11                      
+                ,DED12                      
+                ,DED13                      
+                ,DED14                      
+                ,DED15                      
+                ,DED16                      
+                ,DED17                      
+                ,DED18                      
+                ,DED19                      
+                ,DED20                      
+                ,DED21                      
+                ,DED22                      
+                ,DED23                      
+                ,DED24                      
+                ,DED25                      
+                ,DED26                      
+                ,DED27                      
+                ,DED28                      
+                ,DED29                      
+                ,DED30                      
+                ,DED31                      
+                ,DED32                      
+                ,DED33                      
+                ,DED34                      
+                ,DED35                      
+                ,DED36                      
+                ,DED37                      
+                ,DED38                      
+                ,DED39
+    FROM HJSPAY_RUN_RESULTS
+    where HJSPAY_RUN_RESULT_SEQ = #{HJSPAY_RUN_RESULT_SEQ}
+)
+UNPIVOT (
+    ELE_VALUE FOR ELE_NAME IN (EARN01                     
+                ,EARN02                     
+                ,EARN03                     
+                ,EARN04                     
+                ,EARN05                     
+                ,EARN06                     
+                ,EARN07                     
+                ,EARN08                     
+                ,EARN09                     
+                ,EARN10                     
+                ,EARN11                     
+                ,EARN12                     
+                ,EARN13                     
+                ,EARN14                     
+                ,EARN15                     
+                ,EARN16                     
+                ,EARN17                     
+                ,EARN18                     
+                ,EARN19                     
+                ,EARN20                     
+                ,EARN21                     
+                ,EARN22                     
+                ,EARN23                     
+                ,EARN24                     
+                ,EARN25                     
+                ,EARN26                     
+                ,EARN27                     
+                ,EARN28                     
+                ,EARN29                     
+                ,EARN30                     
+                ,EARN31                     
+                ,EARN32                     
+                ,EARN33                     
+                ,EARN34                     
+                ,EARN35                     
+                ,EARN36                     
+                ,EARN37                     
+                ,EARN38                     
+                ,EARN39                     
+                ,EARN40                     
+                ,EARN41                     
+                ,EARN42                     
+                ,EARN43                     
+                ,EARN44                     
+                ,EARN45                     
+                ,EARN46                     
+                ,EARN47                     
+                ,EARN48                     
+                ,EARN49                     
+                ,EARN50                     
+                ,EARN51                     
+                ,EARN52                     
+                ,EARN53                     
+                ,EARN54                     
+                ,EARN55                     
+                ,TAX01                      
+                ,TAX02                      
+                ,TAX03                      
+                ,TAX04                      
+                ,TAX05                      
+                ,TAX06                      
+                ,TAX07                      
+                ,TAX08                      
+                ,TAX09                      
+                ,TAX10                      
+                ,TAX11                      
+                ,TAX12                      
+                ,DED01                      
+                ,DED02                      
+                ,DED03                      
+                ,DED04                      
+                ,DED05                      
+                ,DED06                      
+                ,DED07                      
+                ,DED08                      
+                ,DED09                      
+                ,DED10                      
+                ,DED11                      
+                ,DED12                      
+                ,DED13                      
+                ,DED14                      
+                ,DED15                      
+                ,DED16                      
+                ,DED17                      
+                ,DED18                      
+                ,DED19                      
+                ,DED20                      
+                ,DED21                      
+                ,DED22                      
+                ,DED23                      
+                ,DED24                      
+                ,DED25                      
+                ,DED26                      
+                ,DED27                      
+                ,DED28                      
+                ,DED29                      
+                ,DED30                      
+                ,DED31                      
+                ,DED32                      
+                ,DED33                      
+                ,DED34                      
+                ,DED35                      
+                ,DED36                      
+                ,DED37                      
+                ,DED38                      
+                ,DED39)
+)
+) ELE, (SELECT lookup_code, 
+               meaning
+        FROM   fnd_lookup_values
+        WHERE  lookup_type = 'HJS_HR_ELEMENT_MAPPING'
+        AND    enabled_flag = 'Y'
+        AND    attribute1  = 'Y' 
+        AND   ( lookup_code like 'E' || '%' OR  lookup_code like 'D' || '%' OR lookup_code like 'T' || '%') 
+        ORDER BY SUBSTR(lookup_code,0,1) DESC, to_number(attribute2) ) COD
+where ele.ELE_NAME = COD.lookup_code 
+and ele.ELE_VALUE <![CDATA[ <> ]]> 0
+AND substr(ele.ELE_NAME,1,1) in ('T','D')  -- 공제조회시
+
+	</select>
+	
+
+</mapper>

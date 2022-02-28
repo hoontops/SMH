@@ -1,0 +1,613 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+	PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+	"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- 로그 관리 -->
+
+<mapper namespace="com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao">
+
+    <sql id="whoCol" >
+    CREATED_BY
+    , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATION_DATE
+    </sql>
+
+    <insert id="insertJobMenuLogs" parameterType="hashMap">
+        INSERT /* com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.insertJobMenuLogs */
+        INTO   CMD_JOB_MENU_LOGS
+		        ( MENU_LOG_ID
+		        , JOB_MENU_ID
+		        , USER_ID
+		        , LGN_LOG_ID
+		        , KEEP_START_DATEC
+		        , MENU_NM
+		        , MENU_COURS_NM
+		        , CREATED_BY
+		        , CREATION_DATE
+		         )
+		  VALUES
+		        ( CMD_JOB_MENU_LOGS_S.NEXTVAL
+		        , #{JOB_MENU_ID}
+		        , #{SESSION_USER_ID}
+		        , #{LGN_LOG_ID}
+		        , TO_CHAR(SYSDATE, 'YYYYMMDD')
+		        <if test="MENU_NM != null and MENU_NM != '' ">
+		        , #{MENU_NM}
+		        </if>
+		        <if test="MENU_NM == null or MENU_NM == '' ">
+		        , (SELECT MENU_NM FROM CMD_JOB_MENU_MNG WHERE JOB_MENU_ID = #{JOB_MENU_ID})
+		        </if>
+		        <if test="MENU_COURS_NM != null and MENU_COURS_NM != '' ">
+                , #{MENU_COURS_NM}
+                </if>
+                <if test="MENU_COURS_NM == null or MENU_COURS_NM == '' ">
+                , (SELECT
+                        MNU.DEPTH_NAME
+                   FROM (
+                        SELECT
+                           LTRIM (SYS_CONNECT_BY_PATH (MENU_NM, ' > '), ' > ') AS DEPTH_NAME
+                        FROM CMD_JOB_MENU_MNG
+                        WHERE JOB_MENU_ID = #{JOB_MENU_ID}
+                        START WITH JOB_MENU_ID IN (SELECT JOB_MENU_ID FROM CMD_JOB_MENU_MNG WHERE MENU_LVS='0')
+                        CONNECT BY PRIOR JOB_MENU_ID = UPPER_MENU
+                        ORDER SIBLINGS BY
+                        UPPER_MENU ASC, JOB_MENU_ID ASC
+                    ) MNU
+                    WHERE 1=1
+                 )
+                 </if>
+		        , #{CREATED_BY}
+		        , SYSDATE
+        )
+    </insert>
+
+    <!-- 메뉴 사용 로그 카운트 조회(화면-paging에서 사용) -->
+    <select id="selectJobMenuLogsCount" parameterType="map" resultType="map">
+         SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectJobMenuLogsCount"  */
+                    COUNT(*) AS CNT
+         FROM CMD_JOB_MENU_LOGS A, CMD_LGN_LOG B, CMD_USERS C
+         WHERE 1=1
+         AND A.LGN_LOG_ID = B.LGN_LOG_ID
+         AND A.USER_ID = C.USER_ID
+         AND A.KEEP_START_DATEC BETWEEN #{START_DATEC} AND #{END_DATEC}
+         <if test="CND != '' and CND !=null ">
+               <if test="CND.equals('USER_NM') and TEXT != null ">
+                      AND C.USER_NM LIKE '%' ||  #{TEXT} || '%'
+               </if>
+               <if test="CND.equals('CNCT_IP') and TEXT != '' ">
+                      AND B.CNCT_IP LIKE UPPER('%' ||  #{TEXT} || '%')
+               </if>
+               <if test="CND.equals('MENU_NM') and TEXT != null ">
+                      AND A.MENU_COURS_NAME LIKE '%' ||  #{TEXT} || '%'
+               </if>
+         </if>
+    </select>
+
+    <!-- 메뉴 사용 로그 조회(화면에서 사용) -->
+    <select id="selectJobMenuLogsList" parameterType="map" resultType="map">
+	    SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectJobMenuLogsList" */
+		    *
+		FROM (
+		   SELECT
+			   ROWNUM AS RNUM,
+			   T.* FROM (
+				    SELECT
+				         C.USER_NM as CREATE_USER_NM -- 사용자명
+				       , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATION_DATE -- 이용시간(메뉴 클릭한 시간)
+				       , MENU_COURS_NM  -- 메뉴 경로명
+				       , TO_CHAR(B.LGN_DTM, 'MM-DD HH24:MI:SS') as LGN_DTM -- 로그인시간
+				       , B.CNCT_IP -- 접속IP
+				    FROM CMD_JOB_MENU_LOGS A, CMD_LGN_LOG B, CMD_USERS C
+				    WHERE 1=1
+				    AND A.LGN_LOG_ID = B.LGN_LOG_ID
+				    AND A.USER_ID = C.USER_ID
+				    AND A.KEEP_START_DATEC BETWEEN #{START_DATEC} AND #{END_DATEC}
+				    <if test="CND != '' and CND !=null ">
+				          <if test="CND.equals('USER_NM') and TEXT != null ">
+                                 AND C.USER_NM LIKE '%' ||  #{TEXT} || '%'
+                          </if>
+			              <if test="CND.equals('CNCT_IP') and TEXT != '' ">
+			                     AND B.CNCT_IP LIKE UPPER('%' ||  #{TEXT} || '%')
+			              </if>
+			              <if test="CND.equals('MENU_NM') and TEXT != null ">
+			                     AND A.MENU_COURS_NAME LIKE '%' ||  #{TEXT} || '%'
+			              </if>
+			        </if>
+				    ORDER BY CREATION_DATE DESC
+				) T WHERE 1=1
+				  <if test= "P_END != null and P_END != ''">
+                   AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+                  </if>
+		) WHERE 1=1
+        <if test= "P_START != null and P_START != ''">
+         AND  RNUM >= #{P_START}
+        </if>
+    </select>
+
+    <!-- 로그 저장: CASE1 (사용안함) -->
+	<insert id="insertLog" parameterType="hashMap">
+	    INSERT /* com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.insertLog */
+	    INTO    CMD_LOGS
+                (SYSLOG_ID
+                , LOG_KND_CD
+                , JOB_SYS_CD
+                , JOB_CD
+                , REQ_URI
+                , PGM_NM
+                , REQ_FULL_URL
+                , BEFORE_URL
+                , LGN_IP
+                , COMMENTS
+                , RM
+                , WK_EXEC_TIMEMS
+                , USER_ID
+                , LGN_LOG_ID
+                , CREATED_BY
+                , CREATION_DATE
+                 )
+                VALUES
+                (CMD_LOGS_S.NEXTVAL
+                , #{LOG_KND_CD}
+                , #{JOB_SYS_CD}
+                , #{JOB_CD}
+                , #{REQ_URI}
+                , #{PGM_NM}
+                , #{REQ_FULL_URL}
+                , #{BEFORE_URL}
+                , #{LGN_IP}
+                , #{CN}
+                , #{RM}
+                , #{WK_EXEC_TIMEMS}
+                , #{USER_ID}
+                , #{LGN_LOG_ID}
+                , #{CREATED_BY}
+                , sysdate
+                )
+	   </insert>
+
+    <!-- 로그 전체 조회(초기화면 onLoad()시 수행) -->
+    <select id="selectLogList" resultType="hashmap">
+    /* com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectLogList */
+	    SELECT * FROM (
+	       SELECT ROWNUM AS RNUM, T.* FROM (
+	           SELECT
+	                      SYSLOG_ID,
+	                      (SELECT CD_NM FROM CMD_LOOKUP_VALUES WHERE LOOKUP_TYPE ='CMD_LOG_KND' AND LOG_KND_CD = LOOKUP_CODE ) AS LOG_KND_NM ,
+	                      (SELECT CD_NM FROM CMD_LOOKUP_VALUES WHERE LOOKUP_TYPE ='CMD_JOB_SYSCD' AND LOOKUP_CODE = JOB_SYS_CD ) AS JOB_NM ,
+	                      JOB_SYS_CD,
+	                      REQ_URI,
+	                      PGM_NM,
+	                      REQ_FULL_URL,
+	                      BEFORE_URL,
+	                      LGN_IP,
+	                      COMMENTS,
+	                      RM,
+	                      WK_EXEC_TIMEMS,
+	                      <include refid="whoCol" />
+	        FROM CMD_LOGS
+	        WHERE 1=1
+	             <if test="LGN_IP != '' and LGN_IP !=null ">
+                 AND LGN_IP = #{LGN_IP}
+                 </if>
+	            <if test= "LOG_KND_CD != null and LOG_KND_CD != ''">
+	              AND  LOG_KND_CD =#{LOG_KND_CD}
+	            </if>
+	            <if test= "CN != null and CN != ''">
+	              AND  COMMENTS LIKE '%' ||  #{CN} || '%'
+	            </if>
+	            <if test= "PRE_DATE != null and PRE_DATE != ''">
+	             AND to_char(CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+	             AND #{TO_DATE} >= to_char(CREATION_DATE,'yyyyMMdd')
+	            </if>
+	         ORDER BY SYSLOG_ID  DESC
+	    )T WHERE 1=1
+	    <if test= "P_END != null and P_END != ''">
+	     AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+	    </if>
+	) WHERE 1=1
+	<if test= "P_START != null and P_START != ''">
+	AND  RNUM >= #{P_START}
+	</if>
+    </select>
+
+    <!-- 전체 로그 갯수 조회 -->
+    <select id="selectLogCount" resultType="hashmap">
+    SELECT  /* com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectLogCount */
+                COUNT(*) AS COUNT
+    FROM CMD_LOGS
+    WHERE 1=1
+     <if test= "LOG_KND_CD != null and LOG_KND_CD != ''">
+     AND  LOG_KND_CD =#{LOG_KND_CD}
+     </if>
+     <if test= "CN != null and CN != ''">
+     AND  COMMENTS LIKE '%' ||  #{CN} || '%'
+     </if>
+     <if test= "PRE_DATE != null and PRE_DATE != ''">
+     AND TO_CHAR(CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+     AND #{TO_DATE} >= TO_CHAR(CREATION_DATE,'yyyyMMdd')
+     </if>
+    </select>
+
+     <!-- SMS 로그 LIST -->
+     <select id="selectSmsLogList" resultType="hashmap">
+      SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectSmsLogList" */ * FROM (
+           SELECT ROWNUM AS RNUM, T.* FROM (
+                SELECT  SNDNG_LOG_ID        /* 발송 로그ID */
+                           , GET_CODE_F('CMD_JOB_SYSCD', JOB_SYS_CD)  as JOB_SYS_NM                 /* 업무시스템 */
+                           , PRIVATE_INFO_MASK_F('TEL_NUM' , SENDER_INFO) AS SENDER_INFO_MASK  /*  보내는 사람 전화 번호 마스킹 처리 */
+                           , SENDER_INFO       /* 보내는 사람 휴대폰 번호 */
+                           , PRIVATE_INFO_MASK_F('TEL_NUM' , RCVER_INFO) AS RCVER_INFO_MASK  /*  받는 사람 전화 번호 마스킹 처리 */
+                           , RCVER_INFO       /* 받는 사람 휴대폰 번호 */
+                           , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_DATE /* 저장일자  */
+        FROM CMD_SNDNG_LOGS
+        WHERE 1=1
+        AND SNDNG_KND_CD='SMS'
+        <if test="SENDER_INFO != '' and SENDER_INFO !=null ">
+              AND SENDER_INFO = #{SENDER_INFO}
+        </if>
+        <if test="RCVER_INFO != '' and RCVER_INFO !=null ">
+              AND RCVER_INFO = #{RCVER_INFO}
+        </if>
+         <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND to_char(CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= to_char(CREATION_DATE,'yyyyMMdd')
+         </if>
+         ORDER BY CREATED_DATE DESC
+         ) T WHERE 1=1
+        <if test= "P_END != null and P_END != ''">
+         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+    ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+    AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+    <!-- SMS 로그 LIST(사용안함) -->
+     <select id="selectSmsLogList_old" resultType="hashmap">
+      SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectSmsLogList" */ * FROM (
+           SELECT ROWNUM AS RNUM, T.* FROM (
+                SELECT  A.SNDNG_LOG_ID        /* 발송 로그ID */
+					       , GET_CODE_F('CMD_JOB_SYSCD', A.JOB_SYS_CD)  as JOB_SYS_NM                 /* 업무시스템 */
+					       , PRIVATE_INFO_MASK_F('TEL_NUM' , A.SENDER_INFO) AS SENDER_INFO_MASK  /*  보내는 사람 전화 번호 마스킹 처리 */
+					       , A.SENDER_INFO       /* 보내는 사람 휴대폰 번호 */
+					       , PRIVATE_INFO_MASK_F('TEL_NUM' , A.RCVER_INFO) AS RCVER_INFO_MASK  /*  받는 사람 전화 번호 마스킹 처리 */
+					       , A.RCVER_INFO       /* 받는 사람 휴대폰 번호 */
+					       , B.LINK_STAT_CD      /* 연계 처리상태 */
+					       , DECODE(B.LINK_STAT_CD , 'N', '신규' , 'P' ,'진행', 'S' , '성공' , 'F' , '실패', '', '오류' )  AS LINK_STAT_NM    /* 연계 처리 상태 */
+					       , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_DATE /* 저장일자  */
+		FROM CMD_SNDNG_LOGS A
+		LEFT OUTER JOIN CMD_SMS_IFS B
+		ON TO_CHAR(A.SNDNG_LOG_ID) = B.CMP_MSG_ID
+		WHERE 1=1
+		AND SNDNG_KND_CD='SMS'
+        <if test="LINK_STAT_CD != '' and LINK_STAT_CD !=null ">
+              AND B.LINK_STAT_CD = #{LINK_STAT_CD}
+        </if>
+        <if test="SENDER_INFO != '' and SENDER_INFO !=null ">
+              AND A.SENDER_INFO = #{SENDER_INFO}
+        </if>
+        <if test="RCVER_INFO != '' and RCVER_INFO !=null ">
+              AND A.RCVER_INFO = #{RCVER_INFO}
+        </if>
+         <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND to_char(A.CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= to_char(A.CREATION_DATE,'yyyyMMdd')
+         </if>
+         ) T WHERE 1=1
+        <if test= "P_END != null and P_END != ''">
+         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+    ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+    AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+    <!-- SMS 로그 COUNT -->
+    <select id="selectSmsLogCount" resultType="hashmap">
+     SELECT  /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectSmsLogCount" */
+                 COUNT(*) AS COUNT
+        FROM CMD_SNDNG_LOGS
+        WHERE 1=1
+        AND SNDNG_KND_CD='SMS'
+        <if test="SENDER_INFO != '' and SENDER_INFO !=null ">
+              AND SENDER_INFO = #{SENDER_INFO}
+        </if>
+        <if test="RCVER_INFO != '' and RCVER_INFO !=null ">
+              AND RCVER_INFO = #{RCVER_INFO}
+        </if>
+         <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND to_char(CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= to_char(CREATION_DATE,'yyyyMMdd')
+         </if>
+     </select>
+
+           <!-- SMS 통계 LIST -->
+      <select id="selectSmsSumList" resultType="hashmap">
+     SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectSmsSumList" */ * FROM (
+           SELECT ROWNUM AS RNUM, T.* FROM (
+                SELECT  COUNT(*) AS COUNT
+                       , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD') AS CREATED_DATE /* 저장일자  */
+                FROM CMD_SNDNG_LOGS A
+                WHERE
+                SNDNG_KND_CD='SMS'
+     <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND TO_CHAR (A.CREATION_DATE, 'YYYY-MM') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= TO_CHAR (A.CREATION_DATE, 'YYYY-MM')
+     </if>
+    GROUP BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+    ORDER BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+      ) T WHERE 1=1
+        <if test= "P_END != null and P_END != ''">
+         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+    ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+    AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+    <!-- SMS 로그 COUNT (사용안함)-->
+     <select id="selectSmsLogCount_old" resultType="hashmap">
+     SELECT  /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectSmsLogCount" */
+                 COUNT(*) AS COUNT
+        FROM CMD_SNDNG_LOGS A
+        LEFT OUTER JOIN CMD_SMS_IFS B
+        ON TO_CHAR(A.SNDNG_LOG_ID) = B.CMP_MSG_ID
+        WHERE 1=1
+        AND SNDNG_KND_CD='SMS'
+        <if test="LINK_STAT_CD != '' and LINK_STAT_CD !=null ">
+              AND B.LINK_STAT_CD = #{LINK_STAT_CD}
+        </if>
+        <if test="SENDER_INFO != '' and SENDER_INFO !=null ">
+              AND A.SENDER_INFO = #{SENDER_INFO}
+        </if>
+        <if test="RCVER_INFO != '' and RCVER_INFO !=null ">
+              AND A.RCVER_INFO = #{RCVER_INFO}
+        </if>
+         <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND to_char(A.CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= to_char(A.CREATION_DATE,'yyyyMMdd')
+         </if>
+     </select>
+
+    <!-- SMS 통계 LIST (사용안함)-->
+    <select id="selectSmsSumList_old" resultType="hashmap">
+	 SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectSmsSumList" */ * FROM (
+           SELECT ROWNUM AS RNUM, T.* FROM (
+				SELECT  DECODE(B.LINK_STAT_CD , 'N', '신규' , 'P' ,'진행', 'S' , '성공' , 'F' , '실패', '', '오류' )  AS LINK_STAT_NM    /* 연계 처리 상태 */
+				       , COUNT(*) AS COUNT
+				       , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD') AS CREATED_DATE /* 저장일자  */
+				FROM CMD_SNDNG_LOGS A
+				LEFT OUTER JOIN CMD_SMS_IFS B
+				ON TO_CHAR(A.SNDNG_LOG_ID) = B.CMP_MSG_ID
+				WHERE 1=1
+				AND SNDNG_KND_CD='SMS'
+     <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND TO_CHAR (A.CREATION_DATE, 'YYYY-MM') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= TO_CHAR (A.CREATION_DATE, 'YYYY-MM')
+     </if>
+     <if test="LINK_STAT_CD != '' and LINK_STAT_CD !=null ">
+              AND B.LINK_STAT_CD = #{LINK_STAT_CD}
+     </if>
+	GROUP BY B.LINK_STAT_CD , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+	ORDER BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+      ) T WHERE 1=1
+        <if test= "P_END != null and P_END != ''">
+         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+    ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+    AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+      <!-- SMS 통계 COUNT-->
+      <select id="selectSmsSumCount" resultType="hashmap">
+     SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectSmsSumCount" */ COUNT(*) AS COUNT FROM (
+           SELECT ROWNUM AS RNUM, T.* FROM (
+                SELECT  COUNT(*) AS COUNT
+                       , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD') AS CREATED_DATE /* 저장일자  */
+                FROM CMD_SNDNG_LOGS A
+                WHERE
+                SNDNG_KND_CD='SMS'
+     <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND TO_CHAR (A.CREATION_DATE, 'YYYY-MM') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= TO_CHAR (A.CREATION_DATE, 'YYYY-MM')
+     </if>
+    GROUP BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+    ORDER BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+      ) T WHERE 1=1
+        <if test= "P_END != null and P_END != ''">
+         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+    ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+    AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+    <!-- SMS 통계 COUNT(사용안함) -->
+      <select id="selectSmsSumCount_old" resultType="hashmap">
+		SELECT    /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectSmsSumCount" */
+		    COUNT ( * ) AS COUNT
+		FROM   (  SELECT   
+		             B.LINK_STAT_CD,
+		             TO_CHAR (A.CREATION_DATE, 'YYYY-MM-DD')
+		                    FROM      CMD_SNDNG_LOGS A
+		                    LEFT OUTER JOIN
+		                    CMD_SMS_IFS B
+		                    ON TO_CHAR (A.SNDNG_LOG_ID) = B.CMP_MSG_ID
+		WHERE   1 = 1
+		AND SNDNG_KND_CD='SMS'
+     <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND TO_CHAR (A.CREATION_DATE, 'YYYY-MM') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= TO_CHAR (A.CREATION_DATE, 'YYYY-MM')
+     </if>
+     <if test="LINK_STAT_CD != '' and LINK_STAT_CD !=null ">
+              AND B.LINK_STAT_CD = #{LINK_STAT_CD}
+     </if>
+    GROUP BY B.LINK_STAT_CD , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+    ORDER BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD') )
+    </select>
+
+    <!-- EMAIL 발송 리스트 -->
+      <select id="selectEmailLogList" resultType="hashmap">
+      SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectEmailLogList" */ * FROM (
+           SELECT ROWNUM AS RNUM, T.* FROM (
+                SELECT  A.SNDNG_LOG_ID        /* 발송 로그ID */
+                           , A.SENDER_INFO       /* 보내는 사람 휴대폰 번호 */
+                           , A.RCVER_INFO       /* 받는 사람 휴대폰 번호 */
+                           , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_DATE /* 저장일자  */
+                           , A.SUBJECT_TEXT   /* 메일 제목 */
+                           , DECODE(SNDNG_YN, 'Y' , '발송완료','N','발송대기', 'F', '발송실패' ) AS SNDNG_YN
+        FROM CMD_SNDNG_LOGS A
+        WHERE
+        SNDNG_KND_CD='EMAIL'
+         <if test="SNDNG_YN != '' and SNDNG_YN !=null ">
+              AND A.SNDNG_YN = #{SNDNG_YN}
+        </if>
+        <if test="SENDER_INFO != '' and SENDER_INFO !=null ">
+              AND UPPER(A.SENDER_INFO) = UPPER(#{SENDER_INFO})
+        </if>
+        <if test="RCVER_INFO != '' and RCVER_INFO !=null ">
+              AND UPPER(A.RCVER_INFO) = UPPER(#{RCVER_INFO})
+        </if>
+        <if test="SUBJECT_TEXT !='' and SUBJECT_TEXT != null ">
+              AND A.SUBJECT_TEXT  LIKE '%' ||  #{SUBJECT_TEXT} || '%'
+         </if>
+         <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND to_char(A.CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= to_char(A.CREATION_DATE,'yyyyMMdd')
+         </if>
+         ORDER BY CREATED_DATE DESC
+         ) T WHERE 1=1
+        <if test= "P_END != null and P_END != ''">
+         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+    ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+    AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+        <!-- EMAIL 발송 COUNT -->
+      <select id="selectEmailLogCount" resultType="hashmap">
+      SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectEmailLogCount" */
+                    COUNT ( * ) AS COUNT
+        FROM CMD_SNDNG_LOGS A
+        WHERE
+        SNDNG_KND_CD='EMAIL'
+        <if test="SNDNG_YN != '' and SNDNG_YN !=null ">
+              AND A.SNDNG_YN = #{SNDNG_YN}
+        </if>
+        <if test="SENDER_INFO != '' and SENDER_INFO !=null ">
+              AND A.SENDER_INFO = #{SENDER_INFO}
+        </if>
+        <if test="RCVER_INFO != '' and RCVER_INFO !=null ">
+              AND A.RCVER_INFO = #{RCVER_INFO}
+        </if>
+        <if test="SUBJECT_TEXT !='' and SUBJECT_TEXT != null ">
+              AND A.SUBJECT_TEXT  LIKE '%' ||  #{SUBJECT_TEXT} || '%'
+         </if>
+         <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND to_char(A.CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= to_char(A.CREATION_DATE,'yyyyMMdd')
+         </if>
+    </select>
+
+        <!-- EMAIL 발송 리스트(Excel용) -->
+      <select id="selectEmailLogListExcel" resultType="hashmap">
+         SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectEmailLogListExcel" */
+                                      A.SNDNG_LOG_ID        /* 발송 로그ID */
+                                    , A.SENDER_INFO       /* 보내는 사람 휴대폰 번호 */
+                                    , A.RCVER_INFO       /* 받는 사람 휴대폰 번호 */
+                                    , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_DATE /* 저장일자  */
+                                    , A.SUBJECT_TEXT   /* 메일 제목 */
+                                    , DECODE(SNDNG_YN, 'Y' , '발송완료','N','발송대기', 'F', '발송실패' ) AS SNDNG_YN
+        FROM CMD_SNDNG_LOGS A
+        WHERE
+        SNDNG_KND_CD='EMAIL'
+        <if test="SNDNG_YN != '' and SNDNG_YN !=null ">
+              AND A.SNDNG_YN = #{SNDNG_YN}
+        </if>
+        <if test="SENDER_INFO != '' and SENDER_INFO !=null ">
+              AND UPPER(A.SENDER_INFO) = UPPER(#{SENDER_INFO})
+        </if>
+        <if test="RCVER_INFO != '' and RCVER_INFO !=null ">
+              AND UPPER(A.RCVER_INFO) = UPPER(#{RCVER_INFO})
+        </if>
+        <if test="SUBJECT_TEXT !='' and SUBJECT_TEXT != null ">
+              AND A.SUBJECT_TEXT  LIKE '%' ||  #{SUBJECT_TEXT} || '%'
+         </if>
+         <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND to_char(A.CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= to_char(A.CREATION_DATE,'yyyyMMdd')
+         </if>
+         ORDER BY CREATED_DATE DESC
+    </select>
+
+    <!--  EMAIL 통계 리스트 -->
+        <select id="selectEmailSumList" resultType="hashmap">
+     SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectEmailSumList" */ * FROM (
+           SELECT ROWNUM AS RNUM, T.* FROM (
+                SELECT  COUNT(*) AS COUNT
+                       , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD') AS CREATED_DATE /* 저장일자  */
+                FROM CMD_SNDNG_LOGS A
+                WHERE
+                SNDNG_KND_CD='EMAIL'
+     <if test="SNDNG_YN != '' and SNDNG_YN !=null ">
+              AND A.SNDNG_YN = #{SNDNG_YN}
+        </if>
+     <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND TO_CHAR (A.CREATION_DATE, 'YYYY-MM') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= TO_CHAR (A.CREATION_DATE, 'YYYY-MM')
+     </if>
+    GROUP BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+    ORDER BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+      ) T WHERE 1=1
+        <if test= "P_END != null and P_END != ''">
+         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+    ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+    AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+        <!--  EMAIL 통계 리스트(Excel) -->
+        <select id="selectEmailSumListExcel" resultType="hashmap">
+                SELECT /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectEmailSumListExcel" */
+                         COUNT(*) AS COUNT
+                       , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD') AS CREATED_DATE /* 저장일자  */
+                FROM CMD_SNDNG_LOGS A
+                WHERE
+                SNDNG_KND_CD='EMAIL'
+     <if test="SNDNG_YN != '' and SNDNG_YN !=null ">
+              AND A.SNDNG_YN = #{SNDNG_YN}
+     </if>
+     <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND TO_CHAR (A.CREATION_DATE, 'YYYY-MM') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= TO_CHAR (A.CREATION_DATE, 'YYYY-MM')
+     </if>
+    GROUP BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+    ORDER BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD')
+    </select>
+
+    <!--  EMAIL 통계 COUNT -->
+     <select id="selectEmailSumCount" resultType="hashmap">
+        SELECT    /* "com.nbdf.cmd.cm.cmlm.dao.CMLM01100Dao.selectEmailSumCount" */
+                    COUNT ( * ) AS COUNT
+        FROM   (  SELECT   
+                     TO_CHAR (A.CREATION_DATE, 'YYYY-MM-DD')
+                            FROM      CMD_SNDNG_LOGS A
+        WHERE   1 = 1
+        AND SNDNG_KND_CD='EMAIL'
+     <if test= "PRE_DATE != null and PRE_DATE != ''">
+                 AND TO_CHAR (A.CREATION_DATE, 'YYYY-MM') >= #{PRE_DATE}
+                 AND #{TO_DATE} >= TO_CHAR (A.CREATION_DATE, 'YYYY-MM')
+     </if>
+     GROUP BY TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD') )
+    </select>
+</mapper>

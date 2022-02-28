@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM00401Dao">
+	
+	<!-- 종합 -->
+	<select id="selectdaysegmentloadtotalList" parameterType="map" resultType="hashmap">
+	
+				SELECT
+                        Q.LOADTOPSEGMENTCLASSID
+                    ,   NVL(TD.DICTIONARYNAME, TOP.LOADSEGMENTCLASSNAME) AS LOADTOPSEGMENTCLASSNAME 
+                    ,   Q.LOADMIDDLESEGMENTCLASSID
+                    ,   NVL(MD.DICTIONARYNAME, MID.LOADSEGMENTCLASSNAME) AS LOADMIDDLESEGMENTCLASSNAME 
+                    ,   Q.LOADSMALLSEGMENTCLASSID
+                    ,   NVL(SD.DICTIONARYNAME, NVL(ED.DICTIONARYNAME, NVL(SML.LOADSEGMENTCLASSNAME, Q.LOADSMALLSEGMENTCLASSID))) AS LOADSMALLSEGMENTCLASSNAME
+                    
+                    ${SELECT_COLUMNS}
+                FROM
+                    (
+                        SELECT 
+                                P.LOADTOPSEGMENTCLASSID
+                            ,   P.LOADMIDDLESEGMENTCLASSID
+                            ,   CASE    WHEN P.LOADMIDDLESEGMENTCLASSID IS NULL THEN 'TOTAL'
+                                        WHEN P.LOADSMALLSEGMENTCLASSID IS NULL THEN 'SUBTOTAL'
+                                        ELSE P.LOADSMALLSEGMENTCLASSID
+                                END AS LOADSMALLSEGMENTCLASSID
+                            ,   CASE WHEN P.LOADMIDDLESEGMENTCLASSID IS NULL THEN 2 ELSE 1 END AS MIDDLEDISPLAYSEQUENCE
+                            ,   CASE WHEN P.LOADSMALLSEGMENTCLASSID IS NULL THEN 2 ELSE 1 END AS SMALLDISPLAYSEQUENCE
+                            ${SUM_COLUMNS}
+                        FROM
+                        	(
+                            SELECT *
+                            FROM (
+                                    SELECT
+                                            LSR.LOADTOPSEGMENTCLASSID || ',' || LSR.LOADMIDDLESEGMENTCLASSID || ',' || LSR.LOADSMALLSEGMENTCLASSID AS ROWNAME
+                                        ,   LSR.LOADTOPSEGMENTCLASSID
+                                        ,   LSR.LOADMIDDLESEGMENTCLASSID
+                                        ,   LSR.LOADSMALLSEGMENTCLASSID
+                                        ,   LSD.PREDICDATE		--부하일
+                                        ,	SUM(CASE WHEN PRODUCTDEFCLASSGROUPNAME IN (${FIRSTSUM_TOTAL_COLUMNS}) THEN LSD.LOADQTY ELSE 0 END) AS TOTALQTY
+                                        ${FIRSTSUM_COLUMNS}
+                                    FROM        BAS_LOADSEGMENTPERDATE   LSD		--공정부하
+                                    INNER JOIN  BAS_LOADSEGMENTREL       LSR 	ON  LSR.PROCESSSEGMENTID = LSD.PROCESSSEGMENTID	--표준공정 공정부하공정 그룹 매핑
+                                    INNER JOIN  BAS_PRODUCTDEFINITION    PD  	ON  PD.PRODUCTDEFID = LSD.PRODUCTDEFID		--제품정의
+                                                                            					AND PD.PRODUCTDEFVERSION = LSD.PRODUCTDEFVERSION
+                                    WHERE   1 = 1
+                                    AND     LSD.ACTIONDATE = TO_CHAR(TO_DATE(REPLACE(#{P_LOADDATE},'-',''),'YYYY-MM-DD'),'YYYY-MM-DD') || ' 00:00'
+                                    AND     LSD.LOADTYPE = #{P_LOADTYPE}
+                                    AND     LSD.PLANTID = #{P_PLANTID}
+                                    --AND     LSD..ISCONFIRM = 'Y'
+                                    AND 		NVL(PD.ISLOADMNG, 'N') = 'Y'          
+                                    AND 		NVL(PD.VALIDSTATELOAD, 'X') = 'Valid'                         
+                                    
+                                    AND     (LSD.PRODUCTDEFID, LSD.PRODUCTDEFVERSION) IN (
+				                                                                                              SELECT PRODUCTDEFID, PRODUCTDEFVERSION
+				                                                                                              FROM BAS_PRODUCTDEFINITION
+				                                                                                              WHERE LOADOWNER LIKE '%' || #{P_RECEIPTUSER} || '%'
+				                                                                                              AND PRODUCTDEFCLASSGROUPNAME IS NOT NULL
+				                                                                               				  AND NVL(ISLOADMNG, 'N') = 'Y'          
+                                    																		  AND NVL(VALIDSTATELOAD, 'X') = 'Valid'               
+				                                                                                              )
+				                                                                                                                                 
+                       <if test="P_LOADTOPSEGMENTCLASSID != null and P_LOADTOPSEGMENTCLASSID !='' ">
+                       			AND     LSR.LOADTOPSEGMENTCLASSID = #{P_LOADTOPSEGMENTCLASSID}	
+                       </if>
+ 
+                        <if test="P_LOADMIDDLESEGMENTCLASSID != null and P_LOADMIDDLESEGMENTCLASSID !='' ">
+                                AND     LSR.LOADMIDDLESEGMENTCLASSID = #{P_LOADMIDDLESEGMENTCLASSID}
+                        </if>
+ 
+                        <if test="P_LOADSMALLSEGMENTCLASSID != null and P_LOADSMALLSEGMENTCLASSID !='' ">
+                                AND     LSR.LOADSMALLSEGMENTCLASSID = #{P_LOADSMALLSEGMENTCLASSID}
+                        </if>
+ 
+                                   GROUP BY
+                                                LSR.LOADTOPSEGMENTCLASSID
+                                            ,   LSR.LOADMIDDLESEGMENTCLASSID
+                                            ,   LSR.LOADSMALLSEGMENTCLASSID
+                                            ,   LSD.PREDICDATE
+                                    ORDER BY ROWNAME, PREDICDATE
+                                )
+                                PIVOT ( 
+                                            SUM(TOTALQTY) AS TOTALQTY
+                                        	${PIVOTSUM_COLUMNS}
+                                        FOR PREDICDATE 
+                                        IN (
+                                        	${PIVOT_COLUMNS}
+                                            )
+                                       )
+                            ) P
+                        WHERE 1=1
+		                AND (
+		                ${SUM_WHERE}
+		                	  )
+                        GROUP BY ROLLUP(P.LOADTOPSEGMENTCLASSID, P.LOADMIDDLESEGMENTCLASSID, P.LOADSMALLSEGMENTCLASSID)
+                        HAVING GROUPING(P.LOADTOPSEGMENTCLASSID) = 0
+                    ) Q
+                LEFT OUTER JOIN BAS_LOADSEGMENTCLASS TOP ON  TOP.LOADSEGMENTCLASSID = Q.LOADTOPSEGMENTCLASSID 
+                LEFT OUTER JOIN BAS_LOADSEGMENTCLASS MID ON  MID.LOADSEGMENTCLASSID = Q.LOADMIDDLESEGMENTCLASSID
+                LEFT OUTER JOIN BAS_LOADSEGMENTCLASS SML ON  SML.LOADSEGMENTCLASSID = Q.LOADSMALLSEGMENTCLASSID
+                LEFT OUTER JOIN CMD_DICTIONARY       TD  	ON  TD.DICTIONARYID = TOP.LOADSEGMENTCLASSNAME
+                                                        					AND TD.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT OUTER JOIN CMD_DICTIONARY       MD  	ON  MD.DICTIONARYID = MID.LOADSEGMENTCLASSNAME
+                                                        					AND MD.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT OUTER JOIN CMD_DICTIONARY       SD  	ON  SD.DICTIONARYID = SML.LOADSEGMENTCLASSNAME
+                                                        					AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+                                                        					AND Q.LOADSMALLSEGMENTCLASSID NOT IN ('TOTAL', 'SUBTOTAL')
+                LEFT OUTER JOIN CMD_DICTIONARY       ED  	ON  ED.DICTIONARYID = Q.LOADSMALLSEGMENTCLASSID
+                                                        					AND ED.LANGUAGETYPE = #{LANGUAGETYPE}
+                                                        					AND Q.LOADSMALLSEGMENTCLASSID IN ('TOTAL', 'SUBTOTAL')
+                WHERE Q.LOADTOPSEGMENTCLASSID IS NOT NULL
+                ORDER BY Q.LOADTOPSEGMENTCLASSID, Q.MIDDLEDISPLAYSEQUENCE, Q.LOADMIDDLESEGMENTCLASSID, Q.SMALLDISPLAYSEQUENCE, Q.LOADSMALLSEGMENTCLASSID
+	</select>
+	
+	<!-- 상세
+		참조 SITE : http://www.gurubee.net/lecture/2679 
+	-->
+	<select id="selectdaysegmentloadDetailList" parameterType="map" resultType="hashmap">
+				SELECT
+		                Q.LOADTOPSEGMENTCLASSID
+		            ,   NVL(TD.DICTIONARYNAME, TOP.LOADSEGMENTCLASSNAME) AS LOADTOPSEGMENTCLASSNAME 
+		            ,   Q.LOADMIDDLESEGMENTCLASSID
+		            ,   NVL(MD.DICTIONARYNAME, MID.LOADSEGMENTCLASSNAME) AS LOADMIDDLESEGMENTCLASSNAME 
+		            ,   Q.LOADSMALLSEGMENTCLASSID
+		            ,   NVL(SD.DICTIONARYNAME, SML.LOADSEGMENTCLASSNAME) AS LOADSMALLSEGMENTCLASSNAME 
+		            ,   Q.PROCESSSEGMENTID
+		            ,   NVL(SGD.DICTIONARYNAME, SEG.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME 
+		            ,	PD.PRIORITY
+		            ,   Q.PRODUCTDEFID
+		            ,   Q.PRODUCTDEFVERSION
+		            ,   NVL(ED.DICTIONARYNAME, PD.PRODUCTDEFNAME) AS PRODUCTDEFNAME
+		            
+		            ${SELECT_COLUMNS}
+		        FROM
+		            (
+		                SELECT
+		                        P.LOADTOPSEGMENTCLASSID
+		                    ,   P.LOADMIDDLESEGMENTCLASSID
+		                    ,   P.LOADSMALLSEGMENTCLASSID
+		                    ,   P.PROCESSSEGMENTID
+		                    ,   CASE    WHEN P.LOADMIDDLESEGMENTCLASSID IS NULL THEN 'TOTAL'
+		                                WHEN P.PRODUCTDEFID IS NULL THEN 'SUBTOTAL'
+		                                ELSE P.PRODUCTDEFID
+		                        END AS PRODUCTDEFID
+		                    ,   P.PRODUCTDEFVERSION
+		                    ,   CASE WHEN P.LOADMIDDLESEGMENTCLASSID IS NULL THEN 2 ELSE 1 END AS MIDDLEDISPLAYSEQUENCE
+		                    ,   CASE WHEN P.PROCESSSEGMENTID IS NULL THEN 2 ELSE 1 END AS SEGMENTDISPLAYSEQUENCE
+		                    
+		                    ${SUM_COLUMNS}
+		                FROM
+		                		(
+		                		SELECT *
+		                		FROM (	                    
+				                        SELECT
+				                                LSR.LOADTOPSEGMENTCLASSID || ',' || LSR.LOADMIDDLESEGMENTCLASSID || ',' || LSR.LOADSMALLSEGMENTCLASSID 
+				                                    || ',' || LSD.PROCESSSEGMENTID || ',' || LSD.PRODUCTDEFID || ',' || LSD.PRODUCTDEFVERSION AS ROWNAME
+				                            ,   LSR.LOADTOPSEGMENTCLASSID
+				                            ,   LSR.LOADMIDDLESEGMENTCLASSID
+				                            ,   LSR.LOADSMALLSEGMENTCLASSID
+				                            ,   LSD.PROCESSSEGMENTID
+				                            ,   LSD.PRODUCTDEFID
+				                            ,   LSD.PRODUCTDEFVERSION
+				                            ,   LSD.PREDICDATE
+				                            ,	SUM(CASE WHEN PRODUCTDEFCLASSGROUPNAME IN (${FIRSTSUM_TOTAL_COLUMNS}) THEN LSD.LOADQTY ELSE 0 END) AS TOTALQTY
+                                        	${FIRSTSUM_COLUMNS}
+				                        FROM        BAS_LOADSEGMENTPERDATE   LSD
+				                        INNER JOIN  BAS_LOADSEGMENTREL       LSR 		ON  LSR.PROCESSSEGMENTID = LSD.PROCESSSEGMENTID
+				                        INNER JOIN  BAS_PRODUCTDEFINITION    PD  		ON  PD.PRODUCTDEFID = LSD.PRODUCTDEFID
+				                                                                						AND PD.PRODUCTDEFVERSION = LSD.PRODUCTDEFVERSION
+				                        WHERE   1 = 1
+						<if test="P_LOADTOPSEGMENTCLASSID != null and P_LOADTOPSEGMENTCLASSID !='' ">
+                       			AND     LSR.LOADTOPSEGMENTCLASSID = #{P_LOADTOPSEGMENTCLASSID}
+                       </if>
+                       <if test="P_LOADMIDDLESEGMENTCLASSID != null and P_LOADMIDDLESEGMENTCLASSID !='' ">
+                       			AND     LSR.LOADMIDDLESEGMENTCLASSID = #{P_LOADMIDDLESEGMENTCLASSID}
+                       </if>
+						<if test="P_LOADSMALLSEGMENTCLASSID != null and P_LOADSMALLSEGMENTCLASSID !='' ">
+                       			AND     LSR.LOADSMALLSEGMENTCLASSID = #{P_LOADSMALLSEGMENTCLASSID}
+                       </if>				                        
+				                        AND     LSD.ACTIONDATE = TO_CHAR(TO_DATE(REPLACE(#{P_LOADDATE},'-',''),'YYYY-MM-DD'),'YYYY-MM-DD') || ' 00:00'	
+				                        AND     LSD.LOADTYPE = #{P_LOADTYPE}
+				                        AND     LSD.PLANTID = #{P_PLANTID}
+				                        --AND		LSD..ISCONFIRM = 'Y'
+				                        AND 		NVL(PD.ISLOADMNG, 'N') = 'Y'          
+                                    	AND 		NVL(PD.VALIDSTATELOAD, 'X') = 'Valid'
+				                        
+				                        AND     (LSD.PRODUCTDEFID, LSD.PRODUCTDEFVERSION) IN (
+				                                                                                              SELECT PRODUCTDEFID, PRODUCTDEFVERSION
+				                                                                                              FROM BAS_PRODUCTDEFINITION
+				                                                                                              WHERE LOADOWNER LIKE '%' || #{P_RECEIPTUSER} || '%'
+				                                                                                              AND PRODUCTDEFCLASSGROUPNAME IS NOT NULL
+				                                                                                              AND NVL(ISLOADMNG, 'N') = 'Y'          
+                                    																		  AND NVL(VALIDSTATELOAD, 'X') = 'Valid'
+				                                                                                              )
+				                        
+				                        
+				                        GROUP BY
+                                                LSR.LOADTOPSEGMENTCLASSID
+                                            ,   LSR.LOADMIDDLESEGMENTCLASSID
+                                            ,   LSR.LOADSMALLSEGMENTCLASSID
+                                            ,   LSD.PROCESSSEGMENTID
+				                            ,   LSD.PRODUCTDEFID
+				                            ,   LSD.PRODUCTDEFVERSION
+                                            ,   LSD.PREDICDATE
+				                        ORDER BY
+				                                LSR.LOADTOPSEGMENTCLASSID
+				                            ,   LSR.LOADMIDDLESEGMENTCLASSID
+				                            ,   LSR.LOADSMALLSEGMENTCLASSID
+				                            ,   LSD.PROCESSSEGMENTID
+				                            ,   LSD.PRODUCTDEFID
+				                            ,   LSD.PRODUCTDEFVERSION
+				                            ,   LSD.PREDICDATE
+				                        )
+				                PIVOT ( 
+                                        SUM(TOTALQTY) AS TOTALQTY
+                                        ${PIVOTSUM_COLUMNS}
+                                        FOR PREDICDATE 
+                                        IN (
+                                        		${PIVOT_COLUMNS}
+                                        	)
+                                        )
+	                            ) P
+		                WHERE 1=1
+		                AND (
+		                ${SUM_WHERE}
+		                	  )
+		                GROUP BY ROLLUP(P.LOADTOPSEGMENTCLASSID, P.LOADMIDDLESEGMENTCLASSID, P.LOADSMALLSEGMENTCLASSID, P.PROCESSSEGMENTID, P.PRODUCTDEFID, P.PRODUCTDEFVERSION)
+		                HAVING 
+		                    (   GROUPING(P.LOADTOPSEGMENTCLASSID) = 0
+		                        AND GROUPING(P.LOADMIDDLESEGMENTCLASSID) = 1
+		                    )
+		                    OR
+		                    (
+		                        GROUPING(P.LOADSMALLSEGMENTCLASSID) = 0
+		                        AND GROUPING(P.PROCESSSEGMENTID) = 1
+		                    )
+		                    OR
+		                    (
+		                        GROUPING_ID(P.LOADTOPSEGMENTCLASSID, P.LOADMIDDLESEGMENTCLASSID, P.LOADSMALLSEGMENTCLASSID, P.PROCESSSEGMENTID, P.PRODUCTDEFID, P.PRODUCTDEFVERSION) = 0
+		                    )
+		            ) Q
+		        LEFT OUTER JOIN BAS_LOADSEGMENTCLASS     TOP 		ON  TOP.LOADSEGMENTCLASSID = Q.LOADTOPSEGMENTCLASSID 
+		        LEFT OUTER JOIN BAS_LOADSEGMENTCLASS     MID 		ON  MID.LOADSEGMENTCLASSID = Q.LOADMIDDLESEGMENTCLASSID
+		        LEFT OUTER JOIN BAS_LOADSEGMENTCLASS     SML 		ON  SML.LOADSEGMENTCLASSID = Q.LOADSMALLSEGMENTCLASSID
+		        LEFT OUTER JOIN BAS_PROCESSSEGMENT       SEG 		ON  SEG.PROCESSSEGMENTID = Q.PROCESSSEGMENTID
+		        LEFT OUTER JOIN BAS_PRODUCTDEFINITION    PD  		ON  PD.PRODUCTDEFID = Q.PRODUCTDEFID
+		                                                    						AND PD.PRODUCTDEFVERSION = Q.PRODUCTDEFVERSION
+		        LEFT OUTER JOIN CMD_DICTIONARY           	TD  		ON  TD.DICTIONARYID = TOP.LOADSEGMENTCLASSNAME
+		                                                    						AND TD.LANGUAGETYPE = #{LANGUAGETYPE}
+		        LEFT OUTER JOIN CMD_DICTIONARY           	MD  		ON  MD.DICTIONARYID = MID.LOADSEGMENTCLASSNAME
+		                                                    						AND MD.LANGUAGETYPE = #{LANGUAGETYPE}
+		        LEFT OUTER JOIN CMD_DICTIONARY           	SD  		ON  SD.DICTIONARYID = SML.LOADSEGMENTCLASSNAME
+		                                                    						AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+		        LEFT OUTER JOIN CMD_DICTIONARY           	SGD 		ON  SGD.DICTIONARYID = SEG.PROCESSSEGMENTNAME
+		                                                    						AND SGD.LANGUAGETYPE = #{LANGUAGETYPE}
+		        LEFT OUTER JOIN CMD_DICTIONARY           	ED  		ON  ED.DICTIONARYID = Q.PRODUCTDEFID
+		                                                    						AND ED.LANGUAGETYPE = #{LANGUAGETYPE}
+		                                                    						AND Q.PRODUCTDEFID IN ('TOTAL', 'SUBTOTAL') 
+		    ORDER BY Q.LOADTOPSEGMENTCLASSID, Q.MIDDLEDISPLAYSEQUENCE, Q.LOADMIDDLESEGMENTCLASSID, Q.LOADSMALLSEGMENTCLASSID, Q.SEGMENTDISPLAYSEQUENCE, Q.PROCESSSEGMENTID, PD.PRIORITY, Q.PRODUCTDEFID, Q.PRODUCTDEFVERSION			
+	</select>
+	
+	
+	
+	
+</mapper>

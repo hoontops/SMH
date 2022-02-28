@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM02900Dao">
+<!-- 검사원 등급 정보-->
+
+    <!-- 검사원 등급 정보 등록 -->
+    <insert id="insertQamQcinspectorgrade" parameterType="map">
+    INSERT INTO QAM_QCINSPECTORGRADE( 
+        ENTERPRISEID  
+        ,PLANTID  
+        ,INSPECTIONCLASSID  
+        ,GRADE  
+        ,UPPERSCORE  
+        ,LOWERSCORE  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE        ) 
+    VALUES( 
+        #{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{INSPECTIONCLASSID}  
+        ,#{GRADE}  
+        ,#{UPPERSCORE}  
+        ,#{LOWERSCORE}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}    )
+    </insert>
+
+    <!-- 검사원 등급 정보 변경 -->
+    <update id="updateQamQcinspectorgrade" parameterType="map" >
+    UPDATE QAM_QCINSPECTORGRADE 
+    SET 
+        UPPERSCORE = #{UPPERSCORE}     
+        ,LOWERSCORE = #{LOWERSCORE}     
+        ,DESCRIPTION = #{DESCRIPTION}             
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+        ,VALIDSTATE = #{VALIDSTATE}
+    WHERE ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    AND INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+    AND GRADE = #{GRADE}
+    </update>
+
+    <!-- 검사원 등급 정보 삭제 -->
+    <update id="deleteQamQcinspectorgrade" parameterType="map" > 
+    DELETE FROM QAM_QCINSPECTORGRADE 
+    WHERE ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    AND INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+    AND GRADE = #{GRADE}
+    </update>
+
+    <!-- 검사원 등급 정보 조회-->
+    <select id="selectQamQcinspectorgradeList" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.ENTERPRISEID	
+        ,A.PLANTID	
+        ,A.INSPECTIONCLASSID	
+        ,A.GRADE	
+        ,A.UPPERSCORE	
+        ,A.LOWERSCORE	
+        ,A.DESCRIPTION	
+        ,CU.USER_NM AS CREATOR
+        ,TO_CHAR(A.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+        ,MU.USER_NM AS MODIFIER
+        ,TO_CHAR(A.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+        ,A.LASTTXNHISTKEY	
+        ,A.LASTTXNID	
+        ,A.LASTTXNUSER	
+        ,A.LASTTXNTIME	
+        ,A.LASTTXNCOMMENT	
+        ,A.VALIDSTATE	
+    FROM	QAM_QCINSPECTORGRADE A
+    LEFT OUTER JOIN CMD_USERS                CU   ON   A.CREATOR                    = CU.USER_ID
+    LEFT OUTER JOIN CMD_USERS                MU  ON   A.MODIFIER                   = MU.USER_ID
+    LEFT OUTER JOIN CMD_LOOKUP_VALUES	  LV	ON	LV.LOOKUP_TYPE = 'InspectionGrade'
+                												AND 	LV.LOOKUP_CODE   = A.GRADE 
+    WHERE 1=1 
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND A.PLANTID = #{PLANTID}
+    </if>
+    <if test="INSPECTIONCLASSID != null and INSPECTIONCLASSID !='' "> 
+        AND A.INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+    </if>
+    ORDER BY A.INSPECTIONCLASSID
+				 ,LV.DISPLAYSEQUENCE 	
+    </select>
+    
+    <!-- 검사원 등급 정보 이력 조회-->
+    <select id="selectQamQcinspectorgradehistoryList" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.TXNHISTKEY	
+        ,A.INSPECTIONCLASSID	
+        ,A.GRADE	
+        ,A.ENTERPRISEID	
+        ,A.PLANTID	
+        ,A.UPPERSCORE	
+        ,A.LOWERSCORE	
+        ,(A.LOWERSCORE || ' ~' || A.UPPERSCORE) AS SCORE	
+        ,A.DESCRIPTION	
+        ,A.CREATOR	
+        ,TO_CHAR(A.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+        ,A.MODIFIER	
+        ,TO_CHAR(A.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+        ,A.TXNGROUPHISTKEY	
+        ,A.TXNID	
+        ,A.TXNUSER	
+        ,A.TXNTIME	
+        ,A.TXNREASONCODECLASS	
+        ,A.TXNREASONCODE	
+        ,A.TXNCOMMENT	
+        ,A.VALIDSTATE	
+    FROM	QAM_QCINSPECTORGRADEHISTORY A 
+    WHERE 1=1 
+    	AND A.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+    <if test="INSPECTIONCLASSID != null and INSPECTIONCLASSID !='' "> 
+        AND A.INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+    </if>
+    <if test="GRADE != null and GRADE !='' "> 
+        AND A.GRADE = #{GRADE}
+    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND A.PLANTID = #{PLANTID}
+    </if>
+    <if test="UPPERSCORE != null and UPPERSCORE !='' "> 
+        AND A.UPPERSCORE = #{UPPERSCORE}
+    </if>
+    <if test="LOWERSCORE != null and LOWERSCORE !='' "> 
+        AND A.LOWERSCORE = #{LOWERSCORE}
+    </if>
+    <if test="DESCRIPTION != null and DESCRIPTION !='' "> 
+        AND A.DESCRIPTION = #{DESCRIPTION}
+    </if>
+    <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+        AND A.VALIDSTATE = #{VALIDSTATE}
+    </if>
+    ORDER BY A.PLANTID, A.ENTERPRISEID, A.GRADE, A.TXNHISTKEY DESC
+    </select>
+    
+</mapper>

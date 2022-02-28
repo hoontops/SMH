@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS00800Dao">
+	<sql id="insertDictionary">
+	BAS_COMMON_PKG.GENERATE_DICTIONARY
+	</sql>
+
+
+    <!-- 트리 조회 -->
+   <select id="selectTreeList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS00800Dao.selectTreeList */
+SELECT CATEGORYID
+      ,CATEGORYNAME
+      ,PARENTCATEGORYID
+      ,"level" AS LVL
+       ,CATEGORYSET
+       ,CHK
+       ,'0' AS IS_CHK
+       ,CATEGORYID AS CODE
+       ,CATEGORYNAME AS NAME
+       ,CATEGORYPATH
+FROM
+(
+				SELECT #{SESSION_ENTERPRISEID} AS CATEGORYID
+				      ,#{SESSION_ENTERPRISEID} AS CATEGORYNAME
+				      ,NULL AS PARENTCATEGORYID
+				      ,'0' AS "level"
+				      ,NULL AS CATEGORYSET
+				      ,1 AS CHK
+				        ,#{SESSION_ENTERPRISEID} AS CATEGORYPATH
+				FROM   DUAL
+				
+				UNION ALL
+				
+				SELECT C.CATEGORYID
+				      ,D.DICTIONARYNAME AS CATEGORYNAME
+				      ,DECODE("level", '1', 'SMLINES', C.PARENTCATEGORYID ) AS PARENTCATEGORYID
+				      ,"level"
+				      ,C.CATEGORYSET
+				      ,DECODE("level", '1', 1, '2',1,3 ) AS CHK
+              		  ,SYS_CONNECT_BY_PATH(C.CATEGORYID,'|') AS CATEGORYPATH
+				FROM   BAS_CATEGORY C
+				LEFT   OUTER JOIN CMD_DICTIONARY D
+				ON     C.DICTIONARYID = D.DICTIONARYID
+				AND    D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+				WHERE  1 = 1
+			    <if test="LVL != null and LVL !='' "> 
+			        AND C."level" IN ('1', '2')
+			    </if>
+			    <if test="CATEGORYSET != null and CATEGORYSET !='' "> 
+			        AND C.CATEGORYSET = #{CATEGORYSET}
+			    </if>
+				AND    C.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+				START  WITH C.PARENTCATEGORYID IS NULL
+				CONNECT BY PRIOR C.CATEGORYID = C.PARENTCATEGORYID
+		)
+    </select>
+    
+   <select id="selectCategoryList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS00800Dao.selectCategoryList */
+		        SELECT C.CATEGORYID
+              ,D1.DICTIONARYNAME AS CATEGORYNAME_KR
+              ,D2.DICTIONARYNAME AS CATEGORYNAME_US
+              ,D3.DICTIONARYNAME AS CATEGORYNAME_CN
+              ,D4.DICTIONARYNAME AS CATEGORYNAME_VN
+              ,C.CATEGORYSET
+              ,C."level" AS LVL
+              ,C.ENTERPRISEID
+              ,C.PLANTID
+              ,C.PARENTCATEGORYID
+              ,C.DESCRIPTION
+              ,C.VALIDSTATE
+              ,NVL(U1.USER_NM, C.CREATOR) AS CREATOR
+              , TO_CHAR(C.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+              ,NVL(U2.USER_NM, C.MODIFIER) AS MODIFIER
+              , TO_CHAR(C.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+              ,C.DICTIONARYID AS CATEGORYNAME
+              ,C.ORDERBY
+        FROM   BAS_CATEGORY C
+				LEFT OUTER JOIN CMD_DICTIONARY 	D1	ON	C.DICTIONARYID = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = 'ko-KR'
+        LEFT OUTER JOIN CMD_DICTIONARY   D2  ON   C.DICTIONARYID = D2.DICTIONARYID
+                          AND D2.LANGUAGETYPE = 'en-US'
+        LEFT OUTER JOIN CMD_DICTIONARY   D3  ON   C.DICTIONARYID = D3.DICTIONARYID
+                          AND D3.LANGUAGETYPE = 'zh-CN'
+        LEFT OUTER JOIN CMD_DICTIONARY   D4  ON   C.DICTIONARYID = D4.DICTIONARYID
+                          AND D4.LANGUAGETYPE = 'vi-VN'
+        LEFT OUTER JOIN CMD_USERS      U1  ON   C.CREATOR = U1.USER_ID
+        LEFT OUTER JOIN CMD_USERS      U2  ON   C.MODIFIER = U2.USER_ID
+        WHERE  	1 = 1
+            AND   C.ENTERPRISEID = #{SESSION_ENTERPRISEID}            
+			
+         <if test="PARENTCATEGORYID neq SESSION_ENTERPRISEID">
+         		AND C.PARENTCATEGORYID = NVL(#{PARENTCATEGORYID}, C.PARENTCATEGORYID)
+		</if>		    
+        <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+	        AND C.VALIDSTATE = #{VALIDSTATE}
+	    </if>  
+	    <if test="CATEGORYSET != null and CATEGORYSET !='' "> 
+	        AND C.CATEGORYSET = #{CATEGORYSET}
+	    </if>
+		<if test="SEARCHVALUE != null and SEARCHVALUE !='' "> 
+			<choose>		
+		          <when test="SEARCHTYPE eq 'ALLVIEWS'.toString()">
+		          	AND (UPPER(C.CATEGORYID)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          	  OR  UPPER(C.CATEGORYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          	  OR  UPPER(D1.DICTIONARYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          	  OR  UPPER(D2.DICTIONARYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          	  OR  UPPER(D3.DICTIONARYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          	  OR  UPPER(D4.DICTIONARYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%') 
+		          	  )
+		          </when>
+		          <when test="SEARCHTYPE eq 'CATEGORYID'.toString()">
+		          	AND UPPER(C.CATEGORYID)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          </when>
+		          <otherwise>
+		          	AND (UPPER(C.CATEGORYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          	  OR  UPPER(D1.DICTIONARYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          	  OR  UPPER(D2.DICTIONARYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          	  OR  UPPER(D3.DICTIONARYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+		          	  OR  UPPER(D4.DICTIONARYNAME)  LIKE UPPER('%' || #{SEARCHVALUE} || '%') 
+		          	  )    
+		          </otherwise>	           
+	          </choose>
+          </if>
+        ORDER BY C.CATEGORYID ASC
+    </select>
+    
+     <select id="selectCategory" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS00800Dao.selectCategory */
+		        SELECT C.CATEGORYID             
+        FROM   BAS_CATEGORY C				
+        WHERE  	1 = 1
+		   AND CATEGORYID = #{CATEGORYID}
+	       AND CATEGORYSET = #{CATEGORYSET} 	
+    </select>
+    
+  <insert id="insertCategory" parameterType="map">
+  DECLARE
+  BEGIN
+    INSERT /* smh.bas.dao.BAS00800Dao.insertCategory */	INTO BAS_CATEGORY
+		     	(CATEGORYID
+				,CATEGORYSET
+				,ENTERPRISEID
+				,PLANTID
+				,CATEGORYTYPE
+				,"level"
+				,PARENTCATEGORYID
+				,DICTIONARYID
+				,DESCRIPTION
+				,ORDERBY
+				,CREATOR
+				,CREATEDTIME
+				,MODIFIER
+				,MODIFIEDTIME
+				,LASTTXNHISTKEY
+				,LASTTXNID
+				,LASTTXNUSER
+				,LASTTXNTIME
+				,LASTTXNCOMMENT
+				,VALIDSTATE)
+			VALUES
+				(#{CATEGORYID}
+				,#{CATEGORYSET}
+				,#{SESSION_ENTERPRISEID}
+				,#{SESSION_SITETYPE}
+				,#{CATEGORYTYPE}
+				,#{LVL}
+				,#{PARENTCATEGORYID}
+				,#{CATEGORYNAME}
+				,#{DESCRIPTION}
+				,TO_NUMBER(#{ORDERBY})
+				,#{CREATOR}
+				,SYSDATE
+				,#{MODIFIER}
+				,SYSDATE
+				,#{LASTTXNHISTKEY}
+				,#{LASTTXNID}
+				,#{CREATOR}
+				,SYSDATE
+				,#{LASTTXNCOMMENT}
+				,#{VALIDSTATE}
+			);
+		    	
+		<!-- 다국어 테이블 저장용 -->							
+				IF #{CATEGORYNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_CATEGORY','ko-KR',#{CATEGORYNAME}, #{CREATOR}, #{CATEGORYNAME_KR}); END IF;
+				IF #{CATEGORYNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_CATEGORY','en-US',#{CATEGORYNAME}, #{CREATOR}, #{CATEGORYNAME_US}); END IF;
+				IF #{CATEGORYNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_CATEGORY','zh-CN',#{CATEGORYNAME}, #{CREATOR}, #{CATEGORYNAME_CN}); END IF;
+				IF #{CATEGORYNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_CATEGORY','vi-VN',#{CATEGORYNAME}, #{CREATOR}, #{CATEGORYNAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		END;
+    </insert>  
+    
+  <update id="updateCategory" parameterType="map">
+  DECLARE
+  BEGIN  		
+     /* smh.bas.dao.BAS00800Dao.updateCategory */	
+     UPDATE BAS_CATEGORY SET
+     		"level" = #{LVL}
+			,PARENTCATEGORYID = #{PARENTCATEGORYID}				
+			,DESCRIPTION = #{DESCRIPTION}	     
+			,VALIDSTATE			=#{VALIDSTATE}
+			,ORDERBY			=TO_NUMBER(#{ORDERBY})
+			,MODIFIER			=#{MODIFIER}
+			,MODIFIEDTIME		=SYSDATE
+			,LASTTXNHISTKEY	=#{LASTTXNHISTKEY}
+			,LASTTXNID			=#{LASTTXNID}
+			,LASTTXNUSER		=#{MODIFIER}
+			,LASTTXNTIME		=SYSDATE
+	WHERE CATEGORYID = #{CATEGORYID}
+	    AND CATEGORYSET = #{CATEGORYSET} ;		    	
+			<!-- 다국어 테이블 저장용 -->							
+				IF #{CATEGORYNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_CATEGORY','ko-KR',#{CATEGORYNAME}, #{CREATOR}, #{CATEGORYNAME_KR}); END IF;
+				IF #{CATEGORYNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_CATEGORY','en-US',#{CATEGORYNAME}, #{CREATOR}, #{CATEGORYNAME_US}); END IF;
+				IF #{CATEGORYNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_CATEGORY','zh-CN',#{CATEGORYNAME}, #{CREATOR}, #{CATEGORYNAME_CN}); END IF;
+				IF #{CATEGORYNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_CATEGORY','vi-VN',#{CATEGORYNAME}, #{CREATOR}, #{CATEGORYNAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		END;
+    </update>   
+    
+    <delete id="deleteCategory" parameterType="map" >
+     /* smh.bas.dao.BAS00800Dao.deleteCategory */  
+    DECLARE 
+    BEGIN
+    	DELETE  FROM BAS_CATEGORY	WHERE CATEGORYID = #{CATEGORYID} AND CATEGORYSET = #{CATEGORYSET} ;		
+    	
+    	DELETE  FROM CMD_DICTIONARY 			WHERE DICTIONARYID = #{CATEGORYNAME};
+    END;
+    </delete>
+</mapper>

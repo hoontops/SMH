@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM09300Dao">
+      
+    
+    
+	<!--
+		설		명	: 자재품목ID선택
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-18 
+		수  정   이  력	:
+	-->
+	<select id="selectConsumableDefList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : GetConsumableDefList
+				-- Version : 10002
+				SELECT
+					   CONSUMABLECLASSID
+					,  DC2.DICTIONARYNAME			AS  CONSUMABLECLASSNAME
+				    ,  CONSUMEDEF
+				    ,  CONSUMABLEDEFID
+				    ,  CONSUMABLEDEFVERSION
+				    ,  CONSUMABLEDEFNAME
+				    ,  CHK
+				FROM
+				(
+				SELECT  
+						C.CONSUMABLECLASSID
+				    ,   DECODE(SUBSTR(C.CONSUMABLEDEFID, 0, 1), '2', C.CONSUMABLEDEFID || '|' || C.CONSUMABLEDEFVERSION, C.CONSUMABLEDEFID)  AS CONSUMEDEF
+				    ,   C.CONSUMABLEDEFID
+				    ,   C.CONSUMABLEDEFVERSION
+				    ,   C.CONSUMABLEDEFNAME
+				    ,   '0'	AS CHK
+				FROM    BAS_CONSUMABLEDEFINITION C			
+				WHERE   1 = 1				
+				AND     C.ENTERPRISEID = #{ENTERPRISEID}
+				AND C.CONSUMABLECLASSID IN ('SubAssembly', 'RawMaterial', 'Subsidiary')
+				
+				
+				<if test="CONSUMABLECLASSID != null and CONSUMABLECLASSID !='' and !(CONSUMABLECLASSID eq '*'.toString())">
+					AND	C.CONSUMABLECLASSID = #{CONSUMABLECLASSID} 
+				</if>
+				
+				
+				<if test="CONSUMABLEDEF != null and CONSUMABLEDEF !='' and !(CONSUMABLEDEF eq '*'.toString())">
+					AND     (C.CONSUMABLEDEFID LIKE  '%' || UPPER(#{CONSUMABLEDEF})|| '%'
+					OR       C.CONSUMABLEDEFNAME LIKE  '%' || UPPER(#{CONSUMABLEDEF})|| '%')
+				</if>
+				) C
+				LEFT OUTER JOIN	CMD_DICTIONARY			DC2	ON	C.CONSUMABLECLASSID = DC2.DICTIONARYID
+											AND	DC2.LANGUAGETYPE = #{LANGUAGETYPE}		
+				ORDER BY CONSUMABLEDEFID ASC
+	</select>
+	
+	<!--
+		설		명	: 자재 사용 이력
+		생	성	자	: 김진현
+		생	성	일	: 2021-03-18 
+		수  정   이  력	:
+	-->
+		<select id="selectConsumableLotHistoryList" parameterType="map" resultType="hashmap">
+			SELECT
+				  MT.ENTERPRISEID
+				, MT.PLANTID
+				, TO_CHAR(MT.TRANSACTION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS TRANSACTION_DATE
+				, MT.ITEM_CODE
+				, MT.ITEM_DESCRIPTION
+				, MT.UOM
+				, MT.LOT_NUMBER
+				, MT.TRANSACTION_SOURCE_NAME
+				, MT.WIP_ITEM_CODE
+				, MT.WIP_ITEM_CODE_DESC
+				, MT.TRANSACTION_QTY
+				, MT.ONHAND_QTY
+				, MT.TRANSACTION_TYPE_NAME
+				, MT.SUBINVENTORY_CODE
+				, MT.SUBINVENTORY_NAME
+				, MT.ITEM_GUBUN 
+			FROM
+			IFC_MES_S_MTL_TRX_ISSUE_V@ERPPROD MT
+			WHERE 1 = 1
+			  AND MT.ENTERPRISEID = #{P_ENTERPRISEID}
+		  <if test="P_INBOUNDDATE_PERIODFR != null and P_INBOUNDDATE_PERIODFR !='' and P_INBOUNDDATE_PERIODTO !=null and P_INBOUNDDATE_PERIODTO !=''">
+			  AND MT.TRANSACTION_DATE BETWEEN TO_DATE(#{P_INBOUNDDATE_PERIODFR}, 'YYYYMMDD')  AND TO_DATE(#{P_INBOUNDDATE_PERIODTO}, 'YYYYMMDD')
+		  </if>
+		  <if test="P_PLANTID != null and P_PLANTID !=''">
+			  AND MT.PLANTID = #{P_PLANTID}
+		  </if> 				  
+		  <if test="P_SUBINVENTORY_CODE != null and P_SUBINVENTORY_CODE !=''">
+			  AND MT.SUBINVENTORY_CODE = #{P_SUBINVENTORY_CODE}
+		  </if> 					  
+		  <if test="P_SUBINVENTORY_NAME != null and P_SUBINVENTORY_NAME !=''">
+			  AND MT.SUBINVENTORY_NAME = #{P_SUBINVENTORY_NAME}
+		  </if> 					  
+           --자재코드  
+           <if test="P_CONSUMABLEDEFID != null and P_CONSUMABLEDEFID !=''"> 
+                 AND EXISTS
+                         (
+                             SELECT  1
+                             FROM    ufn_selectStringToSplitDouble(#{P_CONSUMABLEDEFID}, ',', '|')      LMP  
+                             WHERE   MT.ITEM_CODE = LMP.VALUE1
+                         )
+            </if>
+            --자재명
+           <if test="P_CONSUMENAME != null and P_CONSUMENAME !=''"> 
+                 AND EXISTS
+                        (
+                            SELECT  1
+                            FROM    ufn_selectStringToSplit( '%' || #{P_CONSUMENAME} || '%' , ',')        LMP
+                            WHERE   MT.ITEM_DESCRIPTION LIKE UPPER(LMP.VALUE)
+                        )                    
+            </if>
+               	              	  					  
+		  <if test="P_ITEM_GUBUN != null and P_ITEM_GUBUN !=''">
+			  AND MT.ITEM_GUBUN = #{P_ITEM_GUBUN}
+		  </if> 					  
+		  <if test="P_LOT_NUMBER != null and P_LOT_NUMBER !=''">
+			  AND MT.LOT_NUMBER = #{P_LOT_NUMBER}
+		  </if> 					  
+		ORDER BY TRANSACTION_DATE DESC
+</select>
+	
+	 
+
+</mapper>

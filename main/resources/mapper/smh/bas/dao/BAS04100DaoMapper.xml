@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS04100Dao">
+    <sql id="insertDictionary">
+    BAS_COMMON_PKG.GENERATE_DICTIONARY
+    </sql>
+
+    <!-- 검사정의 조회 -->
+    <select id="selectInspectionclassList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04100Dao.selectInspectionclassList */
+        SELECT SI.ENTERPRISEID
+            ,  SI.PLANTID
+            ,  SI.INSPECTIONCLASSID
+            ,  SI.INSPECTIONCLASSNAME
+            ,  DCK.DICTIONARYNAME    AS INSPECTIONCLASSNAME_KR
+            ,  DCE.DICTIONARYNAME    AS INSPECTIONCLASSNAME_US
+            ,  DCC.DICTIONARYNAME    AS INSPECTIONCLASSNAME_CN
+            ,  DCV.DICTIONARYNAME    AS INSPECTIONCLASSNAME_VN
+            ,  SI.INSPECTIONCLASSTYPE
+            ,  SI.RESOURCETYPE       AS  INSPECTIONRESOURCETYPE
+            ,  NVL(SI.ISUSEITEM,'N') AS ISUSEITEM
+            ,  SI.DESCRIPTION
+            ,  SI.VALIDSTATE
+            ,  SI.CREATOR
+            ,  TO_CHAR(SI.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+            ,  URR.USER_NM           AS CREATORNAME
+            ,  SI.MODIFIER
+            ,  URA.USER_NM           AS MODIFIERNAME
+            ,  TO_CHAR(SI.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+          FROM       BAS_INSPECTIONCLASS SI
+          INNER JOIN CMD_DICTIONARY      DCK    ON  DCK.DICTIONARYID = SI.INSPECTIONCLASSNAME
+                                                AND DCK.LANGUAGETYPE = 'ko-KR'
+          INNER JOIN CMD_DICTIONARY      DCE    ON  DCE.DICTIONARYID = SI.INSPECTIONCLASSNAME
+                                                AND DCE.LANGUAGETYPE = 'en-US'
+          INNER JOIN CMD_DICTIONARY      DCC    ON  DCC.DICTIONARYID = SI.INSPECTIONCLASSNAME
+                                                AND DCC.LANGUAGETYPE = 'zh-CN'
+          INNER JOIN CMD_DICTIONARY      DCV    ON  DCV.DICTIONARYID = SI.INSPECTIONCLASSNAME
+                                                AND DCV.LANGUAGETYPE = 'vi-VN'
+          LEFT OUTER JOIN CMD_USERS      URR    ON  URR.USER_ID      = SI.CREATOR
+          LEFT OUTER JOIN CMD_USERS      URA    ON  URA.USER_ID      = SI.MODIFIER
+         WHERE SI.PARENTINSPECTIONCLASSID IS NULL
+        ]]>
+           AND SI.ENTERPRISEID = #{ENTERPRISEID}
+           <if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+               AND SI.VALIDSTATE = #{VALIDSTATE}
+           </if>
+        ORDER BY SI.INSPECTIONCLASSID
+    </select>
+    
+    <!-- 검사정의 체크  -->
+    <select id="selectInspectionclassChk" parameterType="map" resultType="hashmap">   
+        /* smh.bas.dao.BAS04100Dao.selectInspectionclassChk */
+        SELECT INSPECTIONCLASSID
+          FROM BAS_INSPECTIONCLASS
+         WHERE ENTERPRISEID       = #{ENTERPRISEID}
+           AND INSPECTIONCLASSID  = #{INSPECTIONCLASSID}  /*검사 그룹 ID*/
+           AND ROWNUM             = 1
+    </select>
+
+    <!-- 검사통제 - 대공정 조회  -->
+    <select id="selectProcesssegmentclassLList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04100Dao.selectProcesssegmentclassLList */
+        SELECT PGC.PROCESSSEGMENTCLASSID       
+            ,  DIC.DICTIONARYNAME              AS PROCESSSEGMENTCLASSNAME
+            ,  PGC.PARENTPROCESSSEGMENTCLASSID 
+		  FROM      BAS_PROCESSSEGMENTCLASS PGC
+		  LEFT JOIN CMD_DICTIONARY 			DIC	 ON  DIC.DICTIONARYID = PGC.PROCESSSEGMENTCLASSNAME
+				                                 AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        ]]>
+		 WHERE PGC.ENTERPRISEID = #{ENTERPRISEID} 
+		   AND PGC.PARENTPROCESSSEGMENTCLASSID IS NULL 
+           <if test="VALIDSTATE != null and VALIDSTATE !=''">
+               AND PGC.VALIDSTATE = #{VALIDSTATE}
+           </if>
+        ORDER BY PGC.PROCESSSEGMENTCLASSID
+
+    </select>
+    
+    <!-- 검사통제 - 중공정 조회  -->
+    <select id="selectProcesssegmentclassMList" parameterType="map" resultType="hashmap">
+        <![CDATA[    
+        /* smh.bas.dao.BAS04100Dao.selectProcesssegmentclassMList */
+        SELECT PGC.PROCESSSEGMENTCLASSID       
+            ,  DIC.DICTIONARYNAME              AS PROCESSSEGMENTCLASSNAME
+            ,  PGC.PARENTPROCESSSEGMENTCLASSID 
+		  FROM      BAS_PROCESSSEGMENTCLASS PGC
+		  LEFT JOIN CMD_DICTIONARY 			DIC	 ON  DIC.DICTIONARYID = PGC.PROCESSSEGMENTCLASSNAME
+				                                 AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        ]]>
+		 WHERE PGC.ENTERPRISEID = #{ENTERPRISEID} 
+		   AND PGC.PARENTPROCESSSEGMENTCLASSID IS NOT NULL 
+		   AND PGC.PARENTPROCESSSEGMENTCLASSID = #{PARENTPROCESSSEGMENTCLASSID}
+           <if test="VALIDSTATE != null and VALIDSTATE !=''">
+               AND PGC.VALIDSTATE = #{VALIDSTATE}
+           </if> 
+        ORDER BY PGC.PROCESSSEGMENTCLASSID
+    </select>
+        
+    <!-- 검사통제 - 공정 조회 -->
+    <select id="selectProcesssegmentclassList" parameterType="map" resultType="hashmap">
+        <![CDATA[      
+        /* smh.bas.dao.BAS04100Dao.selectProcesssegmentclassList */
+		SELECT A.PROCESSSEGMENTID
+		    ,  A.ENTERPRISEID
+		    ,  A.PLANTID
+		    ,  D.DICTIONARYNAME         AS PROCESSSEGMENTNAME
+		  FROM      BAS_PROCESSSEGMENT  A
+		  LEFT JOIN CMD_DICTIONARY      D  ON D.DICTIONARYID  = A.PROCESSSEGMENTNAME
+		                                   AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		 WHERE 1 = 1
+        ]]>		 
+		   AND A.ENTERPRISEID = #{ENTERPRISEID}      
+		   AND A.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID}    
+           <if test="VALIDSTATE != null and VALIDSTATE !=''">
+               AND A.VALIDSTATE = #{VALIDSTATE}
+           </if> 
+		 ORDER BY PROCESSSEGMENTID ASC        
+    </select>            
+
+    <!-- 검사통제 - 검사종류 조회 -->
+    <select id="selectProcessInspectionclassList" parameterType="map" resultType="hashmap">
+        <![CDATA[      
+        /* smh.bas.dao.BAS04100Dao.selectProcessInspectionclassList */        
+		SELECT SIC.INSPECTIONCLASSID
+		    ,  DIC.DICTIONARYNAME    AS INSPECTIONCLASSNAME
+		    ,  MIS.ISREQUIRED        AS ISREQUIRED
+		    ,  MIS.VALIDSTATE        AS VALIDSTATE
+		    ,  TO_CHAR(MIS.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+		    ,  TO_CHAR(MIS.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+		    ,  CU.USER_NM            AS CREATORNAME
+		    ,  MU.USER_NM            AS MODIFIERNAME
+		    ,  SIC.ENTERPRISEID
+		  FROM            BAS_INSPECTIONCLASS      SIC
+		  LEFT OUTER JOIN CMD_DICTIONARY           DIC ON  DIC.DICTIONARYID      = SIC.INSPECTIONCLASSNAME
+		                                               AND DIC.LANGUAGETYPE      = #{SESSION_LANGUAGETYPE}
+		  LEFT OUTER JOIN BAS_INSPECTIONSEGMENTREL MIS ON  MIS.INSPECTIONCLASSID = SIC.INSPECTIONCLASSID
+		                                               AND MIS.PROCESSSEGMENTID  = #{PROCESSSEGMENTID}
+		  LEFT OUTER JOIN CMD_USERS                CU  ON  MIS.CREATOR           = CU.USER_ID
+		  LEFT OUTER JOIN CMD_USERS                MU  ON  MIS.MODIFIER          = MU.USER_ID
+		 WHERE 1 =1		
+		   AND SIC.ENTERPRISEID = #{ENTERPRISEID}
+		   AND SIC.PARENTINSPECTIONCLASSID IS NULL
+        ]]>		   
+        <if test="VALIDSTATE != null and VALIDSTATE !=''">
+            AND SIC.VALIDSTATE = #{VALIDSTATE}
+        </if> 
+		ORDER BY SIC.INSPECTIONCLASSID
+
+    </select>
+
+    <!-- 검사 공정 통제 정보 체크  -->
+    <select id="selectInspectionsegmentrelChk" parameterType="map" resultType="hashmap">  
+        <![CDATA[     
+        /* smh.bas.dao.BAS04100Dao.selectInspectionsegmentrelChk */
+        SELECT INSPECTIONCLASSID
+          FROM BAS_INSPECTIONSEGMENTREL
+	     WHERE 1=1	       
+	       AND INSPECTIONCLASSID      = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+	       AND PROCESSSEGMENTTYPE     = #{PROCESSSEGMENTTYPE}         /*공정유형*/
+	       AND PROCESSSEGMENTID       = #{PROCESSSEGMENTID}           /*공정 ID*/
+	       AND PROCESSSEGMENTVERSION  = #{PROCESSSEGMENTVERSION}      /*공정버젼*/
+	       AND ROWNUM                 = 1
+	    ]]>
+    </select> 
+        
+    <!-- 검사 공정 - 통제 정보 등록 -->
+    <insert id="insertInspectionsegmentrel" parameterType="map">
+        INSERT /* smh.bas.dao.BAS04100Dao.insertInspectionsegmentrel */ INTO BAS_INSPECTIONSEGMENTREL
+        (     INSPECTIONCLASSID             /*검사 그룹 ID*/
+            , PROCESSSEGMENTTYPE            /*공정유형*/
+            , PROCESSSEGMENTID              /*공정 ID*/
+            , PROCESSSEGMENTVERSION         /*공정버젼*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , ISREQUIRED                    /*필수여부*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+
+        )VALUES(
+              #{INSPECTIONCLASSID}            /*검사 그룹 ID*/
+            , #{PROCESSSEGMENTTYPE}           /*공정유형*/
+            , #{PROCESSSEGMENTID}             /*공정 ID*/
+            , #{PROCESSSEGMENTVERSION}        /*공정버젼*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{ISREQUIRED}                   /*필수여부*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+
+        )
+    </insert>
+    
+    <!-- 검사정의 수정 -->
+    <update id="updateInspectionclass" parameterType="map">
+    DECLARE
+    BEGIN    
+	    UPDATE /* smh.bas.dao.BAS04100Dao.updateInspectionclass */ BAS_INSPECTIONCLASS
+	       SET DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+	         , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+	         , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+	         , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+	         , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+	         , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+	         , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+	         , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+	         , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+	     WHERE ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+	       AND INSPECTIONCLASSID             = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+        ;
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{INSPECTIONCLASSNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','ko-KR',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_KR}); END IF;
+        IF #{INSPECTIONCLASSNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','en-US',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_US}); END IF;
+        IF #{INSPECTIONCLASSNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','zh-CN',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_CN}); END IF;
+        IF #{INSPECTIONCLASSNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','vi-VN',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;     
+    </update>
+    
+    <!-- 검사 공정 - 통제 정보 수정 -->
+    <update id="updateInspectionsegmentrel" parameterType="map">
+	    UPDATE /* smh.bas.dao.BAS04100Dao.updateInspectionsegmentrel */ BAS_INSPECTIONSEGMENTREL
+	       SET ISREQUIRED                    = #{ISREQUIRED}                 /*필수여부*/	         
+	         , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+	         , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+	         , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+	         , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+	         , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+	         , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+	         , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+	         , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+	     WHERE ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+	       AND INSPECTIONCLASSID             = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+	       AND PROCESSSEGMENTTYPE            = #{PROCESSSEGMENTTYPE}         /*공정유형*/
+	       AND PROCESSSEGMENTID              = #{PROCESSSEGMENTID}           /*공정 ID*/
+	       AND PROCESSSEGMENTVERSION         = #{PROCESSSEGMENTVERSION}      /*공정버젼*/
+    </update>
+   
+    <!-- 검사 공정 - 통제 정보 삭제 -->
+    <delete id="deleteInspectionsegmentrel" parameterType="map">
+	    /* smh.bas.dao.BAS04100Dao.deleteInspectionsegmentrel */
+	    DELETE 
+	      FROM BAS_INSPECTIONSEGMENTREL
+	     WHERE ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+	       AND INSPECTIONCLASSID             = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+	       AND PROCESSSEGMENTTYPE            = #{PROCESSSEGMENTTYPE}         /*공정유형*/
+	       AND PROCESSSEGMENTID              = #{PROCESSSEGMENTID}           /*공정 ID*/
+	       AND PROCESSSEGMENTVERSION         = #{PROCESSSEGMENTVERSION}      /*공정버젼*/
+    </delete>
+</mapper>

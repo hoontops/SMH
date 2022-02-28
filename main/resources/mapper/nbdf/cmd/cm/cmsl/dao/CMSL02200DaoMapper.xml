@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : CMSL02200DaoMapper.xml
+    설명         : 다양한 쿼리 권한등록
+    작성자       : Kang Jeong Gi
+    최초작성일   : 2018.10.25
+<< 개정이력(Modification Information) >>
+    수정일         수정자           수정내용
+    2018.10.25     Kang Jeong Gi    최초 생성
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmsl.dao.CMSL02200Dao">
+
+    <!-- 다양한 쿼리 권한등록 - 프로그램 - 조회  -->    
+    <select id="selectCmdDynamicSqlAuth" parameterType="map" resultType="hashmap">
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02200Dao.selectCmdDynamicSqlAuth */        
+        SELECT CDH.BUSINESS_TYPE
+             , LV1.MEANING AS BUSINESS_TYPE_NM
+             , CDH.PROGRAM_CD
+		     , CDH.PROGRAM_NM
+		     , NVL((SELECT DECODE(CJM.USE_YN, 'Y', '1', '0')
+		          FROM CMD_DYNAMIC_SQL_AUTH CJM
+		         WHERE 1=1		         
+		           AND CJM.PROGRAM_CD    = CDH.PROGRAM_CD
+		           AND CJM.PLATFORM_TYPE = #{PLATFORM_FLAG}
+		           AND CJM.JOB_AUTH_ID   = #{JOB_AUTH_ID}
+		       ), 0) AS USE_YN     
+		  FROM CMD_DYNAMIC_SQL_HEADER CDH
+		     , CMD_LOOKUP_VALUES      LV1
+		 WHERE 1=1
+		   AND CDH.BUSINESS_TYPE = LV1.LOOKUP_CODE
+		   AND LV1.LOOKUP_TYPE   = 'SystemWorkType' 
+		 ORDER BY CDH.PROGRAM_CD
+    </select>
+
+    <!-- 다양한 쿼리 권한등록 - 프로그램 - 저장 -->
+    <update id="saveCmdDynamicSqlAuth" parameterType="map">
+    	/* com.nbdf.cmd.cm.cmsl.dao.CMSL02200Dao.saveCmdDynamicSqlAuth */
+    	MERGE INTO CMD_DYNAMIC_SQL_AUTH CDA
+        USING (
+               SELECT #{PLATFORM_TYPE}     AS PLATFORM_TYPE     /* 플랫폼구분(W:WEB, M:MOBILE) */
+                    , #{JOB_AUTH_ID}       AS JOB_AUTH_ID       /* 업무권한ID                  */
+                    , #{PROGRAM_CD} 	   AS PROGRAM_CD        /* 프로그램코드                */
+                    , #{USE_YN}            AS USE_YN            /* 사용여부                    */                   
+                    , #{CREATED_BY}        AS CREATED_BY        /* 최초생성자                  */
+                    , SYSDATE              AS CREATION_DATE     /* 최초생성일                  */
+                    , #{LAST_UPDATED_BY}   AS LAST_UPDATED_BY   /* 최종수정자                  */
+                    , SYSDATE              AS LAST_UPDATE_DATE  /* 최종수정일                  */
+                 FROM DUAL
+              ) IN_DATA
+        ON (
+            1=1
+            AND CDA.PLATFORM_TYPE = IN_DATA.PLATFORM_TYPE 
+            AND CDA.JOB_AUTH_ID   = IN_DATA.JOB_AUTH_ID 
+            AND CDA.PROGRAM_CD    = IN_DATA.PROGRAM_CD
+           )
+        WHEN MATCHED THEN
+            UPDATE
+               SET USE_YN           = DECODE(IN_DATA.USE_YN, '1', 'Y', 'N')
+                 , LAST_UPDATED_BY  = IN_DATA.LAST_UPDATED_BY
+                 , LAST_UPDATE_DATE = SYSDATE
+        WHEN NOT MATCHED THEN
+            INSERT (
+                    PLATFORM_TYPE
+			      , JOB_AUTH_ID
+			      , PROGRAM_CD
+			      , USE_YN
+			      , CREATED_BY
+			      , CREATION_DATE
+			      , LAST_UPDATED_BY
+			      , LAST_UPDATE_DATE
+	               ) 
+	        VALUES (
+                    IN_DATA.PLATFORM_TYPE
+                  , IN_DATA.JOB_AUTH_ID
+                  , IN_DATA.PROGRAM_CD
+                  , DECODE(IN_DATA.USE_YN, '1', 'Y', 'N')             
+                  , IN_DATA.CREATED_BY
+                  , IN_DATA.CREATION_DATE
+                  , IN_DATA.LAST_UPDATED_BY
+                  , IN_DATA.LAST_UPDATE_DATE
+            ) 
+    </update>
+    
+    <!-- 다양한 쿼리 데이터 조회  -->    
+    <select id="selectCmdDyamicSqlHeader" parameterType="map" resultType="hashmap">
+        /* com.nbdf.cmd.cm.cmsl.dao.CMSL02200Dao.selectCmdDynamicSqlAuth */        
+        SELECT CSH.BUSINESS_TYPE AS BUSINESS_TYPE
+		     , LV1.MEANING       AS BUSINESS_TYPE_NM 
+		     , CSH.PROGRAM_CD    AS PROGRAM_CD
+		     , CSH.PROGRAM_NM    AS PROGRAM_NM
+		  FROM CMD_DYNAMIC_SQL_HEADER CSH
+		     , CMD_LOOKUP_VALUES      LV1
+		 WHERE 1=1           
+		   AND CSH.BUSINESS_TYPE = LV1.LOOKUP_CODE
+		   AND LV1.LOOKUP_TYPE   = 'SystemWorkType'
+		   
+	<if test="SRH_VALUE != null and SRH_VALUE != '' ">
+		<if test="SHR_CASE.equals('10') ">   
+		   AND CSH.PROGRAM_NM    = #{SRH_VALUE}
+		</if>
+		
+		<if test="SHR_CASE.equals('20') ">   
+		   AND LV1.MEANING       = #{SRH_VALUE}
+		</if>   
+		
+		<if test="SHR_CASE.equals('30') ">   
+		   AND CSH.PROGRAM_CD    = #{SRH_VALUE}
+		</if>
+	</if> 
+	 
+		   AND EXISTS            (SELECT 1
+		                            FROM CMD_DYNAMIC_SQL_AUTH CSA
+		                               , CMD_USER_AUTH_MPNG   CUAM  
+		                           WHERE 1=1
+		                             AND CSA.PROGRAM_CD  = CSH.PROGRAM_CD
+		                             AND CSA.JOB_AUTH_ID = CUAM.JOB_AUTH_ID		                             
+		                             AND CUAM.USER_ID    = #{SRH_GET_USER_ID} 
+		                             AND CSA.USE_YN      = 'Y'
+		                         )
+        ORDER BY CSH.BUSINESS_TYPE
+               , CSH.PROGRAM_CD  
+    </select>
+    
+</mapper>

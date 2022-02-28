@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xmlns="http://www.springframework.org/schema/beans" xmlns:context="http://www.springframework.org/schema/context"
+    xmlns:mvc="http://www.springframework.org/schema/mvc" xmlns:p="http://www.springframework.org/schema/p"
+    xmlns:util="http://www.springframework.org/schema/util" xmlns:aop="http://www.springframework.org/schema/aop"
+    xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.2.xsd
+        http://www.springframework.org/schema/aop http://www.springframework.org/schema/aop/spring-aop-3.2.xsd
+        http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.2.xsd
+        http://www.springframework.org/schema/mvc http://www.springframework.org/schema/mvc/spring-mvc-3.2.xsd
+        http://www.springframework.org/schema/util http://www.springframework.org/schema/util/spring-util-3.2.xsd">
+
+   	<bean  id="loggingAdvice" class="com.nbdf.commons.logging.LoggingAdvice" />
+
+   	<bean id="RefreshObserver" class="com.nbdf.commons.system.support.RefreshObserver" />
+
+    <context:component-scan base-package="com,smh" use-default-filters="false">
+        <context:include-filter type="annotation" expression="org.springframework.stereotype.Controller" />
+        <context:include-filter type="annotation" expression="org.springframework.web.bind.annotation.ControllerAdvice" />
+    </context:component-scan>
+
+    <mvc:annotation-driven>
+        <mvc:argument-resolvers>
+            <bean class="com.nbdf.commons.web.support.CustomHandlerMethodArgumentResolver"/>
+        </mvc:argument-resolvers>
+    </mvc:annotation-driven>
+
+    <mvc:resources mapping="/smh/**" location="/ui/smh/" />
+    <mvc:resources mapping="/upload/**" location="/upload/" />
+    <mvc:resources mapping="/export/**" location="/export/" />
+    <mvc:resources mapping="/import/**" location="/import/" />
+    <mvc:resources mapping="/views/**" location="/views/" />
+    <mvc:resources mapping="/html/**" location="/html/" />
+    <mvc:resources mapping="/pesmodule/**" location="/pesmodule/" />
+    <mvc:resources mapping="/mrd/**" location="/mrd/" />
+
+    <bean id="contentNegotiatingResolver" class="org.springframework.web.servlet.view.ContentNegotiatingViewResolver">
+        <property name="order" value="#{T(org.springframework.core.Ordered).HIGHEST_PRECEDENCE}" />
+        <property name="contentNegotiationManager">
+            <bean id="contentNegotiationManager" class="org.springframework.web.accept.ContentNegotiationManagerFactoryBean">
+                <property name="favorPathExtension" value="true" />
+                <property name="favorParameter" value="true" />
+                <property name="defaultContentType" value="text/html" />
+                <property name="ignoreAcceptHeader" value="true" />
+                <property name="mediaTypes">
+                    <value>
+                        do=text/html;charset=UTF-8
+                        htm=text/html;charset=UTF-8
+                        xml=application/xml;charset=UTF-8
+                        ajax=application/json;charset=UTF-8
+                        json=application/json;charset=UTF-8
+                        jsonp=application/javascript;charset=UTF-8
+                        scr=application/x-javascript;charset=UTF-8
+                        xls=application/vnd.ms-excel
+                        xlsx=application/vnd.ms-excel
+                        pdf=application/pdf
+                        save=application/octet-stream
+                        cell=application/haansoftcell
+                    </value>
+                </property>
+            </bean>
+        </property>
+        <property name="viewResolvers">
+            <list>
+                <bean class="org.springframework.web.servlet.view.BeanNameViewResolver" />
+            </list>
+        </property>
+        <property name="defaultViews">
+            <list>
+                <bean class="com.nbdf.commons.web.view.ExcelView" />
+                <bean class="com.nbdf.commons.web.view.FileDownloadView" />
+                <ref bean="uiView" />
+                <ref bean="jsonView" />
+                <bean class="org.springframework.web.servlet.view.xml.MarshallingView">
+                    <property name="marshaller" ref="marshaller" />
+                    <property name="contentType" value="application/xml;charset=UTF-8" />
+                    <property name="modelKey" value="result" />
+                </bean>
+            </list>
+        </property>
+    </bean>
+
+    <bean id="marshaller" class="org.springframework.oxm.xstream.XStreamMarshaller" p:autodetectAnnotations="true" />
+
+    <bean class="org.springframework.web.servlet.view.BeanNameViewResolver" p:order="0" />
+    <bean id="jstlViewResolver" class="org.springframework.web.servlet.view.UrlBasedViewResolver" p:order="1">
+        <property name="viewClass" value="org.springframework.web.servlet.view.JstlView" />
+        <property name="prefix" value="/WEB-INF/views/" />
+        <property name="suffix" value=".jsp" />
+    </bean>
+
+    <bean id="jsonView" class="org.springframework.web.servlet.view.json.MappingJackson2JsonView">
+        <property name="extractValueFromSingleKeyModel" value="true" />
+    </bean>
+
+    <bean id="exceptionResolver"
+        class="org.springframework.web.servlet.handler.SimpleMappingExceptionResolver">
+        <property name="exceptionMappings">
+            <props>
+                <prop key="org.mybatis.spring.MyBatisSystemException">forward:/WEB-INF/views/error/db.jsp</prop>
+                <prop key="DataAccessException">forward:/WEB-INF/views/error/db.jsp</prop>
+                <prop key="BusinessLogicException">forward:/WEB-INF/views/error/login.jsp</prop>
+            </props>
+        </property>
+        <property name="defaultErrorView" value="forward:/WEB-INF/views/error/error.jsp" />
+        <property name="warnLogCategory" value="com" />
+    </bean>
+
+    <bean id="multipartResolver" class="org.springframework.web.multipart.commons.CommonsMultipartResolver">
+        <property name="maxUploadSize" value="1048576000" />
+    </bean>
+
+    <bean id="messageSource" class="org.springframework.context.support.ReloadableResourceBundleMessageSource">
+        <property name="useCodeAsDefaultMessage">
+            <value>true</value>
+        </property>
+        <property name="basenames">
+            <list>
+                <value>classpath:properties/messages/messages</value>
+            </list>
+        </property>
+        <property name="defaultEncoding">
+            <value>UTF-8</value>
+        </property>
+    </bean>
+
+    <util:list id="messageConvertersList">
+        <bean class="org.springframework.http.converter.ByteArrayHttpMessageConverter" />
+        <bean class="org.springframework.http.converter.StringHttpMessageConverter" />
+        <bean class="org.springframework.http.converter.json.MappingJackson2HttpMessageConverter" />
+        <bean class="org.springframework.http.converter.xml.MarshallingHttpMessageConverter">
+            <property name="marshaller" ref="marshaller" />
+            <property name="unmarshaller" ref="marshaller" />
+        </bean>
+    </util:list>
+
+    <mvc:interceptors>
+<!--     
+ 	    <mvc:interceptor>
+            <mvc:mapping path="/**/*.do"/>
+            <mvc:mapping path="/**/*.html"/>
+            <bean class="com.nbdf.commons.interceptor.IpControlInterceptor"/>
+        </mvc:interceptor>  
+        <mvc:interceptor>
+            <mvc:mapping path="/**/*.do"/>
+            <mvc:mapping path="/**/*.html"/>
+            <bean class="com.nbdf.commons.interceptor.RepairServiceInterceptor"/>
+        </mvc:interceptor> 
+-->
+        <mvc:interceptor>
+            <mvc:mapping path="/**/*.do"/>
+            <mvc:mapping path="/**/*.html"/>
+            <bean class="com.nbdf.commons.interceptor.SessionInterceptor"/>
+        </mvc:interceptor>
+        
+        <mvc:interceptor>
+            <mvc:mapping path="/**/*.do"/>
+            <mvc:mapping path="/**/*.scr"/>
+            <mvc:mapping path="/**/*.html"/>
+            <bean class="com.nbdf.commons.db.codec.DbDecodeInterceptor"/>
+        </mvc:interceptor>
+ 
+        <mvc:interceptor>
+            <mvc:mapping path="/**/*.do"/>
+            <bean class="com.nbdf.commons.interceptor.LocaleInterceptor"/>
+        </mvc:interceptor>
+        
+    </mvc:interceptors>
+</beans>

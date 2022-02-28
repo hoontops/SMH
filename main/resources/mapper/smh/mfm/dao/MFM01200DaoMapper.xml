@@ -1,0 +1,713 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM01200Dao">
+	
+	<!--
+    설       명   : LEADTIME 제품군을 조회 한다.
+    작   성   자   : 김기수
+    작   성   일   : 2019-12-05
+    주요 변경 로그    :
+    -->
+    <select id="getLeadTimeCategory" parameterType="map" resultType="hashmap">
+                --
+                --"GetLeadTimeCategory"
+                --Version:10001
+                SELECT
+                        '전체'    AS CATEGORYNAME
+                    ,   '*'     AS CATEGORYID
+                    --#################################################################
+                    ,   (
+                        SELECT
+                            SUM(NVL(ITM.LEADTIME,0))
+                        FROM (
+                            SELECT 
+                                SPLIT_PART(CATEGORYID,'.',2)	 AS CATEGORYID
+                            FROM BAS_CATEGORY
+                            WHERE "level"='3'
+                            GROUP BY SPLIT_PART(CATEGORYID,'.',2)
+                        ) CATEGORY   
+                        LEFT OUTER JOIN BAS_ITEMMASTER ITM ON CATEGORY.CATEGORYID = ITM.ITEMID
+                                                          AND MASTERDATACLASSID='Model'
+                        WHERE 1=1
+                        AND CATEGORYID IS NOT NULL
+                        AND NVL(ITM.LEADTIME,0)+NVL(ITM.TACTTIME,0)+NVL(ITM.LEADTIME2,0)+NVL(ITM.TACTTIME2,0)>0
+                        ) AS PRODUCTLT
+                    ,   (
+                        SELECT
+                            SUM(NVL(ITM.TACTTIME,0))
+                        FROM (
+                            SELECT 
+                                SPLIT_PART(CATEGORYID,'.',2)	 AS CATEGORYID
+                            FROM BAS_CATEGORY
+                            WHERE "level"='3'
+                            GROUP BY SPLIT_PART(CATEGORYID,'.',2)
+                            ) CATEGORY   
+                        LEFT OUTER JOIN BAS_ITEMMASTER ITM ON CATEGORY.CATEGORYID = ITM.ITEMID
+                                                          AND MASTERDATACLASSID='Model'
+                        WHERE 1=1
+                        AND CATEGORYID IS NOT NULL
+                        AND NVL(ITM.LEADTIME,0)+NVL(ITM.TACTTIME,0)+NVL(ITM.LEADTIME2,0)+NVL(ITM.TACTTIME2,0)>0
+                        ) AS SITELT
+                    --#################################################################
+                    ,   (
+                        SELECT
+                            SUM(NVL(ITM.LEADTIME2,0))
+                        FROM (
+                            SELECT 
+                                SPLIT_PART(CATEGORYID,'.',2)	 AS CATEGORYID
+                            FROM BAS_CATEGORY
+                            WHERE "level"='3'
+                            GROUP BY SPLIT_PART(CATEGORYID,'.',2)
+                        ) CATEGORY   
+                        LEFT OUTER JOIN BAS_ITEMMASTER ITM ON CATEGORY.CATEGORYID = ITM.ITEMID
+                                                          AND MASTERDATACLASSID='Model'
+                        WHERE 1=1
+                        AND CATEGORYID IS NOT NULL
+                        AND NVL(ITM.LEADTIME,0)+NVL(ITM.TACTTIME,0)+NVL(ITM.LEADTIME2,0)+NVL(ITM.TACTTIME2,0)>0
+                        ) AS PRODUCTLT2
+                    ,   (
+                        SELECT
+                            SUM(NVL(ITM.TACTTIME2,0))
+                        FROM (
+                            SELECT 
+                                SPLIT_PART(CATEGORYID,'.',2)	 AS CATEGORYID
+                            FROM BAS_CATEGORY
+                            WHERE "level"='3'
+                            GROUP BY SPLIT_PART(CATEGORYID,'.',2)
+                            ) CATEGORY   
+                        LEFT OUTER JOIN BAS_ITEMMASTER ITM ON CATEGORY.CATEGORYID = ITM.ITEMID
+                                                          AND MASTERDATACLASSID='Model'
+                        WHERE 1=1
+                        AND CATEGORYID IS NOT NULL
+                        AND NVL(ITM.LEADTIME,0)+NVL(ITM.TACTTIME,0)+NVL(ITM.LEADTIME2,0)+NVL(ITM.TACTTIME2,0)>0
+                        ) AS SITELT2
+                    --#################################################################
+                    ,   0       AS DISPLAYSEQ
+                    ,   0		AS NO
+                FROM DUAL
+                UNION ALL
+                SELECT
+                        CATEGORY.CATEGORYID         AS CATEGORYNAME
+                    ,   CATEGORY.CATEGORYID         
+                    ,   NVL(ITM.LEADTIME,0)    AS PRODUCTLT
+                    ,   NVL(ITM.TACTTIME,0)    AS SITELT
+                    ,   NVL(ITM.LEADTIME2,0)    AS PRODUCTLT2
+                    ,   NVL(ITM.TACTTIME2,0)    AS SITELT2
+                    ,   (ROW_NUMBER() OVER(ORDER BY CATEGORY.CATEGORYID)) AS DISPLAYEQ
+                    ,	(ROW_NUMBER() OVER(ORDER BY CATEGORY.CATEGORYID)) AS NO
+                FROM (
+                    SELECT 
+                        SPLIT_PART(CATEGORYID,'.',2)	 AS CATEGORYID
+                    FROM BAS_CATEGORY
+                    WHERE "level"='3'
+                    GROUP BY SPLIT_PART(CATEGORYID,'.',2)
+                ) CATEGORY   
+                LEFT OUTER JOIN BAS_ITEMMASTER ITM ON CATEGORY.CATEGORYID = ITM.ITEMID
+                                                  AND MASTERDATACLASSID='Model'
+                WHERE 1=1
+                AND CATEGORYID IS NOT NULL
+                AND NVL(ITM.LEADTIME,0)+NVL(ITM.TACTTIME,0)>0
+                    --AND ITM.LEADTIME != 0 AND ITM.LEADTIME IS NOT NULL
+                --ORDER BY CATEGORY.CATEGORYID
+    </select>
+	
+	
+	<!--
+    설       명   : LEADTIME LIST를 보여준다
+    작   성   자   : 김기수
+    작   성   일   : 2019-12-05
+    주요 변경 로그    :
+    -->
+    <select id="getLeadTimeList" parameterType="map" resultType="hashmap">
+                --
+                --"GetLeadTimeList"
+                --Version:10001
+                SELECT
+                		ENTERPRISEID
+                    ,   PLANTID
+                    ,   ITEMID
+                    ,   ITEMVERSION
+                    ,   ITEMNAME
+                    ,   PRODUCTIONTYPE
+                    ,   CATEGORY
+                    ,   LAYER
+                    ,   PRODUCTLT
+                    ,   SITELT
+                    ,   TOTALLT
+                    ,   CREATOR
+                    ,   TO_CHAR(CREATEDTIME,'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+                    ,   MODIFIER
+                    ,   TO_CHAR(MODIFIEDTIME,'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+                    ,   TACTTIMEFLAG
+                    ,   ROWNUM AS NO
+                    ,	VALIDSTATETAC
+                FROM (
+	                SELECT
+	                        ITM.ENTERPRISEID
+	                    ,   ITM.PLANTID
+	                    ,   ITM.ITEMID
+	                    ,   ITM.ITEMVERSION
+	                    ,   ITM.ITEMNAME
+	                    ,   ITM.PRODUCTIONTYPE
+	                    ,   ITM.CATEGORY
+	                    ,   ITM.LAYER
+	                    ,   ITM.PRODUCTLT
+	                    ,   ITM.SITELT
+	                    ,   ITM.PRODUCTLT + ITM.SITELT AS TOTALLT
+	                    ,   ITM.CREATOR
+	                    ,   ITM.CREATEDTIME
+	                    ,   ITM.MODIFIER
+	                    ,   ITM.MODIFIEDTIME
+	                    ,   ITM.TACTTIMEFLAG
+	                    ,	ITM.VALIDSTATETAC
+	                FROM (
+	                    SELECT
+	                            ITM.ENTERPRISEID
+	                        ,   ITM.PLANTID
+	                        ,   ITM.ITEMID
+	                        ,   ITM.ITEMVERSION
+	                        ,   ITM.ITEMNAME
+	                        ,   DC.DICTIONARYNAME                       AS PRODUCTIONTYPE
+	                        ,   SPLIT_PART(ITM.SALEORDERCATEGORY,'.',2) AS CATEGORY
+	                        ,   PD.LAYER
+	                        
+	                        ,   CASE WHEN ITM.LEADTIME=0 OR ITM.LEADTIME IS NULL THEN 
+	                        					NVL(IM.LEADTIME,0)
+	                            		ELSE 
+	                            				ITM.LEADTIME 
+	                            END AS PRODUCTLT
+	                        ,   CASE WHEN ITM.LEADTIME=0 OR ITM.TACTTIME IS NULL THEN 
+	                        					NVL(IM.TACTTIME,0)
+	                            		ELSE 
+	                            				ITM.TACTTIME 
+	                            END AS SITELT
+	                            
+	                        --, ITM.LEADTIME+ITM.TACTTIME           AS TOTALLT
+	                      	,   	NVL(US2.USER_NM, ITM.CREATOR)  AS CREATOR  
+	                        ,   ITM.CREATEDTIME
+	                        ,   NVL(US1.USER_NM, ITM.MODIFIER) AS MODIFIER
+	                        ,   ITM.MODIFIEDTIME
+	                        ,   CASE WHEN TT.PRODUCTDEFID IS NULL THEN 
+	                        				'N'
+	                            		ELSE 
+	                            			'Y' 
+	                            END TACTTIMEFLAG
+	                        ,	PD.VALIDSTATETAC --합당
+	                    FROM BAS_ITEMMASTER  ITM
+	                    LEFT OUTER JOIN CMD_USERS     				US1 	ON  ITM.MODIFIER = US1.USER_ID
+	                    LEFT OUTER JOIN CMD_USERS     				US2 	ON  ITM.CREATOR = US2.USER_ID
+	                    LEFT OUTER JOIN CMD_LOOKUP_VALUES     	CD  	ON  ITM.PRODUCTIONTYPE = CD.LOOKUP_CODE
+	                                                    								AND CD.LOOKUP_TYPE ='ProductionType'
+	                    LEFT OUTER JOIN CMD_DICTIONARY   			DC  	ON  CD.DICTIONARYID = DC.DICTIONARYID
+	                                                    								AND DC.LANGUAGETYPE = #{LANGUAGETYPE}
+	                    LEFT OUTER JOIN BAS_PRODUCTDEFINITION  PD 	ON   ITM.ITEMID = PD.PRODUCTDEFID
+	                                                                					AND ITM.ITEMVERSION  = PD.PRODUCTDEFVERSION
+	                    INNER JOIN BAS_ITEMMASTER    				IM  	ON  SPLIT_PART(ITM.SALEORDERCATEGORY,'.',2) = IM.ITEMID
+	                                                    								AND IM.MASTERDATACLASSID='Model'
+	                    LEFT OUTER JOIN (
+						                        SELECT TT.PRODUCTDEFID,TT.PRODUCTDEFVERSION
+						                        FROM PCM_TACKTIMEMANAGE TT
+						                        LEFT OUTER JOIN BAS_PRODUCTDEFINITION PD ON TT.PRODUCTDEFID = PD.PRODUCTDEFID
+						                                                                					AND TT.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+						                        WHERE PD.ISLOADMNG ='Y'
+						                        AND PD.TACTIMEMNGTYPE IS NOT NULL 
+						                        AND PD.VALIDSTATETAC = 'Valid'
+						                        GROUP BY TT.PRODUCTDEFID,TT.PRODUCTDEFVERSION
+	                   							 )   TT ON  ITM.ITEMID = TT.PRODUCTDEFID
+	                                                     AND ITM.ITEMVERSION = TT.PRODUCTDEFVERSION
+	                    WHERE   1=1 
+	                        AND ITM.MASTERDATACLASSID = 'Product'
+	                        <if test="P_PRODUCTIONDIVISION != null and P_PRODUCTIONDIVISION !='' ">
+	                            AND ITM.PRODUCTIONTYPE = #{P_PRODUCTIONDIVISION} 		--생산구분
+	                        </if>
+	                ) ITM
+	                WHERE   1=1
+	                <if test="P_CATEGORY != null and P_CATEGORY !='' and P_CATEGORY neq '*'.toString() ">
+	                    AND ITM.CATEGORY = #{P_CATEGORY}
+	                </if>
+	                
+	                <if test="P_CATEGORY == null or P_CATEGORY =='' or P_CATEGORY eq '*'.toString() ">
+	                    AND ITM.CATEGORY IN (
+	                    								SELECT CODE
+											            FROM (
+											                SELECT 
+											                        SPLIT_PART(CATEGORYID,'.',2)	 AS CODE
+											                FROM BAS_CATEGORY
+											                WHERE "level"='3'
+											                AND SPLIT_PART(CATEGORYID,'.',2) IS NOT NULL
+											                GROUP BY SPLIT_PART(CATEGORYID,'.',2)                
+											                ) CATEGORY
+											                LEFT OUTER JOIN BAS_ITEMMASTER ITM 	ON CATEGORY.CODE = ITM.ITEMID
+													                                                  			AND MASTERDATACLASSID='Model'
+													    WHERE NVL(ITM.LEADTIME,0) + NVL(ITM.TACTTIME,0)>0
+													    GROUP BY CODE
+	                    							  )
+	                </if>
+	                
+	                
+	                <if test="P_CATEGORYSET != null and P_CATEGORYSET !='' ">
+	                    AND ITM.CATEGORY = #{P_CATEGORYSET}
+	                </if>
+	                <if test="P_ITEMID != null and P_ITEMID !='' ">
+	                    AND ITM.ITEMID = #{P_ITEMID}
+	                </if>
+	                <if test="P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' ">
+	                    AND ITM.ITEMVERSION = #{P_PRODUCTDEFVERSION}
+	                </if>
+	                <if test="P_PRODUCTDEFNAME != null and P_PRODUCTDEFNAME !='' ">
+	                    AND UPPER(ITM.ITEMNAME) LIKE '%' || UPPER(#{P_PRODUCTDEFNAME}) || '%'
+	                </if>
+	                <if test="P_LAYER != null and P_LAYER !='' ">
+	                    AND ITM.LAYER = #{P_LAYER}
+	                </if>
+	                <if test="P_NOINPUT eq 'Y'.toString() ">
+	                    AND ITM.TACTTIMEFLAG = 'N'
+	                </if>
+	                <if test="P_NOINPUT eq 'N'.toString() ">
+	                	AND ITM.TACTTIMEFLAG = 'Y'
+	                </if>
+	                ORDER BY ITM.ITEMID, ITM.ITEMVERSION
+	           )
+    </select>
+	
+	
+	
+	<!--
+    프 로 그 램 명   : 생산관리 > 생산계획 > Tack Time 등록
+    설       명   : 품목, 공정별 Tack Time 조회
+    작   성   자   : 정승원 
+    작   성   일   : 2019-09-18
+    주요 변경 로그    : 2019-11-06 표준 LEAD TIME 추가
+                  2020-05-18 쿼리 속도로 인한 쿼리 수정(김기수)   
+    -->
+    <select id="selectTackTimeList" parameterType="map" resultType="hashmap">
+                --
+                -- Id : SelectTackTimeList
+                -- Version : 10001
+                 
+                WITH CAL_TACTIME AS
+                (
+                    SELECT Y.PRODUCTDEFID
+                        ,  Y.PRODUCTDEFVERSION
+                        ,  Y.PRODUCTDEFNAME
+                        ,  Y.PROCESSSEGMENTID
+                        ,  Y.PROCESSSEGMENTVERSION
+                        ,  Y.PLANTID
+                        ,  Y.USERSEQUENCE
+                        ,  Y.TACTIMEMNGTYPE
+                        ,  ROUND(AVG(RESULT3TACKTIME),2) RESULT3TACKTIME
+                        ,  ROUND(AVG(RESULT6TACKTIME),2) RESULT6TACKTIME 
+                        ,   Y.VALIDSTATE
+                        ,	Y.VALIDSTATETAC
+                        ,   Y.ISLOADMNG
+                        ,   Y.PRODUCTDEFTYPE
+                    FROM
+                    (
+                        SELECT X.PRODUCTDEFID
+                            ,  X.PRODUCTDEFVERSION
+                            ,  X.PRODUCTDEFNAME
+                            ,  X.PROCESSSEGMENTID
+                            ,  X.PROCESSSEGMENTVERSION
+                            ,  X.PLANTID
+                            ,  X.USERSEQUENCE
+                            ,  X.TACTIMEMNGTYPE
+                            ,  CASE WHEN  NVL(X.WORKENDLEADTIME_3,0) = 0 OR NVL(X.WORKENDPANELQTY_3,0) = 0 THEN NULL
+                                    ELSE  ROUND(X.WORKENDLEADTIME_3/X.WORKENDPANELQTY_3,2) 
+                                    END   RESULT3TACKTIME
+                            ,  CASE WHEN  NVL(X.WORKENDLEADTIME_6,0) = 0 OR NVL(X.WORKENDPANELQTY_6,0) = 0 THEN NULL
+                                    ELSE  ROUND(X.WORKENDLEADTIME_6/X.WORKENDPANELQTY_6,2) 
+                                    END   RESULT6TACKTIME   
+                            ,   X.VALIDSTATE
+                            ,   X.VALIDSTATETAC
+                            ,   X.ISLOADMNG
+                            ,   X.PRODUCTDEFTYPE
+                                     
+                        FROM
+                        (
+                            SELECT PD.PRODUCTDEFID
+                                ,  PD.PRODUCTDEFVERSION
+                                ,  PD.PRODUCTDEFNAME
+                                ,  PP.PROCESSSEGMENTID
+                                ,  PP.PROCESSSEGMENTVERSION
+                                ,  PP.PLANTID
+                                ,  PP.USERSEQUENCE
+                                ,  PD.TACTIMEMNGTYPE
+                                ,  CASE WHEN LW.WORKENDTIME > ADD_MONTHS(SYSDATE, -3) THEN LW.WORKENDLEADTIME ELSE NULL END WORKENDLEADTIME_3
+                                ,  CASE WHEN LW.WORKENDTIME > ADD_MONTHS(SYSDATE, -3) THEN LW.WORKENDPANELQTY ELSE NULL END WORKENDPANELQTY_3
+                                ,  CASE WHEN LW.WORKENDTIME > ADD_MONTHS(SYSDATE, -6) THEN LW.WORKENDLEADTIME ELSE NULL END WORKENDLEADTIME_6
+                                ,  CASE WHEN LW.WORKENDTIME > ADD_MONTHS(SYSDATE, -6) THEN LW.WORKENDPANELQTY ELSE NULL END WORKENDPANELQTY_6 
+                                ,   PD.VALIDSTATE
+                                ,   PD.VALIDSTATETAC
+                                ,   NVL(PD.ISLOADMNG,'') AS ISLOADMNG
+                                ,   PD.PRODUCTDEFTYPE
+                            FROM BAS_PRODUCTDEFINITION PD
+                            INNER JOIN BAS_PRODUCTDEFINITION SPD ON  PD.PRODUCTDEFID = SPD.PRODUCTDEFID
+                                                                AND PD.PRODUCTDEFVERSION = SPD.PRODUCTDEFVERSION
+                            INNER JOIN BAS_PROCESSPATH        PP ON  SPD.PROCESSDEFID = PP.PROCESSDEFID
+                                                                AND SPD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+                            LEFT  JOIN PCM_LOTWORKRESULT      LW ON  PD.PRODUCTDEFID = LW.PRODUCTDEFID
+                                                                AND PD.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+                                                                AND PP.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+                                                                AND PP.PROCESSSEGMENTVERSION = LW.PROCESSSEGMENTVERSION
+                                                                AND NVL(LW.WORKENDPANELQTY,0) > 0
+                                                                AND NVL(LW.WORKENDLEADTIME,0) > 0
+                                                                AND WORKENDTIME BETWEEN ADD_MONTHS(SYSDATE,-6) AND SYSDATE
+                            WHERE 1=1
+                            <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                                AND     EXISTS
+                                        (
+                                            SELECT  1
+                                            FROM    ufn_selectStringToSplit(#{P_PRODUCTDEFID}, ',')      MAP
+                                            WHERE   PD.PRODUCTDEFID = MAP.VALUE
+                                        )
+                            </if>
+                               
+                            <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                                AND     EXISTS
+                                        (
+                                            SELECT  1
+                                            FROM    ufn_selectStringToSplit(#{P_PROCESSSEGMENTID}, ',')      MAP
+                                            WHERE   PP.PROCESSSEGMENTID = MAP.VALUE
+                                        )
+                            </if>            
+                        )X
+                    )Y
+                    GROUP BY Y.PRODUCTDEFID
+                          ,  Y.PRODUCTDEFVERSION
+                          ,  Y.PRODUCTDEFNAME
+                          ,  Y.PROCESSSEGMENTID
+                          ,  Y.PROCESSSEGMENTVERSION
+                          ,  Y.PLANTID
+                          ,  Y.USERSEQUENCE
+                          ,  Y.TACTIMEMNGTYPE
+                          , Y.VALIDSTATE
+                          , Y.VALIDSTATETAC
+                          , Y.ISLOADMNG
+                          , Y.PRODUCTDEFTYPE
+                    ORDER BY Y.PRODUCTDEFID
+                          ,  Y.PRODUCTDEFVERSION
+                          ,  Y.USERSEQUENCE
+                )      
+                SELECT CT.PRODUCTDEFID
+                    ,  CT.PRODUCTDEFVERSION
+                    ,  CT.PRODUCTDEFNAME
+                    ,  CT.PLANTID
+                    ,  CT.USERSEQUENCE
+                    ,  CT.PROCESSSEGMENTID
+                    ,  CT.PROCESSSEGMENTVERSION
+                    ,  NVL(SD.DICTIONARYNAME,CT.PROCESSSEGMENTID) PROCESSSEGMENTNAME
+                    ,  TT.THEORYTACKTIME
+                    ,  CT.RESULT3TACKTIME
+                    ,  CT.RESULT6TACKTIME
+                    ,  TT.TARGETTACKTIME
+                    ,  TT.THEORYTACKTIME    AS THEORYTACKTIME2
+                    ,  CT.RESULT3TACKTIME   AS RESULT3TACKTIME2 
+                    ,  CT.RESULT6TACKTIME   AS RESULT6TACKTIME2
+                    ,  TT.TARGETTACKTIME    AS TARGETTACKTIME2
+                    ,  TT.STDLEADTIME
+                    ,  TT.STDLEADTIME AS STDLEADTIME2
+                    ,  NVL(TT.VALIDSTATE,'Valid') VALIDSTATE
+                    ,  NVL(UR1.USER_NM, TT.CREATOR)  CREATOR
+                    ,  NVL(UR2.USER_NM, TT.MODIFIER)  MODIFIER
+                    ,  TO_CHAR(TT.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS')  CREATEDTIME
+                    ,  TO_CHAR(TT.MODIFIEDTIME,'YYYY-MM-DD HH24:MI:SS') MODIFIEDTIME
+                    ,  CASE WHEN CT.TACTIMEMNGTYPE = 'StandardLeadTime' THEN TT.STDLEADTIME
+                            WHEN CT.TACTIMEMNGTYPE = 'TheoryTackTime'   THEN TT.THEORYTACKTIME
+                            WHEN CT.TACTIMEMNGTYPE = 'TargetTackTime'   THEN TT.TARGETTACKTIME
+                            WHEN CT.TACTIMEMNGTYPE = 'ResultTackTime'   THEN CT.RESULT3TACKTIME
+                            END APPLICATIONTACKTIME 
+                     ,  CASE WHEN CT.TACTIMEMNGTYPE = 'StandardLeadTime' THEN TT.STDLEADTIME
+                            WHEN CT.TACTIMEMNGTYPE = 'TheoryTackTime'   THEN TT.THEORYTACKTIME
+                            WHEN CT.TACTIMEMNGTYPE = 'TargetTackTime'   THEN TT.TARGETTACKTIME
+                            WHEN CT.TACTIMEMNGTYPE = 'ResultTackTime'   THEN CT.RESULT3TACKTIME
+                            END APPLICATIONTACKTIME2
+                     ,	ROWNUM AS NO                    
+                FROM CAL_TACTIME CT 
+                INNER JOIN BAS_PROCESSSEGMENT PS ON  CT.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                                AND PS.PROCESSSEGMENTVERSION = '*'
+                LEFT  JOIN CMD_DICTIONARY     SD ON  PS.PROCESSSEGMENTNAME = SD.DICTIONARYID
+                                                AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN PCM_TACKTIMEMANAGE TT ON  CT.PRODUCTDEFID = TT.PRODUCTDEFID
+                                                AND CT.PRODUCTDEFVERSION = TT.PRODUCTDEFVERSION
+                                                AND CT.PROCESSSEGMENTID = TT.PROCESSSEGMENTID
+                                                AND TT.PROCESSSEGMENTVERSION = '*'
+                LEFT  JOIN CMD_USERS          UR1 ON  TT.CREATOR = UR1.USER_ID
+                LEFT  JOIN CMD_USERS          UR2 ON  TT.MODIFIER = UR2.USER_ID
+                WHERE   1 = 1
+                AND CT.VALIDSTATE = 'Valid'
+                AND CT.VALIDSTATETAC = 'Valid'
+                AND CT.ISLOADMNG = 'Y'
+                <if test="P_VALIDSTATE != null and P_VALIDSTATE !='' ">
+                    AND     NVL(TT.VALIDSTATE, 'Valid') = #{P_VALIDSTATE}
+                </if>
+                
+                <if test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' and P_PRODUCTDEFTYPE eq 'Production'.toString() ">
+                    AND     CT.PRODUCTDEFTYPE IN (#{P_PRODUCTDEFTYPE}, 'Product')
+                </if>
+                <if test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' and P_PRODUCTDEFTYPE eq 'Sample'.toString() ">
+                    AND     CT.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE}
+                </if>
+                ORDER BY CT.PRODUCTDEFID, CT.PRODUCTDEFVERSION, TO_CHAR(TO_NUMBER(CT.USERSEQUENCE),'0000')
+    </select>
+	
+	
+	<!--
+    설       명   : LEADTIME 제품군을 조회 한다.
+    작   성   자   : 김기수
+    작   성   일   : 2019-12-05
+    주요 변경 로그    :
+    -->
+    <select id="getLeadTimeCategoryReg" parameterType="map" resultType="hashmap">
+                --
+                --"GetLeadTimeCategoryReg"
+                --Version:10001
+                SELECT
+                			CATEGORYID
+	                    ,   CATEGORYNAME
+	                    
+	                    ,   PRODUCTLT
+	                    ,   SITELT
+	                    ,   TOTALLT
+	                    
+	                    ,   PRODUCTLT2
+	                    ,   SITELT2
+	                    ,   TOTALLT2
+	                    
+	                    ,   DISPLAYEQ
+	                    ,   CREATOR
+	                    ,   CREATEDTIME
+	                    ,   MODIFIER
+	                    ,   MODIFIEDTIME
+	                    ,	ROWNUM AS NO
+                FROM (
+		                SELECT
+		                        CATEGORY.CATEGORYID         AS CATEGORYID
+		                    ,   CATEGORY.CATEGORYID         AS CATEGORYNAME
+		                    
+		                    ,   NVL(ITM.LEADTIME,0)    AS PRODUCTLT
+		                    ,   NVL(ITM.TACTTIME,0)    AS SITELT
+		                    ,   NVL(ITM.LEADTIME,0)+ NVL(ITM.TACTTIME,0) AS TOTALLT
+		                    
+		                    ,   NVL(ITM.LEADTIME2,0)    AS PRODUCTLT2
+		                    ,   NVL(ITM.TACTTIME2,0)    AS SITELT2
+		                    ,   NVL(ITM.LEADTIME2,0)+ NVL(ITM.TACTTIME2,0) AS TOTALLT2
+		                    
+		                    ,   (ROW_NUMBER() OVER(ORDER BY CATEGORY.CATEGORYID)) AS DISPLAYEQ
+		                    ,   NVL(US1.USER_NM, ITM.CREATOR) AS CREATOR
+		                    ,   TO_CHAR(ITM.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS')  CREATEDTIME
+		                    ,   NVL(US2.USER_NM, ITM.MODIFIER) AS MODIFIER
+		                    ,   TO_CHAR(ITM.MODIFIEDTIME,'YYYY-MM-DD HH24:MI:SS')  MODIFIEDTIME
+		                FROM (
+		                    SELECT 
+		                        SPLIT_PART(CATEGORYID,'.',2)	 AS CATEGORYID
+		                    FROM BAS_CATEGORY
+		                    WHERE "level"='3'
+		                    GROUP BY SPLIT_PART(CATEGORYID,'.',2)
+		                )CATEGORY   
+		                LEFT OUTER JOIN BAS_ITEMMASTER ITM ON CATEGORY.CATEGORYID = ITM.ITEMID
+		                                                  AND MASTERDATACLASSID='Model'
+		                LEFT OUTER JOIN CMD_USERS       US1 ON ITM.CREATOR = US1.USER_ID
+		                LEFT OUTER JOIN CMD_USERS       US2 ON ITM.MODIFIER = US2.USER_ID
+		                WHERE 1=1
+		                AND CATEGORY.CATEGORYID IS NOT NULL
+		                --ORDER BY CATEGORY.CATEGORYID
+		                ORDER BY CATEGORY.CATEGORYID
+		                )
+    </select>
+    
+    <select id="selectItemMaster" parameterType="map" resultType="hashmap">
+    	SELECT	ITEMID,
+    				ITEMVERSION,
+    				ENTERPRISEID
+    	FROM BAS_ITEMMASTER
+    	WHERE ITEMID = #{ITEMID}
+    	AND ITEMVERSION = #{ITEMVERSION}
+    	AND ENTERPRISEID = #{ENTERPRISEID}
+    </select>
+    
+    <update id="updateLeadTime" parameterType="map">
+    	UPDATE BAS_ITEMMASTER
+    	SET 
+    			LEADTIME 			= #{PRODUCTLT}
+    		,	TACTTIME			= #{SITELT}
+    		
+    		,	MODIFIER		= #{MODIFIER}
+			, 	MODIFIEDTIME	= SYSDATE
+			, 	LASTTXNHISTKEY	= #{LASTTXNHISTKEY} 
+			, 	LASTTXNID		= #{LASTTXNID}
+			, 	LASTTXNUSER		= #{LASTTXNUSER} 
+			, 	LASTTXNTIME		= SYSDATE
+			, 	LASTTXNCOMMENT	= null
+    	WHERE ITEMID = #{ITEMID}
+    	AND ITEMVERSION = #{ITEMVERSION}
+    	AND ENTERPRISEID = #{ENTERPRISEID}
+    </update>
+    
+    
+    
+    
+    
+    
+    
+    <select id="selectItemMaster2" parameterType="map" resultType="hashmap">
+    	SELECT	ITEMID,
+    				ITEMVERSION,
+    				ENTERPRISEID
+    	FROM BAS_ITEMMASTER
+    	WHERE ITEMID = #{ITEMID}
+    	AND MASTERDATACLASSID = 'Model'
+    </select>
+    
+    <update id="insertLeadTimePerCategory" parameterType="map">
+    	MERGE INTO BAS_ITEMMASTER
+	    USING DUAL
+	    ON (
+	    	 		ITEMID = #{ITEMID}
+			    	AND ITEMVERSION = #{ITEMVERSION}
+			    	AND ENTERPRISEID = #{ENTERPRISEID}
+	         )
+	     WHEN MATCHED THEN
+	     	UPDATE
+            SET	
+            		LEADTIME				= #{PRODUCTLT}	--양산
+    			,	TACTTIME				= #{SITELT}
+    			
+    			,	LEADTIME2				= #{PRODUCTLT2}	--샘플
+    			,	TACTTIME2				= #{SITELT2}
+    			
+	     		,	MODIFIER				= #{MODIFIER}
+				, 	MODIFIEDTIME			= SYSDATE
+				, 	LASTTXNHISTKEY		= #{LASTTXNHISTKEY} 
+				, 	LASTTXNID				= #{LASTTXNID}
+				, 	LASTTXNUSER			= #{LASTTXNUSER} 
+				, 	LASTTXNTIME			= SYSDATE
+				, 	LASTTXNCOMMENT	= null
+				,	VALIDSTATE				= #{VALIDSTATE}
+	     WHEN NOT MATCHED THEN
+			   INSERT (
+				    	MASTERDATACLASSID
+					,	ITEMID
+					,	ITEMVERSION
+					,	ENTERPRISEID
+					,	PLANTID
+					,	MODELCODE
+					,	ITEMNAME
+		    		,	STATUS
+		    		,	DESCRIPTION
+		    		 
+		    		,	LEADTIME	--양산
+		    		,	TACTTIME
+		    		
+		    		,	LEADTIME2	--샘플
+		    		,	TACTTIME2
+		    		
+		    		,	CREATOR
+		    		,	CREATEDTIME	
+		    		,	MODIFIER
+					, 	MODIFIEDTIME
+					, 	LASTTXNHISTKEY 
+					, 	LASTTXNID
+					, 	LASTTXNUSER 
+					, 	LASTTXNTIME
+					, 	LASTTXNCOMMENT
+					,	VALIDSTATE
+				) 
+		    VALUES ( 
+				        #{MASTERDATACLASSID}
+					,	#{ITEMID}
+					,	#{ITEMVERSION}
+					,	#{ENTERPRISEID}
+					,	#{PLANTID}
+					,	#{MODELCODE}
+					,	#{ITEMNAME}
+					,	#{STATUS}
+					,	#{DESCRIPTION}
+					
+					,	#{PRODUCTLT}
+					,	#{SITELT}
+					
+					,	#{PRODUCTLT2}
+					,	#{SITELT2}
+					
+					,	#{CREATOR}
+					,	SYSDATE
+					,	#{MODIFIER}
+					,	SYSDATE
+					,	#{LASTTXNHISTKEY}
+					,	#{LASTTXNID}
+					,	#{LASTTXNUSER}
+					,	SYSDATE
+					,	null
+					,	#{VALIDSTATE}
+				)
+    </update>
+    
+    <!-- MASTERDATACLASSID='Model' 라인 갱신 -->
+    <update id="updateLeadTimePerCategory0" parameterType="map">
+    	UPDATE BAS_ITEMMASTER
+    	SET 
+    			LEADTIME 		= #{PRODUCTLT}
+    		,	TACTTIME 		= #{SITELT}
+    		
+    		,	LEADTIME2 		= #{PRODUCTLT2}
+    		,	TACTTIME2 		= #{SITELT2}
+    		    		
+    		,	MODIFIER		= #{MODIFIER}
+			, 	MODIFIEDTIME	= SYSDATE
+			, 	LASTTXNHISTKEY	= #{LASTTXNHISTKEY} 
+			, 	LASTTXNID		= #{LASTTXNID}
+			, 	LASTTXNUSER		= #{LASTTXNUSER} 
+			, 	LASTTXNTIME		= SYSDATE
+			, 	LASTTXNCOMMENT	= null
+			,	VALIDSTATE			= #{VALIDSTATE}
+    	WHERE ITEMID = #{ITEMID}
+    	AND MASTERDATACLASSID='Model'
+    </update>
+    
+    <!-- ############################################ -->
+    <!-- ############################################ -->
+    <!-- ############################################ -->
+    <!-- 양산 갱신 -->
+    <update id="updateLeadTimePerCategory" parameterType="map">
+    	UPDATE BAS_ITEMMASTER
+    	SET 
+    			LEADTIME 		= #{PRODUCTLT}
+    		,	TACTTIME 		= #{SITELT}
+    		
+    		,	MODIFIER		= #{MODIFIER}
+			, 	MODIFIEDTIME	= SYSDATE
+			, 	LASTTXNHISTKEY	= #{LASTTXNHISTKEY} 
+			, 	LASTTXNID		= #{LASTTXNID}
+			, 	LASTTXNUSER		= #{LASTTXNUSER} 
+			, 	LASTTXNTIME		= SYSDATE
+			, 	LASTTXNCOMMENT	= null
+			,	VALIDSTATE			= #{VALIDSTATE}
+    	WHERE SPLIT_PART(SALEORDERCATEGORY,'.',2) = #{ITEMID}
+    	AND PRODUCTIONTYPE = 'Production'
+    </update>
+    
+    <!-- 샘플 갱신 -->
+    <update id="updateLeadTimePerCategory2" parameterType="map">
+    	UPDATE BAS_ITEMMASTER
+    	SET 
+    			LEADTIME 		= #{PRODUCTLT2}
+    		,	TACTTIME 		= #{SITELT2}
+    		
+    		,	MODIFIER		= #{MODIFIER}
+			, 	MODIFIEDTIME	= SYSDATE
+			, 	LASTTXNHISTKEY	= #{LASTTXNHISTKEY} 
+			, 	LASTTXNID		= #{LASTTXNID}
+			, 	LASTTXNUSER		= #{LASTTXNUSER} 
+			, 	LASTTXNTIME		= SYSDATE
+			, 	LASTTXNCOMMENT	= null
+			,	VALIDSTATE			= #{VALIDSTATE}
+    	WHERE SPLIT_PART(SALEORDERCATEGORY,'.',2) = #{ITEMID}
+    	AND PRODUCTIONTYPE = 'Sample'
+    </update>
+    <!-- ############################################ -->
+    <!-- ############################################ -->
+    <!-- ############################################ -->
+    	
+</mapper>

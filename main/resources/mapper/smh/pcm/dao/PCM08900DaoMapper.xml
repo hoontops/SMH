@@ -1,0 +1,381 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM08900Dao">
+<!-- 물류창고 입/출고 현황 -->    
+
+    <!--
+	    설       명   : 외주창고입출고현황(수입검사의뢰)
+	    생   성   자   : 최별
+	    생   성   일   : 2019-07-08
+	    수  정   이  력 : 
+	    파  라   미  터        : 
+	                  
+	                 P_PLANTID               site      
+	                 P_SEARCHDATE_PERIODFR         일자
+	                 P_SEARCHDATE_PERIODTO         일자
+	                 P_PROCESSSEGMENTID      공정
+	                 P_PRODUCTDEFID          품목코드
+	                 P_PRODUCTDEFVERSION     품목코드
+	                 P_AREAID                외주작업장 
+	    -->
+    <select id="selectOutboundwarehouseStatusInspectList" parameterType="map" resultType="hashmap">
+         --
+         -- GetOutboundwarehouseStatusInspect
+         -- Version:10001
+         SELECT
+                 TO_CHAR(ORP.REQUESTDATE, 'YYYY-MM-DD HH24:MI:SS') AS REQUESTDATE  --의뢰일
+             ,   SLH.PRODUCTDEFID
+             ,   SLH.PRODUCTDEFVERSION
+             ,   PRD.PRODUCTDEFNAME
+             ,   ORP.LOTID 
+             ,   DAP.DICTIONARYNAME                     AS AREANAME
+             ,   SLH.PROCESSSEGMENTID
+             ,   DIC.DICTIONARYNAME  AS     PROCESSSEGMENTNAME
+             
+             ,   NVL(SLH.SENDPCSQTY, 0)       	AS PCSQTY
+             ,   NVL(SLH.SENDARRAYQTY, 0)     	AS ARRAYQTY
+             ,   NVL(SLH.SENDPANELQTY, 0)     	AS PANELQTY
+             
+             ,   CASE WHEN PRD.PCSMM =0         THEN 0
+                      WHEN SLH.SENDPCSQTY  IS NULL  THEN 0
+                      ELSE ROUND(	SLH.SENDPCSQTY / PRD.PCSMM	,2)
+             
+                 END                                        AS  OSPMM
+             ,   INR.INSPECTIONRESULT     -- 검사일 
+             ,   TO_CHAR(INR.INSPECTIONDATE,'YYYY-MM-DD HH24:MI:SS') AS INSPECTIONDATE       --검사결과 
+             ,   CASE WHEN  NVL(ORP.REQUESTDATE,'')  = ''
+                      THEN 'RequestWait'
+                      ELSE CASE WHEN NVL(ORP.RECEIVINGDATE,'')  = ''
+                                THEN 'OnRequest'
+                                ELSE CASE WHEN NVL(INR.INSPECTIONDATE,'')  = ''
+                                          THEN 'RequestComplete'
+                                          ELSE 'InspectionCompleted'
+                                     END
+                           END
+                 END                                                                 AS   REQUESTSTATUS  
+             ,  SLH.USERSEQUENCE
+         FROM            PCM_LOT                       SLT
+         INNER      JOIN BAS_PLANT                     SPL   ON    SPL.PLANTID               = SLT.PLANTID 
+         INNER      JOIN QAM_QCOSPREQUESTINSPECTION    ORP   ON    ORP.LOTID                 = SLT.LOTID 
+          
+         INNER      JOIN PCM_LOTWORKRESULT            SLH   ON    SLH.TXNHISTKEY            = ORP.LOTHISTKEY
+                                                           AND   SLH.LOTID                 = ORP.LOTID  
+         INNER      JOIN FN_AREA(#{USERID})       	  SAC   ON    SAC.AREAID                = SLH.AREAID
+         LEFT OUTER JOIN CMD_DICTIONARY               DAP   ON    DAP.DICTIONARYID          = SAC.AREANAME
+                                                           AND   DAP.LANGUAGETYPE          = #{LANGUAGETYPE}  
+         LEFT OUTER JOIN BAS_PRODUCTDEFINITION        PRD   ON    PRD.PRODUCTDEFID          = SLH.PRODUCTDEFID          --제품
+                                                           AND   PRD.PRODUCTDEFVERSION     = SLH.PRODUCTDEFVERSION
+         LEFT OUTER JOIN BAS_PROCESSSEGMENT           PRS   ON    PRS.PROCESSSEGMENTID      = SLH.PROCESSSEGMENTID
+                                                           AND   PRS.PROCESSSEGMENTVERSION = SLH.PROCESSSEGMENTVERSION
+         LEFT OUTER JOIN CMD_DICTIONARY               DIC   ON    DIC.DICTIONARYID          = PRS.PROCESSSEGMENTNAME
+                                                           AND   DIC.LANGUAGETYPE          =  #{LANGUAGETYPE}         
+          
+         LEFT OUTER JOIN CMD_USERS                     URR   ON    URR.USER_ID                = ORP.REQUESTOR      -- 
+         LEFT OUTER JOIN QAM_INSPECTIONRESULT         INR   ON    INR.RESOURCETYPE          = 'ProcessInspection'
+                                                           AND   INR.RESOURCEID            = ORP.LOTID     
+                                                           AND   INR.PROCESSRELNO          = ORP.LOTHISTKEY || ORP.DEGREE
+         WHERE 1=1
+		
+		 AND SUBSTR(SLH.PRODUCTDEFID,0,1) = '1'	--2021-06-16 APPENDED BY PHW
+		
+         <if test = "P_LOTID != null and P_LOTID !='' ">
+             AND      SLT.LOTID = #{P_LOTID}
+         </if>
+         <if test = "P_PLANTID != null and P_PLANTID !='' ">
+             AND     SLH.PLANTID = #{P_PLANTID}
+         </if>
+         <if test = "P_AREAID != null and P_AREAID !='' ">
+             AND      SLH.AREAID = #{P_AREAID}
+         </if>
+         <if test = "P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+             AND      SLH.PRODUCTDEFID = #{P_PRODUCTDEFID}
+         </if>
+         <if test = "P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' ">
+             AND      SLH.PRODUCTDEFVERSION = #{P_PRODUCTDEFVERSION}
+         </if>
+         <if test = "P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+             AND      SLH.PROCESSSEGMENTID = #{P_PROCESSSEGMENTID}
+         </if>
+         <if test = "P_SEARCHDATE_PERIODFR != null and P_SEARCHDATE_PERIODFR !='' ">
+             AND     ORP.REQUESTDATE <![CDATA[>=]]> TO_TIMESTAMP( #{P_SEARCHDATE_PERIODFR} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS') 
+         </if>
+         <if test = "P_SEARCHDATE_PERIODTO != null and P_SEARCHDATE_PERIODTO !='' ">
+             AND     ORP.REQUESTDATE <![CDATA[<]]>  TO_TIMESTAMP( #{P_SEARCHDATE_PERIODTO} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS') 
+         </if>
+         ORDER BY ORP.REQUESTDATE DESC
+    </select>
+    
+    <!--
+    설       명   : 외주창고입출고현황(입출고 l/t)
+    생   성   자   : 최별
+    생   성   일   : 2019-07-08
+    수  정   이  력 : 
+    파  라   미  터        : 
+                  
+                 P_PLANTID               site      
+                 P_SEARCHDATE_PERIODFR         일자
+                 P_SEARCHDATE_PERIODTO         일자
+                 P_PROCESSSEGMENTID      공정
+                 P_PRODUCTDEFID          품목코드
+                 P_PRODUCTDEFVERSION     품목코드
+                 P_AREAID                외주작업장 
+    -->
+    <select id="selectOutboundwarehouseStatusInOutList" parameterType="map" resultType="hashmap">
+          --
+          -- GetOutboundwarehouseStatusInOut
+          -- Version:10001
+          SELECT
+                  TO_CHAR(OLT.RECEIPTDATE, 'YYYY-MM-DD HH24:MI:SS') AS RECEIPTTIME                         --입고시간
+              ,   TO_CHAR(OLT.SENDDATE, 'YYYY-MM-DD HH24:MI:SS') AS SENDTIME                               --출고시간
+              ,   ROUND((NVL(OLT.SENDDATE, SYSTIMESTAMP) - OLT.RECEIPTDATE) * 1440)  AS WAITMINTIME
+              --,   TRUNC(EXTRACT(EPOCH FROM NVL(OLT.SENDDATE,NOW()) - OLT.RECEIPTDATE)/60/60)  AS WAITMINTIME 
+              --, TRUNC(EXTRACT(EPOCH FROM NVL(OLT.SENDDATE,NOW()) - OLT.RECEIPTDATE)/60/60)||' Min'  AS WAITTIME 
+              --, TRUNC(EXTRACT(EPOCH FROM NVL(OLT.SENDDATE,NOW()) - OLT.RECEIPTDATE)/60/60)||': '||
+              --  EXTRACT(minute FROM NVL(OLT.SENDDATE,NOW())   - OLT.RECEIPTDATE)||''  AS WAITTIME
+             
+              ,   ' ' AS PREVAREAID
+              ,   PCM_PREVPROCESSNAEM_FN(SLH.LOTID, SLH.USERSEQUENCE, 'A')  AS  PREVAREANAME                                                           --입고작업장(=이전작업장)
+              
+              ,   NVL(OLT.SENDAREAID,SLH.AREAID)   AS SENDAREAID 
+              ,   DAC.DICTIONARYNAME  AS SENDAREANAME                                                           --출고작업장
+              ,   SLH.LOTID
+              ,   SLH.PRODUCTDEFID                                                                       --품목코드
+              ,   SLH.PRODUCTDEFVERSION                                                                  --품묵버젼
+              ,   PRD.PRODUCTDEFNAME                                                                     --품목명
+              ,   SLT.PROCESSSEGMENTID
+              ,   DIC.DICTIONARYNAME  AS    PROCESSSEGMENTNAME                                                                 --공정명 
+              
+              --,   NVL(SLH.SENDPCSQTY, 0)       	AS PCSQTY
+              ,		TO_NUMBER(PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(SLH.LOTID, SLH.USERSEQUENCE, 'Q1')) AS PCSQTY
+              
+              ,   NVL(SLH.SENDARRAYQTY ,0)     AS ARRAYQTY
+              
+              --,   NVL(SLH.SENDPANELQTY ,0)     AS PANELQTY
+              ,		TO_NUMBER(PCM_PREVLOTHISTORY_PKG.PCM_PREVPROCESSNAEM2_FN(SLH.LOTID, SLH.USERSEQUENCE, 'Q2')) AS PANELQTY
+              
+              ,   CASE WHEN PRD.PCSMM =0         THEN 0
+                       WHEN SLH.SENDPCSQTY  IS NULL  THEN 0
+                       ELSE SLH.SENDPCSQTY / PRD.PCSMM
+                  END                                        AS  OSPMM
+               ,  SLH.USERSEQUENCE
+          FROM            PCM_LOT                      SLT
+          INNER      JOIN BAS_PLANT                    SPL   ON    SPL.PLANTID               = SLT.PLANTID 
+          INNER      JOIN OSM_OSPRECEIPTSENDLOT        OLT   ON    OLT.LOTID                 = SLT.LOTID 
+           
+          INNER      JOIN PCM_LOTWORKRESULT            SLH   ON    SLH.TXNHISTKEY            = OLT.LOTHISTKEY
+                                                            AND   SLH.LOTID                 = OLT.LOTID  
+          INNER      JOIN FN_AREA(#{USERID})       	   SAC   ON    SAC.AREAID                =  NVL(OLT.SENDAREAID,SLH.AREAID)
+          LEFT OUTER JOIN CMD_DICTIONARY               DAC   ON    DAC.DICTIONARYID          = SAC.AREANAME
+                                                            AND   DAC.LANGUAGETYPE          = #{LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_PRODUCTDEFINITION        PRD   ON    PRD.PRODUCTDEFID          = SLH.PRODUCTDEFID          --제품
+                                                            AND   PRD.PRODUCTDEFVERSION     = SLH.PRODUCTDEFVERSION
+          LEFT OUTER JOIN BAS_PROCESSSEGMENT           PRS   ON    PRS.PROCESSSEGMENTID      = SLT.PROCESSSEGMENTID
+                                                            AND   PRS.PROCESSSEGMENTVERSION = SLT.PROCESSSEGMENTVERSION
+          LEFT OUTER JOIN CMD_DICTIONARY               DIC   ON    DIC.DICTIONARYID          = PRS.PROCESSSEGMENTNAME
+                                                            AND   DIC.LANGUAGETYPE          =  #{LANGUAGETYPE}
+           
+          LEFT OUTER JOIN CMD_USERS                     URR   ON    URR.USER_ID                = OLT.RECEIPTUSER   -- 
+          LEFT OUTER JOIN CMD_USERS                     URS   ON    URS.USER_ID                = OLT.SENDUSER      -- 
+          WHERE 1=1
+          
+          AND SUBSTR(SLH.PRODUCTDEFID,0,1) = '1'	--2021-06-16 APPENDED BY PHW
+          
+          <if test = "P_LOTID != null and P_LOTID !='' ">
+              AND      SLT.LOTID = #{P_LOTID}
+          </if>
+          <if test = "P_PLANTID != null and P_PLANTID !='' ">
+              AND      OLT.PLANTID = #{P_PLANTID}
+          </if>
+           
+          --AND     OLT.SENDDATE        IS  NOT   NULL
+          <if test = "P_AREAID != null and P_AREAID !='' ">
+              AND      SLH.AREAID = #{P_AREAID}
+          </if>
+          <if test = "P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+              AND      SLH.PRODUCTDEFID = #{P_PRODUCTDEFID}
+          </if>
+          <if test = "P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' ">
+              AND      SLH.PRODUCTDEFVERSION = #{P_PRODUCTDEFVERSION}
+          </if>
+          <if test = "P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+              AND      SLH.PROCESSSEGMENTID = #{P_PROCESSSEGMENTID}
+          </if>
+          <if test = "P_SEARCHDATE_PERIODFR != null and P_SEARCHDATE_PERIODFR !='' ">
+              AND     OLT.RECEIPTDATE <![CDATA[>=]]> TO_TIMESTAMP( #{P_SEARCHDATE_PERIODFR} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS') 
+          </if>
+          <if test = "P_SEARCHDATE_PERIODTO != null and P_SEARCHDATE_PERIODTO !='' ">
+              AND     OLT.RECEIPTDATE <![CDATA[<]]>  TO_TIMESTAMP( #{P_SEARCHDATE_PERIODTO} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS') 
+          </if>
+          ORDER BY OLT.RECEIPTDATE DESC
+    </select>
+    
+    
+    <!--
+    설       명   :외주창고입출고현황(전표출력이력)
+    생   성   자   : 최별
+    생   성   일   : 2019-07-08
+    수  정   이  력 : 
+    파  라   미  터        : 
+                  
+                 P_PLANTID               site      
+                 P_SEARCHDATE_PERIODFR         일자
+                 P_SEARCHDATE_PERIODTO         일자
+                 P_PROCESSSEGMENTID      공정
+                 P_PRODUCTDEFID          품목코드
+                 P_PRODUCTDEFVERSION     품목코드
+                 P_AREAID                외주작업장 
+                 
+    -->
+    <select id="selectOutboundwarehouseStatusOutputSlipList" parameterType="map" resultType="hashmap">
+          --
+          -- GetOutboundwarehouseStatusOutputSlip
+          -- Version:10001
+      WITH WLQ AS
+              (
+                  SELECT
+                          RST.LOTHISTKEY 
+                      ,   RST.LOTID
+                      ,   RST.RECEIPTSEQUENCE
+                      ,   RST.PLANTID
+                      ,   RST.AREAID
+                      ,   RST.LOTTYPE
+                      ,   RST.RECEIPTDATE
+                      ,   RST.RECEIPTUSER
+                      ,   RST.CHECKDATE
+                      ,   RST.CHECKUSER
+                      ,   RST.SENDDATE
+                      ,   RST.SENDUSER
+                      ,   RST.PRINTCOUNT
+                      ,   TO_CHAR(RST.PRINTDATE,'YYYY-MM-DD HH24:MI:SS') AS PRINTDATE
+                      ,   RST.PRINTUSER
+                      ,   RST.SENDAREAID
+                      ,   MIN(RST.PATHSEQUENCE)  AS PATHMIN
+                      ,   MAX(RST.PATHSEQUENCE)  AS PATHMAX
+                      ,   MIN(RST.USERSEQUENCE)  AS USERMIN
+                      ,   MAX(RST.USERSEQUENCE)  AS USERMAX
+                  FROM
+                      (  
+                          SELECT   
+                                  OSL.LOTHISTKEY 
+                              ,   OSL.LOTID
+                              ,   OSL.RECEIPTSEQUENCE
+                              ,   OSL.PLANTID
+                              ,   SLT.LOTTYPE
+                              ,   OSS.PATHSEQUENCE
+                              ,   OSS.USERSEQUENCE
+                              ,   OSS.PROCESSSEGMENTID
+                              ,   OSS.PROCESSSEGMENTVERSION
+                              ,   OSS.AREAID                  AS AREAID
+                              ,   OSL.RECEIPTDATE
+                              ,   OSL.RECEIPTUSER
+                              ,   OSL.CHECKDATE
+                              ,   OSL.CHECKUSER
+                              ,   OSL.SENDDATE
+                              ,   OSL.SENDUSER
+                              ,   OSL.PRINTCOUNT
+                              ,   OSL.PRINTDATE
+                              ,   OSL.PRINTUSER
+                              ,   OSL.SENDAREAID
+                              ,   ROW_NUMBER() OVER(PARTITION BY OSS.LOTHISTKEY, OSS.LOTID, OSS.RECEIPTSEQUENCE ORDER BY OSS.LOTHISTKEY, OSS.LOTID, OSS.RECEIPTSEQUENCE,OSS.PATHSEQUENCE) AS RN3
+                              ,   ROW_NUMBER() OVER(ORDER BY OSS.LOTHISTKEY, OSS.LOTID, OSS.RECEIPTSEQUENCE,OSS.PATHSEQUENCE) AS RN1
+                              ,   ROW_NUMBER() OVER(ORDER BY OSS.AREAID,OSS.LOTHISTKEY, OSS.LOTID, OSS.RECEIPTSEQUENCE,OSS.PATHSEQUENCE) AS RN2
+                          FROM        OSM_OSPRECEIPTSENDLOT        OSL
+                          INNER JOIN PCM_LOT                       SLT   ON  SLT.LOTID            = OSL.LOTID  
+                          INNER JOIN BAS_PLANT                     SPL   ON  SPL.PLANTID          = OSL.PLANTID 
+                          INNER JOIN OSM_OSPRECEIPTSENDLOTSEGMENT  OSS   ON  OSS.LOTHISTKEY       = OSL.LOTHISTKEY 
+                                                                        AND OSS.LOTID            = OSL.LOTID
+                                                                        AND OSS.RECEIPTSEQUENCE  = OSL.RECEIPTSEQUENCE
+                                                                        AND OSS.AREAID           = OSL.SENDAREAID
+                          WHERE 1=1
+                          AND     OSL.PLANTID        = #{P_PLANTID}
+                          <if test = "P_LOTID != null and P_LOTID !='' ">
+                              AND      OSL.LOTID = #{P_LOTID}
+                          </if>
+                          AND     OSL.SENDDATE        IS  NOT   NULL
+                          
+                          <if test = "P_SEARCHDATE_PERIODFR != null and P_SEARCHDATE_PERIODFR !='' ">
+                              AND     OSL.PRINTDATE <![CDATA[>=]]> TO_TIMESTAMP( #{P_SEARCHDATE_PERIODFR} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS') 
+                          </if>
+                          <if test = "P_SEARCHDATE_PERIODTO != null and P_SEARCHDATE_PERIODTO !='' ">
+                              AND     OSL.PRINTDATE <![CDATA[<]]>  TO_TIMESTAMP( #{P_SEARCHDATE_PERIODTO} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS') 
+                          </if>
+                          <if test = "P_AREAID != null and P_AREAID !='' ">
+                              AND      OSL.SENDAREAID = #{P_AREAID}
+                          </if>
+                          <if test = "P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                              AND      SLT.PRODUCTDEFID = #{P_PRODUCTDEFID}
+                          </if>
+                          <if test = "P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' ">
+                              AND      SLT.PRODUCTDEFVERSION = #{P_PRODUCTDEFVERSION}
+                          </if>
+                      )   RST
+                  GROUP BY   RST.RN1-RN2  
+                      ,   RST.LOTHISTKEY 
+                      ,   RST.LOTID
+                      ,   RST.RECEIPTSEQUENCE
+                      ,   RST.PLANTID
+                      ,   RST.AREAID
+                      ,   RST.LOTTYPE
+                      ,   RST.RECEIPTDATE
+                      ,   RST.RECEIPTUSER
+                      ,   RST.CHECKDATE
+                      ,   RST.CHECKUSER
+                      ,   RST.SENDDATE
+                      ,   RST.SENDUSER
+                      ,   RST.PRINTCOUNT
+                      ,   RST.PRINTDATE
+                      ,   RST.PRINTUSER
+                      ,   RST.SENDAREAID
+                  HAVING MIN(CASE WHEN RST.RN3 = 1 THEN RST.PATHSEQUENCE END) IS NOT NULL  
+              )
+                  SELECT
+                          WLQ.PRINTDATE           -- 출력일자
+                      ,   LWS.PRODUCTDEFID        -- 품목코드
+                      ,   LWS.PRODUCTDEFVERSION   --품목버젼
+                      ,   PRD.PRODUCTDEFNAME      --품목명
+                      ,   LWS.PROCESSSEGMENTID
+                      ,   DIC.DICTIONARYNAME  AS PROCESSSEGMENTNAME   --  공정명
+                      ,   WLQ.LOTID
+                      ,   WLQ.LOTHISTKEY
+                      ,   WLQ.PRINTUSER
+                      ,   URR.USER_NM                                AS PRINTUSERNAME 
+                      ,   WLQ.PRINTCOUNT
+                      ,   WLQ.SENDAREAID
+                      ,   DAP.DICTIONARYNAME  AS SENDAREANAME
+                      ,   WLQ.RECEIPTSEQUENCE
+                      ,   WLQ.PATHMIN  AS PATHSEQUENCESTART
+                      ,   WLQ.PATHMAX  AS  PATHSEQUENCEEND
+                  FROM                                        WLQ      
+                  INNER      JOIN  PCM_LOTWORKRESULT                LWS   ON    LWS.TXNHISTKEY            = WLQ.LOTHISTKEY
+                                                                    AND   LWS.LOTID                 = WLQ.LOTID
+                  INNER      JOIN FN_AREA(#{USERID})            		SAC   ON    SAC.AREAID                = LWS.AREAID
+                  LEFT OUTER JOIN CMD_DICTIONARY               DAP   ON    DAP.DICTIONARYID          = SAC.AREANAME
+                                                                    AND   DAP.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  INNER      JOIN BAS_PROCESSPATH                   SPH   ON    SPH.PROCESSDEFID          = LWS.PROCESSDEFID
+                                                                    AND   SPH.PROCESSDEFVERSION     = LWS.PROCESSDEFVERSION
+                                                                    AND   SPH.PROCESSSEGMENTID      = LWS.PROCESSSEGMENTID
+                                                                    AND   SPH.PROCESSSEGMENTVERSION = LWS.PROCESSSEGMENTVERSION
+                                                                    AND   SPH.VALIDSTATE            = 'Valid'
+                  LEFT OUTER JOIN BAS_PRODUCTDEFINITION        PRD   ON    PRD.PRODUCTDEFID          = LWS.PRODUCTDEFID          --제품
+                                                                    AND   PRD.PRODUCTDEFVERSION     = LWS.PRODUCTDEFVERSION
+                  LEFT OUTER JOIN BAS_PROCESSSEGMENT           PRS   ON    PRS.PROCESSSEGMENTID      = LWS.PROCESSSEGMENTID
+                                                                    AND   PRS.PROCESSSEGMENTVERSION = LWS.PROCESSSEGMENTVERSION
+                  LEFT OUTER JOIN CMD_DICTIONARY               DIC   ON    DIC.DICTIONARYID          = PRS.PROCESSSEGMENTNAME
+                                                                    AND   DIC.LANGUAGETYPE          = #{LANGUAGETYPE}
+                   
+                  LEFT OUTER JOIN CMD_USERS                     URR   ON    URR.USER_ID                = WLQ.PRINTUSER      -- 
+                  WHERE 1=1
+                  
+                  AND SUBSTR(LWS.PRODUCTDEFID,0,1) = '1'	--2021-06-16 APPENDED BY PHW
+                  
+                  <if test = "P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' "> 
+                      AND      LWS.PROCESSSEGMENTID = #{P_PROCESSSEGMENTID} 
+                  </if>
+                  ORDER BY PRINTDATE DESC
+                  
+    </select>
+    
+
+</mapper>

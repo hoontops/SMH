@@ -1,0 +1,120 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mtm.dao.MTM00100Dao">
+   
+   <!-- 마스터품목(자재) 조회 -->
+   <select id="selectMtmMaterialManagementList" parameterType="map" resultType="hashmap">
+			   SELECT /*selectMtmMaterialManagementList*/
+					 	IM.ENTERPRISEID								--		
+					,	IM.PLANTID                      			-- SITE
+																	
+					,	IM.ITEMID                       			-- 품목코드
+					,	IM.ITEMVERSION								-- 품목 VER
+					,	IM.ITEMNAME                    				-- 품명
+					,	IM.UOMDEFID			   	AS ITEMUOM 			-- 품목단위
+					
+					,	MTI.RECEIPTWAREHOUSEID 	AS WAERHOUSE 		-- 입고 창고
+					,   IDC.PLANTID			   	AS IDSERIALSITE 	-- 채번 PLANT
+					,	MTC.IDCLASSID								-- 채번 그룹
+					,   IDC.IDCLASSNAME
+					,	MTI.VENDORID		   	AS CONVENDORNAME	-- 공급사
+					,   MTI.MAKER									-- Maker 제조사
+								
+					,	MTI.TOPCLASSID								-- 대분류
+					,	MTI.MIDDLECLASSID	  		           		-- 중분류
+					,	MTI.MATERIALCLASS 					  		-- 소분류
+					,	IM.MASTERDATACLASSID	AS MATERIALTYPE 				
+					,	IM.INVENTORYCATEGORY            			-- 자재범주
+								
+					,	IM.UNITOFPURCHASING							-- 구매단위
+					,	IM.MAKEBUYTYPE                  			-- 제조유무
+								
+					--,	IM.CYCLECOUNT								-- 재고실사
+					--,	IM.ENDTYPE									-- 단종구분
+					,	IM.LOTCONTROL								
+					--,	IM.DESCRIPTION								-- 설명
+					,	IM.VALIDSTATE			
+					--,	IM.CREATOR			AS CREATORID            -- 생성자
+					--,   CREATOR.USER_NAME 	AS CREATOR		    	-- 생성자명
+					,	IM.CREATEDTIME
+					--,	IM.MODIFIER
+					,	IM.MODIFIEDTIME
+					
+				FROM	BAS_ITEMMASTER               IM
+				
+				INNER JOIN BAS_MASTERDATACLASS 		 MTC	 ON	IM.MASTERDATACLASSID = MTC.MASTERDATACLASSID
+															 --AND IM.ENTERPRISEID = MTC.MASTERDATACLASSID
+															 --AND IM.PLANTID = MTC.PLANTID
+															 AND MTC.ITEMOWNER = 'Material' -- 자재
+				LEFT OUTER JOIN BAS_MATERIALITEMSPEC MTI   	 ON  IM.ENTERPRISEID = MTI.ENTERPRISEID
+				                                         	 AND IM.ITEMID = MTI.ITEMID
+				LEFT OUTER JOIN BAS_IDCLASS			 IDC	 ON MTC.IDCLASSID = IDC.IDCLASSID
+															 AND IDC.PLANTID = MTC.PLANTID
+															 AND IDC.ENTERPRISEID = MTC.ENTERPRISEID
+				LEFT OUTER JOIN CMD_USERS            CREATOR ON  IM.ENTERPRISEID = CREATOR.ENTERPRISEID
+				                                          	 AND IM.CREATOR =  CREATOR.USER_ID
+				LEFT OUTER JOIN BAS_VENDOR           MAKER   ON  MTI.ENTERPRISEID = MAKER.ENTERPRISEID
+				                                         	 AND MTI.MAKER =  MAKER.VENDORID
+				LEFT OUTER JOIN BAS_VENDOR           BUYER   ON  MTI.ENTERPRISEID = BUYER.ENTERPRISEID
+				                                         	 AND MTI.VENDORID =  BUYER.VENDORID				                                         	
+															
+				WHERE	1=1
+				
+			<if test="SITE != null and SITE !=''"> 
+				AND	IM.PLANTID	= #{SITE}
+			</if>
+			<if test="VALIDSTATE != null and VALIDSTATE !=''"> 
+				AND	IM.VALIDSTATE	= #{VALIDSTATE}
+			</if>
+			<if test="MATERIALID != null and MATERIALID !=''"> 
+				AND	UPPER(IM.ITEMID) LIKE  '%' || UPPER(#{MATERIALID})|| '%'					-- like 조건으로 변경(21.07.22)
+				
+			</if>
+			<if test="MATERIALNAME != null and MATERIALNAME !=''"> 
+				AND	UPPER(IM.ITEMNAME) LIKE  '%' || UPPER(#{MATERIALNAME})|| '%'		-- like 조건으로 변경(21.07.22)
+			</if>			
+				ORDER BY IM.ITEMID, CREATEDTIME				
+						
+   </select>
+   
+   
+   <!-- 자재 Spec 조회 -->
+   <select id="selectMtmMaterialDetail" parameterType="map" resultType="hashmap">
+   		select im.itemid -- 품목 id
+		     , im.itemname -- 품명
+		     , im.masterdataclassid as materialtype -- 품목 그룹
+		     , sp.materiallength -- 자재 길이
+		     , sp.materialwidth -- 자재 폭
+		     , sp.orderpolicy -- 발주 정책
+		     , sp.iscontainhalogen -- 할로겐 
+		     , sp.conversionfactor -- 환산 계수
+		     , sp.purchaseman -- 기본 구매자
+		     , sp.bookprice        as txtprice -- 장부 가격
+		     , sp.receiptroute -- 입고 경로
+		     , sp.receiptlocator -- 입고 loc
+		     , sp.gitype          as materialouttype -- 출고 방식 
+		     , sp.makereceipttype -- 제조/입고 구분
+		     , sp.accountgroup -- 계정 그룹
+		     , sp.accountcode -- 계정 코드
+		     , sp.accounttype -- 계정 분류
+		     , sp.recordedtype -- 차변/대변
+		     , case sp.itemid when sp.itemid
+		                        then 'modified'
+		                      else 'added'
+		        end state
+		  from bas_itemmaster im
+		  left outer join bas_materialitemspec sp
+		    on im.enterpriseid = sp.enterpriseid
+		   and im.itemid = sp.itemid
+		 where 1 = 1				
+			<if test="ITEMID != null and ITEMID !=''"> 
+		   		and im.itemid = #{ITEMID}
+			</if>					 
+
+   </select>
+     
+     
+
+</mapper>

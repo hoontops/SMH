@@ -1,0 +1,1532 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCMReworkLotDao">
+
+
+     <select id="GetLotIdMaxSequence" parameterType="map" resultType="hashmap">
+     	--
+		-- Id : GetLotIdMaxSequence
+		-- Version : 10001
+		SELECT	
+				COALESCE(MAX(SUBSTRING(L.LOTID FROM 8 FOR 3)), 0) + 1	AS SEQUENCE
+			,	COALESCE(MAX(SUBSTRING(L.LOTID FROM 19 FOR 3)), '000')		AS LOTDEGREE
+		    ,	COALESCE(MAX(RIGHT(L.LOTID,3)) ,0)  AS LASTSEQUENCE
+		FROM	PCM_LOT	L
+		WHERE	L.LOTID LIKE #{LOTID}||'%'
+		AND     l.lotcreatedtype <![CDATA[<>]]> 'Defect'
+    </select>
+     <select id="GetMigrationLotIdMaxSequence" parameterType="map" resultType="hashmap">
+		--
+		-- Id : GetMigrationLotIdMaxSequence
+		-- Version : 10001
+		SELECT
+				COALESCE(MAX(fn_base36_int(RIGHT(L.LOTID, 1))), 0)	AS LASTSEQUENCE
+		FROM	PCM_LOT	L
+		WHERE	L.LOTID LIKE #{LOTID}||'%'
+		AND		L.LOTCREATEDTYPE <![CDATA[<>]]> 'Defect'
+    </select>
+
+     <select id="GetDefectLotMaxSequence" parameterType="map" resultType="hashmap">
+		-- 
+		-- Id : GetDefectLotMaxSequence
+		-- Version : 10001
+		SELECT
+				COALESCE(MAX(RIGHT(L.LOTID, 3)), 'A00')	AS LASTID
+		FROM	PCM_LOT		L
+		WHERE	1 = 1
+		AND		L.LOTID ILIKE #{LOTID}||'%'
+		AND		RIGHT(L.LOTID, 3) ~ '[A-Z]'
+    </select>
+    
+     <select id="GetMigrationDefectLotMaxSequence" parameterType="map" resultType="hashmap">
+		--
+		-- Id : GetMigrationDefectLotMaxSequence
+		-- Version : 10001
+		SELECT
+				COALESCE(MAX(SUBSTRING(L.LOTID, POSITION('-' IN L.LOTID) + 1, 3)), 'A00')	AS LASTID
+		FROM	PCM_LOT		L
+		WHERE	L.LOTID LIKE #{LOTID}||'%'
+		AND		L.LOTID ~ '[-]'
+    </select>
+    
+    <!-- 제품 정보 상세조회-->
+    <select id="selectBasProductdefinition" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.PRODUCTDEFID	 
+        ,A.PRODUCTDEFVERSION	 
+        ,A.PRODUCTCLASSID	 
+        ,A.PRODUCTDEFNAME	 
+        ,A.ENTERPRISEID	 
+        ,A.PLANTID	 
+        ,A.PRODUCTDEFTYPE	 
+        ,A.PRODUCTIONTYPE	 
+        ,A.PRODUCTSHAPE	 
+        ,A.UNIT	 
+        ,A.DEFAULTQTY	 
+        ,A.HASSUBLOT	 
+        ,A.owner	 
+        ,A.LEADTIME	 
+        ,A.PROCESSDEFID	 
+        ,A.PROCESSDEFVERSION	 
+        ,A.VERSIONSTATE	 
+        ,A.CUSTOMERID	 
+        ,A.LAYER	 
+        ,A.PACKINGQTY	 
+        ,A.ISWEEKMNG	 
+        ,A.RTRSHT	 
+        ,A.INPUTTYPE	 
+        ,A.PCSSIZEXAXIS	 
+        ,A.PCSSIZEYAXIS	 
+        ,A.ARYSIZEXAXIS	 
+        ,A.ARYSIZEYAXIS	 
+        ,A.PNLSIZEXAXIS	 
+        ,A.PNLSIZEYAXIS	 
+        ,A.PCSPNL	 
+        ,A.PNLMM	 
+        ,A.PCSMM	 
+        ,A.PCSARY	 
+        ,A.MATERIALCLASS	 
+        ,A.CLMATERIAL	 
+        ,A.SUBSIDIARY	 
+        ,A.TOLERANCE	 
+        ,A.XOUT	 
+        ,A.DESCRIPTION	 
+        ,A.CREATOR	 
+        ,A.CREATEDTIME	 
+        ,A.MODIFIER	 
+        ,A.MODIFIEDTIME	 
+        ,A.VALIDSTATE	 
+        ,A.LOADOWNER	 
+        ,A.PRIORITY	 
+        ,A.MATERIALSEQUENCE	 
+        ,A.OWNERFACTORYID	 
+        ,A.TACTIMEMNGTYPE	 
+        ,A.ISLOADMNG	 
+    FROM	BAS_PRODUCTDEFINITION A 
+    WHERE A.PRODUCTDEFID = #{PRODUCTDEFID}
+    AND	A.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+    </select>
+    
+    <!-- 작업장 정보 상세조회-->
+    <select id="selectBasArea" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.AREAID	 
+        ,A.ENTERPRISEID	 
+        ,A.PLANTID	 
+        ,A.FACTORYID	 
+        ,A.AREANAME	 
+        ,A.AREATYPE	 
+        ,A.WAREHOUSEID	 
+        ,A.VENDORID	 
+        ,A.OWNTYPE	 
+        ,A.PARENTAREAID	 
+        ,A.DESCRIPTION	 
+        ,A.CREATOR	 
+        ,A.CREATEDTIME	 
+        ,A.MODIFIER	 
+        ,A.MODIFIEDTIME	 
+        ,A.LASTTXNHISTKEY	 
+        ,A.LASTTXNID	 
+        ,A.LASTTXNUSER	 
+        ,A.LASTTXNTIME	 
+        ,A.LASTTXNCOMMENT	 
+        ,A.VALIDSTATE	 
+        ,A.ISSUBCONTRACT	 
+    FROM	BAS_AREA A 
+    WHERE A.AREAID = #{AREAID}
+    </select>  
+
+    <!-- LOT 정보 변경 -->
+    <update id="updatePcmLot" parameterType="map" >
+    /* smh.pcm.dao.PCMReworkLotDao.updatePcmLot */
+    UPDATE PCM_LOT 
+    SET 
+        PRODUCTIONORDERID = nvl(#{PRODUCTIONORDERID},PRODUCTIONORDERID) 
+        ,LINENO = nvl(#{LINENO},LINENO)     
+        ,LOTGROUPID = nvl(#{LOTGROUPID},LOTGROUPID)     
+        ,LOTNAME = nvl(#{LOTNAME},LOTNAME)     
+        ,ENTERPRISEID = nvl(#{ENTERPRISEID},ENTERPRISEID)     
+        ,PLANTID = nvl(#{PLANTID},PLANTID)     
+        ,FACTORYID = nvl(#{FACTORYID},FACTORYID)     
+        ,ORIGINALPLANTID = nvl(#{ORIGINALPLANTID},ORIGINALPLANTID)     
+        ,AREAID = nvl(#{AREAID},AREAID)     
+        ,EQUIPMENTID = nvl(#{EQUIPMENTID},EQUIPMENTID)     
+        ,LOCATIONID = nvl(#{LOCATIONID},LOCATIONID)     
+        ,RECIPEDEFID = nvl(#{RECIPEDEFID},RECIPEDEFID)     
+        ,RECIPEDEFVERSION = nvl(#{RECIPEDEFVERSION},RECIPEDEFVERSION)     
+        ,RAWMATERIALID = nvl(#{RAWMATERIALID},RAWMATERIALID)     
+        ,ROOTLOTID = nvl(#{ROOTLOTID},ROOTLOTID)     
+        ,PARENTLOTID = nvl(#{PARENTLOTID},PARENTLOTID)     
+        ,CHILDLOTID = nvl(#{CHILDLOTID},CHILDLOTID)     
+        ,CARRIERID = nvl(#{CARRIERID},CARRIERID)     
+        ,LOTTYPE = nvl(#{LOTTYPE},LOTTYPE)     
+        ,LOTCREATEDTYPE = nvl(#{LOTCREATEDTYPE},LOTCREATEDTYPE)     
+        ,LOTINPUTTYPE = nvl(#{LOTINPUTTYPE},LOTINPUTTYPE)     
+        ,ISREPRESENTROLLLOT = nvl(#{ISREPRESENTROLLLOT},ISREPRESENTROLLLOT)     
+        ,HASSUBLOT = nvl(#{HASSUBLOT},HASSUBLOT)     
+        ,PRODUCTDEFID = nvl(#{PRODUCTDEFID},PRODUCTDEFID)     
+        ,PRODUCTDEFVERSION = nvl(#{PRODUCTDEFVERSION},PRODUCTDEFVERSION)     
+        ,PREVPRODUCTDEFVERSION = nvl(#{PREVPRODUCTDEFVERSION},PREVPRODUCTDEFVERSION)     
+        ,PROCESSDEFID = nvl(#{PROCESSDEFID},PROCESSDEFID)     
+        ,PROCESSDEFVERSION = nvl(#{PROCESSDEFVERSION},PROCESSDEFVERSION)     
+        ,PROCESSPATHSTACK = nvl(#{PROCESSPATHSTACK},PROCESSPATHSTACK)     
+        ,USERSEQUENCE = nvl(#{USERSEQUENCE},USERSEQUENCE)     
+        ,PROCESSSEGMENTID = nvl(#{PROCESSSEGMENTID},PROCESSSEGMENTID)     
+        ,PROCESSSEGMENTVERSION = nvl(#{PROCESSSEGMENTVERSION},PROCESSSEGMENTVERSION)     
+        ,PRIORITY = nvl(#{PRIORITY},PRIORITY)     
+        ,DUEDATE = nvl(#{DUEDATE},DUEDATE)     
+        ,EXPECTEDCOMPLETEDATE = nvl(#{EXPECTEDCOMPLETEDATE},EXPECTEDCOMPLETEDATE)     
+        ,ROOTLOTSTARTDATE = nvl(#{ROOTLOTSTARTDATE},ROOTLOTSTARTDATE)     
+        ,LOTSTARTDATE = nvl(#{LOTSTARTDATE},LOTSTARTDATE)     
+        ,WEEK = nvl(#{WEEK},WEEK)     
+        ,TRACKINUSER = nvl(#{TRACKINUSER},TRACKINUSER)     
+        ,TRACKINTIME = nvl(#{TRACKINTIME},TRACKINTIME)     
+        ,TRACKOUTUSER = nvl(#{TRACKOUTUSER},TRACKOUTUSER)     
+        ,TRACKOUTTIME = nvl(#{TRACKOUTTIME},TRACKOUTTIME)     
+        ,LOTSTATE = nvl(#{LOTSTATE},LOTSTATE)     
+        ,PROCESSSTATE = nvl(#{PROCESSSTATE},PROCESSSTATE)     
+        ,ISHOLD = nvl(#{ISHOLD},ISHOLD)     
+        ,ISREWORK = nvl(#{ISREWORK},ISREWORK)     
+        ,ISLOCKING = nvl(#{ISLOCKING},ISLOCKING)     
+        ,REWORKTYPE = nvl(#{REWORKTYPE},REWORKTYPE)     
+        ,REWORKREASONCODE = nvl(#{REWORKREASONCODE},REWORKREASONCODE)     
+        ,ISPRINTLOTCARD = nvl(#{ISPRINTLOTCARD},ISPRINTLOTCARD)     
+        ,ISPRINTRCLOTCARD = nvl(#{ISPRINTRCLOTCARD},ISPRINTRCLOTCARD)     
+        ,LAYER = nvl(#{LAYER},LAYER)     
+        ,CREATEDQTY = nvl(#{CREATEDQTY},CREATEDQTY)     
+        ,LOTSTDPANELQTY = nvl(#{LOTSTDPANELQTY},LOTSTDPANELQTY)     
+        ,UNIT = nvl(#{UNIT},UNIT)     
+        ,DEFECTUNIT = nvl(#{DEFECTUNIT},DEFECTUNIT)     
+        ,QTY = nvl(#{PCSQTY},QTY)     
+        ,DEFECTQTY = nvl(#{DEFECTQTY},DEFECTQTY)     
+        ,PSEUDODEFECTQTY = nvl(#{PSEUDODEFECTQTY},PSEUDODEFECTQTY)     
+        ,PCSQTY = nvl(#{PCSQTY},PCSQTY)     
+        ,ARRAYQTY = nvl(#{ARRAYQTY},ARRAYQTY)     
+        ,PANELQTY = nvl(#{PANELQTY},PANELQTY)     
+        ,PANELPERQTY = nvl(#{PANELPERQTY},PANELPERQTY)     
+        ,REWORKCOUNT = nvl(#{REWORKCOUNT},REWORKCOUNT)     
+        ,TOTALREWORKCOUNT = nvl(#{TOTALREWORKCOUNT},TOTALREWORKCOUNT)     
+        ,PUREORDER = nvl(#{PUREORDER},PUREORDER)     
+        ,PUREINPUT = nvl(#{PUREINPUT},PUREINPUT)     
+        ,SUBPROCESSDEFID = nvl(#{SUBPROCESSDEFID},SUBPROCESSDEFID)     
+        ,SUBPROCESSDEFVERSION = nvl(#{SUBPROCESSDEFVERSION},SUBPROCESSDEFVERSION)     
+        ,RECEIVEUSER = nvl(#{RECEIVEUSER},RECEIVEUSER)     
+        ,RECEIVETIME = nvl(#{RECEIVETIME},RECEIVETIME)     
+        ,STARTEDUSER = nvl(#{STARTEDUSER},STARTEDUSER)     
+        ,STARTEDDATE = nvl(#{STARTEDDATE},STARTEDDATE)     
+        ,SENDUSER = nvl(#{SENDUSER},SENDUSER)     
+        ,SENDTIME = nvl(#{SENDTIME},SENDTIME)     
+        ,HANDLETYPE = nvl(#{HANDLETYPE},HANDLETYPE)     
+        ,DESCRIPTION = nvl(#{DESCRIPTION},DESCRIPTION)             
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}  
+        ,LASTTXNUSER = #{LASTTXNUSER}   
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}   
+        ,ISDEFECTED = nvl(#{ISDEFECTED},ISDEFECTED)
+        ,LASTTXNGROUPHISTKEY = #{LASTTXNGROUPHISTKEY}     
+        ,WORKCOUNT = nvl(#{WORKCOUNT},WORKCOUNT)     
+        ,RESOURCEID = nvl(#{RESOURCEID},RESOURCEID)     
+        ,MKLOTID = nvl(#{MKLOTID},MKLOTID)     
+        ,PREVPRODUCTDEFID = nvl(#{PREVPRODUCTDEFID},PREVPRODUCTDEFID)     
+        ,PNLROOTLOTID = nvl(#{PNLROOTLOTID},PNLROOTLOTID)     
+        ,PNLCREATEDQTY = nvl(#{PNLCREATEDQTY},PNLCREATEDQTY)     
+        ,INPUTCONFIRMDATE = nvl(#{INPUTCONFIRMDATE},INPUTCONFIRMDATE)     
+        ,INPUTCONFIRMUSER = nvl(#{INPUTCONFIRMUSER},INPUTCONFIRMUSER)     
+        ,ISFINALINSPECTPROGESS = nvl(#{ISFINALINSPECTPROGESS},ISFINALINSPECTPROGESS)     
+        ,LOTINPUTQTY = nvl(#{LOTINPUTQTY},LOTINPUTQTY)     
+        ,ISFIRSTCREATELOT = nvl(#{ISFIRSTCREATELOT},ISFIRSTCREATELOT)     
+        ,ISOEM = nvl(#{ISOEM},ISOEM)     
+        ,ISSHRINKTEST = nvl(#{ISSHRINKTEST},ISSHRINKTEST)
+    WHERE LOTID = #{LOTID}
+    </update>
+
+    <!-- Lot 법인간 물류 이동 상세조회-->
+    <select id="selectMtmLotplanttransit" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.TXNHISTKEY	 
+        ,A.LOTID	 
+        ,A.ENTERPRISEID	 
+        ,A.PLANTID	 
+        ,A.PRODUCTIONORDERID	 
+        ,A.LINENO	 
+        ,A.PREVPLANTID	 
+        ,A.FACTORYID	 
+        ,A.AREAID	 
+        ,A.PREVAREAID	 
+        ,A.PROCESSDEFID	 
+        ,A.PROCESSDEFVERSION	 
+        ,A.PROCESSSEGMENTID	 
+        ,A.PREVPROCESSSEGMENTID	 
+        ,A.WORKCOUNT	 
+        ,A.SENDUSER	 
+        ,A.SENDDATE	 
+        ,A.RECEIVEUSER	 
+        ,A.RECEIVEDATE	 
+        ,A.TRANSITSTATUS	 
+        ,A.DESCRIPTION	 
+        ,A.CREATOR	 
+        ,A.CREATEDTIME	 
+    FROM	MTM_LOTPLANTTRANSIT A 
+    WHERE A.LOTID = #{LOTID}
+    AND	A.TXNHISTKEY = #{TXNHISTKEY}
+    </select>
+
+    <!-- LOT 정보 등록 -->
+    <insert id="insertPcmLot" parameterType="map">
+    INSERT INTO PCM_LOT( 
+        LOTID  
+        ,PRODUCTIONORDERID  
+        ,LINENO  
+        ,LOTGROUPID  
+        ,LOTNAME  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,FACTORYID  
+        ,ORIGINALPLANTID  
+        ,AREAID  
+        ,EQUIPMENTID  
+        ,LOCATIONID  
+        ,RECIPEDEFID  
+        ,RECIPEDEFVERSION  
+        ,RAWMATERIALID  
+        ,ROOTLOTID  
+        ,PARENTLOTID  
+        ,CHILDLOTID  
+        ,CARRIERID  
+        ,LOTTYPE  
+        ,LOTCREATEDTYPE  
+        ,LOTINPUTTYPE  
+        ,ISREPRESENTROLLLOT  
+        ,HASSUBLOT  
+        ,PRODUCTDEFID  
+        ,PRODUCTDEFVERSION  
+        ,PREVPRODUCTDEFVERSION  
+        ,PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,PROCESSPATHSTACK  
+        ,USERSEQUENCE  
+        ,PROCESSSEGMENTID  
+        ,PROCESSSEGMENTVERSION  
+        ,PRIORITY  
+        ,DUEDATE  
+        ,EXPECTEDCOMPLETEDATE  
+        ,ROOTLOTSTARTDATE  
+        ,LOTSTARTDATE  
+        ,WEEK  
+        ,TRACKINUSER  
+        ,TRACKINTIME  
+        ,TRACKOUTUSER  
+        ,TRACKOUTTIME  
+        ,LOTSTATE  
+        ,PROCESSSTATE  
+        ,ISHOLD  
+        ,ISREWORK  
+        ,ISLOCKING  
+        ,REWORKTYPE  
+        ,REWORKREASONCODE  
+        ,ISPRINTLOTCARD  
+        ,ISPRINTRCLOTCARD  
+        ,LAYER  
+        ,CREATEDQTY  
+        ,LOTSTDPANELQTY  
+        ,UNIT  
+        ,DEFECTUNIT  
+        ,QTY  
+        ,DEFECTQTY  
+        ,PSEUDODEFECTQTY  
+        ,PCSQTY  
+        ,ARRAYQTY  
+        ,PANELQTY  
+        ,PANELPERQTY  
+        ,REWORKCOUNT  
+        ,TOTALREWORKCOUNT  
+        ,PUREORDER  
+        ,PUREINPUT  
+        ,SUBPROCESSDEFID  
+        ,SUBPROCESSDEFVERSION  
+        ,RECEIVEUSER  
+        ,RECEIVETIME  
+        ,STARTEDUSER  
+        ,STARTEDDATE  
+        ,SENDUSER  
+        ,SENDTIME  
+        ,HANDLETYPE  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,MODIFIER  
+        ,MODIFIEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,ISDEFECTED  
+        ,LASTTXNGROUPHISTKEY  
+        ,WORKCOUNT  
+        ,RESOURCEID  
+        ,MKLOTID  
+        ,PREVPRODUCTDEFID  
+        ,PNLROOTLOTID  
+        ,PNLCREATEDQTY  
+        ,INPUTCONFIRMDATE  
+        ,INPUTCONFIRMUSER  
+        ,ISFINALINSPECTPROGESS  
+        ,LOTINPUTQTY  
+        ,ISFIRSTCREATELOT  
+        ,ISOEM  
+        ,ISSHRINKTEST        ) 
+    VALUES( 
+        #{LOTID}  
+        ,#{PRODUCTIONORDERID}  
+        ,#{LINENO}  
+        ,#{LOTGROUPID}  
+        ,#{LOTNAME}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{FACTORYID}  
+        ,#{ORIGINALPLANTID}  
+        ,#{AREAID}  
+        ,#{EQUIPMENTID}  
+        ,#{LOCATIONID}  
+        ,#{RECIPEDEFID}  
+        ,#{RECIPEDEFVERSION}  
+        ,#{RAWMATERIALID}  
+        ,#{ROOTLOTID}  
+        ,#{PARENTLOTID}  
+        ,#{CHILDLOTID}  
+        ,#{CARRIERID}  
+        ,#{LOTTYPE}  
+        ,#{LOTCREATEDTYPE}  
+        ,#{LOTINPUTTYPE}  
+        ,#{ISREPRESENTROLLLOT}  
+        ,#{HASSUBLOT}  
+        ,#{PRODUCTDEFID}  
+        ,#{PRODUCTDEFVERSION}  
+        ,#{PREVPRODUCTDEFVERSION}  
+        ,#{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{PROCESSPATHSTACK}  
+        ,#{USERSEQUENCE}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PROCESSSEGMENTVERSION}  
+        ,#{PRIORITY}  
+        ,#{DUEDATE}  
+        ,#{EXPECTEDCOMPLETEDATE}  
+        ,#{ROOTLOTSTARTDATE}  
+        ,#{LOTSTARTDATE}  
+        ,#{WEEK}  
+        ,#{TRACKINUSER}  
+        ,#{TRACKINTIME}  
+        ,#{TRACKOUTUSER}  
+        ,#{TRACKOUTTIME}  
+        ,#{LOTSTATE}  
+        ,#{PROCESSSTATE}  
+        ,#{ISHOLD}  
+        ,#{ISREWORK}  
+        ,#{ISLOCKING}  
+        ,#{REWORKTYPE}  
+        ,#{REWORKREASONCODE}  
+        ,#{ISPRINTLOTCARD}  
+        ,#{ISPRINTRCLOTCARD}  
+        ,#{LAYER}  
+        ,#{CREATEDQTY}  
+        ,#{LOTSTDPANELQTY}  
+        ,#{UNIT}  
+        ,#{DEFECTUNIT}  
+        ,#{QTY}  
+        ,#{DEFECTQTY}  
+        ,#{PSEUDODEFECTQTY}  
+        ,#{PCSQTY}  
+        ,#{ARRAYQTY}  
+        ,#{PANELQTY}  
+        ,#{PANELPERQTY}  
+        ,#{REWORKCOUNT}  
+        ,#{TOTALREWORKCOUNT}  
+        ,#{PUREORDER}  
+        ,#{PUREINPUT}  
+        ,#{SUBPROCESSDEFID}  
+        ,#{SUBPROCESSDEFVERSION}  
+        ,#{RECEIVEUSER}  
+        ,#{RECEIVETIME}  
+        ,#{STARTEDUSER}  
+        ,#{STARTEDDATE}  
+        ,#{SENDUSER}  
+        ,#{SENDTIME}  
+        ,#{HANDLETYPE}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{MODIFIER}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,#{ISDEFECTED}  
+        ,#{LASTTXNGROUPHISTKEY}  
+        ,#{WORKCOUNT}  
+        ,#{RESOURCEID}  
+        ,#{MKLOTID}  
+        ,#{PREVPRODUCTDEFID}  
+        ,#{PNLROOTLOTID}  
+        ,#{PNLCREATEDQTY}  
+        ,#{INPUTCONFIRMDATE}  
+        ,#{INPUTCONFIRMUSER}  
+        ,#{ISFINALINSPECTPROGESS}  
+        ,#{LOTINPUTQTY}  
+        ,#{ISFIRSTCREATELOT}  
+        ,#{ISOEM}  
+        ,#{ISSHRINKTEST}    )
+    </insert>    
+    <!-- LOT 정보 이력 상세조회-->
+    <select id="selectPcmLothistory" parameterType="map" resultType="hashmap">
+     /* smh.pcm.dao.PCMReworkLotDao.selectPcmLothistory */
+    SELECT 
+        A.TXNHISTKEY	 
+        ,A.LOTID	 
+        ,A.PRODUCTIONORDERID	 
+        ,A.LINENO	 
+        ,A.LOTGROUPID	 
+        ,A.LOTNAME	 
+        ,A.ENTERPRISEID	 
+        ,A.ORIGINALPLANTID	 
+        ,A.PREVPLANTID	 
+        ,A.PLANTID	 
+        ,A.PREVFACTORYID	 
+        ,A.FACTORYID	 
+        ,A.PREVAREAID	 
+        ,A.AREAID	 
+        ,A.PREVEQUIPMENTID	 
+        ,A.EQUIPMENTID	 
+        ,A.LOCATIONID	 
+        ,A.RECIPEDEFID	 
+        ,A.RECIPEDEFVERSION	 
+        ,A.PREVPRODUCTDEFID	 
+        ,A.PREVPRODUCTDEFVERSION	 
+        ,A.PRODUCTDEFID	 
+        ,A.PRODUCTDEFVERSION	 
+        ,A.PREVPROCESSDEFID	 
+        ,A.PREVPROCESSDEFVERSION	 
+        ,A.PROCESSDEFID	 
+        ,A.PROCESSDEFVERSION	 
+        ,A.PROCESSPATHSTACK	 
+        ,A.PREVUSERSEQUENCE	 
+        ,A.USERSEQUENCE	 
+        ,A.PREVPROCESSSEGMENTID	 
+        ,A.PREVPROCESSSEGMENTVERSION	 
+        ,A.PROCESSSEGMENTID	 
+        ,A.PROCESSSEGMENTVERSION	 
+        ,A.RAWMATERIALID	 
+        ,A.ROOTLOTID	 
+        ,A.PARENTLOTID	 
+        ,A.CHILDLOTID	 
+        ,A.CARRIERID	 
+        ,A.PREVLOTTYPE	 
+        ,A.LOTTYPE	 
+        ,A.LOTCREATEDTYPE	 
+        ,A.LOTINPUTTYPE	 
+        ,A.ISREPRESENTROLLLOT	 
+        ,A.HASSUBLOT	 
+        ,A.PRIORITY	 
+        ,A.DUEDATE	 
+        ,A.EXPECTEDCOMPLETEDATE	 
+        ,A.ROOTLOTSTARTDATE	 
+        ,A.LOTSTARTDATE	 
+        ,A.WEEK	 
+        ,A.TRACKINUSER	 
+        ,A.TRACKINTIME	 
+        ,A.TRACKOUTUSER	 
+        ,A.TRACKOUTTIME	 
+        ,A.PREVLOTSTATE	 
+        ,A.LOTSTATE	 
+        ,A.PREVPROCESSSTATE	 
+        ,A.PROCESSSTATE	 
+        ,A.ISHOLD	 
+        ,A.ISREWORK	 
+        ,A.ISLOCKING	 
+        ,A.REWORKTYPE	 
+        ,A.REWORKREASONCODE	 
+        ,A.ISPRINTLOTCARD	 
+        ,A.ISPRINTRCLOTCARD	 
+        ,A.LAYER	 
+        ,A.CREATEDQTY	 
+        ,A.LOTSTDPANELQTY	 
+        ,A.UNIT	 
+        ,A.DEFECTUNIT	 
+        ,A.PREVQTY	 
+        ,A.QTY	 
+        ,A.PREVDEFECTQTY	 
+        ,A.DEFECTQTY	 
+        ,A.PREVPSEUDODEFECTQTY	 
+        ,A.PSEUDODEFECTQTY	 
+        ,A.PREVPCSQTY	 
+        ,A.PCSQTY	 
+        ,A.PREVARRAYQTY	 
+        ,A.ARRAYQTY	 
+        ,A.PREVPANELQTY	 
+        ,A.PANELQTY	 
+        ,A.PANELPERQTY	 
+        ,A.REWORKCOUNT	 
+        ,A.TOTALREWORKCOUNT	 
+        ,A.PUREORDER	 
+        ,A.PUREINPUT	 
+        ,A.SUBPROCESSDEFID	 
+        ,A.SUBPROCESSDEFVERSION	 
+        ,A.RECEIVEUSER	 
+        ,A.RECEIVETIME	 
+        ,A.STARTEDUSER	 
+        ,A.STARTEDDATE	 
+        ,A.SENDUSER	 
+        ,A.SENDTIME	 
+        ,A.HANDLETYPE	 
+        ,A.ISCANCEL	 
+        ,A.CANCELHISTKEY	 
+        ,A.DESCRIPTION	 
+        ,A.CREATOR	 
+        ,A.CREATEDTIME	 
+        ,A.MODIFIER	 
+        ,A.MODIFIEDTIME	 
+        ,A.TXNGROUPHISTKEY	 
+        ,A.TXNID	 
+        ,A.TXNUSER	 
+        ,A.TXNTIME	 
+        ,A.TXNREASONCODECLASS	 
+        ,A.TXNREASONCODE	 
+        ,A.TXNCOMMENT	 
+        ,A.ISDEFECTED	 
+        ,A.WORKCOUNT	 
+        ,A.RESOURCEID	 
+        ,A.MKLOTID	 
+        ,A.PNLROOTLOTID	 
+        ,A.PNLCREATEDQTY	 
+        ,A.INPUTCONFIRMDATE	 
+        ,A.INPUTCONFIRMUSER	 
+        ,A.ISFINALINSPECTPROGESS	 
+        ,A.LOTINPUTQTY	 
+        ,A.ISFIRSTCREATELOT	 
+        ,A.ISOEM	 
+        ,A.ISSHRINKTEST	 
+    FROM	PCM_LOTHISTORY A 
+    WHERE A.LOTID = #{LOTID}
+    AND	A.TXNHISTKEY = #{TXNHISTKEY}
+    </select>
+    
+    <!-- LOT 정보 이력 변경 -->
+    <update id="updatePcmLothistory" parameterType="map" >
+     /* smh.pcm.dao.PCMReworkLotDao.updatePcmLothistory */
+    UPDATE PCM_LOTHISTORY 
+    SET 
+        PREVPLANTID = #{PREVPLANTID}     
+        ,PREVFACTORYID = #{PREVFACTORYID}     
+        ,PREVAREAID = #{PREVAREAID}     
+    WHERE LOTID = #{LOTID}
+    AND TXNHISTKEY = #{TXNHISTKEY}
+    </update>
+    
+    <!-- Lot 법인간 물류 이동 등록 -->
+    <insert id="insertMtmLotplanttransit" parameterType="map">
+    INSERT INTO MTM_LOTPLANTTRANSIT( 
+        TXNHISTKEY  
+        ,LOTID  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,PRODUCTIONORDERID  
+        ,LINENO  
+        ,PREVPLANTID  
+        ,FACTORYID  
+        ,AREAID  
+        ,PREVAREAID  
+        ,PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,PROCESSSEGMENTID  
+        ,PREVPROCESSSEGMENTID  
+        ,WORKCOUNT  
+        ,SENDUSER  
+        ,SENDDATE  
+        ,RECEIVEUSER  
+        ,RECEIVEDATE  
+        ,TRANSITSTATUS  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,TXNGROUPHISTKEY  
+        ,TXNUSER  
+        ,TXNTIME  
+        ,TXNREASONCODECLASS  
+        ,TXNREASONCODE  
+        ,TXNCOMMENT        ) 
+    VALUES( 
+        #{TXNHISTKEY}  
+        ,#{LOTID}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{PRODUCTIONORDERID}  
+        ,#{LINENO}  
+        ,#{PREVPLANTID}  
+        ,#{FACTORYID}  
+        ,#{AREAID}  
+        ,#{PREVAREAID}  
+        ,#{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PREVPROCESSSEGMENTID}  
+        ,#{WORKCOUNT}  
+        ,#{SENDUSER}  
+        ,#{SENDDATE}  
+        ,#{RECEIVEUSER}  
+        ,#{RECEIVEDATE}  
+        ,#{TRANSITSTATUS}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{TXNGROUPHISTKEY}  
+        ,#{TXNUSER}  
+        ,SYSDATE  
+        ,#{TXNREASONCODECLASS}  
+        ,#{TXNREASONCODE}  
+        ,#{TXNCOMMENT}    )
+    </insert>    
+    
+    <!-- LOT 사용 설비 삭제 -->
+    <update id="deletePcmLotequipment" parameterType="map" > 
+    DELETE FROM PCM_LOTEQUIPMENT 
+    WHERE LOTID = #{LOTID}
+    AND TXNHISTKEY = #{TXNHISTKEY}
+    </update>
+
+    <!-- LOT 사용 설비 조회-->
+    <select id="selectPcmLotequipmentList" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.LOTID	
+        ,A.TXNHISTKEY	
+        ,A.EQUIPMENTID	
+        ,A.PROCESSSTATE	
+        ,A.PROCESSSEGMENTID	
+        ,A.PROCESSSEGMENTVERSION	
+        ,A.WORKCOUNT	
+        ,A.RECEIVETIME	
+        ,A.TRACKINTIME	
+        ,A.TRACKOUTTIME	
+        ,A.LOTQTY	
+        ,A.DESCRIPTION	
+        ,A.CREATOR	
+        ,A.CREATEDTIME	
+        ,A.MODIFIER	
+        ,A.MODIFIEDTIME	
+        ,A.TXNGROUPHISTKEY	
+        ,A.TXNID	
+        ,A.TXNUSER	
+        ,A.TXNTIME	
+        ,A.TXNREASONCODECLASS	
+        ,A.TXNREASONCODE	
+        ,A.TXNCOMMENT	
+        ,A.RECIPEID	
+        ,A.RECIPEVERSION	
+        ,A.RECIPETYPE	
+    FROM	PCM_LOTEQUIPMENT A 
+    WHERE 1=1 
+    <if test="LOTID != null and LOTID !='' "> 
+        AND A.LOTID = #{LOTID}
+    </if>
+    <if test="EQUIPMENTID != null and EQUIPMENTID !='' "> 
+        AND A.EQUIPMENTID = #{EQUIPMENTID}
+    </if>
+    <if test="PROCESSSTATE != null and PROCESSSTATE !='' "> 
+        AND A.PROCESSSTATE = #{PROCESSSTATE}
+    </if>
+    <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+        AND A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </if>
+    <if test="PROCESSSEGMENTVERSION != null and PROCESSSEGMENTVERSION !='' "> 
+        AND A.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+    </if>
+    <if test="WORKCOUNT != null and WORKCOUNT !='' "> 
+        AND A.WORKCOUNT = #{WORKCOUNT}
+    </if>
+    <if test="RECEIVETIME != null and RECEIVETIME !='' "> 
+        AND A.RECEIVETIME = #{RECEIVETIME}
+    </if>
+    <if test="TRACKINTIME != null and TRACKINTIME !='' "> 
+        AND A.TRACKINTIME = #{TRACKINTIME}
+    </if>
+    <if test="TRACKOUTTIME != null and TRACKOUTTIME !='' "> 
+        AND A.TRACKOUTTIME = #{TRACKOUTTIME}
+    </if>
+    <if test="LOTQTY != null and LOTQTY !='' "> 
+        AND A.LOTQTY = #{LOTQTY}
+    </if>
+    <if test="DESCRIPTION != null and DESCRIPTION !='' "> 
+        AND A.DESCRIPTION = #{DESCRIPTION}
+    </if>
+    <if test="RECIPEID != null and RECIPEID !='' "> 
+        AND A.RECIPEID = #{RECIPEID}
+    </if>
+    <if test="RECIPEVERSION != null and RECIPEVERSION !='' "> 
+        AND A.RECIPEVERSION = #{RECIPEVERSION}
+    </if>
+    <if test="RECIPETYPE != null and RECIPETYPE !='' "> 
+        AND A.RECIPETYPE = #{RECIPETYPE}
+    </if>
+    </select>
+    
+    <!-- LOT Window-Time 삭제 -->
+    <update id="deletePcmLotwtime" parameterType="map" > 
+    DELETE FROM PCM_LOTWTIME 
+    WHERE LOTID = #{LOTID}
+    AND TXNHISTKEY = #{TXNHISTKEY}
+    </update>
+
+    <!-- LOT Window-Time 조회-->
+    <select id="selectPcmLotwtimeList" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.TXNHISTKEY	
+        ,A.LOTID	
+        ,A.WTIMEDEFID	
+        ,A.WTIMEDEFNAME	
+        ,A.ENTERPRISEID	
+        ,A.PLANTID	
+        ,A.PRODUCTDEFID	
+        ,A.PRODUCTDEFVERSION	
+        ,A.PROCESSDEFID	
+        ,A.PROCESSDEFVERSION	
+        ,A.PROCESSPATHID	
+        ,A.USERSEQUENCE	
+        ,A.PROCESSSEGMENTID	
+        ,A.PROCESSSEGMENTVERSION	
+        ,A.PROCESSSTATE	
+        ,A.TOPROCESSDEFID	
+        ,A.TOPROCESSDEFVERSION	
+        ,A.TOPROCESSPATHID	
+        ,A.TOPROCESSSEGMENTID	
+        ,A.TOPROCESSSEGMENTVERSION	
+        ,A.TOPROCESSSTATE	
+        ,A.SETTIME	
+        ,A.OCCURETIME	
+        ,A.WTIME	
+        ,A.WTIMETYPE	
+        ,A.WTIMELIMIT	
+        ,A.DESCRIPTION	
+        ,A.CREATOR	
+        ,A.CREATEDTIME	
+        ,A.MODIFIER	
+        ,A.MODIFIEDTIME	
+        ,A.TXNGROUPHISTKEY	
+        ,A.TXNID	
+        ,A.TXNUSER	
+        ,A.TXNTIME	
+        ,A.TXNREASONCODECLASS	
+        ,A.TXNREASONCODE	
+        ,A.TXNCOMMENT	
+    FROM	PCM_LOTWTIME A 
+    WHERE 1=1 
+    <if test="LOTID != null and LOTID !='' "> 
+        AND A.LOTID = #{LOTID}
+    </if>
+    <if test="WTIMEDEFID != null and WTIMEDEFID !='' "> 
+        AND A.WTIMEDEFID = #{WTIMEDEFID}
+    </if>
+    <if test="WTIMEDEFNAME != null and WTIMEDEFNAME !='' "> 
+        AND A.WTIMEDEFNAME = #{WTIMEDEFNAME}
+    </if>
+    <if test="ENTERPRISEID != null and ENTERPRISEID !='' "> 
+        AND A.ENTERPRISEID = #{ENTERPRISEID}
+    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND A.PLANTID = #{PLANTID}
+    </if>
+    <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+        AND A.PRODUCTDEFID = #{PRODUCTDEFID}
+    </if>
+    <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' "> 
+        AND A.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+    </if>
+    <if test="PROCESSDEFID != null and PROCESSDEFID !='' "> 
+        AND A.PROCESSDEFID = #{PROCESSDEFID}
+    </if>
+    <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' "> 
+        AND A.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </if>
+    <if test="PROCESSPATHID != null and PROCESSPATHID !='' "> 
+        AND A.PROCESSPATHID = #{PROCESSPATHID}
+    </if>
+    <if test="USERSEQUENCE != null and USERSEQUENCE !='' "> 
+        AND A.USERSEQUENCE = #{USERSEQUENCE}
+    </if>
+    <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+        AND A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </if>
+    <if test="PROCESSSEGMENTVERSION != null and PROCESSSEGMENTVERSION !='' "> 
+        AND A.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+    </if>
+    <if test="PROCESSSTATE != null and PROCESSSTATE !='' "> 
+        AND A.PROCESSSTATE = #{PROCESSSTATE}
+    </if>
+    <if test="TOPROCESSDEFID != null and TOPROCESSDEFID !='' "> 
+        AND A.TOPROCESSDEFID = #{TOPROCESSDEFID}
+    </if>
+    <if test="TOPROCESSDEFVERSION != null and TOPROCESSDEFVERSION !='' "> 
+        AND A.TOPROCESSDEFVERSION = #{TOPROCESSDEFVERSION}
+    </if>
+    <if test="TOPROCESSPATHID != null and TOPROCESSPATHID !='' "> 
+        AND A.TOPROCESSPATHID = #{TOPROCESSPATHID}
+    </if>
+    <if test="TOPROCESSSEGMENTID != null and TOPROCESSSEGMENTID !='' "> 
+        AND A.TOPROCESSSEGMENTID = #{TOPROCESSSEGMENTID}
+    </if>
+    <if test="TOPROCESSSEGMENTVERSION != null and TOPROCESSSEGMENTVERSION !='' "> 
+        AND A.TOPROCESSSEGMENTVERSION = #{TOPROCESSSEGMENTVERSION}
+    </if>
+    <if test="TOPROCESSSTATE != null and TOPROCESSSTATE !='' "> 
+        AND A.TOPROCESSSTATE = #{TOPROCESSSTATE}
+    </if>
+    <if test="SETTIME != null and SETTIME !='' "> 
+        AND A.SETTIME = #{SETTIME}
+    </if>
+    <if test="OCCURETIME != null and OCCURETIME !='' "> 
+        AND A.OCCURETIME = #{OCCURETIME}
+    </if>
+    <if test="WTIME != null and WTIME !='' "> 
+        AND A.WTIME = #{WTIME}
+    </if>
+    <if test="WTIMETYPE != null and WTIMETYPE !='' "> 
+        AND A.WTIMETYPE = #{WTIMETYPE}
+    </if>
+    <if test="WTIMELIMIT != null and WTIMELIMIT !='' "> 
+        AND A.WTIMELIMIT = #{WTIMELIMIT}
+    </if>
+    <if test="DESCRIPTION != null and DESCRIPTION !='' "> 
+        AND A.DESCRIPTION = #{DESCRIPTION}
+    </if>
+    </select>
+    
+    <!-- Lot 취소생산실적 등록 -->
+    <insert id="insertPcmLotcancelworkresult" parameterType="map">
+     /* smh.pcm.dao.PCMReworkLotDao.insertPcmLotcancelworkresult */
+    INSERT INTO PCM_LOTCANCELWORKRESULT( 
+        TXNHISTKEY  
+        ,LOTID  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,FACTORYID  
+        ,AREAID  
+        ,PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,PREVPROCESSDEFID  
+        ,PREVPROCESSDEFVERSION  
+        ,PROCESSSEGMENTID  
+        ,PREVPROCESSSEGMENTID  
+        ,WORKCOUNT  
+        ,LOTSTATE  
+        ,PROCESSSTATE  
+        ,PREVLOTSTATE  
+        ,PREVPROCESSSTATE  
+        ,UNIT  
+        ,PCSQTY  
+        ,PANELQTY  
+        ,CANCELCOMMENTS  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,TXNGROUPHISTKEY  
+        ,TXNUSER  
+        ,TXNTIME  
+        ,TXNREASONCODECLASS  
+        ,TXNREASONCODE  
+        ,TXNCOMMENT        ) 
+    VALUES( 
+        #{TXNHISTKEY}  
+        ,#{LOTID}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{FACTORYID}  
+        ,#{AREAID}  
+        ,#{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{PREVPROCESSDEFID}  
+        ,#{PREVPROCESSDEFVERSION}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PREVPROCESSSEGMENTID}  
+        ,#{WORKCOUNT}  
+        ,#{LOTSTATE}  
+        ,#{PROCESSSTATE}  
+        ,#{PREVLOTSTATE}  
+        ,#{PREVPROCESSSTATE}  
+        ,#{UNIT}  
+        ,#{PCSQTY}  
+        ,#{PANELQTY}  
+        ,#{CANCELCOMMENTS}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{TXNGROUPHISTKEY}  
+        ,#{TXNUSER}  
+        ,SYSDATE  
+        ,#{TXNREASONCODECLASS}  
+        ,#{TXNREASONCODE}  
+        ,#{TXNCOMMENT}    )
+    </insert>  
+    
+    <!-- Lot 취소생산실적 조회-->
+    <select id="selectPcmLotcancelworkresultList" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.TXNHISTKEY	
+        ,A.LOTID	
+        ,A.ENTERPRISEID	
+        ,A.PLANTID	
+        ,A.FACTORYID	
+        ,A.AREAID	
+        ,A.PROCESSDEFID	
+        ,A.PROCESSDEFVERSION	
+        ,A.PREVPROCESSDEFID	
+        ,A.PREVPROCESSDEFVERSION	
+        ,A.PROCESSSEGMENTID	
+        ,A.PREVPROCESSSEGMENTID	
+        ,A.WORKCOUNT	
+        ,A.LOTSTATE	
+        ,A.PROCESSSTATE	
+        ,A.PREVLOTSTATE	
+        ,A.PREVPROCESSSTATE	
+        ,A.UNIT	
+        ,A.PCSQTY	
+        ,A.PANELQTY	
+        ,A.CANCELCOMMENTS	
+        ,A.DESCRIPTION	
+        ,A.CREATOR	
+        ,A.CREATEDTIME	
+        ,A.TXNGROUPHISTKEY	
+        ,A.TXNUSER	
+        ,A.TXNTIME	
+        ,A.TXNREASONCODECLASS	
+        ,A.TXNREASONCODE	
+        ,A.TXNCOMMENT	
+    FROM	PCM_LOTCANCELWORKRESULT A 
+    WHERE 1=1 
+    <if test="LOTID != null and LOTID !='' "> 
+        AND A.LOTID = #{LOTID}
+    </if>
+    <if test="ENTERPRISEID != null and ENTERPRISEID !='' "> 
+        AND A.ENTERPRISEID = #{ENTERPRISEID}
+    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND A.PLANTID = #{PLANTID}
+    </if>
+    <if test="FACTORYID != null and FACTORYID !='' "> 
+        AND A.FACTORYID = #{FACTORYID}
+    </if>
+    <if test="AREAID != null and AREAID !='' "> 
+        AND A.AREAID = #{AREAID}
+    </if>
+    <if test="PROCESSDEFID != null and PROCESSDEFID !='' "> 
+        AND A.PROCESSDEFID = #{PROCESSDEFID}
+    </if>
+    <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' "> 
+        AND A.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </if>
+    <if test="PREVPROCESSDEFID != null and PREVPROCESSDEFID !='' "> 
+        AND A.PREVPROCESSDEFID = #{PREVPROCESSDEFID}
+    </if>
+    <if test="PREVPROCESSDEFVERSION != null and PREVPROCESSDEFVERSION !='' "> 
+        AND A.PREVPROCESSDEFVERSION = #{PREVPROCESSDEFVERSION}
+    </if>
+    <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+        AND A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </if>
+    <if test="PREVPROCESSSEGMENTID != null and PREVPROCESSSEGMENTID !='' "> 
+        AND A.PREVPROCESSSEGMENTID = #{PREVPROCESSSEGMENTID}
+    </if>
+    <if test="WORKCOUNT != null and WORKCOUNT !='' "> 
+        AND A.WORKCOUNT = #{WORKCOUNT}
+    </if>
+    <if test="LOTSTATE != null and LOTSTATE !='' "> 
+        AND A.LOTSTATE = #{LOTSTATE}
+    </if>
+    <if test="PROCESSSTATE != null and PROCESSSTATE !='' "> 
+        AND A.PROCESSSTATE = #{PROCESSSTATE}
+    </if>
+    <if test="PREVLOTSTATE != null and PREVLOTSTATE !='' "> 
+        AND A.PREVLOTSTATE = #{PREVLOTSTATE}
+    </if>
+    <if test="PREVPROCESSSTATE != null and PREVPROCESSSTATE !='' "> 
+        AND A.PREVPROCESSSTATE = #{PREVPROCESSSTATE}
+    </if>
+    <if test="UNIT != null and UNIT !='' "> 
+        AND A.UNIT = #{UNIT}
+    </if>
+    <if test="PCSQTY != null and PCSQTY !='' "> 
+        AND A.PCSQTY = #{PCSQTY}
+    </if>
+    <if test="PANELQTY != null and PANELQTY !='' "> 
+        AND A.PANELQTY = #{PANELQTY}
+    </if>
+    <if test="CANCELCOMMENTS != null and CANCELCOMMENTS !='' "> 
+        AND A.CANCELCOMMENTS = #{CANCELCOMMENTS}
+    </if>
+    <if test="DESCRIPTION != null and DESCRIPTION !='' "> 
+        AND A.DESCRIPTION = #{DESCRIPTION}
+    </if>
+    </select>
+
+    <!-- LOT 작업실적 삭제 -->
+    <update id="deletePcmLotworkresult" parameterType="map" > 
+     /* smh.pcm.dao.PCMReworkLotDao.deletePcmLotworkresult */
+    DELETE FROM PCM_LOTWORKRESULT 
+    WHERE LOTID = #{LOTID}
+    AND TXNHISTKEY = #{TXNHISTKEY}
+    </update>
+
+    <!-- LOT 작업실적 조회-->
+    <select id="selectPcmLotworkresultList" parameterType="map" resultType="hashmap">
+     /* smh.pcm.dao.PCMReworkLotDao.selectPcmLotworkresultList */
+    SELECT 
+        A.TXNHISTKEY	
+        ,A.LOTID	
+        ,A.PROCESSSEGMENTID	
+        ,A.PROCESSSEGMENTVERSION	
+        ,A.ENTERPRISEID	
+        ,A.PLANTID	
+        ,A.FACTORYID	
+        ,A.AREAID	
+        ,A.PRODUCTIONORDERID	
+        ,A.LINENO	
+        ,A.PRODUCTDEFID	
+        ,A.PRODUCTDEFVERSION	
+        ,A.PROCESSDEFID	
+        ,A.PROCESSDEFVERSION	
+        ,A.PROCESSPATHID	
+        ,A.PROCESSPATHSTACK	
+        ,A.USERSEQUENCE	
+        ,A.WORKCOUNT	
+        ,A.RESOURCEID	
+        ,A.RESULTTYPE	
+        ,A.ISPRINTLOTCARD	
+        ,A.WEEK	
+        ,A.ISREWORK	
+        ,A.REWORKTYPE	
+        ,A.REWORKREASONCODE	
+        ,A.REWORKCOUNT	
+        ,A.RECEIVETIME	
+        ,A.RECEIVEUSER	
+        ,A.ROOTLOTSTARTDATE	
+        ,A.WORKSTARTTIME	
+        ,A.WORKSTARTUSER	
+        ,A.WORKENDTIME	
+        ,A.WORKENDUSER	
+        ,A.SENDTIME	
+        ,A.SENDUSER	
+        ,A.RECEIVELEADTIME	
+        ,A.WORKSTARTLEADTIME	
+        ,A.WORKENDLEADTIME	
+        ,A.SENDLEADTIME	
+        ,A.DEFECTQTY	
+        ,A.PSEUDODEFECTQTY	
+        ,A.ROOTLOTINPUTPCSQTY	
+        ,A.ROOTLOTINPUTARRAYQTY	
+        ,A.ROOTLOTINPUTPANELQTY	
+        ,A.RECEIVEPCSQTY	
+        ,A.RECEIVEARRAYQTY	
+        ,A.RECEIVEPANELQTY	
+        ,A.WORKSTARTPCSQTY	
+        ,A.WORKSTARTARRAYQTY	
+        ,A.WORKSTARTPANELQTY	
+        ,A.WORKENDPCSQTY	
+        ,A.WORKENDARRAYQTY	
+        ,A.WORKENDPANELQTY	
+        ,A.SENDPCSQTY	
+        ,A.SENDARRAYQTY	
+        ,A.SENDPANELQTY	
+        ,A.PREVSENDLOTHISTKEY	
+        ,A.SELFTAKEINSPRESULT	
+        ,A.SELFSHIPINSPRESULT	
+        ,A.MEASUREINSPRESULT	
+        ,A.DESCRIPTION	
+        ,A.CREATOR	
+        ,A.CREATEDTIME	
+        ,A.MODIFIER	
+        ,A.MODIFIEDTIME	
+    FROM	PCM_LOTWORKRESULT A 
+    WHERE 1=1 
+    <if test="LOTID != null and LOTID !='' "> 
+        AND A.LOTID = #{LOTID}
+    </if>
+    <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' "> 
+        AND A.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+    </if>
+    <if test="PROCESSSEGMENTVERSION != null and PROCESSSEGMENTVERSION !='' "> 
+        AND A.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+    </if>
+    <if test="ENTERPRISEID != null and ENTERPRISEID !='' "> 
+        AND A.ENTERPRISEID = #{ENTERPRISEID}
+    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND A.PLANTID = #{PLANTID}
+    </if>
+    <if test="FACTORYID != null and FACTORYID !='' "> 
+        AND A.FACTORYID = #{FACTORYID}
+    </if>
+    <if test="AREAID != null and AREAID !='' "> 
+        AND A.AREAID = #{AREAID}
+    </if>
+    <if test="PRODUCTIONORDERID != null and PRODUCTIONORDERID !='' "> 
+        AND A.PRODUCTIONORDERID = #{PRODUCTIONORDERID}
+    </if>
+    <if test="LINENO != null and LINENO !='' "> 
+        AND A.LINENO = #{LINENO}
+    </if>
+    <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+        AND A.PRODUCTDEFID = #{PRODUCTDEFID}
+    </if>
+    <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' "> 
+        AND A.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+    </if>
+    <if test="PROCESSDEFID != null and PROCESSDEFID !='' "> 
+        AND A.PROCESSDEFID = #{PROCESSDEFID}
+    </if>
+    <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' "> 
+        AND A.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </if>
+    <if test="PROCESSPATHID != null and PROCESSPATHID !='' "> 
+        AND A.PROCESSPATHID = #{PROCESSPATHID}
+    </if>
+    <if test="PROCESSPATHSTACK != null and PROCESSPATHSTACK !='' "> 
+        AND A.PROCESSPATHSTACK = #{PROCESSPATHSTACK}
+    </if>
+    <if test="USERSEQUENCE != null and USERSEQUENCE !='' "> 
+        AND A.USERSEQUENCE = #{USERSEQUENCE}
+    </if>
+    <if test="WORKCOUNT != null and WORKCOUNT !='' "> 
+        AND A.WORKCOUNT = #{WORKCOUNT}
+    </if>
+    <if test="RESOURCEID != null and RESOURCEID !='' "> 
+        AND A.RESOURCEID = #{RESOURCEID}
+    </if>
+    <if test="RESULTTYPE != null and RESULTTYPE !='' "> 
+        AND A.RESULTTYPE = #{RESULTTYPE}
+    </if>
+    <if test="ISPRINTLOTCARD != null and ISPRINTLOTCARD !='' "> 
+        AND A.ISPRINTLOTCARD = #{ISPRINTLOTCARD}
+    </if>
+    <if test="WEEK != null and WEEK !='' "> 
+        AND A.WEEK = #{WEEK}
+    </if>
+    <if test="ISREWORK != null and ISREWORK !='' "> 
+        AND A.ISREWORK = #{ISREWORK}
+    </if>
+    <if test="REWORKTYPE != null and REWORKTYPE !='' "> 
+        AND A.REWORKTYPE = #{REWORKTYPE}
+    </if>
+    <if test="REWORKREASONCODE != null and REWORKREASONCODE !='' "> 
+        AND A.REWORKREASONCODE = #{REWORKREASONCODE}
+    </if>
+    <if test="REWORKCOUNT != null and REWORKCOUNT !='' "> 
+        AND A.REWORKCOUNT = #{REWORKCOUNT}
+    </if>
+    <if test="RECEIVETIME != null and RECEIVETIME !='' "> 
+        AND A.RECEIVETIME = #{RECEIVETIME}
+    </if>
+    <if test="RECEIVEUSER != null and RECEIVEUSER !='' "> 
+        AND A.RECEIVEUSER = #{RECEIVEUSER}
+    </if>
+    <if test="ROOTLOTSTARTDATE != null and ROOTLOTSTARTDATE !='' "> 
+        AND A.ROOTLOTSTARTDATE = #{ROOTLOTSTARTDATE}
+    </if>
+    <if test="WORKSTARTTIME != null and WORKSTARTTIME !='' "> 
+        AND A.WORKSTARTTIME = #{WORKSTARTTIME}
+    </if>
+    <if test="WORKSTARTUSER != null and WORKSTARTUSER !='' "> 
+        AND A.WORKSTARTUSER = #{WORKSTARTUSER}
+    </if>
+    <if test="WORKENDTIME != null and WORKENDTIME !='' "> 
+        AND A.WORKENDTIME = #{WORKENDTIME}
+    </if>
+    <if test="WORKENDUSER != null and WORKENDUSER !='' "> 
+        AND A.WORKENDUSER = #{WORKENDUSER}
+    </if>
+    <if test="SENDTIME != null and SENDTIME !='' "> 
+        AND A.SENDTIME = #{SENDTIME}
+    </if>
+    <if test="SENDUSER != null and SENDUSER !='' "> 
+        AND A.SENDUSER = #{SENDUSER}
+    </if>
+    <if test="RECEIVELEADTIME != null and RECEIVELEADTIME !='' "> 
+        AND A.RECEIVELEADTIME = #{RECEIVELEADTIME}
+    </if>
+    <if test="WORKSTARTLEADTIME != null and WORKSTARTLEADTIME !='' "> 
+        AND A.WORKSTARTLEADTIME = #{WORKSTARTLEADTIME}
+    </if>
+    <if test="WORKENDLEADTIME != null and WORKENDLEADTIME !='' "> 
+        AND A.WORKENDLEADTIME = #{WORKENDLEADTIME}
+    </if>
+    <if test="SENDLEADTIME != null and SENDLEADTIME !='' "> 
+        AND A.SENDLEADTIME = #{SENDLEADTIME}
+    </if>
+    <if test="DEFECTQTY != null and DEFECTQTY !='' "> 
+        AND A.DEFECTQTY = #{DEFECTQTY}
+    </if>
+    <if test="PSEUDODEFECTQTY != null and PSEUDODEFECTQTY !='' "> 
+        AND A.PSEUDODEFECTQTY = #{PSEUDODEFECTQTY}
+    </if>
+    <if test="ROOTLOTINPUTPCSQTY != null and ROOTLOTINPUTPCSQTY !='' "> 
+        AND A.ROOTLOTINPUTPCSQTY = #{ROOTLOTINPUTPCSQTY}
+    </if>
+    <if test="ROOTLOTINPUTARRAYQTY != null and ROOTLOTINPUTARRAYQTY !='' "> 
+        AND A.ROOTLOTINPUTARRAYQTY = #{ROOTLOTINPUTARRAYQTY}
+    </if>
+    <if test="ROOTLOTINPUTPANELQTY != null and ROOTLOTINPUTPANELQTY !='' "> 
+        AND A.ROOTLOTINPUTPANELQTY = #{ROOTLOTINPUTPANELQTY}
+    </if>
+    <if test="RECEIVEPCSQTY != null and RECEIVEPCSQTY !='' "> 
+        AND A.RECEIVEPCSQTY = #{RECEIVEPCSQTY}
+    </if>
+    <if test="RECEIVEARRAYQTY != null and RECEIVEARRAYQTY !='' "> 
+        AND A.RECEIVEARRAYQTY = #{RECEIVEARRAYQTY}
+    </if>
+    <if test="RECEIVEPANELQTY != null and RECEIVEPANELQTY !='' "> 
+        AND A.RECEIVEPANELQTY = #{RECEIVEPANELQTY}
+    </if>
+    <if test="WORKSTARTPCSQTY != null and WORKSTARTPCSQTY !='' "> 
+        AND A.WORKSTARTPCSQTY = #{WORKSTARTPCSQTY}
+    </if>
+    <if test="WORKSTARTARRAYQTY != null and WORKSTARTARRAYQTY !='' "> 
+        AND A.WORKSTARTARRAYQTY = #{WORKSTARTARRAYQTY}
+    </if>
+    <if test="WORKSTARTPANELQTY != null and WORKSTARTPANELQTY !='' "> 
+        AND A.WORKSTARTPANELQTY = #{WORKSTARTPANELQTY}
+    </if>
+    <if test="WORKENDPCSQTY != null and WORKENDPCSQTY !='' "> 
+        AND A.WORKENDPCSQTY = #{WORKENDPCSQTY}
+    </if>
+    <if test="WORKENDARRAYQTY != null and WORKENDARRAYQTY !='' "> 
+        AND A.WORKENDARRAYQTY = #{WORKENDARRAYQTY}
+    </if>
+    <if test="WORKENDPANELQTY != null and WORKENDPANELQTY !='' "> 
+        AND A.WORKENDPANELQTY = #{WORKENDPANELQTY}
+    </if>
+    <if test="SENDPCSQTY != null and SENDPCSQTY !='' "> 
+        AND A.SENDPCSQTY = #{SENDPCSQTY}
+    </if>
+    <if test="SENDARRAYQTY != null and SENDARRAYQTY !='' "> 
+        AND A.SENDARRAYQTY = #{SENDARRAYQTY}
+    </if>
+    <if test="SENDPANELQTY != null and SENDPANELQTY !='' "> 
+        AND A.SENDPANELQTY = #{SENDPANELQTY}
+    </if>
+    <if test="PREVSENDLOTHISTKEY != null and PREVSENDLOTHISTKEY !='' "> 
+        AND A.PREVSENDLOTHISTKEY = #{PREVSENDLOTHISTKEY}
+    </if>
+    <if test="SELFTAKEINSPRESULT != null and SELFTAKEINSPRESULT !='' "> 
+        AND A.SELFTAKEINSPRESULT = #{SELFTAKEINSPRESULT}
+    </if>
+    <if test="SELFSHIPINSPRESULT != null and SELFSHIPINSPRESULT !='' "> 
+        AND A.SELFSHIPINSPRESULT = #{SELFSHIPINSPRESULT}
+    </if>
+    <if test="MEASUREINSPRESULT != null and MEASUREINSPRESULT !='' "> 
+        AND A.MEASUREINSPRESULT = #{MEASUREINSPRESULT}
+    </if>
+    <if test="DESCRIPTION != null and DESCRIPTION !='' "> 
+        AND A.DESCRIPTION = #{DESCRIPTION}
+    </if>
+    </select>   
+    
+    <!-- 라우팅 상세 정의 상세조회-->
+    <select id="selectBasProcesspath" parameterType="map" resultType="hashmap">
+     /* smh.pcm.dao.PCMReworkLotDao.selectBasProcesspath */
+    SELECT 
+        A.PROCESSPATHID	 
+        ,A.ENTERPRISEID	 
+        ,A.PLANTID	 
+        ,A.PROCESSDEFID	 
+        ,A.PROCESSDEFVERSION	 
+        ,A.PROCESSSEGMENTID	 
+        ,A.PROCESSSEGMENTVERSION	 
+        ,A.PATHSEQUENCE	 
+        ,A.USERSEQUENCE	 
+        ,A.PATHTYPE	 
+        ,A.ALTERNATETYPE	 
+        ,A.ALTERNATEPROCESSCLASSID	 
+        ,A.REWORKPROCESSDEFID	 
+        ,A.REWORKPROCESSDEFVERSION	 
+        ,A.REWORKRETURNPATHID	 
+        ,A.DESCRIPTION	 
+        ,A.VALIDSTATE	 
+        ,A.PROCESSUOM	 
+        ,A.ALTERNATIVERESOURCE	 
+        ,A.ASSIGNEQUIPMENT	 
+        ,A.ISWEEKMNG	 
+    FROM	BAS_PROCESSPATH A 
+    WHERE A.PROCESSPATHID = #{PROCESSPATHID}
+    </select> 
+    
+    <!-- LOT 재작업 Return State 상세조회-->
+    <select id="selectPcmReworkreturn" parameterType="map" resultType="hashmap">
+     /* smh.pcm.dao.PCMReworkLotDao.selectPcmReworkreturn */
+    SELECT 
+        A.LOTID	 
+        ,A.PRODUCTDEFID	 
+        ,A.PRODUCTDEFVERSION	 
+        ,A.PROCESSDEFID	 
+        ,A.PROCESSDEFVERSION	 
+        ,A.SUBPROCESSDEFID	 
+        ,A.SUBPROCESSDEFVERSION	 
+        ,A.FROMPROCESSSEGMENTID	 
+        ,A.FROMPROCESSSEGMENTVERSION	 
+        ,A.FROMPROCESSSTATE	 
+        ,A.FROMAREAID	 
+        ,A.FROMRESOURCEID	 
+        ,A.REWORKPROCESSSEGMENTID	 
+        ,A.REWORKPROCESSSEGMENTVERSION	 
+        ,A.REWORKAREAID	 
+        ,A.REWORKRESOURCE	 
+        ,A.TOPROCESSSEGMENTID	 
+        ,A.TOPROCESSSEGMENTVERSION	 
+        ,A.TOPROCESSSTATE	 
+        ,A.TORESOURCEID	 
+        ,A.TOAREAID	 
+        ,A.MOVESTATE	 
+        ,A.WORKCOUNT	 
+        ,A.APPLOVEDUSER	 
+        ,A.APPLOVEDDATE	 
+        ,A.REWORKQTY	 
+        ,A.DESCRIPTION	 
+        ,A.CREATOR	 
+        ,A.CREATEDTIME	 
+        ,A.MODIFIER	 
+        ,A.MODIFIEDTIME	 
+        ,A.LASTTXNHISTKEY	 
+        ,A.LASTTXNID	 
+        ,A.LASTTXNUSER	 
+        ,A.LASTTXNTIME	 
+        ,A.LASTTXNCOMMENT	 
+        ,A.VALIDSTATE	 
+    FROM	PCM_REWORKRETURN A 
+    WHERE A.LOTID = #{LOTID}
+    </select>  
+    
+    <insert id="insertPcmReworkreturn" parameterType="map">
+     /* smh.pcm.dao.PCMReworkLotDao.insertPcmReworkreturn */
+    INSERT INTO PCM_REWORKRETURN( 
+        LOTID  
+        ,PRODUCTDEFID  
+        ,PRODUCTDEFVERSION  
+        ,PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,SUBPROCESSDEFID  
+        ,SUBPROCESSDEFVERSION  
+        ,FROMPROCESSSEGMENTID  
+        ,FROMPROCESSSEGMENTVERSION  
+        ,FROMPROCESSSTATE  
+        ,FROMAREAID  
+        ,FROMRESOURCEID  
+        ,REWORKPROCESSSEGMENTID  
+        ,REWORKPROCESSSEGMENTVERSION  
+        ,REWORKAREAID  
+        ,REWORKRESOURCE  
+        ,TOPROCESSSEGMENTID  
+        ,TOPROCESSSEGMENTVERSION  
+        ,TOPROCESSSTATE  
+        ,TORESOURCEID  
+        ,TOAREAID  
+        ,MOVESTATE  
+        ,WORKCOUNT  
+        ,APPLOVEDUSER  
+        ,APPLOVEDDATE  
+        ,REWORKQTY  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,MODIFIER  
+        ,MODIFIEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE        ) 
+    VALUES( 
+        #{LOTID}  
+        ,#{PRODUCTDEFID}  
+        ,#{PRODUCTDEFVERSION}  
+        ,#{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{SUBPROCESSDEFID}  
+        ,#{SUBPROCESSDEFVERSION}  
+        ,#{FROMPROCESSSEGMENTID}  
+        ,#{FROMPROCESSSEGMENTVERSION}  
+        ,#{FROMPROCESSSTATE}  
+        ,#{FROMAREAID}  
+        ,#{FROMRESOURCEID}  
+        ,#{REWORKPROCESSSEGMENTID}  
+        ,#{REWORKPROCESSSEGMENTVERSION}  
+        ,#{REWORKAREAID}  
+        ,#{REWORKRESOURCE}  
+        ,#{TOPROCESSSEGMENTID}  
+        ,#{TOPROCESSSEGMENTVERSION}  
+        ,#{TOPROCESSSTATE}  
+        ,#{TORESOURCEID}  
+        ,#{TOAREAID}  
+        ,#{MOVESTATE}  
+        ,#{WORKCOUNT}  
+        ,#{APPLOVEDUSER}  
+        ,#{APPLOVEDDATE}  
+        ,#{REWORKQTY}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{MODIFIER}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}    )
+    </insert>
+
+    <!-- LOT 재작업 Return State 변경 -->
+    <update id="updatePcmReworkreturn" parameterType="map" >
+    /* smh.pcm.dao.PCMReworkLotDao.updatePcmReworkreturn */
+    UPDATE PCM_REWORKRETURN 
+    SET 
+        PRODUCTDEFID = nvl(#{PRODUCTDEFID},PRODUCTDEFID)     
+        ,PRODUCTDEFVERSION = nvl(#{PRODUCTDEFVERSION},PRODUCTDEFVERSION)     
+        ,PROCESSDEFID = nvl(#{PROCESSDEFID},PROCESSDEFID)     
+        ,PROCESSDEFVERSION = nvl(#{PROCESSDEFVERSION},PROCESSDEFVERSION)     
+        ,SUBPROCESSDEFID = nvl(#{SUBPROCESSDEFID},SUBPROCESSDEFID)     
+        ,SUBPROCESSDEFVERSION = nvl(#{SUBPROCESSDEFVERSION},SUBPROCESSDEFVERSION)     
+        ,FROMPROCESSSEGMENTID = nvl(#{FROMPROCESSSEGMENTID},FROMPROCESSSEGMENTID)     
+        ,FROMPROCESSSEGMENTVERSION = nvl(#{FROMPROCESSSEGMENTVERSION},FROMPROCESSSEGMENTVERSION)     
+        ,FROMPROCESSSTATE = nvl(#{FROMPROCESSSTATE},FROMPROCESSSTATE)     
+        ,FROMAREAID = nvl(#{FROMAREAID},FROMAREAID)     
+        ,FROMRESOURCEID = nvl(#{FROMRESOURCEID},FROMRESOURCEID)     
+        ,REWORKPROCESSSEGMENTID = nvl(#{REWORKPROCESSSEGMENTID},REWORKPROCESSSEGMENTID)     
+        ,REWORKPROCESSSEGMENTVERSION = nvl(#{REWORKPROCESSSEGMENTVERSION},REWORKPROCESSSEGMENTVERSION)     
+        ,REWORKAREAID = nvl(#{REWORKAREAID},REWORKAREAID)     
+        ,REWORKRESOURCE = nvl(#{REWORKRESOURCE},REWORKRESOURCE)     
+        ,TOPROCESSSEGMENTID = nvl(#{TOPROCESSSEGMENTID},TOPROCESSSEGMENTID)     
+        ,TOPROCESSSEGMENTVERSION = nvl(#{TOPROCESSSEGMENTVERSION},TOPROCESSSEGMENTVERSION)     
+        ,TOPROCESSSTATE = nvl(#{TOPROCESSSTATE},TOPROCESSSTATE)     
+        ,TORESOURCEID = nvl(#{TORESOURCEID},TORESOURCEID)     
+        ,TOAREAID = nvl(#{TOAREAID},TOAREAID)     
+        ,MOVESTATE = nvl(#{MOVESTATE},MOVESTATE)     
+        ,WORKCOUNT = nvl(#{WORKCOUNT},WORKCOUNT)     
+        ,APPLOVEDUSER = nvl(#{APPLOVEDUSER},APPLOVEDUSER)     
+        ,APPLOVEDDATE = nvl(#{APPLOVEDDATE},APPLOVEDDATE)     
+        ,REWORKQTY = nvl(#{REWORKQTY},REWORKQTY)     
+        ,DESCRIPTION = nvl(#{DESCRIPTION},DESCRIPTION)             
+        ,VALIDSTATE = nvl(#{VALIDSTATE},VALIDSTATE)    
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+    WHERE LOTID = #{LOTID}
+    </update>                
+</mapper>

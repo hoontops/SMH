@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM00200Dao">
+
+    <!-- 화폐 콤보 데이타 조회 -->
+    <select id="selectCurrencies" parameterType="map" resultType="hashmap">
+    SELECT  CURRENCY_CODE 
+		, CURRENCY_CODE CURRENCY_NAME
+		, DESCRIPTION
+	FROM BAS_CURRENCIES
+    </select>
+
+    <!-- 단가 목록 조회 -->
+    <select id="selectUnitPriceList" parameterType="map" resultType="hashmap">
+    	SELECT    PRD.PLANTID 	
+				, PRD.PRODUCTDEFID 
+				, PRD.PRODUCTDEFVERSION 
+				, PRD.PRODUCTDEFNAME 
+				, PRD.CUSTOMERID
+				, CUST.CUSTOMERNAME 
+				, UPR.UNITPRICEID
+				, UPR.ENTERPRISEID 
+				, UPR.CURRENCY_CODE
+				, UPR.UNITPRICE 
+				, UPR.UNITPRICE_BARE 
+				, UPR.UNITPRICE_SMT 
+				, UPR.UNITPRICE_ETC 	
+				, PRD.UNIT       	AS UOM
+				, PRD.PRODUCTIONTYPE     				-- 생산구분
+				, PIS.PRODUCTTYPE AS ITEMTYPE			-- 제품 TYPE
+				, PIS.MFG_CATEGORY					AS APPLICATION 
+				, TO_CHAR(UPR.APPLY_START_DATE,'yyyy-MM-dd') AS APPLY_START_DATE
+				, TO_CHAR(UPR.APPLY_END_DATE,'yyyy-MM-dd') AS APPLY_END_DATE
+				, UPR.MODIFIER 
+				, MUSER.USER_NM
+				, UPR.MODIFIEDTIME 
+				, NVL(EXC.EXCHANGE_RATE,1) 					AS EXCHANGE_RATE
+				, UPR.UNITPRICE * NVL(EXC.EXCHANGE_RATE,1) 	AS SALEPRICE
+		  FROM BAS_ITEMMASTER IM
+		  INNER JOIN BAS_PRODUCTDEFINITION PRD 		ON  PRD.PRODUCTDEFID = ITEMID
+		  											AND PRD.PRODUCTDEFVERSION = ITEMVERSION
+		  INNER JOIN BAS_UNITPRICEFORMES UPR 		ON  IM.ENTERPRISEID = UPR.ENTERPRISEID
+			  										AND IM.ITEMID = UPR.PRODUCTDEFID
+			  										AND IM.ITEMVERSION = UPR.PRODUCTDEFVERSION
+	      LEFT JOIN BAS_EXCHANGE EXC				ON  UPR.CURRENCY_CODE = EXC.CURRENCY_CODE
+		  											AND EXC.PERIOD_NAME = TO_CHAR(SYSDATE ,'YYYY-MM')
+		  LEFT OUTER JOIN BAS_CUSTOMER      CUST    ON  PRD.ENTERPRISEID = CUST.ENTERPRISEID 
+		                                            AND PRD.PLANTID = CUST.PLANTID
+		                                            AND PRD.CUSTOMERID =  CUST.CUSTOMERID  
+		  LEFT OUTER JOIN BAS_PRODUCTITEMSPEC PIS   ON  IM.ENTERPRISEID = PIS.ENTERPRISEID
+		                                            AND IM.ITEMID = PIS.ITEMID
+		                                            AND IM.ITEMVERSION = PIS.ITEMVERSION
+		  LEFT OUTER JOIN CMD_USERS         MUSER   ON  UPR.ENTERPRISEID = MUSER.ENTERPRISEID
+						                            AND UPR.MODIFIER =  MUSER.USER_ID           
+		WHERE 1=1
+		  AND PRD.PLANTID = #{PLANTID}
+	<choose>
+	<when test="PERIODSEL == 'MODFYDAY'">
+  	
+		<![CDATA[
+				AND	UPR.MODIFIEDTIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+									AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+			]]>
+	</when>
+	<otherwise>
+		<![CDATA[
+				AND	( UPR.APPLY_START_DATE BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+									AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+					OR 
+					  NVL(UPR.APPLY_END_DATE,TO_TIMESTAMP('9999-12-31 23:59:59','YYYY-MM-DD HH24:MI:SS'))
+					  	BETWEEN TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+				  						AND TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+  	   				)
+			]]>
+	 </otherwise>
+	 </choose>
+	<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+    	AND 
+     <foreach collection="PRODUCTDEFID" item="PRODUCTDEFID"  open="(" close=")" separator="OR">
+             PRD.PRODUCTDEFID LIKE <![CDATA['%' ||]]> #{PRODUCTDEFID} <![CDATA[|| '%']]>
+	 </foreach>
+	</if>
+	<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+		  AND PRD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	</if>
+	<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 
+		  AND UPPER(PRD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+	</if>
+	<if test="CUSTOMERNM != null and CUSTOMERNM !=''"> 
+		  AND UPPER(CUST.CUSTOMERNAME) LIKE UPPER(<![CDATA['%' ||]]> #{CUSTOMERNM} <![CDATA[|| '%']]> )
+	</if>
+	<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+		  AND PRD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+	</if>
+	<if test="PRODUCTTYPE != null and PRODUCTTYPE !=''"> 
+		  AND IM.ITEMTYPE = #{PRODUCTTYPE}
+	</if>
+    ORDER BY 	PRD.PRODUCTDEFID 
+				, PRD.PRODUCTDEFVERSION 
+				, UPR.APPLY_START_DATE      
+    </select>
+    
+    <select id="selectBasUnitprice" parameterType="map" resultType="hashmap">
+    SELECT * FROM BAS_UNITPRICEFORMES UPR WHERE 1=1
+	AND PLANTID = #{PLANTID} 
+	AND UPR.PRODUCTDEFID = #{PRODUCTDEFID}  
+	AND UPR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} 
+	AND ( #{APPLY_START_DATE}  BETWEEN UPR.APPLY_START_DATE  AND NVL(UPR.APPLY_END_DATE,TO_TIMESTAMP('9999-12-31','YYYY-MM-DD'))
+	<if test="APPLY_END_DATE != null and APPLY_END_DATE !=''"> 
+		OR  
+	    #{APPLY_END_DATE} BETWEEN UPR.APPLY_START_DATE  AND NVL(UPR.APPLY_END_DATE,TO_TIMESTAMP('9999-12-31','YYYY-MM-DD'))
+	</if>
+		)
+    </select>
+    
+    <!-- 단가 테이블 정의 등록 -->
+    <insert id="insertBasUnitpriceformes" parameterType="map">
+	    INSERT INTO BAS_UNITPRICEFORMES( 
+	        UNITPRICEID  
+	        ,ENTERPRISEID  
+	        ,PLANTID  
+	        ,PRODUCTDEFID  
+	        ,PRODUCTDEFVERSION  
+	        ,CURRENCY_CODE  
+	        ,UNITPRICE  
+	        ,UNITPRICE_BARE  
+	        ,UNITPRICE_SMT  
+	        ,UNITPRICE_ETC  
+	        ,APPLY_START_DATE  
+	        ,APPLY_END_DATE  
+	        ,VALIDSTATE  
+	        ,CREATOR  
+	        ,CREATEDTIME  
+	        ,MODIFIER  
+	        ,MODIFIEDTIME  
+	        ,LASTTXNHISTKEY  
+	        ,LASTTXNID  
+	        ,LASTTXNUSER  
+	        ,LASTTXNTIME  
+	        ,LASTTXNCOMMENT        ) 
+	    VALUES( 
+	        #{UNITPRICEID}  
+	        ,#{ENTERPRISEID}  
+	        ,#{PLANTID}  
+	        ,#{PRODUCTDEFID}  
+	        ,#{PRODUCTDEFVERSION}  
+	        ,#{CURRENCY_CODE}  
+	        ,#{UNITPRICE}  
+	        ,#{UNITPRICE_BARE}  
+	        ,#{UNITPRICE_SMT}  
+	        ,#{UNITPRICE_ETC}  
+	        ,#{APPLY_START_DATE}  
+	        ,#{APPLY_END_DATE}  
+	        ,'Valid' 
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{LASTTXNHISTKEY}  
+	        ,#{LASTTXNID}  
+	        ,#{CREATOR}   
+	        ,SYSDATE  
+	        ,#{LASTTXNCOMMENT}    )
+    </insert>
+    
+    <!-- 단가Table(MES용) 변경 -->
+    <update id="updateBasUnitpriceformes" parameterType="map" >
+	    UPDATE BAS_UNITPRICEFORMES 
+	    SET PLANTID = #{PLANTID}     
+	        ,PRODUCTDEFID = #{PRODUCTDEFID}     
+	        ,PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}     
+	        ,CURRENCY_CODE = #{CURRENCY_CODE}     
+	        ,UNITPRICE = #{UNITPRICE}     
+	        ,UNITPRICE_BARE = #{UNITPRICE_BARE}     
+	        ,UNITPRICE_SMT = #{UNITPRICE_SMT}     
+	        ,UNITPRICE_ETC = #{UNITPRICE_ETC}     
+	        ,APPLY_START_DATE = #{APPLY_START_DATE}     
+	        ,APPLY_END_DATE = #{APPLY_END_DATE}     
+	        ,VALIDSTATE = 'Valid'                    
+	        ,MODIFIER = #{MODIFIER}     
+	        ,MODIFIEDTIME = SYSDATE     
+	        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+	        ,LASTTXNID = #{LASTTXNID}     
+	        ,LASTTXNUSER = #{MODIFIER}   
+	        ,LASTTXNTIME = SYSDATE  
+	        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+	    WHERE UNITPRICEID = #{UNITPRICEID}
+    </update>
+    
+    <!-- 단가Table(MES용) 삭제 -->
+    <delete id="deleteBasUnitpriceformes" parameterType="map" > 
+	    DELETE FROM BAS_UNITPRICEFORMES 
+	    WHERE UNITPRICEID = #{UNITPRICEID}
+    </delete>
+</mapper>

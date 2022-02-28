@@ -1,0 +1,474 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : Claim공정별 기준금액
+    설명          : Claim공정별 기준금액
+    작성자       : 진성하
+    최초작성일 : 2021.04.10
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.04.10      진성하     최초  생성
+-->
+
+<mapper namespace="smh.osm.dao.OSM00400Dao">
+    <select id="GetOutsourcedClaimConfirmation" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00400Dao.GetOutsourcedClaimConfirmation"  */
+	SELECT 
+			CASE WHEN COALESCE(OCM.VALIDSTATE,'Invalid') =  'Valid'   THEN 'Y' 
+			     ELSE 'N' END                   AS CLAIMYN                  -- 마감포함
+		,	'LOTCLAIMDEFECT'                    AS WORKGUBUN
+		,	'DefectScrap'                       AS CLAIMTYPE                -- Claim유형
+		,	QDR.TXNHISTKEY                      AS LOTHISTKEY
+		,	QDR.DEFINETIME                                                  -- 확정일
+		,	SLD.CREATEDTIME                     AS OCCURTIME                 --발생일
+		,	0                                   AS CLAIMSEQUENCE
+		,	DPS.DICTIONARYNAME                  AS PROCESSSEGMENTNAME        --대공정
+		,	DPC.DICTIONARYNAME                  AS PROCESSSEGMENTCLASSNAME   --공정명
+		,	DAR.DICTIONARYNAME                  AS REASONAREANAME             --작업장
+		,	MVD.VENDORNAME                      AS OSPVENDORNAME              --업체명
+		,	SLD.PRODUCTDEFID                                                  --품목코드
+		,	SLD.PRODUCTDEFVERSION 
+		,	SPD.PRODUCTDEFNAME                                                --품목명
+		,	QDR.LOTID                                                         -- LOT NO
+		,	SLD.DEFECTCODE                                                    --불량코드
+		,	DRC.DICTIONARYNAME                  AS  DEFECTNAME                --불량명
+		,	CASE WHEN OCM.LOTID  IS NULL THEN SLD.DEFECTQTY  
+		         ELSE OCM.DEFECTQTY    END      AS  DEFECTQTY                 --불량수
+		,	CASE WHEN OCM.LOTID  IS NULL THEN PQS.PCSAMOUNT   
+		         ELSE OCM.CLAIMPRICE   END      AS CLAIMPRICE                 --불량단가
+		,	CASE WHEN OCM.LOTID  IS NULL THEN TRUNC(SLD.DEFECTQTY * PQS.PCSAMOUNT)
+		         ELSE TRUNC(OCM.DEFECTAMOUNT) END      AS  DEFECTAMOUNT              --불량금액
+		,	OCM.REDUCEQTY                       --감면수	AS  OSPREDUCEQTY              --감면수
+		,	OCM.REDUCEQTYAMOUNT                                               --수량감면액
+		,	OCM.REDUCERATE                      --감면율	AS  OSPREDUCERATE             
+		,	OCM.REDUCERATEAMOUNT                                              --비율감면액
+		,	CASE WHEN OCM.LOTID  IS NULL THEN TRUNC(SLD.DEFECTQTY * PQS.PCSAMOUNT)
+		         ELSE TRUNC(OCM.CLAIMAMOUNT) END AS CLAIMAMOUNT                                                   --CLAIM금액
+		,	OCM.PROCESSSEGMENTID                                              --발견공정
+		,	DPP.DICTIONARYNAME                  AS  FINDPROCESSSEGMENTNAME    --발견공정
+		,	URC.USERNAME                        AS  CREATORNAME               --입력자
+		,	URC.USERNAME                        AS  DEFINEUSERNAME            --확정자
+		,	OCM.DESCRIPTION
+		,	SLD.ENTERPRISEID
+		,	SLD.PLANTID
+		,	SLD.PROCESSPATHID
+		,	SLD.PROCESSSEGMENTID
+		,	SLD.AREAID
+		,	SLD.REASONSEGMENTID
+		,	SLD.REASONAREAID
+		,	SLD.REASONCONSUMABLELOTID
+		,	OCM.PERIODID                  AS PERIODID
+		,	COALESCE(PED.PERIODSTATE,'Open')    AS PERIODSTATE
+		,	CASE WHEN OCM.PERIODID IS null             THEN 'N' 
+			     ELSE 'Y' 
+			END AS  ISCLOSE	
+		,	COALESCE(OCM.PERIODID,'')                  AS OLDPERIODID
+		,	PED.PERIODNAME 
+		, '' as CHK
+	FROM       QAM_QCLOTDEFECTRESULT             QDR 
+	INNER JOIN PCM_LOTDEFECT                     SLD  ON  SLD.TXNHISTKEY              = QDR.TXNHISTKEY
+	                                                 AND SLD.LOTID                   = QDR.LOTID
+	LEFT OUTER JOIN PCM_LOTWORKRESULT            SLH  ON  SLH.LOTID                   = SLD.LOTID  
+	                                                 AND SLH.TXNHISTKEY              = SLD.TXNHISTKEY 
+	LEFT OUTER JOIN PCM_LOT                      SLT  ON  SLT.LOTID                   = SLD.LOTID
+	INNER JOIN BAS_PRODUCTDEFINITION             SPD  ON  SPD.PRODUCTDEFID            = SLD.PRODUCTDEFID
+	                                                 AND SPD.PRODUCTDEFVERSION       = SLD.PRODUCTDEFVERSION 
+	INNER JOIN BAS_AREA                          SAR  ON  SAR.AREAID                  = SLD.REASONAREAID  
+	                                                 AND SAR.OWNTYPE         IN (
+																					SELECT LOOKUP_CODE 
+																					FROM CMD_LOOKUP_VALUES SCD
+																					WHERE  SCD.LOOKUP_TYPE = #{PERIODTYPEOSP}
+																				) 
+	LEFT OUTER JOIN CMD_DICTIONARY               DAR  ON  DAR.DICTIONARYID            = SAR.AREANAME
+	                                                 AND DAR.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+	LEFT OUTER JOIN BAS_VENDOR                   MVD  ON  MVD.VENDORID                = SAR.VENDORID
+	                                                 AND MVD.PLANTID                 = SAR.PLANTID
+	LEFT OUTER JOIN BAS_PROCESSSEGMENT           SPS  ON  SPS.PROCESSSEGMENTID        = SLD.REASONSEGMENTID 
+	                                                 AND SPS.PROCESSSEGMENTVERSION   = SLD.PROCESSSEGMENTVERSION
+	LEFT OUTER JOIN CMD_DICTIONARY               DPS  ON  DPS.DICTIONARYID            = SPS.PROCESSSEGMENTNAME
+	                                                 AND DPS.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+	LEFT OUTER JOIN BAS_PROCESSSEGMENTCLASS      SPC  ON  SPC.PROCESSSEGMENTCLASSID   = SPS.PROCESSSEGMENTCLASSID 
+	LEFT OUTER JOIN CMD_DICTIONARY               DPC  ON  DPC.DICTIONARYID            = SPC.PROCESSSEGMENTCLASSNAME
+	                                                 AND DPC.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+	LEFT OUTER JOIN BAS_PROCESSSEGMENT           SPP  ON  SPP.PROCESSSEGMENTID        = SLD.PROCESSSEGMENTID 
+	                                                 AND SPP.PROCESSSEGMENTVERSION   = SLD.PROCESSSEGMENTVERSION
+	LEFT OUTER JOIN CMD_DICTIONARY               DPP  ON  DPP.DICTIONARYID            = SPP.PROCESSSEGMENTNAME
+	                                                 AND DPP.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE} 
+	LEFT OUTER JOIN BAS_PRODUCTQUOTATIONSEGMENT  PQS  ON  PQS.PRODUCTDEFID            = SLD.PRODUCTDEFID
+	                                                 AND PQS.PRODUCTDEFVERSION       = SLD.PRODUCTDEFVERSION
+	                                                 AND PQS.PROCESSDEFID            = SPD.PROCESSDEFID
+	                                                 AND PQS.PROCESSDEFVERSION       = SPD.PROCESSDEFVERSION
+	                                                 AND PQS.PROCESSSEGMENTID        = SLD.PROCESSSEGMENTID 
+	                                                 AND PQS.PROCESSSEGMENTVERSION   = SLD.PROCESSSEGMENTVERSION
+	                                                 AND PQS.VALIDSTATE              = 'Valid'
+	LEFT OUTER JOIN BAS_DEFECTCODE               SDC  ON  SDC.DEFECTCODE              = SLD.DEFECTCODE
+	LEFT OUTER JOIN CMD_DICTIONARY               DRC  ON  DRC.DICTIONARYID            = SDC.DICTIONARYID
+	                                                 AND DRC.LANGUAGETYPE            =#{SESSION_LANGUAGETYPE}
+	INNER      JOIN OSM_OSPCLAIM                 OCM  ON  OCM.LOTHISTKEY              = QDR.TXNHISTKEY
+	                                                 AND OCM.LOTID                   = QDR.LOTID  
+	INNER      JOIN BAS_PERIOD                   PED  ON  PED.ENTERPRISEID            = OCM.ENTERPRISEID
+								 	                 AND PED.PLANTID                 = OCM.PLANTID
+								 	                 AND PED.PERIODID                = OCM.PERIODID 	
+	LEFT OUTER JOIN CMD_USER_V                     URC  ON  URC.USERID                  = SLD.CREATOR 
+	LEFT OUTER JOIN CMD_USER_V                     URD  ON  URD.USERID                  = QDR.DEFINEUSER 
+	
+	WHERE   1=1 
+	AND     PED.PERIODNAME   = #{PERIODNAME}
+	AND		NOT EXISTS (SELECT 'X'
+						FROM	BAS_CONSUMABLEDEFINITION COF
+						WHERE	COF.CONSUMABLEDEFID = SLD.REASONCONSUMABLELOTID )
+	AND		QDR.STATUS          IN ('Confirm', 'DeadlineComplete')
+	AND 	SLD.PLANTID          = #{PLANTID}
+
+	
+	<if test="PERIOD_PERIODFR != null and PERIOD_PERIODFR !=''"> 
+		AND 	SLD.CREATEDTIME  >= TO_DATE( #{PERIOD_PERIODFR},'YYYYMMDD')
+	</if>
+	<if test="PERIOD_PERIOTO != null and PERIOD_PERIOTO !=''"> 
+		AND 	SLD.CREATEDTIME <![CDATA[<]]>  TO_DATE( #{PERIOD_PERIOTO},'YYYYMMDD')
+	</if>
+	<if test="FACTORYID != null and FACTORYID !=''"> 
+		AND 	SAR.FACTORYID  = #{FACTORYID}
+	</if>
+	<if test="AREAID != null and AREAID !=''"> 
+		AND 	SLD.REASONAREAID  = #{AREAID}
+	</if>
+	<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+		AND 	SAR.VENDORID  = #{OSPVENDORID}
+	</if>
+	<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+		AND 	 MVD.VENDORNAME    LIKE #{OSPVENDORNAME}||'%'
+	</if>
+	<if test="LOTTYPE != null and LOTTYPE !='' and '*'.equals(LOTTYPE)"> 
+		AND 	SLT.LOTTYPE  = #{LOTTYPE}
+	</if>
+	<if test="LOTID != null and LOTID !='' and !'*'.equals(LOTID)"> 
+		AND 	QDR.LOTID   = #{LOTID}
+	</if>
+	<if test="REDUCEYESNO != null and REDUCEYESNO !='' and 'Y'.equals(REDUCEYESNO)"> 
+		AND 	OCM.REDUCEQTYAMOUNT + OCM.REDUCERATEAMOUNT   > 0
+	</if>
+	<if test="REDUCEYESNO != null and REDUCEYESNO !='' and 'N'.equals(REDUCEYESNO)"> 
+		AND 	OCM.REDUCEQTYAMOUNT + OCM.REDUCERATEAMOUNT    = 0
+	</if>
+	<if test="CLOSEYESNO != null and CLOSEYESNO !='' and  (CLOSEYESNO eq 'Y'.toString())"> 
+		--AND 	OCM.PERIODID IS  NOT null
+		-- (21.06.23) 감면여부 판단 수정
+		 AND (
+		      		OCM.REDUCEQTY           		IS NOT NULL         --감면수
+				OR	OCM.REDUCEQTYAMOUNT     	IS NOT NULL         --수량감면액
+		        OR	OCM.REDUCERATE          		IS NOT NULL         --감면율
+				OR	OCM.REDUCERATEAMOUNT    	IS NOT NULL         --비율감면액
+		      )
+		
+	</if>
+	<if test="CLOSEYESNO != null and CLOSEYESNO !='' and  (CLOSEYESNO eq 'N'.toString())"> 
+		--AND 	OCM.PERIODID IS null
+		-- (21.06.23) 감면여부 판단 수정
+		 AND (
+		      		OCM.REDUCEQTY           		IS NULL         --감면수
+				OR	OCM.REDUCEQTYAMOUNT     	IS NULL         --수량감면액
+		        OR	OCM.REDUCERATE          		IS NULL         --감면율
+				OR	OCM.REDUCERATEAMOUNT    	IS NULL         --비율감면액
+		      )
+		
+	</if>
+	<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+		AND 	 SLD.PRODUCTDEFID    = #{PRODUCTDEFID}||'%'
+	</if>
+    </select>   
+
+    <!-- 외주Claim 등록 -->
+    <insert id="insertOsmOspclaim" parameterType="map">
+    /* "smh.osm.dao.OSM00400Dao.insertOsmOspclaim"  */
+    INSERT INTO OSM_OSPCLAIM( 
+        LOTID  
+        ,LOTHISTKEY  
+        ,DEFINETIME  
+        ,OCCURTIME  
+        ,PROCESSPATHID  
+        ,PROCESSSEGMENTID  
+        ,AREAID  
+        ,DEFECTCODE  
+        ,REASONSEGMENTID  
+        ,REASONAREAID  
+        ,REASONCONSUMABLELOTID  
+        ,DEFECTQTY  
+        ,CLAIMPRICE  
+        ,DEFECTAMOUNT  
+        ,REDUCEQTY  
+        ,REDUCEQTYAMOUNT  
+        ,REDUCERATE  
+        ,REDUCERATEAMOUNT  
+        ,CLAIMAMOUNT  
+        ,CLAIMTYPE  
+        ,PERIODID  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,MODIFIER  
+        ,MODIFIEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE        ) 
+    VALUES( 
+        #{LOTID}  
+        ,#{LOTHISTKEY}  
+        ,sysdate  
+        ,sysdate 
+        ,#{PROCESSPATHID}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{AREAID}  
+        ,#{DEFECTCODE}  
+        ,#{REASONSEGMENTID}  
+        ,#{REASONAREAID}  
+        ,#{REASONCONSUMABLELOTID}  
+        ,#{DEFECTQTY}  
+        ,#{CLAIMPRICE}  
+        ,#{DEFECTAMOUNT}  
+        ,#{REDUCEQTY}  
+        ,#{REDUCEQTYAMOUNT}  
+        ,#{REDUCERATE}  
+        ,#{REDUCERATEAMOUNT}  
+        ,#{CLAIMAMOUNT}  
+        ,#{CLAIMTYPE}  
+        ,#{PERIODID}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{MODIFIER}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}    )
+    </insert>
+
+    <!-- 외주Claim 변경 -->
+    <update id="updateOsmOspclaim" parameterType="map" >
+    /* "smh.osm.dao.OSM00400Dao.updateOsmOspclaim"  */
+    UPDATE OSM_OSPCLAIM 
+    SET 
+        DEFINETIME = sysdate     
+        ,OCCURTIME = sysdate     
+        ,PROCESSPATHID = #{PROCESSPATHID}     
+        ,PROCESSSEGMENTID = #{PROCESSSEGMENTID}     
+        ,AREAID = #{AREAID}     
+        ,DEFECTCODE = #{DEFECTCODE}     
+        ,REASONSEGMENTID = #{REASONSEGMENTID}     
+        ,REASONAREAID = #{REASONAREAID}     
+        ,REASONCONSUMABLELOTID = #{REASONCONSUMABLELOTID}     
+        ,DEFECTQTY = #{DEFECTQTY}     
+        ,CLAIMPRICE = #{CLAIMPRICE}     
+        ,DEFECTAMOUNT = #{DEFECTAMOUNT}     
+        ,REDUCEQTY = #{REDUCEQTY}     
+        ,REDUCEQTYAMOUNT = #{REDUCEQTYAMOUNT}     
+        ,REDUCERATE = #{REDUCERATE}     
+        ,REDUCERATEAMOUNT = #{REDUCERATEAMOUNT}     
+        ,CLAIMAMOUNT = #{CLAIMAMOUNT}     
+        ,CLAIMTYPE = #{CLAIMTYPE}     
+        ,PERIODID = #{PERIODID}     
+        ,PLANTID = #{PLANTID}     
+        ,DESCRIPTION = #{DESCRIPTION}             
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+        ,VALIDSTATE = #{VALIDSTATE}
+    WHERE LOTHISTKEY = #{LOTHISTKEY}
+    AND LOTID = #{LOTID}
+    </update>
+
+    <!-- 외주Claim 삭제 -->
+    <update id="updateOsmOspclaimClose" parameterType="map" > 
+    /* "smh.osm.dao.OSM00400Dao.updateOsmOspclaimClose"  */
+    UPDATE OSM_OSPCLAIM 
+    SET 
+        DEFINETIME = sysdate     
+        ,OCCURTIME = sysdate     
+        ,PROCESSPATHID = #{PROCESSPATHID}     
+        ,PROCESSSEGMENTID = #{PROCESSSEGMENTID}     
+        ,AREAID = #{AREAID}     
+        ,DEFECTCODE = #{DEFECTCODE}     
+        ,REASONSEGMENTID = #{REASONSEGMENTID}     
+        ,REASONAREAID = #{REASONAREAID}     
+        ,REASONCONSUMABLELOTID = #{REASONCONSUMABLELOTID}     
+        ,DEFECTQTY = #{DEFECTQTY}     
+        ,CLAIMPRICE = #{CLAIMPRICE}     
+        ,DEFECTAMOUNT = #{DEFECTAMOUNT}     
+        ,REDUCEQTY = #{REDUCEQTY}     
+        ,REDUCEQTYAMOUNT = #{REDUCEQTYAMOUNT}     
+        ,REDUCERATE = #{REDUCERATE}     
+        ,REDUCERATEAMOUNT = #{REDUCERATEAMOUNT}     
+        ,CLAIMAMOUNT = #{CLAIMAMOUNT}     
+        ,CLAIMTYPE = #{CLAIMTYPE}     
+        ,PERIODID = #{PERIODID}     
+        ,ENTERPRISEID = #{ENTERPRISEID}     
+        ,PLANTID = #{PLANTID}     
+        ,DESCRIPTION = #{DESCRIPTION}             
+        ,CREATEDTIME = #{CREATEDTIME}     
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+        ,VALIDSTATE = #{VALIDSTATE}
+    WHERE LOTHISTKEY = #{LOTHISTKEY}
+    AND LOTID = #{LOTID}
+    </update>
+
+    <!-- 외주Claim 상세조회-->
+    <select id="selectOsmOspclaim" parameterType="map" resultType="hashmap">
+        /* "smh.osm.dao.OSM00400Dao.selectOsmOspclaim"  */
+    SELECT 
+        A.LOTID	 
+        ,A.LOTHISTKEY	 
+        ,A.DEFINETIME	 
+        ,A.OCCURTIME	 
+        ,A.PROCESSPATHID	 
+        ,A.PROCESSSEGMENTID	 
+        ,A.AREAID	 
+        ,A.DEFECTCODE	 
+        ,A.REASONSEGMENTID	 
+        ,A.REASONAREAID	 
+        ,A.REASONCONSUMABLELOTID	 
+        ,A.DEFECTQTY	 
+        ,A.CLAIMPRICE	 
+        ,A.DEFECTAMOUNT	 
+        ,A.REDUCEQTY	 
+        ,A.REDUCEQTYAMOUNT	 
+        ,A.REDUCERATE	 
+        ,A.REDUCERATEAMOUNT	 
+        ,A.CLAIMAMOUNT	 
+        ,A.CLAIMTYPE	 
+        ,A.PERIODID	 
+        ,A.ENTERPRISEID	 
+        ,A.PLANTID	 
+        ,A.DESCRIPTION	 
+        ,A.CREATOR	 
+        ,A.CREATEDTIME	 
+        ,A.MODIFIER	 
+        ,A.MODIFIEDTIME	 
+        ,A.LASTTXNHISTKEY	 
+        ,A.LASTTXNID	 
+        ,A.LASTTXNUSER	 
+        ,A.LASTTXNTIME	 
+        ,A.LASTTXNCOMMENT	 
+        ,A.VALIDSTATE	 
+    FROM	OSM_OSPCLAIM A 
+    WHERE A.LOTHISTKEY = #{LOTHISTKEY}
+    AND	A.LOTID = #{LOTID}
+    </select>
+    
+    <select id="GetCheckPeriodCloseOsp" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00400Dao.GetCheckPeriodCloseOsp"  */
+	SELECT
+			 OAD.PERIODSTATE  AS PERIODSTATE
+	FROM 	BAS_PERIOD    OAD
+	WHERE	OAD.VALIDSTATE       =  'Valid'
+	AND		OAD.PLANTID          = #{PLANTID}
+	AND		OAD.PERIODID         = #{PERIODID}	 
+
+    </select>       				    
+    <select id="GetOutsourcedClaimConfirmationCheck" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00400Dao.GetOutsourcedClaimConfirmationCheck"  */
+	SELECT 
+			QDR.STATUS
+	FROM  QAM_QCLOTDEFECTRESULT                  QDR 
+	WHERE	1=1 
+	AND		QDR.LOTID        = #{LOTID}
+	AND		QDR.TXNHISTKEY   = #{TXNHISTKEY}
+	AND		QDR.STATUS          IN ('Confirm', 'DeadlineComplete')
+
+    </select>     
+    
+    <select id="GetFactoryListByCsm" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00400Dao.GetFactoryListByCsm"  */
+    
+    -- (21.06.23) 전체 조회 추가
+    SELECT    '' 						AS FACTORYID 	
+           ,(
+            SELECT 	DICTIONARYNAME
+              FROM 	CMD_DICTIONARY
+             WHERE 	1 = 1
+               AND 	DICTIONARYID 		= 'ALLVIEWS'        -- 전체조회
+               AND 	LANGUAGETYPE 	= #{SESSION_LANGUAGETYPE}
+            ) 							AS FACTORYNAME
+            
+        FROM DUAL
+    
+    UNION ALL
+    
+    
+    SELECT  ARA.AREAID           AS FACTORYID
+      ,  DIC.DICTIONARYNAME   AS FACTORYNAME
+    FROM      BAS_AREA            ARA
+    INNER JOIN CMD_DICTIONARY   DIC   ON   ARA.AREANAME        = DIC.DICTIONARYID
+                                     AND   DIC.LANGUAGETYPE    = #{SESSION_LANGUAGETYPE}
+    WHERE  ARA.VALIDSTATE     = 'Valid'
+    AND    ARA.AREATYPE      = 'Factory'
+    AND    ARA.PLANTID           = #{PLANTID}
+    ORDER BY FACTORYID DESC			-- (21.06.23) 수정      
+    </select>    
+    
+    <!-- 외주기타Claim비용 변경 -->
+    <update id="updateOsmOspetcclaimamount" parameterType="map" >
+    UPDATE OSM_OSPETCCLAIMAMOUNT 
+    SET 
+        PERIODID = #{PERIODID}     
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+    WHERE CLAIMDATE = #{CLAIMDATE}
+    AND CLAIMSEQUENCE = #{CLAIMSEQUENCE}
+    AND ENTERPRISEID = #{ENTERPRISEID}
+    AND PLANTID = #{PLANTID}
+    </update>
+
+    <select id="GetCheckClaimClosePeriodPopup" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00400Dao.GetCheckClaimClosePeriodPopup"  */
+	SELECT
+			NVL(MAX(CPR.PERIODID),'') AS PERIODID
+	FROM	BAS_PERIOD	                    CPR                              --재고 실사기간등록
+	WHERE	1=1 
+	AND 	CPR.PERIODTYPE     = #{PERIODTYPE} 
+	AND 	CPR.PLANTID        = #{PLANTID}
+	AND 	CPR.PERIODNAME     = #{PERIODNAME}
+	
+    </select>   
+    
+    <!--
+		설		명	: Claim 감면 관리 - 저장시 BAS_PERIOD 의 type 확인 Close 인 경우 저장 불가 / PERIODID 가 존재 하는 것만
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-24 
+		수  정   이  력	:
+	-->
+	<select id="selectPeriodTypeCheck" parameterType="map" resultType="hashmap">
+			/* selectPeriodTypeCheck -  Claim 감면 관리 - 저장시 BAS_PERIOD 의 type 확인 Close 인 경우 저장 불가 / PERIODID 가 존재 하는 것만 */
+			 SELECT  MAX(CPR.PERIODSTATE) AS PERIODSTATE
+			   FROM  BAS_PERIOD CPR
+			  WHERE  1 = 1
+				AND     CPR.VALIDSTATE     	= 'Valid'
+				AND		CPR.PERIODTYPE     	= 'Claim'			-- 일단 고정
+				AND		CPR.PLANTID        	= #{PLANTID}
+				--AND		CPR.ENTERPRISEID   	= ENTERPRISEID
+				AND		CPR.PERIODID     		= #{PERIODID}
+	</select> 
+
+</mapper>

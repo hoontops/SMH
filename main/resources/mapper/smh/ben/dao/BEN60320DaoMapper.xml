@@ -1,0 +1,211 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.ben.dao.BEN60320Dao">
+
+	<select id="gonList" parameterType="map" resultType="hashmap">
+	SELECT  HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_APPROVAL_STATUS',DEF.STATUS) STATUS_NAME  /* 상태명  */       
+	       ,REQUEST_DATE                   AS  REQUEST_DATE              /* 신청일자 */                   
+	       ,(SELECT PURF.ROW_LOW_RANGE_OR_NAME AS GON_GUBUN_NAME
+	           FROM PAY_USER_ROWS_F PURF, PAY_USER_TABLES PUT 
+	          WHERE PURF.USER_TABLE_ID = PUT.USER_TABLE_ID
+	            AND PUT.USER_TABLE_NAME = 'HJS_BEN_경조금지급기준'
+	            AND PURF.USER_ROW_ID = DEF.GON_GUBUN) AS GON_GUBUN_NAME   /* 경조구분명 */
+	       ,DEF.GON_DATE                   AS  GON_DATE                  /* 경조일자     */                   
+	       ,PAYMENT_DATE                   AS  PAYMENT_DATE              /* 승인일자     */                   
+	       ,DEF.AMOUNT                     AS  AMOUNT                    /* 회사지원금    */                   
+	       ,DEF.CON_DATE                   AS  CON_DATE                  /* 지급일자     */                   
+	       ,DEF.LINE_CONTENTS              AS  LINE_CONTENTS             /* 경조내용     */                   
+	       ,DEF.STATUS                     AS  STATUS                    /* 상태         */                   
+	       ,DEF.PERSON_ID                  AS  PERSON_ID                 /* PERSON_ID    */                   
+	       ,DEF.GON_GUBUN                  AS  GON_GUBUN                 /* 경조구분     */                   
+	       ,DEF.OBJECT_VERSION_NUMBER      AS  OBJECT_VERSION_NUMBER     /* OBJECT_VERSION_NUMBER */                  
+	       ,DEF.HJSBEN_EXPENSES_SEQ        AS  HJSBEN_EXPENSES_SEQ       /* 경조금관리PK */      
+	       ,''							   AS  CHK  
+	 FROM  ( SELECT HJSBEN_EXPENSES_SEQ     AS  HJSBEN_EXPENSES_SEQ       /* 경조금관리PK */                   
+	               ,PERSON_ID               AS  PERSON_ID                 /* PERSON_ID    */                   
+	               ,TO_CHAR(GON_DATE,'YYYY-MM-DD')      AS  GON_DATE      /* 경조일자     */                   
+	               ,STATUS                  AS  STATUS                    /* 상태         */                   
+	               ,TO_CHAR(REQUEST_DATE,'YYYY-MM-DD')  AS  REQUEST_DATE  /* 신청일자     */                   
+	               ,GON_GUBUN               AS  GON_GUBUN                 /* 경조구분     */                   
+	               ,TELEPHONE               AS  TELEPHONE                 /* 긴급연락처   */                   
+	               ,AMOUNT                  AS  AMOUNT                    /* 회사지원금   */                   
+	               ,FLOWER_FLAG             AS  FLOWER_FLAG               /* 조화환지원   */                   
+	               ,LINE_CONTENTS           AS  LINE_CONTENTS             /* 경조내용     */                   
+	               ,OBJECT_NAME             AS  OBJECT_NAME               /* 대상자성명   */                   
+	               ,RELATIONSHIP            AS  RELATIONSHIP              /* 관계         */                   
+	               ,TO_CHAR(PAYMENT_DATE,'YYYY-MM-DD')   AS  PAYMENT_DATE /* 승인일자     */                   
+	               ,TO_CHAR(CON_DATE,'YYYY-MM-DD')       AS  CON_DATE     /* 지급일자     */                   
+	               ,SUBMIT_PRICE            AS  SUBMIT_PRICE              /* 승인금액     */                   
+	               ,CON_FLAG                AS  CON_FLAG                  /* 이체여부     */                   
+	               ,REASION_CONTENTS        AS  REASION_CONTENTS          /* 불가사유     */                   
+	               ,OBJECT_VERSION_NUMBER   AS  OBJECT_VERSION_NUMBER     /* OBJECT_VERSION_NUMBER */          
+	           FROM HJSBEN_EXPENSES_CONGRATULATION                                                              
+	          WHERE 1=1
+	            AND PERSON_ID = #{PERSON_ID}		--57268   -- 로그인 Person ID
+	            AND NVL(GON_GUBUN, '1') = NVL(#{GON_GUBUN}, NVL(GON_GUBUN,'1'))
+	            AND NVL(STATUS, '1')    = NVL(#{STATUS}, NVL(STATUS, '1'))  
+	       ) DEF
+	  WHERE 1=1
+	     ORDER BY DEF.REQUEST_DATE DESC    
+	</select>
+	
+	
+	<select id="gonDetailList" parameterType="map" resultType="hashmap">
+	
+	SELECT  def.HJSBEN_EXPENSES_SEQ        AS  HJSBEN_EXPENSES_SEQ       /* 경조금관리PK */                   
+              ,def.PERSON_ID                  AS  PERSON_ID                 /* PERSON_ID    */                   
+              ,def.GON_DATE                   AS  GON_DATE                  /* 경조일자     */                   
+              ,def.STATUS                     AS  STATUS                    /* 상태         */                   
+              ,hjshrf_decode_lookup_fnc('HJS_HR_APPROVAL_STATUS',def.STATUS) AS STATUS_NAME  /* 상태명  */       
+              ,REQUEST_DATE                   AS  REQUEST_DATE              /* 신청일자 */                   
+              ,def.GON_GUBUN                  AS  GON_GUBUN                 /* 경조구분     */   
+              ,(SELECT purf.row_low_range_or_name as gon_gubun_name
+                FROM   pay_user_rows_f purf, pay_user_tables put
+                WHERE  purf.user_table_id = put.user_table_id
+                AND    put.user_table_name = 'HJS_BEN_경조금지급기준'
+                AND    purf.user_row_id = def.gon_gubun) AS gon_gubun_name   /* 경조구분명 */
+              ,def.TELEPHONE                  AS  TELEPHONE                 /* 긴급연락처   */                   
+              ,def.AMOUNT                     AS  AMOUNT                    /* 회사지원금    */                   
+              ,def.FLOWER_FLAG                AS  FLOWER_FLAG               /* 조화환지원   */                   
+              ,def.LINE_CONTENTS              AS  LINE_CONTENTS             /* 경조내용     */                   
+              ,def.OBJECT_NAME                AS  OBJECT_NAME               /* 대상자성명   */                   
+              ,def.RELATIONSHIP               AS  RELATIONSHIP              /* 관계         */                   
+              ,hjsrec_get_flex_value_des_fnc('HJS_HR_CONTACT_TYPE',def.RELATIONSHIP) AS RELATIONSHIP_NAME /* 관계명   */           
+              ,PAYMENT_DATE                   AS  PAYMENT_DATE /* 지급일자     */                   
+              ,def.SUBMIT_PRICE               AS  SUBMIT_PRICE              /* 승인금액     */                   
+              ,def.CON_FLAG                   AS  CON_FLAG                  /* 이체여부     */                   
+              ,def.REASION_CONTENTS           AS  REASION_CONTENTS          /* 불가사유     */                   
+              ,def.OBJECT_VERSION_NUMBER      AS  OBJECT_VERSION_NUMBER     /* OBJECT_VERSION_NUMBER */      
+        FROM  ( select HJSBEN_EXPENSES_SEQ     AS  HJSBEN_EXPENSES_SEQ       /* 경조금관리PK */                   
+                      ,PERSON_ID               AS  PERSON_ID                 /* PERSON_ID    */                   
+                      ,TO_CHAR(GON_DATE,'YYYY/MM/DD')      AS  GON_DATE      /* 경조일자     */                   
+                      ,STATUS                  AS  STATUS                    /* 상태         */                   
+                      ,TO_CHAR(REQUEST_DATE,'YYYY/MM/DD')  AS  REQUEST_DATE  /* 신청일자     */                   
+                      ,GON_GUBUN               AS  GON_GUBUN                 /* 경조구분     */                   
+                      ,TELEPHONE               AS  TELEPHONE                 /* 긴급연락처   */                   
+                      ,AMOUNT                  AS  AMOUNT                    /* 회사지원금   */                   
+                      ,FLOWER_FLAG             AS  FLOWER_FLAG               /* 조화환지원   */                   
+                      ,LINE_CONTENTS           AS  LINE_CONTENTS             /* 경조내용     */                   
+                      ,OBJECT_NAME             AS  OBJECT_NAME               /* 대상자성명   */                   
+                      ,RELATIONSHIP            AS  RELATIONSHIP              /* 관계         */                   
+                      ,TO_CHAR(PAYMENT_DATE,'YYYY/MM/DD')   AS  PAYMENT_DATE /* 지급일자     */                   
+                      ,SUBMIT_PRICE            AS  SUBMIT_PRICE              /* 승인금액     */                   
+                      ,CON_FLAG                AS  CON_FLAG                  /* 이체여부     */                   
+                      ,REASION_CONTENTS        AS  REASION_CONTENTS          /* 불가사유     */                   
+                      ,OBJECT_VERSION_NUMBER   AS  OBJECT_VERSION_NUMBER     /* OBJECT_VERSION_NUMBER */          
+                from  hjsben_expenses_congratulation                                                              
+              ) def
+        WHERE def.HJSBEN_EXPENSES_SEQ  = #{HJSBEN_EXPENSES_SEQ}
+	
+	</select>
+	
+	
+	<select id="addDetail" parameterType="map" resultType="hashmap">
+		select EMPLOYMENT_CATEGORY from hjshr_sshr_employee_lov_v 
+		where PERSON_ID = #{PERSON_ID}
+	
+	</select>
+	
+	<select id="gonDetail" parameterType="map" resultType="hashmap">
+		SELECT pci.VALUE                    as SUPPORT_MONEY                  /* 회사지원금 */
+       FROM   pay_user_column_instances_f pci
+             ,pay_user_rows_f             pur
+             ,pay_user_rows_f_tl          urt
+             ,pay_user_columns            puc
+       WHERE  pci.user_row_id = pur.user_row_id
+       AND    pci.user_row_id = urt.user_row_id
+       AND    sysdate between  pci.effective_start_date and pci.effective_end_date
+       AND    sysdate between  pur.effective_start_date and pur.effective_end_date
+       AND    puc.user_column_name in (#{RANK},#{GON_GUBUN_NAME})
+       AND    pci.user_column_id = puc.user_column_id
+       AND    pur.user_row_id = #{GON_GUBUN}  
+       order by pci.VALUE
+	
+	</select>
+	
+	<select id="gonFlowerDetail" parameterType="map" resultType="hashmap">
+		SELECT pci.VALUE                    as FLOWER_FLAG                  /* 회사지원금 */
+       FROM   pay_user_column_instances_f pci
+             ,pay_user_rows_f             pur
+             ,pay_user_rows_f_tl          urt
+             ,pay_user_columns            puc
+       WHERE  pci.user_row_id = pur.user_row_id
+       AND    pci.user_row_id = urt.user_row_id
+       AND    sysdate between  pci.effective_start_date and pci.effective_end_date
+       AND    sysdate between  pur.effective_start_date and pur.effective_end_date
+       AND    puc.user_column_name in (#{FLOWER},#{GON_GUBUN_NAME})
+       AND    pci.user_column_id = puc.user_column_id
+       AND    pur.user_row_id = #{GON_GUBUN}  
+       order by pci.VALUE
+	
+	</select>
+	
+	<insert id="insertGon" parameterType="map">
+    /* 경조금 신청 정보 등록 insert */
+	INSERT /* smh.ben.dao.BEN60310MDao.insertBasMasterdataclass */ INTO HJSBEN_EXPENSES_CONGRATULATION( 
+           HJSBEN_EXPENSES_SEQ  
+          ,PERSON_ID  
+          ,GON_DATE  
+          ,STATUS  
+          ,REQUEST_DATE  
+          ,GON_GUBUN  
+          ,TELEPHONE  
+          ,AMOUNT  
+          ,FLOWER_FLAG  
+          ,LINE_CONTENTS  
+          ,OBJECT_NAME
+          ,RELATIONSHIP
+          ,CREATED_BY
+          ,CREATION_DATE  
+          ,LAST_UPDATED_BY  
+          ,LAST_UPDATE_DATE  
+          ,LAST_UPDATE_LOGIN
+          ,OBJECT_VERSION_NUMBER) 
+      VALUES( 
+           HJSBEN_EXPENSES_SEQ.NEXTVAL
+          ,#{PERSON_ID}  
+          ,#{GON_DATE}  
+          ,'10'
+          ,#{REQUEST_DATE}  
+          ,#{GON_GUBUN}  
+          ,#{TELEPHONE}  
+          ,#{AMOUNT}  
+          ,#{FLOWER_FLAG}  
+          ,#{LINE_CONTENTS}  
+          ,#{OBJECT_NAME}  
+          ,#{RELATIONSHIP}
+          ,#{CREATED_BY}
+          ,SYSDATE
+          ,#{LAST_UPDATED_BY} 
+          ,SYSDATE             
+          ,#{LAST_UPDATED_BY}            
+          ,#{OBJECT_VERSION_NUMBER})
+    </insert>
+    
+    <update id="updateGon" parameterType="map" >
+    UPDATE HJSBEN_EXPENSES_CONGRATULATION 
+    SET 
+        GON_GUBUN = #{GON_GUBUN}     
+        ,TELEPHONE = #{TELEPHONE}
+        ,AMOUNT = #{AMOUNT}
+        ,FLOWER_FLAG = #{FLOWER_FLAG}
+        ,LINE_CONTENTS = #{LINE_CONTENTS}
+        ,OBJECT_NAME = #{OBJECT_NAME}
+        ,RELATIONSHIP = #{RELATIONSHIP}
+        ,LAST_UPDATED_BY = #{LAST_UPDATED_BY} 
+        ,LAST_UPDATE_DATE = SYSDATE
+        ,LAST_UPDATE_LOGIN = #{LAST_UPDATED_BY}
+        ,OBJECT_VERSION_NUMBER = #{OBJECT_VERSION_NUMBER}
+    WHERE HJSBEN_EXPENSES_SEQ = #{HJSBEN_EXPENSES_SEQ}
+    </update>
+    
+	
+	<delete id="deleteGon" parameterType="hashmap">
+		DELETE /* smh.ben.dao.BEN60310MDao.deleteBasMasterdataclass */ FROM HJSBEN_EXPENSES_CONGRATULATION 
+	    WHERE HJSBEN_EXPENSES_SEQ = #{HJSBEN_EXPENSES_SEQ}
+	</delete>
+	
+
+</mapper>

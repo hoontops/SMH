@@ -1,0 +1,802 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM09000Dao">
+    
+	<!-- 프 로 그 램 명 : 공정 관리 > 자재관리 > 자재불출요청 설 명 : 각 공정별 재공 LOT 조회(공정별 - 투입현황) 
+		작 성 자 : 정승원 작 성 일 : 2019-07-01 주요 변경 로그 : 2019-07-22 정승원 SELECT L.UNIT 추가 
+		2019-12-27 황유성 사용자별 작업장 통제 적용 -->
+	<select id="selectLotListWipByProcessSegList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectLotListWipByProcessSeg
+				-- Version : 10001				
+				SELECT
+						LOTINPUT.ISREQUEST
+					,	LOTINPUT.REQUESTNO
+					,	LOTINPUT.LOTTYPE
+					,	LOTINPUT.PRODUCTDEFID
+					,	LOTINPUT.PRODUCTDEFVERSION
+					,	LOTINPUT.PRODUCTDEFNAME
+					,	LOTINPUT.USERSEQUENCE
+					,	LOTINPUT.PROCESSSEGMENTID
+					,	LOTINPUT.PROCESSSEGMENTVERSION
+					,	LOTINPUT.PROCESSSEGMENTNAME
+					,	LOTINPUT.AREAID
+					,	LOTINPUT.AREANAME
+					,	LOTINPUT.UNIT
+					,	LOTINPUT.LOTCNT
+					,	LOTINPUT.PANELQTY
+					,	LOTINPUT.QTY
+					,	LOTINPUT.MM
+					,	LOTINPUT.CHK
+					,	LOTINPUT.PLANTID
+				FROM (
+					SELECT		
+							CASE WHEN LOT.REQUESTNO IS NULL OR LOT.REQUESTNO='' THEN 'N' ELSE 'Y' END AS ISREQUEST
+						,	LOT.LOTTYPE
+						,	LOT.PRODUCTDEFID
+						,	LOT.PRODUCTDEFVERSION
+						,	LOT.PRODUCTDEFNAME
+						,	LOT.USERSEQUENCE
+						,	LOT.PROCESSSEGMENTID
+						,	LOT.PROCESSSEGMENTVERSION
+						,	LOT.PROCESSSEGMENTNAME
+						,	LOT.AREAID
+						,	LOT.AREANAME
+						,	LOT.UNIT
+						,	COUNT(LOT.LOTID)		AS LOTCNT
+						,	SUM(LOT.PANELQTY)			AS PANELQTY
+						,	SUM(LOT.QTY)				AS QTY
+						,	SUM(LOT.MM)					AS MM
+						,	NULL							AS CHK
+						,	LOT.PLANTID
+						,	LOT.REQUESTNO
+					FROM(
+						SELECT
+								GEN.LOTID
+							,	DCT.DICTIONARYNAME				AS LOTTYPE
+							,	GEN.PRODUCTDEFID
+							,	GEN.PRODUCTDEFVERSION
+							,	PD.PRODUCTDEFNAME
+							,	GEN.USERSEQUENCE
+							,	GEN.PROCESSSEGMENTID
+							,	GEN.PROCESSSEGMENTVERSION
+							,	DCP.DICTIONARYNAME					AS PROCESSSEGMENTNAME
+							,	GEN.CREATEDQTY						AS QTY
+							,	CEIL(GEN.CREATEDQTY / LOT.PANELPERQTY ) AS PANELQTY
+							,	ROUND(GEN.CREATEDQTY / PD.PCSMM , 2) 	AS MM
+							,	GEN.AREAID
+							,	DCA.DICTIONARYNAME					AS AREANAME
+							,	GEN.PLANTID
+							,	GEN.ENTERPRISEID
+							,	LOT.LOTSTARTDATE
+							,	LOT.UNIT
+							,	REQ.REQUESTNO
+						FROM PCM_LOTGENEAL		GEN
+						LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD	ON	GEN.PRODUCTDEFID = PD.PRODUCTDEFID
+																	AND	GEN.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+						LEFT OUTER JOIN PCM_LOT					LOT	ON	GEN.LOTID = LOT.LOTID
+						LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS	ON	GEN.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+																	AND GEN.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+						LEFT OUTER JOIN CMD_DICTIONARY			DCP	ON	PS.PROCESSSEGMENTNAME = DCP.DICTIONARYID
+																	AND DCP.LANGUAGETYPE='ko-KR'
+						LEFT OUTER JOIN BAS_AREA				AR	ON	GEN.AREAID = AR.AREAID
+						LEFT OUTER JOIN	CMD_DICTIONARY			DCA	ON	AR.AREANAME = DCA.DICTIONARYID
+																	AND DCA.LANGUAGETYPE = 'ko-KR'
+						LEFT OUTER JOIN	CMD_LOOKUP_VALUES		CD	ON	LOT.LOTTYPE = CD.LOOKUP_CODE
+																	AND	CD.LOOKUP_TYPE = 'ProductionType'
+						LEFT OUTER JOIN CMD_DICTIONARY			DCT	ON	CD.DICTIONARYID = DCT.DICTIONARYID
+																	AND DCT.LANGUAGETYPE = 'ko-KR'
+						LEFT OUTER JOIN (
+							SELECT  
+									CMR.REQUESTNO
+						        ,   CMR.ENTERPRISEID
+						        ,   CMR.PLANTID
+						        ,   CMR.AREAID
+						        ,   CMR.PROCESSSEGMENTID
+						        ,   CMD.LOTID
+						    FROM    MTM_CONSUMABLEREQUEST          CMR
+						    INNER JOIN MTM_CONSUMABLEREQUESTDETAIL CMD   	ON  CMR.REQUESTNO = CMD.REQUESTNO
+						                        							AND CMR.PLANTID = CMD.PLANTID
+						                        							AND CMR.ENTERPRISEID = CMD.ENTERPRISEID
+						    GROUP BY	CMR.REQUESTNO
+							        ,   CMR.ENTERPRISEID
+							        ,   CMR.PLANTID
+							        ,   CMR.AREAID
+							        ,   CMR.PROCESSSEGMENTID
+							        ,   CMD.LOTID 
+						)										REQ	ON	GEN.LOTID = REQ.LOTID
+																	AND	GEN.AREAID = REQ.AREAID
+																	AND	GEN.PROCESSSEGMENTID = REQ.PROCESSSEGMENTID
+						WHERE 1=1
+							AND	GEN.ROOTLOTID = GEN.LOTID
+							/* AND PD.PRODUCTCLASSID='Product' */
+							AND GEN.SOURCELOTID IS NULL
+							AND		GEN.PLANTID = #{P_PLANTID}
+							AND 	GEN.AREAID = #{P_AREAID}
+							<if test = "P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">				
+								AND EXISTS  (
+												SELECT VALUE 
+		                         				FROM UFN_SELECTSTRINGTOSPLIT(#{P_PROCESSSEGMENTID},',') MAP
+		                         				WHERE GEN.PROCESSSEGMENTID = MAP.VALUE	
+												)
+							</if>
+							<if test = "P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='' ">
+								AND	LOT.LOTSTARTDATE <![CDATA[>=]]> TO_DATE(#{P_PERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+							</if>
+							<if test = "P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='' ">	
+								AND 	LOT.LOTSTARTDATE <![CDATA[<]]> TO_DATE(#{P_PERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')
+							</if>
+							<if test = "P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+								AND 	LOT.PRODUCTDEFID = #{P_PRODUCTDEFID}
+							</if>
+							<if test = "P_LOTPRODUCTTYPETATUS != null and P_LOTPRODUCTTYPETATUS !='' ">
+								AND		LOT.LOTTYPE = #{P_LOTPRODUCTTYPETATUS}		--양산구분
+							</if>
+							<if test = "P_ISREQUEST != null and P_ISREQUEST !='' ">
+		                	<if test="P_ISREQUEST eq 'Y'.toString() ">
+		                		AND NVL(REQ.REQUESTNO, 'X') != 'X'
+		                	</if>
+		                	<if test="P_ISREQUEST neq 'Y'.toString() ">
+		                		AND NVL(REQ.REQUESTNO, 'X') = 'X'
+		                	</if>
+		                </if>
+							AND	EXISTS (
+								SELECT  1
+						        FROM    BAS_BILLOFMATERIAL M
+						        WHERE   1 = 1
+						        AND     GEN.PRODUCTDEFID = M.PRODUCTDEFID
+						        AND     GEN.PRODUCTDEFVERSION = M.PRODUCTDEFVERSION
+						       -- AND     X.PROCESSSEGMENTID = M.PROCESSSEGMENTID
+							)	
+					) LOT
+					GROUP BY 
+							LOT.LOTTYPE
+						,	LOT.PRODUCTDEFID
+						,	LOT.PRODUCTDEFVERSION
+						,	LOT.PRODUCTDEFNAME
+						,	LOT.USERSEQUENCE
+						,	LOT.PROCESSSEGMENTID
+						,	LOT.PROCESSSEGMENTVERSION
+						,	LOT.PROCESSSEGMENTNAME
+						,	LOT.AREAID
+						,	LOT.AREANAME
+						,	LOT.UNIT
+						,	LOT.REQUESTNO
+						,	LOT.PLANTID
+					ORDER BY 
+							LOT.PROCESSSEGMENTNAME 
+						,	LOT.PRODUCTDEFID ASC
+				)LOTINPUT	          
+	</select>
+	
+	<select id="selectLotListWipByProcessSegGroupList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectLotListWipByProcessSeg
+				-- Version : 10001				
+				SELECT 	
+						X.PROCESSSEGMENTID
+                     ,	X.PROCESSSEGMENTVERSION
+				FROM
+				(
+					SELECT  	L.PROCESSSEGMENTID
+                        	,	L.PROCESSSEGMENTVERSION
+                        	,	L.ENTERPRISEID
+                        	,   	L.PLANTID
+                        	,	L.AREAID
+                        	,	L.LOTID
+                        	,	L.PRODUCTDEFID
+                        	,	L.PRODUCTDEFVERSION
+					FROM 	PCM_LOT									L
+					INNER JOIN BAS_PRODUCTDEFINITION 		PD		ON	L.PRODUCTDEFID = PD.PRODUCTDEFID
+																					AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+					INNER JOIN BAS_PROCESSSEGMENT 			PS		ON	L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+																					AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+					INNER JOIN FN_AREA(#{CURRENTLOGINID})	AR		ON	L.AREAID = AR.AREAID
+																					AND AR.ISMODIFY = 'Y' -- 등록화면
+					LEFT OUTER JOIN CMD_DICTIONARY			D1		ON	PS.PROCESSSEGMENTNAME = D1.DICTIONARYID
+																					AND D1.LANGUAGETYPE = #{LANGUAGETYPE}
+					LEFT OUTER JOIN CMD_DICTIONARY			D2		ON	AR.AREANAME = D2.DICTIONARYID
+																					AND D2.LANGUAGETYPE = #{LANGUAGETYPE}										
+					LEFT OUTER JOIN CMD_LOOKUP_VALUES 		C		ON	L.LOTTYPE = C.LOOKUP_CODE
+														 							AND C.LOOKUP_TYPE = 'ProductionType'
+					LEFT OUTER JOIN CMD_DICTIONARY 			DIC 	ON	C.DICTIONARYID = DIC.DICTIONARYID
+																					AND DIC.LANGUAGETYPE = #{LANGUAGETYPE}					
+					WHERE 1 = 1
+					AND		L.PLANTID = #{P_PLANTID}
+					AND 		L.AREAID = #{P_AREAID}
+					AND		L.LOTSTATE IN ('InProduction', 'InTransit')
+					AND 		NVL(L.ISHOLD, 'N') = 'N'
+					AND		NVL(L.ISLOCKING, 'N') = 'N'
+					AND     	NVL(L.ISDEFECTED, 'N') = 'N'
+					--AND		L.PROCESSSTATE = 'WaitForReceive'
+					
+					<if test = "P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">				
+						AND EXISTS  (
+										SELECT VALUE 
+                         				FROM UFN_SELECTSTRINGTOSPLIT(#{P_PROCESSSEGMENTID},',') MAP
+                         				WHERE L.PROCESSSEGMENTID = MAP.VALUE	
+										)
+					</if>
+					
+					<if test = "P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='' ">
+						AND	L.LOTSTARTDATE <![CDATA[>=]]> TO_DATE(#{P_PERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+					</if>
+					
+					<if test = "P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='' ">	
+						AND 	L.LOTSTARTDATE <![CDATA[<]]> TO_DATE(#{P_PERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')
+					</if>
+					
+					<if test = "P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+						AND 	L.PRODUCTDEFID = #{P_PRODUCTDEFID}
+					</if>
+					
+					<if test = "P_LOTPRODUCTTYPETATUS != null and P_LOTPRODUCTTYPETATUS !='' ">
+						AND		L.LOTTYPE = #{P_LOTPRODUCTTYPETATUS}		--양산구분
+					</if>
+					
+					GROUP BY L.PROCESSSEGMENTID
+                        	,	L.PROCESSSEGMENTVERSION
+                        	,	L.ENTERPRISEID
+                        	,   	L.PLANTID
+                        	,	L.AREAID
+                        	,	L.LOTID
+				) X
+				--청구여부
+                LEFT JOIN (
+                            SELECT  CMR.REQUESTNO
+                                ,   CMR.ENTERPRISEID
+                                ,   CMR.PLANTID
+                                ,   CMR.AREAID
+                                ,   CMR.PROCESSSEGMENTID
+                                ,   CMD.LOTID
+                            FROM    MTM_CONSUMABLEREQUEST          CMR
+                            INNER JOIN MTM_CONSUMABLEREQUESTDETAIL CMD   	ON  CMR.REQUESTNO = CMD.REQUESTNO
+                                                                        							AND CMR.PLANTID = CMD.PLANTID
+                                                                        							AND CMR.ENTERPRISEID = CMD.ENTERPRISEID
+                			) REQ   ON  X.ENTERPRISEID = REQ.ENTERPRISEID
+			                        AND X.PLANTID = REQ.PLANTID
+			                        AND X.AREAID = REQ.AREAID
+			                        AND X.PROCESSSEGMENTID = REQ.PROCESSSEGMENTID
+			                        AND X.LOTID = REQ.LOTID
+				WHERE	1 = 1				
+				AND EXISTS (
+				                    SELECT  1
+				                    FROM    BAS_BILLOFMATERIAL M
+				                    WHERE   1 = 1
+				                    AND     X.PRODUCTDEFID = M.PRODUCTDEFID
+				                    AND     X.PRODUCTDEFVERSION = M.PRODUCTDEFVERSION
+				                    AND     X.PROCESSSEGMENTID = M.PROCESSSEGMENTID
+				                )
+                --청구여부
+                <if test = "P_ISREQUEST != null and P_ISREQUEST !='' ">
+                	<if test="P_ISREQUEST eq 'Y'.toString() ">
+                		AND NVL(REQ.REQUESTNO, 'X') != 'X'
+                	</if>
+                	<if test="P_ISREQUEST neq 'Y'.toString() ">
+                		AND NVL(REQ.REQUESTNO, 'X') = 'X'
+                	</if>
+                </if>
+                GROUP BY X.PROCESSSEGMENTID
+                    ,	 X.PROCESSSEGMENTVERSION
+	</select>
+	
+	<!-- 프 로 그 램 명 : 공정관리 > 자재관리 > 자재불출요청 설 명 : 불출 자재 목록 조회 작 성 자 : 정승원 작 성 
+		일 : 2019-11-08 주요 변경 로그 : -->
+	<select id="selectConsumListOfBomList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectConsumListOfBom
+				-- Version : 10001				
+				SELECT
+						BOM.MATERIALDEFID		AS CONSUMABLEDEFID
+					,	BOM.MATERIALDEFVERSION	AS CONSUMABLEDEFVERSION
+					,	BOM.UNIT				AS UOM
+					,	CD.CONSUMABLEDEFNAME
+					,   SUM(GEN.CREATEDQTY * BOM.QTY)    	AS QTY
+				    ,	'1' AS CHK
+				    ,	'0' AS SENDCHK
+				    ,	BOM.MATERIALTYPE
+				FROM PCM_LOTGENEAL	GEN
+				LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD	ON	GEN.PRODUCTDEFID = PD.PRODUCTDEFID
+															AND GEN.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT OUTER JOIN PCM_LOT					LOT	ON	GEN.LOTID = LOT.LOTID
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	ON	GEN.PRODUCTDEFID = BOM.PROCESSDEFID
+															AND GEN.PRODUCTDEFVERSION = BOM.PROCESSDEFVERSION
+															AND BOM.MATERIALTYPE = 'Consumable'
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION CD	ON	BOM.MATERIALDEFID = CD.CONSUMABLEDEFID
+															AND BOM.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION								
+				WHERE 1=1
+					AND	GEN.ROOTLOTID = GEN.LOTID
+					/* AND	PD.PRODUCTCLASSID = 'Product' */
+					AND GEN.SOURCELOTID IS NULL
+					<if test="TYPE eq 'SINGLE'.toString() ">
+						AND     GEN.PRODUCTDEFID = #{P_PRODUCTDEFID}
+						AND     GEN.PRODUCTDEFVERSION = #{P_PRODUCTDEFVERSION}
+					</if>
+					<if test="TYPE eq 'MULTI'.toString() ">
+						AND EXISTS (
+										SELECT	1
+										FROM 	UFN_SELECTSTRINGTOSPLIT3(#{P_PRODUCTDEFID}, ',', '|')	M
+										WHERE	GEN.PRODUCTDEFID = M.VALUE
+										AND		GEN.PRODUCTDEFVERSION = M.VALUE2
+								   )
+					</if>
+					AND     GEN.AREAID = #{P_AREAID}
+					AND     GEN.PLANTID = #{P_PLANTID}
+					<if test="P_ISREQUEST eq 'N'.toString() ">
+						AND NOT EXISTS (
+		                                    SELECT  1
+		                                    FROM    MTM_CONSUMABLEREQUEST            		CMR
+		                                    INNER JOIN MTM_CONSUMABLEREQUESTDETAIL   	CMD 		ON  CMR.REQUESTNO = CMD.REQUESTNO
+					                                                                                AND CMR.PLANTID = CMD.PLANTID
+					                                                                                AND CMR.ENTERPRISEID = CMD.ENTERPRISEID
+					                                                                                AND GEN.LOTID = CMD.LOTID
+					                                                                                AND BOM.MATERIALDEFID = CMD.CONSUMABLEDEFID
+					                                                                                AND BOM.MATERIALDEFVERSION = CMD.CONSUMABLEDEFVERSION
+                            )
+					</if>
+					<if test = "P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='' ">
+						AND	LOT.LOTSTARTDATE <![CDATA[>=]]> TO_DATE(#{P_PERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+					</if>
+					<if test = "P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='' ">	
+						AND 	LOT.LOTSTARTDATE <![CDATA[<]]> TO_DATE(#{P_PERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')
+					</if>
+					AND EXISTS (
+				                    SELECT  1
+				                    FROM    BAS_BILLOFMATERIAL M
+				                    WHERE   1 = 1
+				                    AND     GEN.PRODUCTDEFID = M.PRODUCTDEFID
+				                    AND     GEN.PRODUCTDEFVERSION = M.PRODUCTDEFVERSION
+				                )
+				GROUP BY BOM.MATERIALDEFID
+				    ,    BOM.MATERIALDEFVERSION
+				    ,	 BOM.UNIT
+				    ,	 CD.CONSUMABLEDEFNAME
+				    ,	 BOM.MATERIALTYPE
+				ORDER BY BOM.MATERIALDEFID ASC
+	</select>
+	
+	<!-- ################## -->
+	<!-- ################## -->
+	<!-- ################## -->
+	<!-- 전표출력용 테이블 insert -->
+	<!-- ################## -->
+	<!-- ################## -->
+	<!-- ################## -->
+	<update id="insertConsumListOfBomTableMake" parameterType="map">
+				INSERT INTO MTM_CONSUMABLEPRINT
+				SELECT UUID,
+						 ROWNUM,
+						 REQUESTNO,
+						 CONSUMABLEDEFID,
+						 CONSUMABLEDEFVERSION,
+						 UOM,
+						 CONSUMABLEDEFNAME,
+						 QTY,
+						 ITEMQTY,
+						 LOTQTY
+				FROM (				
+					SELECT
+								#{P_UUID} AS UUID
+							,	#{P_REQUESTNO} AS REQUESTNO
+							,	CMD.CONSUMABLEDEFID      	AS CONSUMABLEDEFID
+						    ,   CMD.CONSUMABLEDEFVERSION  	AS CONSUMABLEDEFVERSION
+						    ,	CMD.UNIT					AS UOM
+						    ,   CMD.DESCRIPTION				AS CONSUMABLEDEFNAME
+						    ,   TO_CHAR(SUM(CMD.REQUESTQTY),'9,999,999.99') AS QTY
+						    ,	TO_CHAR((
+									SELECT
+										COUNT(DISTINCT LOT.PRODUCTDEFID)
+									FROM MTM_CONSUMABLEREQUESTDETAIL	CM
+									LEFT OUTER JOIN PCM_LOT				LOT ON	CM.LOTID = LOT.LOTID
+									WHERE CM.REQUESTNO = #{P_REQUESTNO}
+										AND	CM.CONSUMABLEDEFID = CMD.CONSUMABLEDEFID
+										AND CM.CONSUMABLEDEFVERSION = CMD.CONSUMABLEDEFVERSION 
+			                    ),'9,999,999') AS ITEMQTY
+						    ,	TO_CHAR(COUNT(CMD.LOTID),'9,999,999') AS LOTQTY
+					FROM    MTM_CONSUMABLEREQUEST			CMH
+					LEFT OUTER JOIN MTM_CONSUMABLEREQUESTDETAIL CMD	ON CMH.REQUESTNO = CMD.REQUESTNO
+																	AND	CMH.ENTERPRISEID = CMD.ENTERPRISEID
+																	AND CMH.PLANTID = CMD.PLANTID                                    
+					WHERE   1 = 1
+						AND	CMH.REQUESTNO = #{P_REQUESTNO}
+					GROUP BY 
+							CMD.CONSUMABLEDEFID
+						,	CMD.CONSUMABLEDEFVERSION
+						,	CMD.UNIT
+						,	CMD.DESCRIPTION
+					)
+	</update>
+	
+	<update id="insertConsumListOfBomTableMake2" parameterType="map">
+		INSERT INTO MTM_CONSUMABLEPRINT
+				SELECT 
+						#{P_UUID}  	
+					,	A.NO
+					,	#{P_REQUESTNO}
+		           	,	' '
+		           	,	' '
+		           	,	' '
+		           	,	' '
+		           	,	' '
+		           	,	' '
+		           	,	' '
+			    FROM (
+				        SELECT 1 AS NO FROM DUAL UNION ALL
+				        SELECT 2 AS NO FROM DUAL UNION ALL
+				        SELECT 3 AS NO FROM DUAL UNION ALL
+				        SELECT 4 AS NO FROM DUAL UNION ALL
+				        SELECT 5 AS NO FROM DUAL UNION ALL
+				        SELECT 6 AS NO FROM DUAL UNION ALL
+				        SELECT 7 AS NO FROM DUAL UNION ALL
+				        SELECT 8 AS NO FROM DUAL UNION ALL
+				        SELECT 9 AS NO FROM DUAL
+			        	) A
+			    WHERE A.NO > (SELECT COUNT(*) FROM MTM_CONSUMABLEPRINT WHERE UUID = #{P_UUID})
+	</update>
+	
+	<select id="selectConsumListOfBomTableMake" parameterType="map" resultType="hashmap">
+		SELECT
+					#{P_UUID} AS UUID
+		FROM DUAL
+	</select>
+	
+	
+	
+	
+	
+	
+	<!-- 프 로 그 램 명 : 공정 관리 > 자재관리 > 자재불출요청 설 명 : 각 공정별 재공의 자재 명세 조회(공정별 - 투입자재) 
+		작 성 자 : 정승원 작 성 일 : 2019-07-01 주요 변경 로그 : 2019-11-27 정승원 CT_CONSUMEMATERIALLOT_TEMP에 
+		소모된 자재 제외 후 청구 2019-12-05 정승원 L.UNIT -> BOM.UNIT SELECT로 변경 2019-12-11 정승원 
+		LOT 인수 이후만 가능(영풍만 해당) -->
+	<select id="selectLotListByRequestList2" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectLotListByRequest
+				-- Version : 10002
+				SELECT
+						GEN.PRODUCTDEFID
+					,	GEN.PRODUCTDEFVERSION
+					,	PD.PRODUCTDEFNAME
+					,	GEN.LOTID
+					,	BOM.MATERIALDEFID
+					,	BOM.MATERIALDEFVERSION
+					,	CD.CONSUMABLEDEFNAME		AS MATERIALDEFNAME
+					,	BOM.UNIT
+					,	CEIL(GEN.CREATEDQTY/LOT.PANELPERQTY)		AS	PANELQTY
+					,	GEN.CREATEDQTY								AS QTY
+					,	BOM.QTY										AS BOMQTY
+					,	(GEN.CREATEDQTY * BOM.QTY)					AS CHARGEQTY
+					,	NVL(CM.REQUESTQTY,0)						AS REQUESTQTY
+					,	TO_CHAR(LOT.LOTSTARTDATE , 'YYYY-MM-DD HH24:MI:SS') AS INPUTDATE
+					,	GEN.AREAID
+					,	GEN.PROCESSSEGMENTID
+					,	GEN.PROCESSSEGMENTVERSION
+					,	'0'											AS CHK
+				FROM PCM_LOTGENEAL	GEN
+				LEFT OUTER JOIN BAS_PRODUCTDEFINITION	PD	ON	GEN.PRODUCTDEFID = PD.PRODUCTDEFID
+															AND GEN.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+				LEFT OUTER JOIN PCM_LOT					LOT	ON	GEN.LOTID = LOT.LOTID
+				INNER JOIN BAS_BILLOFMATERIAL			BOM	ON	GEN.PRODUCTDEFID = BOM.PROCESSDEFID
+															AND GEN.PRODUCTDEFVERSION = BOM.PROCESSDEFVERSION
+															AND BOM.MATERIALTYPE = 'Consumable'
+				LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION CD	ON	BOM.MATERIALDEFID = CD.CONSUMABLEDEFID
+															AND BOM.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION
+				LEFT OUTER JOIN (
+					SELECT 
+							CMR.REQUESTNO
+						,	CMD.LOTID
+						,	CMD.CONSUMABLEDEFID
+						,	CMD.CONSUMABLEDEFVERSION
+						,	CMR.AREAID
+						,	CMD.REQUESTQTY
+					FROM MTM_CONSUMABLEREQUEST		CMR		
+					LEFT OUTER JOIN MTM_CONSUMABLEREQUESTDETAIL		CMD	ON	CMR.REQUESTNO = CMD.REQUESTNO
+																		AND	CMR.PLANTID	 = CMD.PLANTID
+																		AND	CMR.ENTERPRISEID = CMD.ENTERPRISEID
+				)										CM	ON	GEN.LOTID = CM.LOTID
+															AND	BOM.MATERIALDEFID = CM.CONSUMABLEDEFID
+															AND BOM.MATERIALDEFVERSION = CM.CONSUMABLEDEFVERSION
+															AND GEN.AREAID = CM.AREAID
+				WHERE 1=1
+					AND	GEN.ROOTLOTID = GEN.LOTID
+					/* AND	PD.PRODUCTCLASSID = 'Product' */
+					AND GEN.SOURCELOTID IS NULL
+					AND	GEN.PLANTID = #{P_PLANTID}
+					AND GEN.AREAID = #{P_AREAID}
+				<if test = "P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='' ">
+					AND	LOT.LOTSTARTDATE <![CDATA[>=]]> TO_DATE(#{P_PERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+				</if>
+				<if test = "P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='' ">	
+					AND 	LOT.LOTSTARTDATE <![CDATA[<]]> TO_DATE(#{P_PERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')
+				</if>
+				
+				<!--AS IS 주석됨
+				AND		L.PRODUCTDEFID = '$!{PRODUCTDEFID}'
+				AND		L.PRODUCTDEFVERSION = '$!{PRODUCTDEFVERSION}'
+				AND		L.PROCESSSEGMENTID = '$!{PROCESSSEGMENTID}'
+				-->				
+				
+				AND	EXISTS (
+								SELECT	1
+								FROM	UFN_SELECTSTRINGTOSPLIT3(#{P_PRODUCTDEFID}, ',', '|')	M
+								WHERE	GEN.PRODUCTDEFID = M.VALUE
+								AND		GEN.PRODUCTDEFVERSION = M.VALUE2
+								AND 	GEN.PROCESSSEGMENTID = M.VALUE3
+						   )
+						   
+				AND EXISTS (
+								SELECT  1
+                                FROM    UFN_SELECTSTRINGTOSPLIT2(#{P_CONSUMABLEDEFID}, ',', '|')      M
+                                WHERE   BOM.MATERIALDEFID = M.VALUE
+                                AND     (BOM.MATERIALDEFVERSION = M.VALUE2 OR M.VALUE2 = '')
+                           )
+                
+                --불출하지 않은 LOT, 자재에 대해서만 조회(2)
+                <if test="P_ISREQUEST eq 'N'.toString() ">
+                AND NOT EXISTS (
+                                    SELECT  1
+                                    FROM    MTM_CONSUMABLEREQUEST            		CMR
+                                    INNER JOIN MTM_CONSUMABLEREQUESTDETAIL   	CMD 		ON  CMR.REQUESTNO = CMD.REQUESTNO
+								                                                                                AND CMR.PLANTID = CMD.PLANTID
+								                                                                                AND CMR.ENTERPRISEID = CMD.ENTERPRISEID
+								                                                                                AND GEN.LOTID = CMD.LOTID
+								                                                                                AND BOM.MATERIALDEFID = CMD.CONSUMABLEDEFID
+								                                                                                AND BOM.MATERIALDEFVERSION = CMD.CONSUMABLEDEFVERSION
+                               )        
+                </if>
+				ORDER BY GEN.LOTID ASC
+	</select>
+	
+	<!-- 불출요청번호 생성 -->
+	<select id="createIdSeq" parameterType="map" resultType="hashmap">
+		SELECT TRIM(CASE WHEN (SELECT COUNT(*) FROM MTM_CONSUMABLEREQUEST WHERE SUBSTR(REQUESTNO,1,6) = TO_CHAR(SYSDATE,'YYMMDD')) > 0 THEN
+								(SELECT TO_CHAR(SYSDATE,'YYMMDD')||'-55'||TRIM(TO_CHAR(TO_NUMBER(MAX(SUBSTR(REQUESTNO,10,2)))+1,'09'))
+                                FROM MTM_CONSUMABLEREQUEST
+                                WHERE SUBSTR(REQUESTNO,1,6) = TO_CHAR(SYSDATE,'YYMMDD'))
+					     ELSE
+					     		TO_CHAR(SYSDATE,'YYMMDD')||'-5501'
+				  END) AS REQUESTSEQUENCE
+		FROM DUAL
+    </select>
+    
+    <select id="getERPSeqNextVal" parameterType="map" resultType="hashmap">
+    	SELECT IFC_MES_R_MATERIAL_REQUEST_S.NEXTVAL||'' AS SEQNEXTVAL 
+    	FROM DUAL
+    </select>
+	
+	<select id="selectLotInfo" parameterType="map" resultType="hashmap">
+		SELECT 	LOTID
+				,	LOTSTATE
+				,	ISHOLD
+				,	ISLOCKING
+				,	AREAID
+		FROM PCM_LOT 
+		WHERE LOTID = #{LOTID}		
+	</select>
+	
+	<update id="insertConsumablerequestdetail" parameterType="map" >
+		INSERT INTO MTM_CONSUMABLEREQUESTDETAIL (
+					REQUESTNO
+				,	ENTERPRISEID
+				,	PLANTID
+				,	REQUESTSEQUENCE
+				,	CONSUMABLEDEFID
+				,	CONSUMABLEDEFVERSION
+				,	LOTID
+				,	REQUESTQTY
+				,	UNIT
+				,	DESCRIPTION
+				
+				,	CREATOR
+				,	CREATEDTIME
+				,	MODIFIER
+				,	MODIFIEDTIME
+				,	LASTTXNHISTKEY
+				,	LASTTXNID
+				,	LASTTXNUSER
+				,	LASTTXNTIME
+				,	LASTTXNCOMMENT
+				,	LASTTXNGROUPHISTKEY
+				,	VALIDSTATE
+				) VALUES (
+					#{REQUESTNO}
+				,	#{ENTERPRISEID}
+				,	#{PLANTID}
+				,	#{REQUESTSEQUENCE}
+				,	#{MATERIALDEFID}
+				,	#{MATERIALDEFVERSION}
+				,	#{LOTID}
+				,	#{CHARGEQTY}
+				,	#{UNIT}
+				,	#{DESCRIPTION}
+				
+				,	#{CREATOR}				<!-- TR -->
+				,	SYSDATE
+				,	#{MODIFIER}
+				,	SYSDATE
+				,	#{LASTTXNHISTKEY}
+				,	#{LASTTXNID}
+				,	#{LASTTXNUSER}
+				,	SYSDATE
+				,	#{LASTTXNCOMMENT}
+				,	''
+				,	'Valid'
+				)
+	</update>
+	
+	<update id="insertConsumableRequestData" parameterType="map" >
+		INSERT INTO MTM_CONSUMABLEREQUEST (
+						ENTERPRISEID
+					,	PLANTID
+					,	REQUESTNO
+					,	AREAID
+					,	PROCESSSEGMENTID
+					,	PROCESSSEGMENTVERSION
+					,	REQUESTDATE
+					,	REQUESTUSER
+					,	REQUESTDEPARTMENT
+					,	REQUESTTYPE
+					,	DESCRIPTION
+					
+					,	CREATOR
+					,	CREATEDTIME
+					,	MODIFIER
+					,	MODIFIEDTIME
+					,	LASTTXNHISTKEY
+					,	LASTTXNID
+					,	LASTTXNUSER
+					,	LASTTXNTIME
+					,	LASTTXNCOMMENT
+					,	LASTTXNGROUPHISTKEY
+					,	VALIDSTATE
+					,	WAREHOUSEID
+				) VALUES (
+					#{ENTERPRISEID}
+				,	#{PLANTID}
+				,	#{REQUESTNO}
+				,	#{AREAID}
+				,	#{PROCESSSEGMENTID}
+				,	#{PROCESSSEGMENTVERSION}
+				,	#{REQUESTDATE}
+				,	#{REQUESTUSER}
+				,	(SELECT DEPT_CD FROM CMD_USERS WHERE USER_ID = #{CREATOR})
+				,	#{REQUESTTYPE}
+				,	#{DESCRIPTION}
+				
+				,	#{CREATOR}				<!-- TR -->
+				,	SYSDATE
+				,	#{MODIFIER}
+				,	SYSDATE
+				,	#{LASTTXNHISTKEY}
+				,	#{LASTTXNID}
+				,	#{LASTTXNUSER}
+				,	SYSDATE
+				,	#{LASTTXNCOMMENT}
+				,	''
+				,	'Valid'
+				,	(SELECT WAREHOUSEID FROM BAS_AREA WHERE AREAID = #{AREAID})
+				)
+	</update>
+	
+	
+	<update id="insertERPIFData" parameterType="map" >
+		INSERT INTO IFC_MES_R_MATERIAL_REQUEST@ERPPROD (
+						ENTERPRISEID, 
+						ORGANIZATION_CODE, 
+						
+						DEMAND_NUM, 
+						DEMAND_DATE, 
+						DEMAND_TYPE, 
+						DEMAND_DEPT,						 
+						REQUEST_SUBINVENTORY_CODE, 
+						DEMAND_USER_NAME, 
+						CUST_NUMBER, 
+						SELL_YN, 
+						
+						DEMAND_NUM_SEQ, 
+						ITEM_CODE, 
+						DEMAND_QTY, 
+						
+						DEMAND_DESCRIPTION, 
+						ORDER_FLAG,
+						 
+						CREATOR, 
+						CREATEDTIME, 
+						MODIFIER, 
+						MODIFIEDTIME, 
+						
+						IF_CRUD, 
+						IF_DATE, 
+						IF_PROCESS_TYPE, 
+						IF_PROCESS_TIME, 
+						
+						IF_PROCESS_COMMENT, 
+						IF_SEQUENCE
+				) VALUES (
+					#{ENTERPRISEID}
+				,	#{PLANTID}
+				
+				,	#{REQUESTNO}  
+				,	#{REQUESTDATE}
+				,	'생산'
+				,	#{REQUESTDEPARTMENT}
+				,	(SELECT WAREHOUSEID FROM BAS_AREA WHERE AREAID = #{AREAID})
+				,	#{REQUESTUSER}
+				,	0
+				,	'N'
+				
+				,	#{DEMANDNUMSEQ}
+				,	#{CONSUMABLEDEFID}
+			    ,	#{REQUESTQTY}
+			    
+				,	#{DESCRIPTION}
+				,	'N'
+				
+				,	#{CREATOR}
+				,	SYSDATE
+				,	#{MODIFIER}
+				,	SYSDATE
+				
+				,	'C'
+				,	SYSDATE
+				,	'N'
+				,	SYSDATE
+				
+				,	''
+				,	#{SEQNEXTVAL}
+				)
+	</update>
+	
+	
+	
+	<!-- 프 로 그 램 명 : 공정관리 > 자재관리 > 자재불출요청 설 명 : 자재불출 전표 Header Info 조회 작 성 자 
+		: 정승원 작 성 일 : 2019-10-07 주요 변경 로그 : -->
+	<select id="selectPrintChitHeaderInfo" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectPrintChitHeaderInfo
+				-- Version : 10001
+				SELECT  --CR.REQUESTUSER
+                        U.USER_NM              						 	AS REQUESTUSER
+                    ,   U.DEPT_CD            						 		AS REQUESTDEPARTMENT
+                    ,   TO_CHAR(CR.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') 	AS REQUESTDATE
+                    ,   TO_CHAR(CURRENT_TIMESTAMP, 'YYYY-MM-DD HH24:MI:SS') AS RELEASEDATE --발행일자
+                    ,   D.DICTIONARYNAME        						 	AS REQUESTTYPE 
+                    --,   CR.REQUESTDEPARTMENT  
+                    ,   CR.REQUESTNO
+				FROM    MTM_CONSUMABLEREQUEST    	CR
+				LEFT JOIN CMD_USERS               			U   	ON CR.REQUESTUSER = U.USER_ID
+				LEFT JOIN CMD_LOOKUP_VALUES            C   	ON  CR.REQUESTTYPE = C.LOOKUP_CODE
+                                                    						AND C.LOOKUP_TYPE = 'ConsumableRequestType'
+                LEFT JOIN CMD_DICTIONARY         		D   	ON  C.DICTIONARYID = D.DICTIONARYID
+                                                    						AND D.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE 	CR.REQUESTNO = #{REQUESTNO}
+				AND		CR.PLANTID = #{PLANTID}
+	</select>	
+	
+	
+	<!-- 프 로 그 램 명 : 공정관리 > 자재관리 > 자재불출요청 설 명 : 자재불출 전표 Table 조회 작 성 자 : 정승원 
+		작 성 일 : 2019-10-07 주요 변경 로그 : 2020.02.14 CRD.DESCRIPTION 컬럼추가 CHOISSTAR -->
+	<select id="selectPrintChitDetailTableList" parameterType="map" resultType="hashmap">
+				--
+				-- Id : SelectPrintChitDetailTable
+				-- Version : 10001
+				SELECT  CRD.REQUESTSEQUENCE
+				    ,   CRD.CONSUMABLEDEFID
+				    ,   CD.CONSUMABLEDEFNAME
+				    ,   CRD.UNIT
+				    ,   CRD.LOTID
+				    ,   CRD.REQUESTQTY
+				    ,   CRD.REQUESTNO
+				    ,	CRD.DESCRIPTION
+				FROM    MTM_CONSUMABLEREQUESTDETAIL  	CRD 
+				LEFT JOIN BAS_CONSUMABLEDEFINITION   		CD  	ON  CRD.CONSUMABLEDEFID = CD.CONSUMABLEDEFID
+				                                        							AND CRD.CONSUMABLEDEFVERSION = CD.CONSUMABLEDEFVERSION
+				WHERE 	CRD.REQUESTNO = #{REQUESTNO}
+				AND		CRD.PLANTID = #{PLANTID}
+	</select>
+	
+</mapper>
+
+

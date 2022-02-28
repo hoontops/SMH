@@ -1,0 +1,453 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM03100Dao">
+<!-- 수축율 측정기준-->
+
+    <!-- 수축율 관리대상 품목정보 조회-->
+    <select id="selectQamShrinkproductList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03100Dao.selectQamShrinkproductList  */
+    SELECT  A.SHRINKPRODUCTID
+			, A.PRODUCTDEFID
+			, A.PRODUCTDEFVERSION
+			, A.PLANTID
+			, A.ENTERPRISEID
+			, A.VALIDSTATE
+			, A.FIRSTMEASURE
+			, A.SCALE_X1
+			, A.SCALE_X2
+			, A.SCALE_Y1
+			, A.SCALE_Y2
+			, A.SCALE_XY1
+			, A.SCALE_XY2
+			, A.CREATOR
+			, A.CREATEDTIME
+			, A.MODIFIER
+			, A.MODIFIEDTIME
+			, A.LASTTXNHISTKEY
+			, A.LASTTXNID
+			, A.LASTTXNUSER
+			, A.LASTTXNTIME
+			, A.LASTTXNCOMMENT
+			, PD.PRODUCTDEFNAME
+			, SU.USER_NM               AS CREATORNAME
+            , (SELECT COUNT(*)
+                 FROM QAM_SHRINKFIRSTLOT SLOT
+                WHERE SLOT.SHRINKPRODUCTID = A.SHRINKPRODUCTID
+              )                        AS MEASURELOTCNT
+	 FROM       QAM_SHRINKPRODUCT      A
+	 LEFT JOIN	CMD_USERS              SU	ON	A.CREATOR = SU.USER_ID
+	 INNER JOIN BAS_PRODUCTDEFINITION  PD  	ON  PD.PRODUCTDEFID = A.PRODUCTDEFID
+											AND PD.PRODUCTDEFVERSION = A.PRODUCTDEFVERSION
+	WHERE 1=1
+	<if test="SHRINKPRODUCTID != null and SHRINKPRODUCTID !='' ">
+		AND A.SHRINKPRODUCTID = #{SHRINKPRODUCTID}
+	</if>
+	<if test="PLANTID != null and PLANTID !='' ">
+		AND A.PLANTID = #{PLANTID}
+	</if>
+	<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+		AND A.PRODUCTDEFID = #{PRODUCTDEFID}
+	</if>
+	<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+		AND A.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	</if>
+	<if test="VALIDSTATE != null and VALIDSTATE !='' ">
+		AND A.VALIDSTATE = #{VALIDSTATE}
+	</if>
+	<if test="FIRSTMEASURE != null and FIRSTMEASURE !='' ">
+		AND A.FIRSTMEASURE = #{FIRSTMEASURE}
+	</if>
+	</select>    
+
+	 <!-- 수축율관리품목 공정별기준값 조회-->
+    <select id="selectQamShrinkproductoperationList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03100Dao.selectQamShrinkproductoperationList  */
+    SELECT 	A.SHRINKPRODUCTID
+			, A.OPERATIONID
+			, A.PROCESSSEGMENTID
+			, A.VALIDSTATE
+			, A.WIPPROCESSSTATE
+			, A.SCALE_X1
+			, A.SCALE_X2
+			, A.SCALE_Y1
+			, A.SCALE_Y2
+			, A.SCALE_XY1
+			, A.SCALE_XY2
+			, A.CAD_X1
+			, A.CAD_X2
+			, A.CAD_Y1
+			, A.CAD_Y2
+			, A.CAD_XY1
+			, A.CAD_XY2
+			<!-- LOT별 수축율 측정정보에 넣기 위해 KEY 값 매핑 -->
+			, A.SCALE_X1 AS PRODVAL_X1
+			, A.SCALE_X2 AS PRODVAL_X2
+			, A.SCALE_Y1 AS PRODVAL_Y1
+			, A.SCALE_Y2 AS PRODVAL_Y2
+			, A.SCALE_XY1 AS PRODVAL_XY1
+			, A.SCALE_XY2 AS PRODVAL_XY2
+			, A.CREATOR
+			, A.CREATEDTIME
+			, A.MODIFIER
+			, A.MODIFIEDTIME
+			, A.LASTTXNHISTKEY
+			, A.LASTTXNID
+			, A.LASTTXNUSER
+			, A.LASTTXNTIME
+			, B.PRODUCTDEFID
+			, B.PRODUCTDEFVERSION
+			, OP.PLANTID
+     		, TO_NUMBER(OP.USERSEQUENCE) AS PROCESSSEGMENTSEQ 
+     		, FN_QAM_GET_DICTIONARYNAME(PG.PROCESSSEGMENTNAME, #{SESSION_LANGUAGETYPE}) AS PROCESSSEGMENTNAME
+	 FROM QAM_SHRINKPRODUCTOPERATION A
+	 		 , QAM_SHRINKPRODUCT B
+		     , BAS_OPERATION  OP
+		     , BAS_PROCESSSEGMENTEXT PG
+     WHERE 1=1
+     AND A.SHRINKPRODUCTID  = B.SHRINKPRODUCTID 
+	 AND A.OPERATIONID = OP.OPERATIONID 
+	 AND A.PROCESSSEGMENTID   = PG.PROCESSSEGMENTID
+   	 AND OP.ENTERPRISEID       = PG.ENTERPRISEID
+   	 AND OP.VALIDSTATE         = 'Valid'
+	 <if test="SHRINKPRODUCTID != null and SHRINKPRODUCTID !='' ">
+		AND A.SHRINKPRODUCTID = #{SHRINKPRODUCTID}
+	</if>
+	<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+		AND B.PRODUCTDEFID = #{PRODUCTDEFID} --품목
+	</if>
+	<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+		AND B.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} --품목ver
+	</if>
+	<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+		AND A.PROCESSSEGMENTID = #{PROCESSSEGMENTID} --공정
+	</if>
+	<if test="WIPPROCESSSTATE != null and WIPPROCESSSTATE !='' ">
+		AND A.WIPPROCESSSTATE = #{WIPPROCESSSTATE} --작업상태
+	</if>
+	<if test="PROCESSSEGMENTSEQ != null and PROCESSSEGMENTSEQ !='' ">
+		AND OP.USERSEQUENCE = #{PROCESSSEGMENTSEQ} --공정수순
+	</if>
+	<if test="VALIDSTATE != null and VALIDSTATE !='' ">
+		AND A.VALIDSTATE = #{VALIDSTATE}
+	</if>
+	ORDER BY TO_NUMBER(OP.USERSEQUENCE)
+	</select>    
+
+	
+	<!-- 공정선택 팝업-->
+    <select id="selectQamProcesssegmentList" parameterType="map" resultType="hashmap">
+    /* smh.qam.dao.QAM03100Dao.selectQamProcesssegmentList  */
+    SELECT OP.OPERATIONID
+		     , OP.PLANTID
+		     , TO_NUMBER(OP.USERSEQUENCE) AS PROCESSSEGMENTSEQ
+		     , PG.PROCESSSEGMENTID
+		     , PN.DICTIONARYNAME AS PROCESSSEGMENTNAME
+		     , RT.MAINPRODUCTID AS PRODUCTDEFID
+		     , RT.MAINPRODUCTVERSION AS PRODUCTDEFVERSION
+	  FROM BAS_ROUTING    RT
+		     , BAS_OPERATION  OP
+		     , BAS_PROCESSSEGMENTEXT PG
+		     , CMD_DICTIONARY PN
+	 WHERE 1=1
+	   AND RT.ENTERPRISEID = OP.ENTERPRISEID
+	   AND RT.ASSEMBLYROUTINGID  = OP.ASSEMBLYROUTINGID
+	   AND OP.PROCESSSEGMENTID   = PG.PROCESSSEGMENTID
+	   AND OP.ENTERPRISEID       = PG.ENTERPRISEID
+	   AND PG.PROCESSSEGMENTNAME = PN.DICTIONARYID
+	   AND PN.LANGUAGETYPE      = #{SESSION_LANGUAGETYPE}
+	   AND OP.VALIDSTATE         = 'Valid'
+	   AND RT.ENTERPRISEID  = #{ENTERPRISEID}
+	   AND RT.MAINPRODUCTID  = #{PRODUCTDEFID}-- 품목코드
+	   AND RT.MAINPRODUCTVERSION  = #{PRODUCTDEFVERSION}  -- 품목REV
+	   <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+			AND (PG.PROCESSSEGMENTID LIKE '%' || #{PROCESSSEGMENTID} || '%' OR PN.DICTIONARYNAME LIKE '%' || #{PROCESSSEGMENTID} || '%' ) -- 표준공정
+		</if>		
+	ORDER BY OP.OPERATIONSEQUENCE ASC
+	</select>    
+	
+	<!-- 측정LOT 선택(LOT별 수축율 측정정보) -->
+	<select id="selectMeasureMasterLotList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM03100Dao.selectMeasureMasterLotList  */
+        SELECT QSM.SHRINKPRODUCTID    
+             , QSM.LOTID
+             , TO_CHAR(QSM.LOTSTARTDATE, 'yyyy-MM-dd HH24:MI:SS') AS LOTSTARTDATE
+             , CASE WHEN TO_NUMBER(QSM.USERSEQUENCE)
+                              <![CDATA[>=]]> (SELECT MAX(TO_NUMBER(OP.USERSEQUENCE))
+                                                FROM QAM_SHRINKPRODUCT          A
+                                                   , QAM_SHRINKPRODUCTOPERATION B
+                                                   , BAS_OPERATION              OP
+                                               WHERE A.SHRINKPRODUCTID = B.SHRINKPRODUCTID 
+                                                 AND A.PLANTID         = OP.PLANTID
+                                                 AND B.OPERATIONID     = OP.OPERATIONID 
+                                                 AND B.VALIDSTATE      = 'Valid'
+                                                 AND B.SHRINKPRODUCTID = QSM.SHRINKPRODUCTID
+                                                 AND A.PLANTID         = QSM.PLANTID
+                                              ) 
+                   THEN 'Y' ELSE 'N' END AS PROCESSCOMPLETEYN
+             , '0'  AS CHK
+          FROM (
+                SELECT X.SHRINKPRODUCTID
+                     , X.PLANTID
+                     , X.LOTID
+                     , X.LOTSTARTDATE
+                     , MAX(X.CREATEDTIME) CREATEDTIME
+                     , MAX(TO_NUMBER(X.USERSEQUENCE)) USERSEQUENCE
+                  FROM QAM_SHRINKMEASUREMASTER X
+                 WHERE X.SHRINKPRODUCTID = #{SHRINKPRODUCTID}
+                   AND X.PLANTID         = #{PLANTID}
+                   AND NOT EXISTS (SELECT 'Y'
+                                     FROM QAM_SHRINKFIRSTLOT SLOT
+                                    WHERE SLOT.SHRINKPRODUCTID = X.SHRINKPRODUCTID
+                                      AND SLOT.LOTID = X.LOTID
+                                  ) 
+                GROUP BY X.SHRINKPRODUCTID, X.PLANTID, X.LOTID, X.LOTSTARTDATE) QSM
+         WHERE 1=1
+            <if test="LOTID != null and LOTID !='' ">
+            AND QSM.LOTID = #{LOTID}
+            </if>
+        ORDER BY QSM.CREATEDTIME	
+	</select>
+
+	<!-- 측정LOT 조회(수축율관리_초도측정LOT정보) -->
+	<select id="selectShrinkFirstLotList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM03100Dao.selectShrinkFirstLotList  */
+        SELECT QSF.SHRINKPRODUCTID
+             , QSF.LOTID
+             , TO_CHAR(QSM.LOTSTARTDATE, 'yyyy-MM-dd HH24:MI:SS') AS LOTSTARTDATE
+             , CASE WHEN TO_NUMBER(QSM.USERSEQUENCE)
+                              <![CDATA[>=]]> (SELECT MAX(TO_NUMBER(OP.USERSEQUENCE))
+                                                FROM QAM_SHRINKPRODUCT          A
+                                                   , QAM_SHRINKPRODUCTOPERATION B
+                                                   , BAS_OPERATION              OP
+                                               WHERE A.SHRINKPRODUCTID = B.SHRINKPRODUCTID 
+                                                 AND A.PLANTID         = OP.PLANTID
+                                                 AND B.OPERATIONID     = OP.OPERATIONID 
+                                                 AND B.VALIDSTATE      = 'Valid'
+                                                 AND B.SHRINKPRODUCTID = QSM.SHRINKPRODUCTID
+                                                 AND A.PLANTID         = QSM.PLANTID
+                                              ) 
+                   THEN 'Y' ELSE 'N' END AS PROCESSCOMPLETEYN
+             , '0'                       AS CHK             
+          FROM QAM_SHRINKFIRSTLOT QSF
+             , (SELECT SHRINKPRODUCTID
+                     , PLANTID
+                     , LOTID
+                     , LOTSTARTDATE
+                     , MAX(CREATEDTIME) CREATEDTIME
+                     , MAX(TO_NUMBER(USERSEQUENCE)) USERSEQUENCE
+                  FROM QAM_SHRINKMEASUREMASTER
+                 WHERE SHRINKPRODUCTID = #{SHRINKPRODUCTID}
+                   AND PLANTID         = #{PLANTID}
+                GROUP BY SHRINKPRODUCTID, PLANTID, LOTID, LOTSTARTDATE) QSM
+         WHERE QSF.SHRINKPRODUCTID = #{SHRINKPRODUCTID}
+           AND QSF.LOTID = QSM.LOTID 
+        ORDER BY QSM.CREATEDTIME
+	</select>
+	
+	<!-- 수축율 관리대상 품목정보 등록 -->
+	<insert id="insertQamShrinkproduct" parameterType="map">
+    /* smh.qam.dao.QAM03100Dao.insertQamShrinkproduct  */
+    INSERT INTO QAM_SHRINKPRODUCT (
+		SHRINKPRODUCTID
+		, PRODUCTDEFID
+		, PRODUCTDEFVERSION
+		, PLANTID
+		, ENTERPRISEID
+		, VALIDSTATE
+		, FIRSTMEASURE
+		, SCALE_X1
+		, SCALE_X2
+		, SCALE_Y1
+		, SCALE_Y2
+		, SCALE_XY1
+		, SCALE_XY2
+		, CREATOR
+		, CREATEDTIME
+		, LASTTXNHISTKEY
+		, LASTTXNID
+		, LASTTXNUSER
+		, LASTTXNTIME
+		, LASTTXNCOMMENT
+	) VALUES ( 
+		#{SHRINKPRODUCTID}
+		, #{PRODUCTDEFID}
+		, #{PRODUCTDEFVERSION}
+		, #{PLANTID}
+		, #{ENTERPRISEID}
+		, #{VALIDSTATE}
+		, #{FIRSTMEASURE}
+		, #{SCALE_X1}
+		, #{SCALE_X2}
+		, #{SCALE_Y1}
+		, #{SCALE_Y2}
+		, #{SCALE_XY1}
+		, #{SCALE_XY2}
+		, #{CREATOR}
+		, SYSDATE
+		, #{LASTTXNHISTKEY}
+		, #{LASTTXNID}
+		, #{LASTTXNUSER}
+		, SYSDATE
+		, #{LASTTXNCOMMENT}
+	)   
+    </insert>
+
+	
+	
+	<!-- 수축율관리품목 공정별기준값 등록 -->
+	<insert id="insertQamShrinkproductoperation" parameterType="map">
+    /* smh.qam.dao.QAM03100Dao.insertQamShrinkproductoperation  */
+    INSERT INTO QAM_SHRINKPRODUCTOPERATION (
+		SHRINKPRODUCTID
+		, OPERATIONID
+		, PROCESSSEGMENTID
+		, VALIDSTATE
+		, WIPPROCESSSTATE
+		, SCALE_X1
+		, SCALE_X2
+		, SCALE_Y1
+		, SCALE_Y2
+		, SCALE_XY1
+		, SCALE_XY2
+		, CAD_X1
+		, CAD_X2
+		, CAD_Y1
+		, CAD_Y2
+		, CAD_XY1
+		, CAD_XY2
+		, CREATOR
+		, CREATEDTIME
+		, LASTTXNHISTKEY
+		, LASTTXNID
+		, LASTTXNUSER
+		, LASTTXNTIME
+		, LASTTXNCOMMENT
+	) VALUES ( 
+		#{SHRINKPRODUCTID}
+		, #{OPERATIONID}
+		, #{PROCESSSEGMENTID}
+		, #{VALIDSTATE}
+		, #{WIPPROCESSSTATE}
+		, #{SCALE_X1}
+		, #{SCALE_X2}
+		, #{SCALE_Y1}
+		, #{SCALE_Y2}
+		, #{SCALE_XY1}
+		, #{SCALE_XY2}
+		, #{CAD_X1}
+		, #{CAD_X2}
+		, #{CAD_Y1}
+		, #{CAD_Y2}
+		, #{CAD_XY1}
+		, #{CAD_XY2}
+		, #{CREATOR}
+		, SYSDATE
+		, #{LASTTXNHISTKEY}
+		, #{LASTTXNID}
+		, #{LASTTXNUSER}
+		, SYSDATE
+		, #{LASTTXNCOMMENT}
+	)
+    </insert>
+
+		
+    <!-- 수축율관리_초도측정LOT정보 -->
+    <insert id="insertQamShrinkFirstLot" parameterType="map">
+        /* smh.qam.dao.QAM03100Dao.insertQamShrinkFirstLot */
+        INSERT INTO QAM_SHRINKFIRSTLOT
+        (    SHRINKPRODUCTID               /*수축율관리품목ID*/
+           , LOTID                         /*LOT ID*/
+           , CREATOR                       /*생성자*/
+           , CREATEDTIME                   /*생성일*/
+           , MODIFIER                      /*수정자*/
+           , MODIFIEDTIME                  /*수정일*/
+           , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+           , LASTTXNID                     /*마지막TXN ID*/
+           , LASTTXNUSER                   /*마지막TXN 사용자*/
+           , LASTTXNTIME                   /*마지막TXN 시간*/
+           , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+        )VALUES(
+             #{SHRINKPRODUCTID}              /*수축율관리품목ID*/
+           , #{LOTID}                        /*LOT ID*/
+           , #{CREATOR}                      /*생성자*/
+           , SYSDATE                         /*생성일*/
+           , #{MODIFIER}                     /*수정자*/
+           , SYSDATE                         /*수정일*/
+           , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+           , #{LASTTXNID}                    /*마지막TXN ID*/
+           , #{LASTTXNUSER}                  /*마지막TXN 사용자*/
+           , SYSDATE                         /*마지막TXN 시간*/
+           , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+        )
+    </insert>
+
+	
+	<!-- 수축율 관리대상 품목정보 수정 -->
+	<update id="updateQamShrinkproduct" parameterType="map">
+	/* smh.qam.dao.QAM03100Dao.updateQamShrinkproduct */
+	UPDATE QAM_SHRINKPRODUCT SET
+		 PRODUCTDEFID = #{PRODUCTDEFID}
+		, PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+		, PLANTID = #{PLANTID}
+		, ENTERPRISEID = #{ENTERPRISEID}
+		, VALIDSTATE = #{VALIDSTATE}
+		, FIRSTMEASURE = #{FIRSTMEASURE}
+		, SCALE_X1 = #{SCALE_X1}
+		, SCALE_X2 = #{SCALE_X2}
+		, SCALE_Y1 = #{SCALE_Y1}
+		, SCALE_Y2 = #{SCALE_Y2}
+		, SCALE_XY1 = #{SCALE_XY1}
+		, SCALE_XY2 = #{SCALE_XY2}
+		, MODIFIER = #{MODIFIER}
+		, MODIFIEDTIME = SYSDATE
+		, LASTTXNHISTKEY = #{LASTTXNHISTKEY}
+		, LASTTXNID = #{LASTTXNID}
+		, LASTTXNUSER = #{LASTTXNUSER}
+		, LASTTXNTIME = SYSDATE
+		, LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+	WHERE 1=1
+	AND SHRINKPRODUCTID = #{SHRINKPRODUCTID}
+	</update>
+
+	
+	<!-- 수축율관리품목 공정별기준값 수정 -->
+	<update id="updateQamShrinkproductoperation" parameterType="map">
+	/* smh.qam.dao.QAM03100Dao.updateQamShrinkproductoperation */
+	UPDATE QAM_SHRINKPRODUCTOPERATION SET
+		 PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		, VALIDSTATE = #{VALIDSTATE}
+		, WIPPROCESSSTATE = #{WIPPROCESSSTATE}
+		, SCALE_X1 = #{SCALE_X1}
+		, SCALE_X2 = #{SCALE_X2}
+		, SCALE_Y1 = #{SCALE_Y1}
+		, SCALE_Y2 = #{SCALE_Y2}
+		, SCALE_XY1 = #{SCALE_XY1}
+		, SCALE_XY2 = #{SCALE_XY2}
+		, CAD_X1 = #{CAD_X1}
+		, CAD_X2 = #{CAD_X2}
+		, CAD_Y1 = #{CAD_Y1}
+		, CAD_Y2 = #{CAD_Y2}
+		, CAD_XY1 = #{CAD_XY1}
+		, CAD_XY2 = #{CAD_XY2}
+		, MODIFIER = #{MODIFIER}
+		, MODIFIEDTIME = SYSDATE
+		, LASTTXNHISTKEY = #{LASTTXNHISTKEY}
+		, LASTTXNID = #{LASTTXNID}
+		, LASTTXNUSER = #{LASTTXNUSER}
+		, LASTTXNTIME = SYSDATE
+		, LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+	WHERE 1=1
+	AND SHRINKPRODUCTID = #{SHRINKPRODUCTID}
+	AND OPERATIONID = #{OPERATIONID}
+	</update>
+	
+    <!-- 수축율관리_초도측정LOT정보 삭제-->
+    <update id="deleteQamShrinkFirstLot" parameterType="map" >
+        /* smh.qam.dao.QAM03100Dao.deleteQamShrinkFirstLot */
+        DELETE FROM QAM_SHRINKFIRSTLOT
+         WHERE SHRINKPRODUCTID = #{SHRINKPRODUCTID} /*수축율관리품목ID*/
+           AND LOTID           = #{LOTID}
+    </update>
+</mapper>

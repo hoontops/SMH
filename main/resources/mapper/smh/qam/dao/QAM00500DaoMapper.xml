@@ -1,0 +1,538 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM00500Dao">
+
+    <!-- 수입검사 의뢰 조회  
+         asis => SelectOSPReqListUnionToReq
+    -->
+    <select id="selectQcOspRequestInspList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM00500Dao.selectQcOspRequestInspList */
+        /*이미 의뢰된건*/
+		SELECT ORI.LOTID
+		     , ORI.LOTHISTKEY
+		     , ORI.REQUESTOR
+		     , ORI.DEGREE
+		     , ORI.PLANTID
+		     , ORI.ENTERPRISEID
+		     , RU.USER_NM                               AS REQUESTORNAME
+		     , TO_CHAR(ORI.REQUESTDATE, 'YYYYMMDDHH24MISS') AS REQUESTDATE
+		     , ORI.DESCRIPTION
+		     , LWR.AREAID
+		     , AD.DICTIONARYNAME                         AS AREANAME
+		     , PS.PROCESSSEGMENTID
+		     , PS.PROCESSSEGMENTVERSION
+		     , PSD.DICTIONARYNAME                        AS PROCESSSEGMENTNAME
+		     , PD.PRODUCTDEFID
+		     , PD.PRODUCTDEFNAME
+		     , PD.PRODUCTDEFVERSION
+		     , V.VENDORID
+		     , V.VENDORNAME
+		     , LWR.WORKENDPCSQTY
+		     , LWR.WORKENDPANELQTY
+		     , CASE WHEN  PIS.PCSMM > 0 THEN LWR.WORKENDPCSQTY / PIS.PCSMM
+		       ELSE NULL END                             AS WORKENDMMQTY
+		     , TO_CHAR(IR.INSPECTIONDATE, 'YYYYMMDDHH24MISS')  AS INSPECTIONDATE
+		     , IR.INSPECTIONRESULT
+		     , IR.ISSEND
+		     , CD.DICTIONARYNAME                         AS ISSENDNAME
+		     , 'modified'                                AS JOBSTATE
+		     , AR.ISMODIFY
+		     , CASE WHEN  ORI.REQUESTDATE IS NULL THEN 'RequestWait'
+		       ELSE
+		           CASE WHEN ORI.RECEIVINGDATE IS NULL THEN 'OnRequest'
+		           ELSE
+		               CASE WHEN IR.INSPECTIONDATE IS NULL THEN 'RequestComplete'
+		               ELSE 'InspectionCompleted'
+		               END
+		           END
+		       END                                       AS REQUESTSTATUS
+		     , 'Y'                                       AS ISINSPECTIONREQUIRED
+		     , NVL(LWR.SELFTAKEINSPRESULT,'N')           AS SELFTAKEINSPRESULT
+		     , NVL(LWR.SELFSHIPINSPRESULT,'N')           AS SELFSHIPINSPRESULT		     
+		     , NULL                                      AS OSPREQUIRED
+		     , NULL                                      AS SHIPREQUIRED
+		     <!-- 품질규격검사
+		     2021.06.05 TOBE Modify 수입검사결과등록시 체크하므로 품질규격검사 체크제외
+		     , NVL(LWR.MEASUREINSPRESULT,'N')            AS MEASUREINSPRESULT
+		     , NULL                                      AS OPERATIONREQUIRED-->
+		     , NULL                                      AS CHK
+		  FROM       QAM_QCOSPREQUESTINSPECTION   ORI
+		  INNER JOIN PCM_LOTWORKRESULT            LWR ON   ORI.LOTID                = LWR.LOTID
+		                                              AND  ORI.LOTHISTKEY           = LWR.TXNHISTKEY
+		                                              AND  ORI.PLANTID              = LWR.PLANTID
+		                                              AND  ORI.ENTERPRISEID         = LWR.ENTERPRISEID
+		  INNER JOIN FN_AREA(#{USERID})           AR  ON   LWR.AREAID               = AR.AREAID
+		                                              AND  AR.ISMODIFY              = 'Y'
+		  LEFT OUTER JOIN BAS_VENDOR              V   ON   AR.VENDORID              = V.VENDORID
+		                                              AND  AR.ENTERPRISEID          = V.ENTERPRISEID
+		                                              AND  AR.PLANTID               = V.PLANTID
+		  INNER JOIN BAS_PROCESSSEGMENT           PS  ON   LWR.PROCESSSEGMENTID     = PS.PROCESSSEGMENTID
+		                                              AND  LWR.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+		  INNER JOIN BAS_PRODUCTDEFINITION        PD  ON   LWR.PRODUCTDEFID         = PD.PRODUCTDEFID
+		                                              AND  LWR.PRODUCTDEFVERSION    = PD.PRODUCTDEFVERSION
+		  LEFT OUTER JOIN QAM_INSPECTIONRESULT    IR  ON   IR.RESOURCEID            = ORI.LOTID
+		                                              AND  IR.PROCESSRELNO          = ORI.LOTHISTKEY||ORI.DEGREE
+		                                              AND  RESOURCETYPE             = #{RESOURCETYPE}
+		  LEFT OUTER JOIN CMD_DICTIONARY          AD  ON   AR.AREANAME              = AD.DICTIONARYID
+		                                              AND  AD.LANGUAGETYPE          = #{LANGUAGETYPE}
+		  LEFT OUTER JOIN CMD_DICTIONARY          PSD ON   PS.PROCESSSEGMENTNAME    = PSD.DICTIONARYID
+		                                              AND  PSD.LANGUAGETYPE         = #{LANGUAGETYPE}
+		  LEFT OUTER JOIN BAS_PRODUCTITEMSPEC     PIS ON   PIS.ITEMID               = LWR.PRODUCTDEFID
+		                                              AND  PIS.ITEMVERSION          = LWR.PRODUCTDEFVERSION
+		                                              AND  PIS.ENTERPRISEID         = LWR.ENTERPRISEID
+		  LEFT OUTER JOIN CMD_USERS               RU  ON   ORI.REQUESTOR            = RU.USER_ID
+		  LEFT OUTER JOIN CMD_LOOKUP_VALUES       C   ON   C.LOOKUP_CODE            = IR.ISSEND
+		                                              AND  C.LOOKUP_TYPE            = 'IsHandOverProcess'
+		  LEFT OUTER JOIN CMD_DICTIONARY          CD  ON   CD.DICTIONARYID          = C.DICTIONARYID
+		                                              AND  CD.LANGUAGETYPE          = #{LANGUAGETYPE}
+		 WHERE 1 = 1
+		<if test="PLANTID != null and PLANTID !='' ">
+		   AND ORI.PLANTID  = #{PLANTID}
+		</if>		
+		<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+		   AND ORI.ENTERPRISEID  = #{ENTERPRISEID}
+		</if>		
+		<if test="VENDORID != null and VENDORID !='' ">
+		   AND V.VENDORID  = #{VENDORID}
+		</if>		
+		<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+		   AND LWR.PROCESSSEGMENTID  = #{PROCESSSEGMENTID}
+		</if>		
+		<if test="AREAID != null and AREAID !='' ">
+		  AND LWR.AREAID  = #{AREAID}
+		</if>		
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+		  AND LWR.PRODUCTDEFID  IN ( SELECT TRIM(REGEXP_SUBSTR(PRODUCTDEFID_LIST, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+                                       FROM  (SELECT  #{PRODUCTDEFID} AS PRODUCTDEFID_LIST FROM DUAL)
+                                     CONNECT BY  INSTR(PRODUCTDEFID_LIST, ',', 1, LEVEL - 1) > 0
+                                   )
+		</if>
+		
+		<if test="LOTID != null and LOTID !='' ">
+		  AND ORI.LOTID  LIKE '%' || #{LOTID} || '%'
+		</if>
+		<choose>
+		<!--의뢰대기 : 의뢰 안된것 : 나올수 없음-->
+		    <when test="REQUESTSTATE eq 'RequestWait'.toString() ">
+		        AND ORI.REQUESTDATE IS NULL
+		    </when>
+		<!--의뢰중 : 의뢰일 있고, 입고 일 없는경우-->
+		    <when test="REQUESTSTATE eq 'OnRequest'.toString() ">
+		        AND (ORI.REQUESTDATE BETWEEN TO_DATE(#{REQUESTDATE_F}, 'YYYY-MM-DD HH24:MI:SS')
+		                                 AND TO_DATE(#{REQUESTDATE_T}, 'YYYY-MM-DD HH24:MI:SS'))
+		        AND ORI.RECEIVINGDATE IS NULL
+		    </when>
+		<!--의뢰완료 : 의뢰일 있고, 입고일 있는경우,  메인그리드 조회 의뢰일자 입력된것만 -->
+		    <when test="REQUESTSTATE eq 'RequestComplete'.toString() ">
+		        AND (ORI.REQUESTDATE BETWEEN TO_DATE(#{REQUESTDATE_F}, 'YYYY-MM-DD HH24:MI:SS')
+		                                 AND TO_DATE(#{REQUESTDATE_T}, 'YYYY-MM-DD HH24:MI:SS'))
+		        AND ORI.RECEIVINGDATE IS NOT NULL
+		        AND IR.INSPECTIONDATE IS NULL
+		    </when>
+		<!--검사완료 : 의뢰일 있고, 입고일 있고, 검사일 있는경우, 메인그리드 조회 의뢰일자 입력된것만 -->
+		    <when test="REQUESTSTATE eq 'InspectionCompleted'.toString() ">
+		        AND (ORI.REQUESTDATE BETWEEN TO_DATE(#{REQUESTDATE_F}, 'YYYY-MM-DD HH24:MI:SS')
+		                                 AND TO_DATE(#{REQUESTDATE_T}, 'YYYY-MM-DD HH24:MI:SS'))
+		        AND ORI.RECEIVINGDATE IS NOT NULL
+		        AND IR.INSPECTIONDATE IS NOT NULL
+		    </when>
+		    <otherwise>				
+			        AND  (ORI.REQUESTDATE BETWEEN TO_DATE(#{REQUESTDATE_F}, 'YYYY-MM-DD HH24:MI:SS')
+			                                  AND TO_DATE(#{REQUESTDATE_T}, 'YYYY-MM-DD HH24:MI:SS'))
+		    </otherwise>
+		</choose>
+		UNION ALL
+		/*의뢰대상*/
+		SELECT LWR.LOTID
+		     , LWR.TXNHISTKEY                            AS LOTHISTKEY
+		     , ''                                        AS REQUESTOR
+		     , ''                                        AS DEGREE
+		     , LT.PLANTID
+		     , LT.ENTERPRISEID
+		     , ''                                        AS REQUESTORNAME
+		     , null                                      AS REQUESTDATE
+		     , ''                                        AS DESCRIPTION
+		     , LT.AREAID
+		     , AD.DICTIONARYNAME                         AS AREANAME
+		     , LT.PROCESSSEGMENTID
+		     , LT.PROCESSSEGMENTVERSION
+		     , PSD.DICTIONARYNAME                        AS PROCESSSEGMENTNAME
+		     , LT.PRODUCTDEFID
+		     , PD.PRODUCTDEFNAME
+		     , LT.PRODUCTDEFVERSION
+		     , V.VENDORID
+		     , V.VENDORNAME
+		     , LWR.WORKENDPCSQTY
+		     , LWR.WORKENDPANELQTY
+		     , CASE WHEN  PIS.PCSMM > 0 THEN LWR.WORKENDPCSQTY / PIS.PCSMM
+		       ELSE NULL END                             AS WORKENDMMQTY
+		     , ''                                        AS INSPECTIONDATE
+		     , ''                                        AS INSPECTIONRESULT
+		     , ''                                        AS ISSEND
+		     , ''                                        AS ISSENDNAME
+		     , 'added'                                   AS JOBSTATE
+		     , AR.ISMODIFY
+		     , 'RequestWait'                             AS REQUESTSTATUS
+		     , NVL(IS1.ISREQUIRED,NVL(IS2.ISREQUIRED,NVL(IS3.ISREQUIRED,'N')))
+		                                                 AS ISINSPECTIONREQUIRED
+		     , NVL(LWR.SELFTAKEINSPRESULT,'N')           AS SELFTAKEINSPRESULT
+		     , NVL(LWR.SELFSHIPINSPRESULT,'N')           AS SELFSHIPINSPRESULT
+		     <!-- 수입(외주입고품) -->
+		     , CASE WHEN NVL(IS1.ISREQUIRED,'NONE') ='NONE' THEN
+		            CASE WHEN NVL(IS2.ISREQUIRED,'NONE') ='NONE' THEN
+		                 CASE WHEN NVL(IS3.ISREQUIRED,'NONE') = 'NONE' THEN 'N'
+		                 ELSE IS3.ISREQUIRED
+		                 END
+		            ELSE IS2.ISREQUIRED
+		            END
+		       ELSE IS1.ISREQUIRED
+		       END                                       AS OSPREQUIRED
+		    <!-- 자주 검사(출하 필수 체크) -->
+		    , CASE WHEN NVL(SS1.ISREQUIRED,'NONE') ='NONE' THEN
+		           CASE WHEN NVL(SS2.ISREQUIRED,'NONE') ='NONE' THEN
+		                CASE WHEN NVL(SS3.ISREQUIRED,'NONE') = 'NONE' THEN 'N'
+		                ELSE SS3.ISREQUIRED
+		                END
+		           ELSE SS2.ISREQUIRED
+		           END
+		       ELSE SS1.ISREQUIRED
+		       END                                       AS SHIPREQUIRED
+		    <!-- 품질규격검사
+		    2021.06.05 TOBE Modify 수입검사결과등록시 체크하므로 품질규격검사 체크제외
+		    , NVL(LWR.MEASUREINSPRESULT,'N')            AS MEASUREINSPRESULT
+		    , CASE WHEN NVL(OS1.ISREQUIRED,'NONE') ='NONE' THEN
+		           CASE WHEN NVL(OS2.ISREQUIRED,'NONE') ='NONE' THEN
+		                CASE WHEN NVL(OS3.ISREQUIRED,'NONE') = 'NONE' THEN 'N'
+		                ELSE OS3.ISREQUIRED
+		                END
+		           ELSE OS2.ISREQUIRED
+		           END
+		      ELSE OS1.ISREQUIRED
+		      END                                       AS OPERATIONREQUIRED
+		     -->
+		    , NULL                                      AS CHK 
+		  FROM            PCM_LOT                 LT
+		  INNER JOIN      PCM_LOTWORKRESULT       LWR   ON   LT.LOTID                   = LWR.LOTID
+		                                                AND  LT.PROCESSSEGMENTID        = LWR.PROCESSSEGMENTID
+		                                                AND  LT.PROCESSSEGMENTVERSION   = LWR.PROCESSSEGMENTVERSION
+		                                                AND  LT.WORKCOUNT               = LWR.WORKCOUNT
+		                                                AND  LT.PLANTID                 = LWR.PLANTID
+		                                                AND  LT.ENTERPRISEID            = LWR.ENTERPRISEID
+		  <!--다음 AREA 알기 위해 현재 PATHSEQUENCE-->		  
+		  INNER JOIN      BAS_PROCESSPATH         PP    ON   LT.PROCESSDEFID            = PP.PROCESSDEFID
+		                                                AND  LT.PROCESSDEFVERSION       = PP.PROCESSDEFVERSION
+		                                                AND  LT.PROCESSSEGMENTID        = PP.PROCESSSEGMENTID
+		                                                AND  LT.PROCESSSEGMENTVERSION   = PP.PROCESSSEGMENTVERSION
+		  <!--다음 AREA 정보-->
+		  INNER JOIN      BAS_PROCESSPATH         NP    ON   LT.PROCESSDEFID            = NP.PROCESSDEFID
+		                                                AND  LT.PROCESSDEFVERSION       = NP.PROCESSDEFVERSION
+		                                                AND  NP.PATHSEQUENCE            = PP.PATHSEQUENCE+1
+		  LEFT OUTER JOIN PCM_LOTAREA             LA    ON   LA.LOTID                   = LT.LOTID
+		                                                AND  LA.PROCESSDEFID            = NP.PROCESSDEFID
+		                                                AND  LA.PROCESSDEFVERSION       = NP.PROCESSDEFVERSION
+		                                                AND  LA.PROCESSSEGMENTID        = NP.PROCESSSEGMENTID
+		                                                AND  LA.PROCESSSEGMENTVERSION   = NP.PROCESSSEGMENTVERSION
+		                                                AND  LWR.WORKCOUNT              = LA.WORKCOUNT
+		  LEFT OUTER JOIN BAS_BILLOFRESOURCE      BR    ON   BR.PRODUCTDEFID            = LT.PRODUCTDEFID
+		                                                AND  BR.PRODUCTDEFVERSION       = LT.PRODUCTDEFVERSION
+		                                                AND  BR.PROCESSDEFID            = NP.PROCESSDEFID
+		                                                AND  BR.PROCESSDEFVERSION       = NP.PROCESSDEFVERSION
+		                                                AND  BR.PROCESSSEGMENTID        = NP.PROCESSSEGMENTID
+		                                                AND  BR.PROCESSSEGMENTVERSION   = NP.PROCESSSEGMENTVERSION
+		                                                AND  BR.RESOURCETYPE            = 'Resource'
+		                                                AND  BR.ISPRIMARYRESOURCE       = 'Y'
+		  LEFT OUTER JOIN BAS_RESOURCE            RM    ON   BR.RESOURCEID              = RM.RESOURCEID
+		  LEFT OUTER JOIN BAS_RESOURCE            RML   ON   LT.RESOURCEID              = RML.RESOURCEID<!--2021.05.13 TOBE Add-->		  
+		  INNER JOIN FN_AREA(#{USERID})           AR    ON   LT.AREAID                  = AR.AREAID
+		                                                AND  AR.ISMODIFY                = 'Y'
+		  LEFT OUTER JOIN CMD_DICTIONARY          AD    ON   AR.AREANAME                = AD.DICTIONARYID
+		                                                AND  AD.LANGUAGETYPE            =#{LANGUAGETYPE}
+		  LEFT OUTER JOIN BAS_VENDOR              V     ON   V.VENDORID                 = AR.VENDORID
+		                                                AND  V.ENTERPRISEID             = AR.ENTERPRISEID
+		                                                AND  V.PLANTID                  = AR.PLANTID
+		  INNER JOIN      BAS_PROCESSSEGMENT      PS    ON   PP.PROCESSSEGMENTID        = PS.PROCESSSEGMENTID
+		                                                AND  PP.PROCESSSEGMENTVERSION   = PS.PROCESSSEGMENTVERSION
+		  INNER JOIN      BAS_PROCESSSEGMENTCLASS MPC   ON   PS.PROCESSSEGMENTCLASSID   = MPC.PROCESSSEGMENTCLASSID
+		  INNER JOIN      BAS_PROCESSSEGMENTCLASS TPC   ON   MPC.PARENTPROCESSSEGMENTCLASSID = TPC.PROCESSSEGMENTCLASSID
+		  LEFT OUTER JOIN CMD_DICTIONARY          PSD   ON   PSD.DICTIONARYID           = PS.PROCESSSEGMENTNAME
+		                                                AND  PSD.LANGUAGETYPE           =#{LANGUAGETYPE}
+		  INNER JOIN      BAS_PRODUCTDEFINITION   PD    ON   LT.PRODUCTDEFID            = PD.PRODUCTDEFID
+		                                                AND  LT.PRODUCTDEFVERSION       = PD.PRODUCTDEFVERSION
+		  LEFT OUTER JOIN BAS_PRODUCTITEMSPEC     PIS   ON   PIS.ITEMID                 = LT.PRODUCTDEFID
+		                                                AND  PIS.ITEMVERSION            = LT.PRODUCTDEFVERSION
+		                                                AND  PIS.ENTERPRISEID           = LT.ENTERPRISEID
+		
+		  <!-- 공정수입검사 필수체크 -->
+		  LEFT  JOIN BAS_INSPECTIONSEGMENTREL     IS1 ON   LT.PROCESSSEGMENTID          = IS1.PROCESSSEGMENTID
+		                                              AND  LT.PROCESSSEGMENTVERSION     = IS1.PROCESSSEGMENTVERSION
+		                                              AND  IS1.INSPECTIONCLASSID        = 'OSPInspection'
+		                                              AND  IS1.PROCESSSEGMENTTYPE       = 'ProcessSegmentID'
+		  LEFT  JOIN BAS_INSPECTIONSEGMENTREL     IS2 ON   MPC.PROCESSSEGMENTCLASSID    = IS2.PROCESSSEGMENTID
+		                                              AND  IS2.PROCESSSEGMENTVERSION    = '*'
+		                                              AND  IS2.INSPECTIONCLASSID        = 'OSPInspection'
+		                                              AND  IS2.PROCESSSEGMENTTYPE       = 'MiddleProcessSegmentClass'
+		  LEFT  JOIN BAS_INSPECTIONSEGMENTREL     IS3 ON   TPC.PROCESSSEGMENTCLASSID    = IS3.PROCESSSEGMENTID
+		                                              AND  IS3.PROCESSSEGMENTVERSION    = '*'
+		                                              AND  IS3.INSPECTIONCLASSID        = 'OSPInspection'
+		                                              AND  IS3.PROCESSSEGMENTTYPE       = 'TopProcessSegmentClass'
+		  <!-- 자주 출하 검사 필수체크 -->
+		  LEFT  JOIN BAS_INSPECTIONSEGMENTREL     SS1 ON   LT.PROCESSSEGMENTID          = SS1.PROCESSSEGMENTID
+		                                              AND  LT.PROCESSSEGMENTVERSION     = SS1.PROCESSSEGMENTVERSION
+		                                              AND  SS1.INSPECTIONCLASSID        = 'SelfInspectionShip'
+		                                              AND  SS1.PROCESSSEGMENTTYPE       = 'ProcessSegmentID'
+		  LEFT  JOIN BAS_INSPECTIONSEGMENTREL     SS2 ON   MPC.PROCESSSEGMENTCLASSID    = SS2.PROCESSSEGMENTID
+		                                              AND  SS2.PROCESSSEGMENTVERSION    = '*'
+		                                              AND  SS2.INSPECTIONCLASSID        = 'SelfInspectionShip'
+		                                              AND  SS2.PROCESSSEGMENTTYPE       = 'MiddleProcessSegmentClass'
+		  LEFT  JOIN BAS_INSPECTIONSEGMENTREL     SS3 ON   TPC.PROCESSSEGMENTCLASSID    = SS3.PROCESSSEGMENTID
+		                                              AND  SS3.PROCESSSEGMENTVERSION    = '*'
+		                                              AND  SS3.INSPECTIONCLASSID        = 'SelfInspectionShip'
+		                                              AND  SS3.PROCESSSEGMENTTYPE       = 'TopProcessSegmentClass'
+		  <!-- 품질 규격 검사 필수체크
+		  2021.06.05 TOBE Modify 수입검사결과등록시 체크하므로 품질규격검사 체크제외
+		  LEFT  JOIN BAS_INSPECTIONSEGMENTREL     OS1 ON   LT.PROCESSSEGMENTID          = OS1.PROCESSSEGMENTID
+		                                              AND  LT.PROCESSSEGMENTVERSION     = OS1.PROCESSSEGMENTVERSION
+		                                              AND  OS1.INSPECTIONCLASSID        = 'OperationInspection'
+		                                              AND  OS1.PROCESSSEGMENTTYPE       = 'ProcessSegmentID'
+		  LEFT  JOIN BAS_INSPECTIONSEGMENTREL     OS2 ON   MPC.PROCESSSEGMENTCLASSID    = OS2.PROCESSSEGMENTID
+		                                              AND  OS2.PROCESSSEGMENTVERSION    = '*'
+		                                              AND  OS2.INSPECTIONCLASSID        = 'OperationInspection'
+		                                              AND  OS2.PROCESSSEGMENTTYPE       = 'MiddleProcessSegmentClass'
+		  LEFT  JOIN BAS_INSPECTIONSEGMENTREL     OS3 ON   TPC.PROCESSSEGMENTCLASSID    = OS3.PROCESSSEGMENTID
+		                                              AND  OS3.PROCESSSEGMENTVERSION    = '*'
+		                                              AND  OS3.INSPECTIONCLASSID        = 'OperationInspection'
+		                                              AND  OS3.PROCESSSEGMENTTYPE       = 'TopProcessSegmentClass' -->
+          LEFT JOIN  BAS_RESOURCE				  BR  ON   BR.RESOURCEID                = LT.RESOURCEID 
+		  LEFT JOIN  BAS_PROCESSSEGMENT			  BP  ON   BP.PROCESSSEGMENTID          = LT.PROCESSSEGMENTID 		                                              
+		 WHERE   1 = 1
+		   <!-- 표준공정 > 중공정> 대공정  필수 우선순위(없을경우 다음 것 체크)-->
+		   AND NVL(IS1.ISREQUIRED,NVL(IS2.ISREQUIRED,NVL(IS3.ISREQUIRED,'N'))) = 'Y'		   
+		   <!-- 2021.05.13 TOBE Modify 현재는 외주작업장인 경우만 해당이 되었으나 향후 자사작업장도 포함 
+		   AND AR.OWNTYPE             = 'OutsideOSP'-->	   
+		   AND RML.ISOSPINSPCONTROL      = 'Y'
+		   <!-- 2021.05.25 TOBE Modify 표준공정의 공정그룹별 스텝에 따라 검색가능한 PROCESSSTATE 정의
+		    * 4STEP/3StepA/3StepC : WaitForSend
+		    * 3StepB/2StepB       : Run
+		    * 2StepA			  : Wait		    
+		   AND LT.PROCESSSTATE          = 'WaitForSend'   인계대기 상태 -->
+		   AND LT.PROCESSSTATE          = (CASE WHEN BR.STEPTYPE IS NOT NULL THEN   
+					  			               SUBSTR(BR.STEPTYPE,INSTR(BR.STEPTYPE,',',-1)+1)
+					  		               ELSE SUBSTR(BP.STEPTYPE,INSTR(BP.STEPTYPE,',',-1)+1) END) /*인계대기 상태*/
+		   AND LT.LOTSTATE              = 'InProduction'  /*생산중인 재공*/
+		   AND NVL(LT.ISLOCKING,'N')    = 'N'             /*LOCKING 아닌 상태*/
+		   AND NVL(LT.ISHOLD ,'N')      = 'N'             /*HOLD가 아닌 상태*/
+		   AND NVL(LT.ISDEFECTED,'N')  != 'Y'             /*불량 아닌 lot*/
+		   AND (PD.PRODUCTDEFTYPE = 'Product' OR PD.PRODUCTDEFTYPE='SubAssembly')
+		   <!-- 공정수입검사 의뢰 내역있으나 검사결과 등록되지않았거나 인계처리된 것 제외-->
+		   AND   NOT EXISTS ( SELECT ORI.LOTID
+		                           , ORI.LOTHISTKEY
+		                           , IR.ISSEND
+		                           , ORI.DEGREE
+		                        FROM            QAM_QCOSPREQUESTINSPECTION ORI
+		                        LEFT OUTER JOIN QAM_INSPECTIONRESULT       IR  ON   ORI.LOTID = IR.RESOURCEID
+		                                                                       AND  ORI.LOTHISTKEY||ORI.DEGREE = IR.PROCESSRELNO
+		                                                                       AND  IR.RESOURCETYPE = 'ProcessInspection'
+		                       WHERE 1=1
+		                         AND LWR.LOTID = ORI.LOTID
+		                         AND LWR.TXNHISTKEY = ORI.LOTHISTKEY
+		                         AND (IR.ISSEND IS NULL OR IR.ISSEND ='HandOverProcess' OR IR.ISSEND ='HandOverProcessNon')
+		)
+		<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+		   AND LT.ENTERPRISEID  = #{ENTERPRISEID}
+		</if>		
+		<if test="PLANTID != null and PLANTID !='' ">
+		   AND LT.PLANTID  = #{PLANTID}
+		</if>		
+		<if test="VENDORID != null and VENDORID !='' ">
+		   AND V.VENDORID  = #{VENDORID}
+		</if>		
+		<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+		   AND LT.PROCESSSEGMENTID  = #{PROCESSSEGMENTID}
+		</if>		
+		<if test="AREAID != null and AREAID !='' ">
+		   AND LT.AREAID  = #{AREAID}
+		</if>		
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+		   AND LT.PRODUCTDEFID  IN ( SELECT TRIM(REGEXP_SUBSTR(PRODUCTDEFID_LIST, '[^,]+', 1, LEVEL)) AS SPLIT_DATA
+                                       FROM  (SELECT  #{PRODUCTDEFID} AS PRODUCTDEFID_LIST FROM DUAL)
+                                     CONNECT BY  INSTR(PRODUCTDEFID_LIST, ',', 1, LEVEL - 1) > 0
+                                   ) 
+		</if> 
+		<if test="LOTID != null and LOTID !='' ">
+		   AND LWR.LOTID  LIKE '%' ||#{LOTID} || '%'
+		</if>		
+		<!-- 메인그리드 조회 의뢰대기 일 경우만 조회 되어야함 -> 나머지 상태일때 나오면 안됨-->
+		<if test="REQUESTSTATE eq 'RequestComplete'.toString() || REQUESTSTATE eq 'OnRequest'.toString() || REQUESTSTATE eq 'InspectionCompleted'.toString() ">
+		   AND LWR.LOTID IS NULL
+		</if>		
+		<!--INTERFLEX 재작업인 경우 재 검사 하지 않음 -->		
+		   AND LT.SUBPROCESSDEFID IS NULL
+		   AND LT.SUBPROCESSDEFVERSION IS NULL
+		   AND LT.WORKCOUNT <![CDATA[<]]> 1
+    </select>
+    
+    <!-- 공정 수입검사 의뢰 차수를 매기기위한 조회 
+         asis " GetOSPInspRequestDegree
+    -->
+    <select id="selectQcOspRequestInspDegree" parameterType="map" resultType="hashmap">   
+        /* smh.qam.dao.QAM00500Dao.selectQcOspRequestInspDegree */
+		SELECT NVL(MAX(DEGREE), 0)        AS DEGREE
+		  FROM QAM_QCOSPREQUESTINSPECTION
+		 WHERE ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+		   AND PLANTID                       = #{PLANTID}                    /*Site ID*/
+		   AND LOTID                         = #{LOTID}                      /*LOT ID*/
+		   AND LOTHISTKEY                    = #{LOTHISTKEY}                 /*Lot HistKey*/
+    </select>
+    
+    <!-- 공정 수입 검사 의뢰전 의뢰된건중 검사하지않은 항목 - 체크 -->
+    <select id="selectQcOspRequestInspResultChk" parameterType="map" resultType="hashmap">   
+        /* smh.qam.dao.QAM00500Dao.selectQcOspRequestInspResultChk */
+		SELECT RESOURCEID
+		  FROM QAM_INSPECTIONRESULT
+		 WHERE RESOURCEID                    = #{RESOURCEID}                 /*ID*/
+		   AND PROCESSRELNO                  = #{PROCESSRELNO}               /*연관번호*/
+		   AND "degree"                      = #{DEGREE}                     /*차수*/
+		   AND RESOURCETYPE                  = #{RESOURCETYPE}               /*LOT 구분*/   
+    </select>
+       
+    <!-- 공정 수입검사 - 체크 -->
+    <select id="selectQcOspRequestInspChk" parameterType="map" resultType="hashmap">   
+        /* smh.qam.dao.QAM00500Dao.selectQcOspRequestInspChk */
+		SELECT LOTID
+		  FROM QAM_QCOSPREQUESTINSPECTION
+		 WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+		   AND LOTHISTKEY                    = #{LOTHISTKEY}                 /*Lot HistKey*/
+		   AND DEGREE                        = #{DEGREE}                     /*차수*/
+    </select>
+    
+    <!--  공정수입검사 의뢰되어있는건 조회  -->
+    <select id="selectQcOspRequestInspIsLast" parameterType="map" resultType="hashmap">   
+        /* smh.qam.dao.QAM00500Dao.selectQcOspRequestInspIsLast */
+        SELECT LOTID
+             , LOTHISTKEY
+             , DEGREE
+             , ENTERPRISEID
+             , PLANTID
+             , REQUESTDATE
+             , REQUESTOR
+             , RECEIVINGDATE
+             , DESCRIPTION
+             , CREATOR
+             , CREATEDTIME
+             , MODIFIER
+             , MODIFIEDTIME
+             , LASTTXNHISTKEY
+             , LASTTXNID
+             , LASTTXNUSER
+             , LASTTXNTIME
+             , LASTTXNCOMMENT
+             , VALIDSTATE
+             , ISLASTREQUEST
+          FROM QAM_QCOSPREQUESTINSPECTION
+         WHERE ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+		   AND PLANTID                       = #{PLANTID}                    /*Site ID*/
+		   AND LOTID                         = #{LOTID}                      /*LOT ID*/
+		   AND LOTHISTKEY                    = #{LOTHISTKEY}                 /*Lot HistKey*/
+           AND ISLASTREQUEST                 = #{ISLASTREQUEST}              /*마지막요청여부*/        
+    </select>
+    
+    <!-- 수입검사 의뢰 등록 -->
+    <insert id="insertQcOspRequestInsp" parameterType="map">
+        /* smh.qam.dao.QAM00500Dao.insertQcOspRequestInsp */
+        INSERT INTO QAM_QCOSPREQUESTINSPECTION
+        (     LOTID                         /*LOT ID*/
+            , LOTHISTKEY                    /*Lot HistKey*/
+            , DEGREE                        /*차수*/
+            , ENTERPRISEID                  /*회사 ID*/
+            , PLANTID                       /*Site ID*/
+            , REQUESTDATE                   /*의뢰일자*/
+            , REQUESTOR                     /*의뢰자*/
+            , RECEIVINGDATE                 /*입고일시*/
+            , DESCRIPTION                   /*설명*/
+            , CREATOR                       /*생성자*/
+            , CREATEDTIME                   /*생성일*/
+            , MODIFIER                      /*수정자*/
+            , MODIFIEDTIME                  /*수정일*/
+            , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+            , LASTTXNID                     /*마지막TXN ID*/
+            , LASTTXNUSER                   /*마지막TXN 사용자*/
+            , LASTTXNTIME                   /*마지막TXN 시간*/
+            , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+            , VALIDSTATE                    /*유효여부*/
+            , ISLASTREQUEST                 /*마지막요청여부*/
+        )VALUES(
+              #{LOTID}                        /*LOT ID*/
+            , #{LOTHISTKEY}                   /*Lot HistKey*/
+            , #{DEGREE}                       /*차수*/
+            , #{ENTERPRISEID}                 /*회사 ID*/
+            , #{PLANTID}                      /*Site ID*/
+            , #{REQUESTDATE}                  /*의뢰일자*/
+            , #{REQUESTOR}                    /*의뢰자*/
+            , #{RECEIVINGDATE}                /*입고일시*/
+            , #{DESCRIPTION}                  /*설명*/
+            , #{CREATOR}                      /*생성자*/
+            , SYSDATE                         /*생성일*/
+            , #{MODIFIER}                     /*수정자*/
+            , SYSDATE                         /*수정일*/
+            , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+            , #{LASTTXNID}                    /*마지막TXN ID*/
+            , #{CREATOR}                      /*마지막TXN 사용자*/
+            , SYSDATE                         /*마지막TXN 시간*/
+            , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+            , #{VALIDSTATE}                   /*유효여부*/
+            , #{ISLASTREQUEST}                /*마지막요청여부*/
+        )
+    </insert>
+
+    <!-- 수입검사 의뢰 수정 -->
+    <update id="updateQcOspRequestInsp" parameterType="map">
+        /* smh.qam.dao.QAM00500Dao.updateQcOspRequestInsp */
+        UPDATE QAM_QCOSPREQUESTINSPECTION
+           SET DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/ 
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+           AND LOTHISTKEY                    = #{LOTHISTKEY}                 /*Lot HistKey*/
+           AND DEGREE                        = #{DEGREE}                     /*차수*/
+           AND ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+           AND PLANTID                       = #{PLANTID}                    /*Site ID*/
+    </update>
+
+    <!-- 수입검사 의뢰 수정 -->
+    <update id="updateQcOspRequestInspIsLast" parameterType="map">
+        /* smh.qam.dao.QAM00500Dao.updateQcOspRequestInspIsLast */
+        UPDATE QAM_QCOSPREQUESTINSPECTION
+           SET MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/             
+             , ISLASTREQUEST                 = #{ISLASTREQUEST}              /*마지막요청여부*/
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+           AND LOTHISTKEY                    = #{LOTHISTKEY}                 /*Lot HistKey*/
+           AND DEGREE                        = #{DEGREE}                     /*차수*/
+           AND ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+           AND PLANTID                       = #{PLANTID}                    /*Site ID*/
+    </update>
+    
+    <!-- 수입검사 의뢰 삭제 -->
+    <delete id="deleteQcOspRequestInsp" parameterType="map">
+        /* smh.qam.dao.QAM00500Dao.deleteQcOspRequestInsp */
+        DELETE
+          FROM QAM_QCOSPREQUESTINSPECTION 
+         WHERE LOTID                         = #{LOTID}                      /*LOT ID*/
+           AND LOTHISTKEY                    = #{LOTHISTKEY}                 /*Lot HistKey*/
+           AND DEGREE                        = #{DEGREE}                     /*차수*/
+           AND ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+           AND PLANTID                       = #{PLANTID}                    /*Site ID*/
+    </delete>    
+</mapper>

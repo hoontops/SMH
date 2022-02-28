@@ -1,0 +1,500 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM00900Dao">
+
+    <!--
+         desc    : 자주/최종 NCR
+    -->
+    <select id="selectAbnormalOccurrenceList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM00900Dao.selectAbnormalOccurrenceList */
+        /* Id : selectSelfFinishAOIAbnormalOccurrence - Version : 10001*/
+        WITH INSPECTOR AS
+        (
+            SELECT A.RESOURCEID
+                  , A."degree" AS DEGREE
+                  , A.RESOURCETYPE
+                  , A.PROCESSRELNO
+                  , LISTAGG(QI.INSPECTORNAME, '/') WITHIN GROUP(ORDER BY QI.INSPECTORNAME) AS INSPECTIONUSER
+              FROM       QAM_INSPECTIONRESULT   A
+              INNER JOIN PCM_INSPECTIONWORKER   IW  ON   IW.RESOURCETYPE = A.RESOURCETYPE
+                                                    AND  IW.RESOURCEID   = A.RESOURCEID
+                                                    AND  IW.DEGREE       = A."degree"
+                                                    AND  IW.PROCESSRELNO = A.PROCESSRELNO
+              INNER JOIN QAM_QCINSPECTOR        QI  ON   QI.INSPECTORID  = IW.INSPECTIONUSER
+                                                    AND  QI.PLANTID      = IW.PLANTID
+             WHERE A.RESOURCETYPE = #{ABNOCRTYPE}
+               AND IW.PLANTID = #{PLANTID}
+            GROUP BY A.RESOURCEID
+                   , A."degree"
+                   , A.RESOURCETYPE
+                   , A.PROCESSRELNO
+        )
+        SELECT AO.ABNOCRNO
+             , AO.ABNOCRTYPE
+             , TO_CHAR(AO.NCRISSUEDATE, 'YYYYMMDDHH24MISS')                            AS NCRISSUEDATE
+             , SCD.DICTIONARYNAME                                                      AS STATENAME
+             , AO.STATE
+             , AO.PRODUCTDEFID
+             , AO.PRODUCTDEFVERSION
+             , PD.PRODUCTDEFNAME
+             , AO.PROCESSSEGMENTID
+             , PSD.DICTIONARYNAME                                                      AS PROCESSSEGMENTNAME
+             , MPD.DICTIONARYNAME                                                      AS MIDDLEPROCESSSEGMENTCLASSNAME
+             , TPD.DICTIONARYNAME                                                      AS TOPPROCESSSEGMENTCLASSNAME
+             , AD.DICTIONARYNAME                                                       AS AREANAME
+             , AO.AREAID
+             , ICD.DICTIONARYNAME                                                      AS INSPECTIONDEFNAME
+             , L.PARENTLOTID
+             , AO.LOTID
+             , AO.DEGREE
+             , DCD.DICTIONARYNAME                                                      AS DEFECTCODENAME
+             , QDD.DICTIONARYNAME                                                      AS QCSEGMENTNAME
+             , DCD.DICTIONARYNAME||'-'||QDD.DICTIONARYNAME                             AS JOINNAME
+             , QID.FILERESOURCEID
+             , QID.DEFECTQTY
+             , IR.INSPECTIONQTY
+             , ROUND((QID.DEFECTQTY/IR.INSPECTIONQTY)*100,1)                           AS DEFECTRATE
+             , CASE WHEN CRT.REASONCONSUMABLEDEFID IS NULL
+               THEN  NVL(ARC.CONSUMABLEDEFNAME,ARP.PRODUCTDEFNAME)
+               ELSE NVL(RCC.CONSUMABLEDEFNAME,RP.PRODUCTDEFNAME)
+               END                                                                     AS REASONCONSUMABLEDEFNAME
+             , CASE WHEN CRT.REASONCONSUMABLEDEFID IS NULL THEN AO.REASONCONSUMABLEDEFID
+               ELSE CRT.REASONCONSUMABLEDEFID
+               END                                                                     AS REASONCONSUMABLEDEFID
+             , CASE WHEN CRT.REASONCONSUMABLEDEFID IS NULL THEN AO.REASONCONSUMABLEDEFVERSION
+               ELSE CRT.REASONCONSUMABLEDEFVERSION
+               END                                                                     AS REASONCONSUMABLEDEFVERSION
+             , CASE WHEN CRT.REASONCONSUMABLEDEFID IS NULL THEN AO.REASONCONSUMABLELOTID
+               ELSE CRT.REASONCONSUMABLELOTID
+               END                                                                     AS REASONCONSUMABLELOTID
+             , CASE WHEN CRT.REASONCONSUMABLEDEFID IS NULL THEN APD.DICTIONARYNAME
+               ELSE RPD.DICTIONARYNAME
+               END                                                                     AS REASONSEGMENTNAME
+             , CASE WHEN CRT.REASONCONSUMABLEDEFID IS NULL THEN AO.REASONSEGMENTID
+               ELSE CRT.REASONSEGMENTID
+               END                                                                     AS REASONSEGMENTID
+             , CASE WHEN CRT.REASONCONSUMABLEDEFID IS NULL THEN AAD.DICTIONARYNAME
+               ELSE RAD.DICTIONARYNAME
+               END                                                                     AS REASONAREANAME
+             , CASE WHEN CRT.REASONCONSUMABLEDEFID IS NULL THEN AO.REASONAREAID
+               ELSE CRT.REASONAREAID
+               END                                                                     AS REASONAREAID
+             , CASE WHEN IR.INSPECTIONDEFID = 'FinishInspection' THEN IIW.INSPECTIONUSER
+               ELSE IU.USER_NM
+               END                                                                     AS INSPECTIONUSER
+             , EV.ISCLOSE
+             , IR.INSPECTIONDATE
+             , IR.INSPECTIONDEFID
+             , AO.DESCRIPTION
+             , RCD.DICTIONARYNAME                                                      AS REASONCODENAME
+             , CU.USER_NM                                                              AS CHARGERNAME
+             , CASE WHEN IR.INSPECTIONDEFID = 'FinishInspection'   THEN NWR.WORKSTARTPCSQTY
+                    WHEN IR.INSPECTIONDEFID = 'SelfInspectionShip' THEN NWR.WORKENDPCSQTY
+               ELSE PWR.SENDPCSQTY
+               END                                                                     AS PCSQTY
+             , CASE WHEN IR.INSPECTIONDEFID = 'FinishInspection'   THEN NWR.WORKSTARTPANELQTY
+                    WHEN IR.INSPECTIONDEFID = 'SelfInspectionShip' THEN NWR.WORKENDPANELQTY
+               ELSE PWR.SENDPANELQTY
+               END                                                                     AS PANELQTY
+             , DCR.DECISIONDEGREE
+             , NWR.PLANTID
+             , PD.CUSTOMERID
+             , NWR.RESOURCEID
+             , NWR.WORKSTARTUSER
+             , MR.EQUIPMENTCLASSID
+             , NWR.WORKENDTIME                                                         AS LOTWORKRESULTDATE
+             , LISTAGG(LE.EQUIPMENTID, ',') WITHIN GROUP(ORDER BY LE.EQUIPMENTID)      AS EQUIPMENTID
+             , FA.ISMODIFY
+             , NVL(AFL.ISLOCKING, 'N')                                                 AS AFFECTISLOCKING
+             , CRT.CARREQUESTDATE
+             , CASE WHEN CRT.CARREQUESTDATE IS NULL THEN NULL
+               ELSE TO_CHAR(CRT.CARREQUESTDATE + 3, 'YYYYMMDDHH24MISS')
+               END                                                                     AS CAREXPECTEDRECEIPTDATE
+             , CASE WHEN AO.STATE ='CARRequestCompleted' THEN NULL
+               ELSE TO_CHAR(CAV.RECEIPTDATE, 'YYYYMMDDHH24MISS')
+               END                                                                     AS RECEIPTDATE
+             , CASE WHEN AO.STATE IN ('CARRequestCompleted','CARReceivingCompleted') THEN NULL
+               ELSE TO_CHAR(CAV.APPROVALDATE, 'YYYYMMDDHH24MISS')
+               END                                                                     AS APPROVALDATE
+             , CASE WHEN AO.STATE !='ValidityEvaluationCompleted' THEN NULL
+               ELSE TO_CHAR(EV.CLOSEDATE, 'YYYYMMDDHH24MISS')
+               END                                                                     AS CLOSEDATE
+             , NULL                                                                    AS CHK
+             <!-- 2021.05.27 권혜영 추가 -->
+             ,QID.TXNHISTKEY
+			 ,QID.DEFECTCODE 
+          FROM            QAM_ABNORMALOCCURRENCE    AO
+          INNER JOIN      PCM_LOT                   L    ON   L.LOTID                         = AO.LOTID
+          INNER JOIN      QAM_INSPECTIONRESULT      IR   ON   AO.LOTID                        = IR.RESOURCEID
+                                                         AND  IR.RESOURCETYPE                 = AO.ABNOCRTYPE
+                                                         AND  IR.PROCESSRELNO                 = AO.PROCESSRELNO
+                                                         AND  AO.DEGREE                       = IR."degree"
+          INNER JOIN      QAM_INSPECTIONDEFECT      QID  ON   IR.RESOURCEID                   = QID.RESOURCEID
+                                                         AND  AO.DEFECTCODE                   = QID.DEFECTCODE
+                                                         AND  AO.QCSEGMENTID                  = QID.QCSEGMENTID
+                                                         <!--*2021.05.21 TOBE Modify TXNGROUPHISTKEY 생성룰 변경에 따라 생성되지 않을 수 있어 주석처리
+                                                         AND  IR.TXNGROUPHISTKEY              = QID.TXNGROUPHISTKEY-->
+                                                         <!-- 2021.07.08 TOBE Add TXNGROUPHISTKEY 미사용에 따라 조건절에 추가 -->
+                                                         AND  AO.ABNOCRTYPE                   = QID.RESOURCETYPE
+                                                         AND  AO.DEGREE                       = QID.DEGREE
+                                                         AND  AO.PROCESSRELNO                 = QID.PROCESSRELNO
+          INNER JOIN      BAS_PROCESSSEGMENT        PS   ON   AO.PROCESSSEGMENTID             = PS.PROCESSSEGMENTID
+                                                         AND  AO.PROCESSSEGMENTVERSION        = PS.PROCESSSEGMENTVERSION
+          INNER JOIN      BAS_PROCESSSEGMENTCLASS   MPC  ON   PS.PROCESSSEGMENTCLASSID        = MPC.PROCESSSEGMENTCLASSID
+          INNER JOIN      BAS_PROCESSSEGMENTCLASS   TPC  ON   MPC.PARENTPROCESSSEGMENTCLASSID = TPC.PROCESSSEGMENTCLASSID
+          INNER JOIN      BAS_PRODUCTDEFINITION     PD   ON   AO.PRODUCTDEFID                 = PD.PRODUCTDEFID
+                                                         AND  AO.PRODUCTDEFVERSION            = PD.PRODUCTDEFVERSION
+          INNER JOIN      FN_AREA(#{USERID})        FA   ON   AO.AREAID                       = FA.AREAID
+          INNER JOIN      BAS_AREA                  A    ON   FA.AREAID                       = A.AREAID
+          LEFT OUTER JOIN QAM_CARREQUEST            CRT  ON   AO.ABNOCRNO                     = CRT.ABNOCRNO
+                                                         AND  AO.ABNOCRTYPE                   = CRT.ABNOCRTYPE
+                                                         AND  CRT.SEQUENCE                    = '1'
+          LEFT OUTER JOIN QAM_CARAPPROVAL           CAV  ON   AO.ABNOCRNO                     = CAV.ABNOCRNO
+                                                         AND  AO.ABNOCRTYPE                   = CAV.ABNOCRTYPE
+                                                         AND  CAV.SEQUENCE                    = '1'
+          LEFT OUTER JOIN QAM_ESTIMATEVALIDITY      EV   ON   EV.ABNOCRNO                     = AO.ABNOCRNO
+                                                         AND  EV.ABNOCRTYPE                   = AO.ABNOCRTYPE
+                                                         AND  EV.SEQUENCE                     = '1'
+          INNER JOIN      BAS_DEFECTCODE            DC   ON   AO.DEFECTCODE                   = DC.DEFECTCODE
+          LEFT OUTER JOIN CMD_DICTIONARY            DCD  ON   DC.DICTIONARYID                 = DCD.DICTIONARYID
+                                                         AND  DCD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION   QD   ON   AO.QCSEGMENTID                  = QD.QCSEGMENTID
+          LEFT OUTER JOIN CMD_DICTIONARY            QDD  ON   QD.QCSEGMENTNAME                = QDD.DICTIONARYID
+                                                         AND  QDD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES         SC   ON   AO.STATE                        = SC.LOOKUP_CODE
+                                                         AND  SC.LOOKUP_TYPE                  = 'CARProgressStatus'
+          LEFT OUTER JOIN CMD_DICTIONARY            SCD  ON   SCD.DICTIONARYID                = SC.DICTIONARYID
+                                                         AND  SCD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_PRODUCTDEFINITION     RP   ON   CRT.REASONCONSUMABLEDEFID       = RP.PRODUCTDEFID
+                                                         AND  CRT.REASONCONSUMABLEDEFVERSION  = RP.PRODUCTDEFVERSION
+          LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION  RCC  ON   CRT.REASONCONSUMABLEDEFID       = RCC.CONSUMABLEDEFID
+                                                         AND  CRT.REASONCONSUMABLEDEFVERSION  = RCC.CONSUMABLEDEFVERSION
+          LEFT OUTER JOIN CMD_DICTIONARY            PSD  ON   PSD.DICTIONARYID                = PS.PROCESSSEGMENTNAME
+                                                         AND  PSD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY            MPD  ON   MPD.DICTIONARYID                = MPC.PROCESSSEGMENTCLASSNAME
+                                                         AND  MPD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY            TPD  ON   TPD.DICTIONARYID                = TPC.PROCESSSEGMENTCLASSNAME
+                                                         AND  TPD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY            AD   ON   AD.DICTIONARYID                 = A.AREANAME
+                                                         AND  AD.LANGUAGETYPE                 = #{LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_PROCESSSEGMENT        RPS  ON   CRT.REASONSEGMENTID             = RPS.PROCESSSEGMENTID
+                                                         AND  RPS.PROCESSSEGMENTVERSION       = '*'
+
+          LEFT OUTER JOIN CMD_DICTIONARY            RPD  ON   RPS.PROCESSSEGMENTNAME          = RPD.DICTIONARYID
+                                                         AND  RPD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_AREA                  RA   ON   RA.AREAID                       = CRT.REASONAREAID
+          LEFT OUTER JOIN CMD_DICTIONARY            RAD  ON   RA.AREANAME                     = RAD.DICTIONARYID
+                                                         AND  RAD.LANGUAGETYPE                = #{LANGUAGETYPE}
+
+          LEFT OUTER JOIN BAS_REASONCODE            RC   ON   AO.REASONCODEID                 = RC.REASONCODEID
+                                                         AND  RC.REASONCODECLASSID            = 'QCLockInSelfFinalExamination'
+          LEFT OUTER JOIN CMD_DICTIONARY            RCD  ON   RC.REASONCODENAME               = RCD.DICTIONARYID
+                                                         AND  RCD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES         IC   ON   IR.INSPECTIONDEFID              = IC.LOOKUP_CODE
+                                                         AND  IC.LOOKUP_TYPE                  = 'InspectionResultResouceType'
+          LEFT OUTER JOIN CMD_DICTIONARY            ICD  ON   ICD.DICTIONARYID                = IC.DICTIONARYID
+                                                         AND  icd.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN INSPECTOR                 IIW  ON   IIW.RESOURCETYPE                = IR.RESOURCETYPE
+                                                         AND  IIW.RESOURCEID                  = IR.RESOURCEID
+                                                         AND  IIW.PROCESSRELNO                = IR.PROCESSRELNO
+                                                         AND  IIW.DEGREE                      = IR."degree"
+          LEFT OUTER JOIN CMD_USERS                 CU   ON   CU.USER_ID                      = CRT.CHARGERID
+          LEFT OUTER JOIN PCM_LOTWORKRESULT         NWR  ON   IR.RESOURCEID                   = NWR.LOTID
+                                                         AND  IR.PROCESSSEGMENTID             = NWR.PROCESSSEGMENTID
+                                                         AND  IR.PROCESSSEGMENTVERSION        = NWR.PROCESSSEGMENTVERSION
+                                                         AND  IR.WORKCOUNT                    = NWR.WORKCOUNT
+          LEFT OUTER JOIN BAS_RESOURCE              MR   ON   MR.RESOURCEID                   = NWR.RESOURCEID
+          LEFT OUTER JOIN PCM_LOTEQUIPMENT          LE   ON   LE.LOTID                        = NWR.LOTID
+                                                         AND  LE.PROCESSSEGMENTID             = NWR.PROCESSSEGMENTID
+                                                         AND  LE.PROCESSSEGMENTVERSION        = NWR.PROCESSSEGMENTVERSION
+                                                         AND  LE.WORKCOUNT                    = NWR.WORKCOUNT
+          LEFT OUTER JOIN PCM_LOTHISTORY            PLH  ON   NWR.PREVSENDLOTHISTKEY          = PLH.TXNHISTKEY
+                                                         AND  IR.RESOURCEID                   = PLH.LOTID
+          LEFT OUTER JOIN PCM_LOTWORKRESULT         PWR  ON   IR.RESOURCEID                   = PWR.LOTID
+                                                         AND  PWR.PROCESSSEGMENTID            = PLH.PREVPROCESSSEGMENTID
+                                                         AND  PWR.PROCESSSEGMENTVERSION       = PLH.PREVPROCESSSEGMENTVERSION
+                                                         AND  PWR.WORKCOUNT                   = PLH.WORKCOUNT
+          LEFT OUTER JOIN BAS_DEFECTCODEREL         DCR  ON   AO.DEFECTCODE                   = DCR.DEFECTCODE
+                                                         AND  AO.QCSEGMENTID                  = DCR.QCSEGMENTID
+          LEFT OUTER JOIN CMD_USERS                 IU   ON   IR.INSPECTIONUSER               = IU.USER_ID
+
+          LEFT OUTER JOIN BAS_PRODUCTDEFINITION     ARP  ON   AO.REASONCONSUMABLEDEFID        = ARP.PRODUCTDEFID
+                                                         AND  AO.REASONCONSUMABLEDEFVERSION   = ARP.PRODUCTDEFVERSION
+          LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION  ARC  ON   AO.REASONCONSUMABLEDEFID        = ARC.CONSUMABLEDEFID
+                                                         AND  AO.REASONCONSUMABLEDEFVERSION   = ARC.CONSUMABLEDEFVERSION
+          LEFT OUTER JOIN BAS_PROCESSSEGMENT        APS  ON   AO.REASONSEGMENTID              = APS.PROCESSSEGMENTID
+                                                         AND  APS.PROCESSSEGMENTVERSION       = '*'
+
+          LEFT OUTER JOIN CMD_DICTIONARY            APD  ON   APS.PROCESSSEGMENTNAME          = APD.DICTIONARYID
+                                                         AND  APD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_AREA                  ARA  ON   ARA.AREAID                      = AO.REASONAREAID
+          LEFT OUTER JOIN CMD_DICTIONARY            AAD  ON   ARA.AREANAME                    = AAD.DICTIONARYID
+                                                         AND  AAD.LANGUAGETYPE                = #{LANGUAGETYPE}
+          --affectLot lockingStatus
+           LEFT OUTER JOIN QAM_AFFECTLOT            AFL  ON   AO.ABNOCRNO                     = AFL.ABNOCRNO
+                                                         AND  AO.ABNOCRTYPE                   = AFL.ABNOCRTYPE
+                                                         AND  AO.LOTID                        = AFL.LOTID
+         WHERE 1 = 1
+           AND AO.ABNOCRTYPE = #{ABNOCRTYPE}  --*검사구분
+
+        <if test="!(ABNOCRTYPE eq 'FinishInspection'.toString()) ">
+           AND QID.INSPECTIONRESULT IS NOT NULL --*검사구분 최종일경우
+        </if>
+
+           AND (AO.NCRISSUEDATE BETWEEN TO_DATE(#{PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+                                    AND TO_DATE(#{PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')) --*발행기간
+
+        <if test="STATE != null and STATE !='' and !(STATE eq '*'.toString()) ">
+           AND AO.STATE  = #{STATE} --*처리현황
+        </if>
+
+        <if test="ISCLOSE != null and ISCLOSE !='' and !(ISCLOSE eq '*'.toString()) ">
+           AND NVL(EV.ISCLOSE, 'N')  = #{ISCLOSE} --*마감여부
+        </if>
+
+        <if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+           AND AO.PLANTID = #{PLANTID} --*site
+        </if>
+
+        <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+           AND AO.ENTERPRISEID = #{ENTERPRISEID}
+        </if>
+
+        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and !(PRODUCTDEFID eq '*'.toString()) ">
+           AND EXISTS
+                 (
+                     SELECT 1
+                       FROM ufn_selectStringToSplit(#{PRODUCTDEFID}, ',')    P
+                      WHERE AO.PRODUCTDEFID = P.VALUE
+                 ) --*품목코드          
+        </if>
+
+        <if test="DEFECTCODE != null and DEFECTCODE !='' and !(DEFECTCODE eq '*'.toString()) ">
+           AND QID.QCSEGMENTID||AO.DEFECTCODE = #{DEFECTCODE}  --*불량코드
+        </if>
+
+        <if test="REASONAREAID != null and REASONAREAID !='' and !(REASONAREAID eq '*'.toString()) ">
+           AND CASE WHEN CRT.REASONCONSUMABLEDEFID IS NULL THEN AO.REASONAREAID
+               ELSE CRT.REASONAREAID
+               END  = #{REASONAREAID} --*원인작업장
+        </if>
+
+        <if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' and !(PROCESSSEGMENTCLASSID eq '*'.toString()) ">
+           AND TPC.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID} --*대공정
+        </if>
+
+        <if test="MIDDLEPROCESSSEGMENTCLASSID != null and MIDDLEPROCESSSEGMENTCLASSID !='' and !(MIDDLEPROCESSSEGMENTCLASSID eq '*'.toString()) ">
+           AND MPC.PROCESSSEGMENTCLASSID = #{MIDDLEPROCESSSEGMENTCLASSID} --*중공정
+        </if>
+
+        <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' and !(PROCESSSEGMENTID eq '*'.toString()) ">
+           AND AO.PROCESSSEGMENTID = #{PROCESSSEGMENTID} --*공정
+        </if>
+
+        <if test="AREAID != null and AREAID !='' and !(AREAID eq '*'.toString()) ">
+           AND AO.AREAID = #{AREAID}
+        </if>
+
+        <if test="LOTID != null and LOTID !='' and !(LOTID eq '*'.toString()) ">
+           AND AO.LOTID = #{LOTID}
+        </if>
+
+        <if test="DECISIONDEGREE != null and DECISIONDEGREE !='' and !(DECISIONDEGREE eq '*'.toString()) ">
+           AND DCR.DECISIONDEGREE = #{DECISIONDEGREE}
+        </if>
+        GROUP BY AO.ABNOCRNO
+               , AO.ABNOCRTYPE
+               , AO.NCRISSUEDATE
+               , SCD.DICTIONARYNAME
+               , AO.STATE
+               , AO.PRODUCTDEFID
+               , AO.PRODUCTDEFVERSION
+               , PD.PRODUCTDEFNAME
+               , AO.PROCESSSEGMENTID
+               , PSD.DICTIONARYNAME
+               , MPD.DICTIONARYNAME
+               , TPD.DICTIONARYNAME
+               , AD.DICTIONARYNAME
+               , AO.AREAID
+               , ICD.DICTIONARYNAME
+               , L.PARENTLOTID
+               , AO.LOTID
+               , AO.DEGREE
+               , DCD.DICTIONARYNAME
+               , QDD.DICTIONARYNAME
+               , IR.INSPECTIONQTY
+               , QID.FILERESOURCEID
+               , QID.DEFECTQTY
+               , EV.ISCLOSE
+               , IR.INSPECTIONDATE
+               , IR.INSPECTIONDEFID
+               , AO.DESCRIPTION
+               , RCD.DICTIONARYNAME
+               , CU.USER_NM
+               , NWR.WORKENDPCSQTY
+               , IR.INSPECTIONDEFID
+               , NWR.WORKSTARTPANELQTY
+               , IR.INSPECTIONDEFID
+               , NWR.WORKENDPANELQTY
+               , PWR.SENDPANELQTY
+               , DCR.DECISIONDEGREE
+               , NWR.PLANTID
+               , PD.CUSTOMERID
+               , NWR.RESOURCEID
+               , NWR.RESOURCEID
+               , NWR.WORKSTARTUSER
+               , MR.EQUIPMENTCLASSID
+               , NWR.WORKENDTIME
+               , CRT.REASONCONSUMABLEDEFID
+               , ARP.PRODUCTDEFNAME
+               , ARC.CONSUMABLEDEFNAME
+               , RP.PRODUCTDEFNAME
+               , RCC.CONSUMABLEDEFNAME
+               , CRT.REASONCONSUMABLEDEFVERSION
+               , CRT.REASONCONSUMABLELOTID
+               , CRT.REASONSEGMENTID
+               , APD.DICTIONARYNAME
+               , RPD.DICTIONARYNAME
+               , CRT.REASONAREAID
+               , AAD.DICTIONARYNAME
+               , RAD.DICTIONARYNAME
+               , IIW.INSPECTIONUSER
+               , IU.USER_NM
+               , NWR.WORKSTARTPCSQTY
+               , PWR.SENDPCSQTY
+               , FA.ISMODIFY
+               , AFL.ISLOCKING
+               , CRT.CARREQUESTDATE
+               , CAV.RECEIPTDATE
+               , CAV.APPROVALDATE
+               , EV.CLOSEDATE
+               , AO.REASONCONSUMABLEDEFID
+               , AO.REASONCONSUMABLEDEFVERSION
+               , AO.REASONCONSUMABLELOTID
+               , AO.REASONSEGMENTID
+               , AO.REASONAREAID               
+               <!-- 2021.05.27 권혜영 추가 -->
+               , QID.TXNHISTKEY
+			   , QID.DEFECTCODE 
+        ORDER BY AO.NCRISSUEDATE DESC
+    </select>
+
+    <!--
+         desc    : 공정 수입검사와 출하검사  affecLot을 조회한다(등록된 Affect Lot 만 조회)
+    -->
+    <select id="selectAffectLotInspAbnormalPopupList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM00900Dao.selectAffectLotInspAbnormalPopupList */
+        SELECT AL.ABNOCRNO
+             , AL.ABNOCRTYPE
+             , AL.LOTID
+             , AL."sequence" AS SEQUENCE
+             , AL.ENTERPRISEID
+             , AL.PLANTID
+             , AL.REASONCODEID
+             , AL.RESULTCODE
+             , AL.ISLOCKING
+             , AL.CHARGERID
+             , AL.AFFECTEDDATE
+             , AL.LOCKINGTXNHISTKEY
+             , L.PRODUCTDEFID
+             , L.PRODUCTDEFVERSION
+             , P.PRODUCTDEFNAME
+             , L.PANELQTY
+             , L.QTY                                    AS PCSQTY
+             , L.PROCESSSEGMENTID
+             , PSD.DICTIONARYNAME                       AS PROCESSSEGMENTNAME
+             , L.AREAID
+             , AD.DICTIONARYNAME                        AS AREANAME
+             , L.LOTSTATE
+             , AL.LASTTXNID
+             , NVL2(L.ISLOCKING, L.ISLOCKING, 'N')      AS ISLOTLOCKING
+             , NULL                                     AS ISADDED
+             , NULL                                     AS CHK
+             , (SELECT SUBSTR(MAX(TXNHISTKEY||PLL.LOCKINGSTATUS), -1)
+                  FROM PCM_LOTLOCKING PLL
+                 WHERE PLL.LOTID                  = L.LOTID
+                   AND PLL.ENTERPRISEID           = L.ENTERPRISEID
+                   AND PLL.PLANTID                = L.PLANTID
+                   AND PLL.PROCESSSEGMENTID       = L.PROCESSSEGMENTID
+                   AND PLL.PROCESSSEGMENTVERSION  = L.PROCESSSEGMENTVERSION
+                   AND PLL.PRODUCTDEFID           = L.PRODUCTDEFID
+                   AND PLL.PRODUCTDEFVERSION      = L.PRODUCTDEFVERSION
+                   AND PLL.WORKCOUNT              = L.WORKCOUNT
+                                           )            AS PREV_ISLOCKING        
+          FROM            QAM_AFFECTLOT         AL
+          INNER JOIN      PCM_LOT               L    ON   AL.LOTID                 = L.LOTID
+          INNER JOIN      BAS_PRODUCTDEFINITION P    ON   L.PRODUCTDEFID           = P.PRODUCTDEFID
+                                                     AND  L.PRODUCTDEFVERSION      = P.PRODUCTDEFVERSION
+          INNER JOIN      BAS_PROCESSSEGMENT    PS   ON   L.PROCESSSEGMENTID       = PS.PROCESSSEGMENTID
+                                                     AND  L.PROCESSSEGMENTVERSION  = PS.PROCESSSEGMENTVERSION
+          LEFT OUTER JOIN CMD_DICTIONARY        PSD  ON   PS.PROCESSSEGMENTNAME    = PSD.DICTIONARYID
+                                                     AND  PSD.LANGUAGETYPE         = #{LANGUAGETYPE}
+          INNER JOIN      BAS_AREA                   A    ON L.AREAID              = A.AREAID
+          LEFT OUTER JOIN CMD_DICTIONARY        AD   ON   A.AREANAME               = AD.DICTIONARYID
+                                                     AND  AD.LANGUAGETYPE          = #{LANGUAGETYPE}
+         WHERE 1=1
+           AND AL.ABNOCRTYPE =#{ABNOCRTYPE}
+           AND Al.ABNOCRNO =#{ABNOCRNO}
+        ORDER BY ABNOCRNO
+    </select>
+
+    <!--
+         desc    : 대공정으로 표준공정 조회
+    -->
+    <select id="selectProcessSegmentByTclassList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM00900Dao.selectProcessSegmentByTclassList */
+        SELECT PS.PROCESSSEGMENTID
+             , PSD.DICTIONARYNAME             AS PROCESSSEGMENTNAME
+             , PS.PROCESSSEGMENTVERSION
+             , MPD.DICTIONARYNAME             AS PROCESSSEGMENTCLASSNAME_MIDDLE
+             , TPD.DICTIONARYNAME             AS PROCESSSEGMENTCLASSNAME_TOP
+
+          FROM            BAS_PROCESSSEGMENT       PS
+          INNER JOIN      BAS_PROCESSSEGMENTCLASS  MP   ON   PS.PROCESSSEGMENTCLASSID       = MP.PROCESSSEGMENTCLA
+                                                        AND  MP.PROCESSSEGMENTCLASSTYPE     = 'MiddleProcessSegmen
+          INNER JOIN      BAS_PROCESSSEGMENTCLASS  TP   ON   MP.PARENTPROCESSSEGMENTCLASSID = TP.PROCESSSEGMENTCLA
+                                                        AND  TP.PROCESSSEGMENTCLASSTYPE     = 'TopProcessSegmentCl
+          LEFT OUTER JOIN CMD_DICTIONARY           PSD  ON   PS.PROCESSSEGMENTNAME          = PSD.DICTIONARYID
+                                                        AND  PSD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           MPD  ON   MP.PROCESSSEGMENTCLASSNAME     = MPD.DICTIONARYID
+                                                        AND  MPD.LANGUAGETYPE               = #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY           TPD  ON   TP.PROCESSSEGMENTCLASSNAME     = TPD.DICTIONARYID
+                                                        AND  TPD.LANGUAGETYPE               = #{LANGUAGETYPE}
+         WHERE 1 = 1
+
+        <if test="PROCESSSEGMENTCLASSID != null and PROCESSSEGMENTCLASSID !='' and !(PROCESSSEGMENTCLASSID eq '*'.toString()) ">
+           AND TP.PROCESSSEGMENTCLASSID = #{PROCESSSEGMENTCLASSID}
+        </if>
+
+        <if test="OPERATIONCLASS != null and OPERATIONCLASS !='' and !(OPERATIONCLASS eq '*'.toString()) ">
+           AND TP.PROCESSSEGMENTCLASSID = #{OPERATIONCLASS}
+        </if>
+        <if test="MIDDLEPROCESSSEGMENTCLASSID != null and MIDDLEPROCESSSEGMENTCLASSID !='' and !(MIDDLEPROCESSSEGMENTCLASSID eq '*'.toString()) ">
+           AND MP.PROCESSSEGMENTCLASSID = #{MIDDLEPROCESSSEGMENTCLASSID}
+        </if>
+
+        <if test="PROCESSSEGMENT != null and PROCESSSEGMENT !='' ">
+            AND     (   UPPER(PS.PROCESSSEGMENTID) LIKE '%'||UPPER(#{PROCESSSEGMENT})||'%'
+                     OR UPPER(PSD.DICTIONARYNAME)  LIKE '%'||UPPER(#{PROCESSSEGMENT})||'%')
+        </if>
+        ORDER BY PROCESSSEGMENTID
+    </select>
+
+    <!--
+         desc    : 해당 기간안에 NG 발생한 Count를 가져온다
+    -->
+    <select id="selectNGCountAbnormal" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM00900Dao.selectNGCountAbnormal */
+        SELECT COUNT(*) AS COUNT
+          FROM BAS_INSPECTIONITEMRESULT             II
+         WHERE 1 = 1
+           AND II.CREATEDTIME BETWEEN #{FROMDATE} AND #{TODATE}
+           AND II.INSPECTIONRESULT = 'NG'
+           AND II.RESOURCETYPE     = #{RESOURCETYPE}
+    </select>
+    
+    
+    
+</mapper>

@@ -1,0 +1,453 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nbdf.cm.cmsa.dao.CMSA00400Dao">	
+<!-- 공통룩업유형-->
+
+
+    <!--업무영역 조회 (동시작업)-->
+    <select id="selectFndApplicationVlList" parameterType="map" resultType="hashmap">
+    SELECT FRG.DESCRIPTION AS REQUEST_GROUP
+          ,FAV.APPLICATION_NAME
+          ,FRG.REQUEST_GROUP_NAME
+          ,FRG.REQUEST_GROUP_ID
+          ,FAV.APPLICATION_ID
+          ,APPLICATION_SHORT_NAME
+    FROM   FND_REQUEST_GROUPS FRG, FND_APPLICATION_VL FAV
+    WHERE  FRG.APPLICATION_ID = FAV.APPLICATION_ID
+    AND    FRG.REQUEST_GROUP_CODE = 'CONCURRENT'
+    ORDER BY FAV.APPLICATION_NAME
+    </select>
+
+    <!--업무영역 조회(보고서)-->
+    <select id="selectFndApplicationVlListForPrint" parameterType="map" resultType="hashmap">
+    SELECT FRG.DESCRIPTION AS REQUEST_GROUP
+          ,FAV.APPLICATION_NAME
+          ,FRG.REQUEST_GROUP_NAME
+          ,FRG.REQUEST_GROUP_ID
+          ,FAV.APPLICATION_ID
+          ,APPLICATION_SHORT_NAME
+    FROM   FND_REQUEST_GROUPS FRG, FND_APPLICATION_VL FAV
+    WHERE  FRG.APPLICATION_ID = FAV.APPLICATION_ID
+    AND    FRG.REQUEST_GROUP_CODE = 'REPORT'
+    ORDER BY FAV.APPLICATION_NAME
+    </select>
+
+    <!--프로그램명 조회-->
+    <select id="selectFndConcurrentProgramsVlList" parameterType="map" resultType="hashmap">
+SELECT FP.CONCURRENT_PROGRAM_NAME||'.'||FP.USER_CONCURRENT_PROGRAM_NAME as USER_CONCURRENT_PROGRAM_DESC,
+        FP.CONCURRENT_PROGRAM_NAME
+        ,FLV.MEANING AS EXECUTE_METHOD, FP.EXECUTION_METHOD_CODE, FP.APPLICATION_ID, FAV.APPLICATION_SHORT_NAME
+        ,FP.USER_CONCURRENT_PROGRAM_NAME
+FROM   (
+        SELECT FRGU.REQUEST_UNIT_ID AS PROGRAM_ID
+              ,FRGU.APPLICATION_ID
+              ,FRGU.REQUEST_GROUP_ID
+	        FROM   FND_REQUEST_GROUP_UNITS FRGU
+	        WHERE  FRGU.REQUEST_UNIT_TYPE = 'P'
+	        UNION ALL
+	        SELECT FCP.CONCURRENT_PROGRAM_ID AS PROGRAM_ID
+	              ,FRGU.APPLICATION_ID
+	              ,FRGU.REQUEST_GROUP_ID
+	        FROM   FND_REQUEST_GROUP_UNITS FRGU, FND_CONCURRENT_PROGRAMS_VL FCP
+	        WHERE  FRGU.REQUEST_UNIT_TYPE = 'A'
+	        AND    FCP.APPLICATION_ID = FRGU.REQUEST_UNIT_ID
+	          AND FCP.ENABLED_FLAG = 'Y'
+	       ) MM,
+	       FND_CONCURRENT_PROGRAMS_VL FP,
+	       FND_LOOKUP_VALUES_VL FLV,
+	       FND_APPLICATION_VL FAV
+		WHERE  MM.PROGRAM_ID       = FP.CONCURRENT_PROGRAM_ID
+		AND    FP.EXECUTION_METHOD_CODE  = FLV.LOOKUP_CODE
+		AND    FLV.LOOKUP_TYPE     = 'CP_EXECUTION_METHOD_CODE'
+		AND    FP.APPLICATION_ID   = FAV.APPLICATION_ID
+		AND    MM.REQUEST_GROUP_ID = #{REQUEST_GROUP_ID}
+    <if test="CONCURRENT_PROGRAM_NAME != null and CONCURRENT_PROGRAM_NAME !='' ">
+        AND  FP.CONCURRENT_PROGRAM_NAME LIKE '%'||#{CONCURRENT_PROGRAM_NAME}|| '%'
+    </if>
+    <if test="USER_CONCURRENT_PROGRAM_NAME != null and USER_CONCURRENT_PROGRAM_NAME !='' ">
+        AND  FP.USER_CONCURRENT_PROGRAM_NAME LIKE '%'||#{USER_CONCURRENT_PROGRAM_NAME}|| '%'
+    </if>
+    <if test="ECM_DOWNLOAD_PROGRAM != null and ECM_DOWNLOAD_PROGRAM !='' ">
+    --추가부분 20160722 chaoslim added  --------------------------------------
+    and exists
+        (
+        select v.lookup_code
+          from ecm_lookup_values_v v
+         where v.LOOKUP_TYPE = 'ECM_DOWNLOAD_PROGRAM'
+           and v.ENABLED_FLAG = 'Y'
+           and v.lookup_code = FP.CONCURRENT_PROGRAM_NAME
+        )
+    --------------------------------------------------------------------------
+    </if>
+
+<!-- AND    EXECUTION_METHOD_CODE = 'I'-->
+ORDER BY TO_CHAR(FP.CREATION_DATE, 'YYYY') DESC, FP.CONCURRENT_PROGRAM_NAME
+    </select>
+
+    <!--프로그램명 조회-->
+    <select id="selectfndDescrFlexColUsageVlList" parameterType="map" resultType="hashmap">
+        SELECT FDF.COLUMN_SEQ_NUM /*imcs.ecm.cm.cmsa.dao.CMSA00400Dao.selectfndDescrFlexColUsageVlList*/
+               ,FDF.FORM_LEFT_PROMPT
+               ,FVS.FLEX_VALUE_SET_NAME AS VALUE_SET
+               ,FDF.DEFAULT_TYPE
+               ,DFV.MEANING AS DEFAULT_TYPE_DESC
+               ,TRIM(CASE WHEN DEFAULT_TYPE='S' AND INSTR(DEFAULT_VALUE,#{FLEX},1,1)=0 AND INSTR(DEFAULT_VALUE,#{PROFILES},1,1)=0 THEN GET_EXEC_SQL(DEFAULT_VALUE)
+                     WHEN INSTR(DEFAULT_VALUE,#{FLEX},1,1)>0 OR INSTR(DEFAULT_VALUE,#{PROFILES},1,1)>0 THEN ''
+                     ELSE NVL(DECODE(DEFAULT_VALUE,'MFG_ORGANIZATION_ID','',NVL2(DEFAULT_VALUE,DECODE(VALIDATION_TYPE,'F',FVS.FLEX_VALUE_SET_NAME,'') || DEFAULT_VALUE,'')),'') END) AS VALUE
+               ,TRIM(CASE WHEN DEFAULT_TYPE='S' AND INSTR(DEFAULT_VALUE,#{FLEX},1,1)=0 AND INSTR(DEFAULT_VALUE,#{PROFILES},1,1)=0 THEN GET_EXEC_SQL(DEFAULT_VALUE)
+                    ELSE NVL(DECODE(DEFAULT_VALUE,'MFG_ORGANIZATION_ID','',NVL2(DEFAULT_VALUE,DECODE(VALIDATION_TYPE,'F',FVS.FLEX_VALUE_SET_NAME,'') || DEFAULT_VALUE,'')),'') END) AS DEFAULT_VALUE
+               ,DEFAULT_VALUE AS DEFAULT_VALUE2
+               ,DECODE(FDF.REQUIRED_FLAG,'Y','1','0') AS REQUIRED_FLAG
+               ,DECODE(FDF.DISPLAY_FLAG,'Y','0','1') AS DISPLAY_FLAG
+               ,FDF.DISPLAY_SIZE
+               ,FDF.FLEX_VALUE_SET_ID
+               ,DECODE(VALIDATION_TYPE,'F','SELECT LOOKUP_TYPE,TRIM(TO_CHAR(LOOKUP_CODE)) AS LOOKUP_CODE,TRIM(TO_CHAR(MEANING)) AS MEANING
+                          FROM (SELECT '''|| FVS.FLEX_VALUE_SET_NAME ||''' AS LOOKUP_TYPE ,' ||
+                          '''' || FVS.FLEX_VALUE_SET_NAME || '''||' || NVL(FVT.ID_COLUMN_NAME,VALUE_COLUMN_NAME) || ' AS LOOKUP_CODE,' ||
+                          VALUE_COLUMN_NAME || ' AS MEANING FROM ' || APPLICATION_TABLE_NAME || ' ' ||
+                          DECODE(LOWER(trim(dbms_lob.substr(FVT.ADDITIONAL_WHERE_CLAUSE, 6, 1))), 'where', '', NULL, '', 'order', '','group', '', 'where ') ||
+                          dbms_lob.substr(FVT.ADDITIONAL_WHERE_CLAUSE,2000,1)||')',NULL) AS QRY
+               ,FVT.ID_COLUMN_NAME
+               ,FVT.VALUE_COLUMN_NAME
+               ,FVT.APPLICATION_TABLE_NAME
+               ,dbms_lob.substr(FVT.ADDITIONAL_WHERE_CLAUSE,1000,1) as ADDITIONAL_WHERE_CLAUSE
+               ,FVS.VALIDATION_TYPE
+               ,#{PORTAL_USER_ID} AS PORTAL_USER_ID
+               ,#{ORG_ID} AS ORG_ID
+               ,#{JOB_SYS_CD} AS JOB_SYS_CD
+               ,END_USER_COLUMN_NAME
+               ,'' AS ROW_QRY
+               ,FVS.FORMAT_TYPE
+               ,ROWNUM
+               ,'' AS LAST_QRY
+        FROM FND_APPLICATION_VL FAV ,FND_CONCURRENT_PROGRAMS_VL FCP ,FND_DESCR_FLEX_COL_USAGE_VL FDF
+            ,FND_LOOKUP_VALUES_VL DFV, FND_FLEX_VALIDATION_TABLES  FVT ,FND_FLEX_VALUE_SETS FVS
+        WHERE FAV.APPLICATION_SHORT_NAME = #{APPLICATION_SHORT_NAME}
+        AND FCP.APPLICATION_ID = FAV.APPLICATION_ID
+        AND FDF.APPLICATION_ID = FCP.APPLICATION_ID
+        AND FCP.CONCURRENT_PROGRAM_NAME = #{CONCURRENT_PROGRAM_NAME}
+        AND FDF.DESCRIPTIVE_FLEXFIELD_NAME = #{SRS}||FCP.CONCURRENT_PROGRAM_NAME
+        AND FDF.DEFAULT_TYPE = DFV.LOOKUP_CODE(+)
+        AND DFV.LOOKUP_TYPE(+) = 'FLEX_DEFAULT_TYPE'
+        AND FDF.ENABLED_FLAG = 'Y'
+        AND FCP.ENABLED_FLAG = 'Y'
+        AND FDF.FLEX_VALUE_SET_ID = FVT.FLEX_VALUE_SET_ID(+)
+        AND FDF.FLEX_VALUE_SET_ID = FVS.FLEX_VALUE_SET_ID(+)
+        ORDER BY FDF.COLUMN_SEQ_NUM
+    </select>
+
+    <select id="executeEcmConcurrentPkgRequest"  statementType="CALLABLE" parameterType="map">
+       begin
+        APPS.ecm_concurrent_pkg.request
+         (
+            #{P_PORTAL_USER_ID ,mode=IN ,jdbcType=INTEGER ,javaType=decimal}
+          , #{P_ACCT_DIV_CD ,mode=IN ,jdbcType=VARCHAR ,javaType=string }
+          , #{P_JOB_SYS_CD ,mode=IN ,jdbcType=VARCHAR ,javaType=string }
+          , #{P_FND_INITIALIZE ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+          , #{P_WAIT_YN ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+          , #{P_WAIT_SECOND ,mode=IN ,jdbcType=INTEGER ,javaType=decimal}
+          , #{P_SET_LANG ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+          , #{X_REQ_ID ,mode=OUT ,jdbcType=INTEGER ,javaType=decimal}
+          , #{X_REQ_STATUS ,mode=OUT ,jdbcType=VARCHAR ,javaType=string}
+          , #{X_REQ_MSG ,mode=OUT ,jdbcType=VARCHAR ,javaType=string}
+          , #{APPLICATION ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+          , #{PROGRAM ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+          , #{DESCRIPTION ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        <if test="ARGUMENT1 != null">
+          , #{ARGUMENT1 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT2 != null">
+          , #{ARGUMENT2 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT3 != null">
+          , #{ARGUMENT3 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT4 != null">
+          , #{ARGUMENT4 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT5 != null">
+          , #{ARGUMENT5 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT6 != null">
+          , #{ARGUMENT6 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT7 != null">
+          , #{ARGUMENT7 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT8 != null">
+          , #{ARGUMENT8 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT9 != null">
+          , #{ARGUMENT9 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT10 != null">
+          , #{ARGUMENT10 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT11 != null">
+          , #{ARGUMENT11 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT12 != null">
+          , #{ARGUMENT12 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT13 != null">
+          , #{ARGUMENT13 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT14 != null">
+          , #{ARGUMENT14 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT15 != null">
+          , #{ARGUMENT15 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT16 != null">
+          , #{ARGUMENT16 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT17 != null">
+          , #{ARGUMENT17 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT18 != null">
+          , #{ARGUMENT18 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT19 != null">
+          , #{ARGUMENT19 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT20 != null">
+          , #{ARGUMENT20 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT21 != null">
+          , #{ARGUMENT21 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT22 != null">
+          , #{ARGUMENT22 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT23 != null">
+          , #{ARGUMENT23 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT24 != null">
+          , #{ARGUMENT24 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT25 != null">
+          , #{ARGUMENT25 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT26 != null">
+          , #{ARGUMENT26 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT27 != null">
+          , #{ARGUMENT27 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT28 != null">
+          , #{ARGUMENT28 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT29 != null">
+          , #{ARGUMENT29 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT30 != null">
+          , #{ARGUMENT30 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT31 != null">
+          , #{ARGUMENT31 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT32 != null">
+          , #{ARGUMENT32 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT33 != null">
+          , #{ARGUMENT33 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT34 != null">
+          , #{ARGUMENT34 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT35 != null">
+          , #{ARGUMENT35 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT36 != null">
+          , #{ARGUMENT36 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT37 != null">
+          , #{ARGUMENT37 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT38 != null">
+          , #{ARGUMENT38 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT39 != null">
+          , #{ARGUMENT39 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT40 != null">
+          , #{ARGUMENT40 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT41 != null">
+          , #{ARGUMENT41 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT42 != null">
+          , #{ARGUMENT42 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT43 != null">
+          , #{ARGUMENT43 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT44 != null">
+          , #{ARGUMENT44 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT45 != null">
+          , #{ARGUMENT45 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT46 != null">
+          , #{ARGUMENT46 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT47 != null">
+          , #{ARGUMENT47 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT48 != null">
+          , #{ARGUMENT48 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT49 != null">
+          , #{ARGUMENT49 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT50 != null">
+          , #{ARGUMENT50 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT51 != null">
+          , #{ARGUMENT51 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT52 != null">
+          , #{ARGUMENT52 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT53 != null">
+          , #{ARGUMENT53 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT54 != null">
+          , #{ARGUMENT54 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT55 != null">
+          , #{ARGUMENT55 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT56 != null">
+          , #{ARGUMENT56 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT57 != null">
+          , #{ARGUMENT57 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT58 != null">
+          , #{ARGUMENT58 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT59 != null">
+          , #{ARGUMENT59 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+        <if test="ARGUMENT60 != null">
+          , #{ARGUMENT60 ,mode=IN ,jdbcType=VARCHAR ,javaType=string}
+        </if>
+          );
+        end;
+    </select>
+
+    <!-- 프로파일 값 받기-->
+    <select id="selectProfileValue"  statementType="CALLABLE" parameterType="map">
+        begin
+        #{RESULT , mode=OUT, jdbcType=VARCHAR ,javaType=string}
+         := APPS.ECM_COMMON_PKG.PROFILE_VALUE_F(
+                #{P_PROFILE_NAME ,mode=IN ,jdbcType=VARCHAR ,javaType=string }
+              , #{P_PORTAL_USER_ID ,mode=IN ,jdbcType=INTEGER ,javaType=decimal}
+              , #{P_ACCT_DIV_CD ,mode=IN  ,jdbcType=VARCHAR ,javaType=string}
+              , #{P_JOB_SYS_CD ,mode=IN  ,jdbcType=VARCHAR ,javaType=string}
+              , #{P_OUT_MSG ,mode=OUT ,jdbcType=VARCHAR ,javaType=string}
+               );
+        end;
+    </select>
+
+    <!-- 보고서세트 그리드 조회 -->
+    <select id="selectReportSet" parameterType="map" resultType="hashmap">
+    SELECT FCP.USER_CONCURRENT_PROGRAM_NAME AS RPT_NAME
+              ,FEF.EXECUTION_FILE_NAME          AS RPT_PGM_ID
+              ,FRS.REQUEST_SET_ID               AS RPT_SET_ID
+              ,FA.APPLICATION_ID                AS APPLICATION_ID
+      FROM FND_REQUEST_SETS_VL        FRS
+              ,FND_APPLICATION            FA
+              ,FND_REQ_SET_STAGES_FORM_V  FRSS
+              ,FND_REQUEST_SET_PROGRAMS   FRSP
+              ,FND_CONCURRENT_PROGRAMS_VL FCP
+              ,FND_EXECUTABLES_FORM_V     FEF
+  WHERE FRS.APPLICATION_ID         = FA.APPLICATION_ID
+       AND FRS.REQUEST_SET_ID         = FRSS.REQUEST_SET_ID
+       AND FRSS.REQUEST_SET_STAGE_ID  = FRSP.REQUEST_SET_STAGE_ID
+       AND FRSP.CONCURRENT_PROGRAM_ID = FCP.CONCURRENT_PROGRAM_ID
+       AND FCP.EXECUTABLE_ID          = FEF.EXECUTABLE_ID
+       AND FA.APPLICATION_SHORT_NAME  = #{APPLICATION_SHORT_NAME}
+       AND FRS.REQUEST_SET_ID         = #{REQUEST_SET_ID}
+     ORDER BY FRSP.SEQUENCE
+    </select>
+
+    <!-- 보고서세트 그리드 조회 -->
+    <select id="selectReportSetList" parameterType="map" resultType="hashmap">
+    SELECT FA.APPLICATION_SHORT_NAME   AS BIZ_TYPE_CODE
+              ,FRS.REQUEST_SET_NAME        AS RPT_SET_CODE
+              ,FRS.USER_REQUEST_SET_NAME   AS RPT_SET_NAME
+              ,FRS.REQUEST_SET_ID          AS RPT_SET_ID
+              ,FRS.APPLICATION_ID          AS APPLICATION_ID
+      FROM FND_REQUEST_SETS_VL FRS
+              ,FND_APPLICATION     FA
+     WHERE FRS.APPLICATION_ID        = FA.APPLICATION_ID
+       AND FA.APPLICATION_SHORT_NAME = #{APPLICATION_SHORT_NAME}
+     ORDER BY FRS.USER_REQUEST_SET_NAME
+
+    </select>
+
+    <!-- 보고서 실행조건 그리드 조회 -->
+    <select id="selectReportSetInput" parameterType="map" resultType="hashmap">
+    SELECT FDFC.COLUMN_SEQ_NUM          AS COL_SEQ
+              ,FDFC.APPLICATION_COLUMN_NAME AS COL_NAME
+              ,FDFC.END_USER_COLUMN_NAME    AS PAR_NAME
+              ,MAX(FDFC.DEFAULT_TYPE)       AS DFT_TYPE
+              ,MAX(FDFC.DEFAULT_VALUE)      AS DFT_VALUE
+              ,MAX(FDFC.FORM_LEFT_PROMPT)   AS PAR_LABEL
+      FROM FND_REQUEST_SET_STAGES       FRSS
+              ,FND_REQUEST_SET_PROGRAMS     FRSP
+              ,FND_CONCURRENT_PROGRAMS      FCP
+              ,FND_EXECUTABLES              FEF
+              ,(SELECT B.DESCRIPTIVE_FLEXFIELD_NAME
+                      ,B.COLUMN_SEQ_NUM
+                      ,B.APPLICATION_COLUMN_NAME
+                      ,B.END_USER_COLUMN_NAME
+                      ,B.DEFAULT_TYPE
+                      ,B.DEFAULT_VALUE
+                      ,T.FORM_LEFT_PROMPT
+                  FROM FND_DESCR_FLEX_COL_USAGE_TL  T
+                      ,FND_DESCR_FLEX_COLUMN_USAGES B
+                 WHERE B.APPLICATION_ID                = T.APPLICATION_ID
+                   AND B.DESCRIPTIVE_FLEXFIELD_NAME    = T.DESCRIPTIVE_FLEXFIELD_NAME
+                   AND B.DESCRIPTIVE_FLEX_CONTEXT_CODE = T.DESCRIPTIVE_FLEX_CONTEXT_CODE
+                   AND B.APPLICATION_COLUMN_NAME       = T.APPLICATION_COLUMN_NAME
+                   AND T.LANGUAGE                      = USERENV('LANG')
+               ) FDFC
+     WHERE 1=1
+           AND FRSS.REQUEST_SET_STAGE_ID    = FRSP.REQUEST_SET_STAGE_ID
+           AND FRSP.CONCURRENT_PROGRAM_ID   = FCP.CONCURRENT_PROGRAM_ID
+           AND FCP.EXECUTABLE_ID            = FEF.EXECUTABLE_ID
+           AND #{SRS} || FCP.CONCURRENT_PROGRAM_NAME = FDFC.DESCRIPTIVE_FLEXFIELD_NAME
+           AND FCP.APPLICATION_ID           = #{APPLICATION_ID}
+           AND FRSS.REQUEST_SET_ID          = #{REQUEST_SET_ID}
+     GROUP BY FDFC.COLUMN_SEQ_NUM
+                 ,FDFC.APPLICATION_COLUMN_NAME
+                 ,FDFC.END_USER_COLUMN_NAME
+     ORDER BY FDFC.COLUMN_SEQ_NUM
+    </select>
+
+    <!--업무영역 조회(보고서)-->
+    <select id="selectPortalUserList" parameterType="map" resultType="hashmap">
+    SELECT to_char(a.PORTAL_USER_ID) as PORTAL_USER_ID
+               ,a.USER_NM
+               ,b.OFFICE_NAME
+	    FROM pes_portal_users a, CMD_ORGS b
+	    where 1=1
+	    and a.OFFICE_CODE = b.OFFICE_CODE(+)
+        and ((a.HFFC_STTUS_CD = '1' and a.JNG_COURS_CD = '2') or
+                (a.JNG_COURS_CD = '1')) /* 가입경로(JNG_COURS_CD 1:경포, 2:행포)가 행정포털이면 재직여부체크, 가입경로가 경포면 체크안함 */
+
+    <if test="OFFICE_NAME != null and OFFICE_NAME !='' ">
+        AND OFFICE_NAME LIKE '%'||#{OFFICE_NAME}||'%'
+    </if>
+    <if test="USER_NM != null and USER_NM !='' ">
+        AND USER_NM LIKE #{USER_NM}||'%'
+    </if>
+    order by OFFICE_NAME,USER_NM
+    </select>
+
+</mapper>

@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- (첨부)파일 업로드/다운로드 관리  -->
+
+<mapper namespace="com.nbdf.cmd.cm.cmfm.dao.CMFM01000Dao">
+
+    <!--  첨부파일 정보 저장(CMD_ATCH_FILES) -->
+    <insert id="insertAtchFiles" parameterType="hashmap">
+		 INSERT  /* com.nbdf.cmd.cm.cmfm.dao.CMFM01000Dao.insertAtchFiles  */
+		 INTO     CMD_ATCH_FILES
+		             (ATCH_FILE_ID
+		             , SEQ_NO
+		             , OC_FILE_NM
+		             , ATCH_FILE_GUID
+		             , SVR_SAVE_COURS
+		             , FULL_SAVE_COURS
+		             , FILE_SIZE
+		             , FILE_EXT
+		             , DRM_APY_YN
+		             , DNLD_CNT
+		             , USE_YN
+		             , CREATED_BY
+		             , KEEP_START_DATEC   /* 보관 시작일자C */
+		             , KEEP_END_DATEC
+		             )
+		 VALUES (
+		             #{ATCH_FILE_ID}
+		             ,(SELECT NVL(MAX(SEQ_NO),0)+1 FROM CMD_ATCH_FILES WHERE ATCH_FILE_ID = #{ATCH_FILE_ID})
+		             , #{OC_FILE_NM}
+		             , #{ATCH_FILE_GUID}
+		             , #{SVR_SAVE_COURS}
+		             , #{SVR_SAVE_COURS} || #{ATCH_FILE_GUID}
+		             , #{FILE_SIZE}
+		             , #{FILE_EXT}
+		             , #{DRM_APY_YN}
+		             , 0
+		             , 'Y'
+		             , #{CREATED_BY}
+		             , TO_CHAR(SYSDATE, 'YYYYMMDD')
+		             , #{KEEP_END_DATEC}
+		             )
+     </insert>
+
+    <!--  첨부파일 정보 저장(CMD_ATCH_FILES_MPNGS) -->
+     <insert id="insertAtchFilesMapngs" parameterType="hashmap">
+        <selectKey keyProperty="ATCH_FILE_ID" resultType="Integer" order="BEFORE">
+           SELECT CMD_ATCH_FILES_S.NEXTVAL FROM DUAL
+        </selectKey>
+         INSERT  /* com.nbdf.cmd.cm.cmfm.dao.CMFM01000Dao.insertAtchFilesMapngs  */
+         INTO     CMD_ATCH_FILES_MPNGS
+                    (ATCH_FILE_ID
+                    ,ATCH_SRC_KEY
+                    , ATCH_TY_CD
+                    , RM
+                    , CREATED_BY
+                    , CREATION_DATE
+                    )
+        VALUES (	
+        			#{ATCH_FILE_ID}
+                    , #{ATCH_SRC_KEY}
+                    , #{ATCH_TY_CD}
+                    , #{RM}
+                    , #{CREATED_BY}
+                    , sysdate
+        		)
+     </insert>
+
+        <!-- (업무단에서 요청 시  첨부파일 정보 조회 -->
+        <select id="selectAtchFiles"  resultType="hashmap"  >
+         SELECT   /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.selectAtchFiles  */
+                        A.ATCH_SRC_KEY
+                      , B.ATCH_FILE_ID
+                      , B.OC_FILE_NM
+                      , B.ATCH_FILE_GUID
+                      , B.SVR_SAVE_COURS
+                      , B.FULL_SAVE_COURS
+                      , to_char(round(B.FILE_SIZE/1024,2),'9,999,999.99')||' KB    ' as FILE_SIZE
+                      , B.FILE_EXT
+                      , B.DRM_APY_YN
+                      , B.DNLD_CNT
+                      , B.KEEP_START_DATEC
+                      , B.KEEP_END_DATEC
+                      , A.RM
+                      , B.USE_YN
+                      , B.CREATED_BY
+                      , TO_CHAR(B.CREATION_DATE, 'YYYY-MM-DD') AS CREATION_DATE
+                      , B.LAST_UPDATED_BY
+                      , TO_CHAR(B.LAST_UPDATE_DATE, 'YYYY-MM-DD') AS LAST_UPDATE_DATE
+                      , B.SEQ_NO 
+           FROM    CMD_ATCH_FILES_MPNGS A,
+                       CMD_ATCH_FILES B
+           WHERE   1 = 1
+				       AND A.ATCH_FILE_ID = B.ATCH_FILE_ID
+				       AND A.ATCH_SRC_KEY =#{ATCH_SRC_KEY}
+				       AND A.ATCH_TY_CD = #{ATCH_TY_CD}
+				       <if test="ATCH_FILE_GUID != null and ATCH_FILE_GUID != '' ">
+				            AND B.ATCH_FILE_GUID = #{ATCH_FILE_GUID}
+				       </if>
+        </select>
+
+         <!-- 다운로드시 첨부파일 정보 조회 -->
+        <select id="selectAtchFileDn"  resultType="hashmap"  >
+          SELECT   /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.selectAtchFiles  */
+                       A.RM
+                       , B.ATCH_FILE_ID
+                       , B.OC_FILE_NM
+                       , B.ATCH_FILE_GUID
+                       , B.SVR_SAVE_COURS
+                       , B.FULL_SAVE_COURS
+                       , B.FILE_SIZE
+                       , B.FILE_EXT
+                       , B.DRM_APY_YN
+                       , B.DNLD_CNT
+                       , B.KEEP_START_DATEC
+                       , B.KEEP_END_DATEC
+                       , B.USE_YN
+                       , B.CREATED_BY
+                       , B.CREATION_DATE
+                       , B.LAST_UPDATED_BY
+                       , B.LAST_UPDATE_DATE
+          FROM     CMD_ATCH_FILES_MPNGS A,
+                      CMD_ATCH_FILES B
+          WHERE   1 = 1
+                      AND A.ATCH_FILE_ID = B.ATCH_FILE_ID
+                      AND A.ATCH_FILE_ID = #{ATCH_FILE_ID}
+                      AND B.SEQ_NO = #{SEQ_NO}
+        </select>
+
+                 <!-- 다운로드시 첨부파일 정보 조회 -->
+        <select id="selectAtchFileGuidDn"  resultType="hashmap"  >
+          SELECT   /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.selectAtchFileGuidDn  */
+                       A.RM
+                       , B.ATCH_FILE_ID
+                       , B.OC_FILE_NM
+                       , B.ATCH_FILE_GUID
+                       , B.SVR_SAVE_COURS
+                       , B.FULL_SAVE_COURS
+                       , B.FILE_SIZE
+                       , B.FILE_EXT
+                       , B.DRM_APY_YN
+                       , B.DNLD_CNT
+                       , B.KEEP_START_DATEC
+                       , B.KEEP_END_DATEC
+                       , B.USE_YN
+                       , B.CREATED_BY
+                       , B.CREATION_DATE
+                       , B.LAST_UPDATED_BY
+                       , B.LAST_UPDATE_DATE
+          FROM     CMD_ATCH_FILES_MPNGS A,
+                      CMD_ATCH_FILES B
+          WHERE   1 = 1
+                      AND A.ATCH_FILE_ID = B.ATCH_FILE_ID
+                      AND ATCH_FILE_GUID = #{atchFileGuid}
+        </select>
+
+        <!-- 첨부파일 다운로드 횟수 카운트 증가 -->
+        <update id="updatetAtchFilesDnldCnt">
+        UPDATE   /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.updatetAtchFilesDnldCnt  */  CMD_ATCH_FILES
+        SET        DNLD_CNT = DNLD_CNT+1,
+                     LAST_UPDATED_BY = #{LAST_UPDATED_BY},           /* 최종수정자ID */
+                     LAST_UPDATE_DATE = SYSDATE                             /* 최종수정자ID */
+        WHERE    ATCH_FILE_ID = #{ATCH_FILE_ID}
+         AND 	 SEQ_NO = #{SEQ_NO}
+       </update>
+
+       <!-- 첨부파일 다운로드 횟수 카운트 증가(GUID이용) -->
+        <update id="updatetAtchFilesGuidDnldCnt">
+        UPDATE   /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.updatetAtchFilesGuidDnldCnt  */  CMD_ATCH_FILES
+        SET        DNLD_CNT = DNLD_CNT+1,
+                     LAST_UPDATED_BY = #{LAST_UPDATED_BY},           /* 최종수정자ID */
+                     LAST_UPDATE_DATE = SYSDATE                             /* 최종수정자ID */
+        WHERE    ATCH_FILE_GUID = #{ATCH_FILE_GUID}
+       </update>
+
+
+        <!-- 첨부파일 삭제 -->
+        <update id="deleteAtchFiles">
+        DELETE  /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.deleteAtchFiles  */
+        FROM    CMD_ATCH_FILES
+        WHERE  ATCH_FILE_ID = #{ATCH_FILE_ID}
+        AND ATCH_FILE_GUID = #{ATCH_FILE_GUID}
+       </update>
+
+        <!-- 첨부파일 삭제: ATCH_FILE_ID별 삭제 -->
+        <update id="deleteAtchFilesByAtchFileId">
+        DELETE  /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.deleteAtchFilesByAtchFileId  */
+        FROM    CMD_ATCH_FILES
+        WHERE  ATCH_FILE_ID = #{ATCH_FILE_ID}
+       </update>
+       
+        <!-- 첨부파일 삭제(매핑 테이블) -->
+        <update id="deleteAtchFilesMpngs">
+        DELETE  /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.deleteAtchFilesMpngs  */
+        FROM   CMD_ATCH_FILES_MPNGS
+        WHERE  ATCH_FILE_ID = #{ATCH_FILE_ID}
+       </update>
+
+        <select id="selectAtchFilesMpngsAtchFileId"  resultType="hashmap" parameterType="hashmap" >
+         SELECT   /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.selectAtchFilesMpngsAtchFileId  */
+                  ATCH_FILE_ID
+           FROM    CMD_ATCH_FILES_MPNGS A
+           WHERE   1 = 1
+	       AND A.ATCH_SRC_KEY =#{ATCH_SRC_KEY}
+	       AND A.ATCH_TY_CD = #{ATCH_TY_CD}
+        </select>
+        
+        <select id="selectAtchFilesExistCnt"  resultType="Integer" parameterType="hashmap" >
+         SELECT   /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.selectAtchFilesExistCnt  */
+                  count(*)
+           FROM    CMD_ATCH_FILES A
+           WHERE   1 = 1
+	       AND A.ATCH_FILE_ID =#{ATCH_FILE_ID}
+	       AND A.ATCH_FILE_GUID = #{ATCH_FILE_GUID}
+        </select>
+
+        <!-- 단일첨부삭제를 위한 조회 -->
+        <select id="selectAtchFilesKeyAll" resultType="hashmap" parameterType="hashmap" >
+        /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.selectAtchFilesKeyAll  */
+        SELECT ATCH_FILE_ID     AS ATCH_FILE_ID
+             , SEQ_NO           AS SEQ_NO
+             , FULL_SAVE_COURS  AS FULL_SAVE_COURS
+             , OC_FILE_NM       AS OC_FILE_NM
+             , SVR_SAVE_COURS   AS SVR_SAVE_COURS
+        FROM    CMD_ATCH_FILES
+        WHERE  ATCH_FILE_ID IN (SELECT ATCH_FILE_ID 
+                                  FROM CMD_ATCH_FILES_MPNGS
+                                 WHERE ATCH_SRC_KEY = #{ATCH_SRC_KEY}
+                                   AND ATCH_TY_CD   = #{TABLE_NAME})
+       </select>
+       
+        <!-- 단일첨부를 위한 파일 삭제 -->
+        <delete id="deleteAtchFilesKeyAll" parameterType="hashmap">
+        DELETE  /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.deleteAtchFilesKeyAll  */
+          FROM CMD_ATCH_FILES
+         WHERE ATCH_FILE_ID = #{ATCH_FILE_ID}
+           AND SEQ_NO = #{SEQ_NO}
+       </delete>
+       
+        <!-- 단일첨부를 위한 파일 삭제 -->
+        <delete id="deleteAtchFilesAll" parameterType="hashmap">
+        DELETE  /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.deleteAtchFilesKeyAll  */
+        FROM    CMD_ATCH_FILES
+        WHERE  ATCH_FILE_ID IN (SELECT ATCH_FILE_ID 
+                                  FROM CMD_ATCH_FILES_MPNGS
+                                 WHERE ATCH_SRC_KEY = #{ATCH_SRC_KEY}
+                                   AND ATCH_TY_CD   = #{ATCH_TY_CD})
+       </delete>
+
+        <select id="selectAtchFileGuid"  resultType="String" >
+         SELECT   /* com.nbdf.cmd.cm.cmhm.dao.CMFM01000Dao.selectAtchFileGuid  */
+                  SYS_GUID()
+           FROM    DUAL
+        </select>
+       
+ </mapper>

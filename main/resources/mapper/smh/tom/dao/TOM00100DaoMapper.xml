@@ -1,0 +1,1266 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.tom.dao.TOM00100Dao">
+<!-- 치공구제작 의뢰 -->    
+
+	<!--
+    설       명   : 치공구제작의뢰  목록 검색 (치공구 제작의뢰 화면의 메인그리드에서 사용)
+    생   성   자   : 김용조
+    생   성   일   : 2019-07-11
+    수  정   이  력 : 
+    -->
+	<select id="selectToolRequest" parameterType="map" resultType="hashmap">
+	       --
+	       -- GetToolRequestListByTool
+	       -- Version:10001
+          SELECT
+                  DCP.DICTIONARYNAME                            		AS TOOLPROGRESSSTATUSNAME           --진행상태명         CT_ToolRequest.ToolProgressStatus
+              ,   TO_CHAR(TRQ.REQUESTDATE,'YYYY-MM-DD')     	AS REQUESTDATE                      --의뢰일자          CT_ToolRequest.RequestDate PK
+              ,   TO_CHAR(TRQ.REQUESTDATE,'YYYY-MM-DD')||' '||TO_CHAR(TRQ.CREATEDTIME,'HH24:MI:SS')     	AS REQUESTDATE2                      --의뢰일자2          CT_ToolRequest.RequestDate PK, 요청사항(236-4)
+              ,   TRQ.REQUESTSEQUENCE                              	AS REQUESTSEQUENCE                  --의뢰순번          CT_ToolRequest.RequestSequence PK
+              ,   TRQ.TOOLMAKETYPE                                  	AS TOOLMAKETYPE                     --제작구분          CT_ToolRequest.ToolMakeType         CMD_LOOKUP_VALUES의 CodeClass값이 ToolMakeType  CodeID가 Add, Modify, New, Repair
+              ,   DCM.DICTIONARYNAME                                 AS TOOLMAKETYPENAME                 --제작구분명                 
+              ,   TRQ.PRODUCTDEFID                                    	AS PRODUCTDEFID                     --품목코드          CT_ToolRequest.ProductDefId
+              ,   TRQ.PRODUCTDEFVERSION                              AS PRODUCTDEFVERSION                --품목Ver         CT_ToolRequest.ProductDefVersion
+              ,   PDF.PRODUCTDEFNAME                                  AS PRODUCTDEFNAME                   --품목명               SF_ProductDefinition.ProductDefName
+              ,   NVL((SELECT SUM(QTY)
+                       FROM TOM_TOOLREQUESTDETAIL TRD
+                       WHERE TRD.REQUESTDATE = TRQ.REQUESTDATE
+                       AND TRD.REQUESTSEQUENCE = TRQ.REQUESTSEQUENCE)
+                       ,0)                               			  AS REQUESTQTY                       --의뢰수량          CT_ToolRequest.RequestQty
+              ,   TO_CHAR(TRQ.DELIVERYDATE,'YYYY-MM-DD')              AS DELIVERYDATE                     --납기일자          CT_ToolRequest.DeliverDate
+              ,   TRQ.ISAPPROVALUSE                                   AS ISAPPROVALUSE                    --승인사용          CT_ToolRequest.IsApprovalUse
+              ,   TRQ.REQUESTUSER                                     AS REQUESTUSER                      --의뢰자ID         CT_ToolRequest.Requestor
+              ,   USR.USER_NM                                         AS REQUESTUSERNAME                  --의뢰자명          CMD_USERS.USERNAME
+              ,   TRQ.REQUESTDEPARTMENT                               AS REQUESTDEPARTMENT                --의뢰부서명         CT_ToolRequest.RequestDepartment
+              ,   TRQ.REQUESTCOMMENT                                  AS REQUESTCOMMENT                   --제작사유          CT_ToolRequest.MakeReason --제작사유 필드 현재 없음              
+              ,   TRQ.TOOLPROGRESSSTATUS                              AS TOOLPROGRESSSTATUS               --진행상태          CT_ToolRequest.ToolProgressStatus
+              ,   TRQ.APPROVALNO                                      AS APPROVALNO
+              ,	  NVL(TRQ.ORDERYN,'')					  			AS ORDERYN						  --발주여부(NULL,Y,N)
+              ,	  DECODE(TRQ.ORDERYN,'Y','발주','N','취소','미발주')  AS ORDERYNNAME				  		--발주여부명
+              ,	  TRQ.PLANTID
+          FROM    TOM_TOOLREQUEST                  TRQ 
+          INNER JOIN BAS_PRODUCTDEFINITION         PDF  ON TRQ.PRODUCTDEFID        		= PDF.PRODUCTDEFID
+                                                       AND TRQ.PRODUCTDEFVERSION   		= PDF.PRODUCTDEFVERSION 
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES        CDM  ON TRQ.TOOLMAKETYPE    			= CDM.LOOKUP_CODE
+                                                       AND  CDM.LOOKUP_TYPE         	= 'ToolMakeType'
+          LEFT OUTER JOIN CMD_DICTIONARY           DCM  ON CDM.DICTIONARYID        		= DCM.DICTIONARYID                                                       
+                                                       					AND  DCM.LANGUAGETYPE        	= #{LANGUAGETYPE}
+                                                       					AND  DCM.USE_YN          		= 'Y'
+          LEFT OUTER JOIN CMD_LOOKUP_VALUES        CDP  ON TRQ.TOOLPROGRESSSTATUS = CDP.LOOKUP_CODE
+                                                       					  AND  CDP.LOOKUP_TYPE         	= 'ToolProgressStatus'
+          LEFT OUTER JOIN CMD_DICTIONARY           DCP  ON CDP.DICTIONARYID        		= DCP.DICTIONARYID
+                                                       					AND  DCP.LANGUAGETYPE        	= #{LANGUAGETYPE}
+                                                       					AND  DCP.USE_YN          		= 'Y'
+          INNER JOIN CMD_USERS                     USR  ON TRQ.REQUESTUSER         		= USR.USER_ID
+          WHERE 1=1
+          AND TRQ.VALIDSTATE      = 'Valid'
+          <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+              AND     TRQ.ENTERPRISEID        = #{ENTERPRISEID}                                        --SITE(PLANTID), EnterpriseID는 필요시 삽입
+          </if>
+          <if test="P_PLANTID != null and P_PLANTID !='' ">
+              AND     TRQ.PLANTID             = #{P_PLANTID}                                           --SITE(PLANTID), EnterpriseID는 필요시 삽입
+          </if>
+          <if test="P_REQUESTDATE_PERIODTO != null and P_REQUESTDATE_PERIODTO !='' ">
+              AND     TRQ.REQUESTDATE         <![CDATA[<=]]> TO_DATE(#{P_REQUESTDATE_PERIODTO}, 'YYYY-MM-DD')      --REQUEST_DATE 기간검색
+          </if>
+          <if test="P_REQUESTDATE_PERIODFR != null and P_REQUESTDATE_PERIODFR !='' ">
+              AND     TRQ.REQUESTDATE         <![CDATA[>=]]> TO_DATE(#{P_REQUESTDATE_PERIODFR}, 'YYYY-MM-DD')      --REQUEST_DATE 기간검색
+          </if>
+          <if test="TOOLMAKETYPE != null and TOOLMAKETYPE !='' ">
+              AND     TRQ.TOOLMAKETYPE        = #{TOOLMAKETYPE}                                        --복수검색일 경우 오른쪽 구문 사용 IN ('Add', 'Modify', 'New')--CMD_LOOKUP_VALUES.CODECLASSID = 'ToolMakeType'  TOOLMAKETYPE = 'Add, Modify, New'
+          </if>
+          
+          
+          
+          <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+              AND     UPPER(PDF.PRODUCTDEFID)        LIKE '%' || UPPER(#{PRODUCTDEFID}) || '%'                                       --TOM_TOOLREQUEST.REQUESTDEPARTMENT --부서 테이블은 현재 만들어 져있지 않아 직접입력 및 직접검색
+          </if>
+          <if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !='' ">
+              AND     UPPER(PDF.PRODUCTDEFNAME)      LIKE '%' || UPPER(#{PRODUCTDEFNAME}) || '%'              --부품명 검색
+          </if>
+          <if test="PRODUCTDEFVER != null and PRODUCTDEFVER !='' ">
+              AND     UPPER(PDF.PRODUCTDEFVERSION)      LIKE '%' || UPPER(#{PRODUCTDEFVER}) || '%'           --버젼 검색
+          </if>
+          
+          
+          <if test="REQUESTDEPARTMENT != null and REQUESTDEPARTMENT !='' ">
+              AND     UPPER(TRQ.REQUESTDEPARTMENT)   LIKE '%' || #{PRODUCTDEFNAME} || '%'              --TOM_TOOLREQUEST.REQUESTDEPARTMENT --부서 테이블은 현재 만들어 져있지 않아 직접입력 및 직접검색
+          </if>
+          
+          <if test="REQUESTDATE != null and REQUESTDATE !='' ">
+              AND     TRQ.REQUESTDATE         = #{REQUESTDATE}                                         --TOM_TOOLREQUEST.REQUESTDATE --상세정보를 조회하기 위한 키 검색
+          </if>
+          <if test="REQUESTSEQUENCE != null and REQUESTSEQUENCE !='' ">
+              AND     TRQ.REQUESTSEQUENCE     = #{REQUESTSEQUENCE}                                     --TOM_TOOLREQUEST.REQUESTSEQUENCE --상세정보를 조회하기 위한 키 검색
+          </if>
+          
+          
+          
+          
+          
+          <if test="P_TOOLREGISTTYPE eq 'NotRegist'.toString() ">			--미등록
+              AND     TRQ.TOOLPROGRESSSTATUS     IN ('Create')
+          </if>
+          <if test="P_TOOLREGISTTYPE eq 'Regist'.toString() ">				--등록
+              AND     TRQ.TOOLPROGRESSSTATUS     IN ('DetailRegist')
+              AND     (
+	              			 (SELECT MAX(RECEIPTDATE)
+			                 FROM TOM_TOOLREQUESTDETAILLOT TRDL 
+			                 WHERE TRDL.REQUESTDATE = TRQ.REQUESTDATE 
+			                 AND TRDL.REQUESTSEQUENCE = TRQ.REQUESTSEQUENCE) IS NULL AND
+			                 (SELECT MAX(SENDDATE)
+			                 FROM TOM_TOOLREQUESTDETAILLOT TRDL 
+			                 WHERE TRDL.REQUESTDATE = TRQ.REQUESTDATE 
+			                 AND TRDL.REQUESTSEQUENCE = TRQ.REQUESTSEQUENCE) IS NULL
+		                 )
+          </if>
+          <if test="P_TOOLREGISTTYPE eq 'Income'.toString() ">				--입고
+          	  AND     TRQ.TOOLPROGRESSSTATUS     IN ('DetailRegist')
+              AND    (
+              			(SELECT MAX(RECEIPTDATE)
+                        FROM TOM_TOOLREQUESTDETAILLOT TRDL 
+                        WHERE TRDL.REQUESTDATE = TRQ.REQUESTDATE 
+                        AND TRDL.REQUESTSEQUENCE = TRQ.REQUESTSEQUENCE) IS NOT NULL
+                        )
+          </if>
+          <if test="P_TOOLREGISTTYPE eq 'Outbound'.toString() ">			--출고
+              AND    TRQ.TOOLPROGRESSSTATUS     IN ('DetailRegist')
+              AND    (
+	              			 (SELECT MAX(SENDDATE)
+			                 FROM TOM_TOOLREQUESTDETAILLOT TRDL 
+			                 WHERE TRDL.REQUESTDATE = TRQ.REQUESTDATE 
+			                 AND TRDL.REQUESTSEQUENCE = TRQ.REQUESTSEQUENCE) IS NOT NULL
+		                 )
+          </if>
+          
+          
+          
+          
+          
+          <if test="P_REQUESTORID != null and P_REQUESTORID !='' ">
+              AND     TRQ.REQUESTUSER         = #{P_REQUESTORID}                                       --의뢰자
+          </if>
+          
+          <if test="P_ORDERNO != null and P_ORDERNO !='' ">
+              AND     (TRQ.REQUESTDATE, TRQ.REQUESTSEQUENCE) = (SELECT DISTINCT REQUESTDATE, REQUESTSEQUENCE FROM TOM_TOOLREQUESTDETAIL WHERE ORDERNO = #{P_ORDERNO})	--발주번호 검색
+          </if>
+          ORDER BY    TRQ.REQUESTDATE, TRQ.REQUESTSEQUENCE, PDF.PRODUCTDEFID
+    </select>
+	
+	<!-- tool 정보 :: 하단 Grid : 3/18일 2:49분에 이전쿼리 참조할것 -->
+	<select id="selectToolDetail" parameterType="map" resultType="hashmap">
+		--
+        -- GetToolRequestDetailListByTool
+        -- Version:10001
+            SELECT
+            		CASE WHEN #{P_TOOLMAKETYPE} IN ('Repair','Modify') THEN
+            					(SELECT DURABLELOTID
+            					 FROM TOM_TOOLREQUESTDETAILLOT TRDL
+            					 WHERE 1=1
+            					 AND TRDT.REQUESTDATE       		= TRDL.REQUESTDATE
+                                 AND TRDT.REQUESTSEQUENCE   	= TRDL.REQUESTSEQUENCE
+                                 AND TRDT.REQUESTIDX   			= TRDL.REQUESTIDX
+                                 AND TRDT.DURABLEDEFID   			= TRDL.DURABLEDEFID                                                                                                                        
+                                 AND TRDT.DURABLEDEFVERSION   = TRDL.DURABLEDEFVERSION)
+            				ELSE 
+            					'' 
+            		END AS TOOLNUMBER
+                ,   TRDT.DURABLEDEFID               AS TOOLCODE                         --Tool코드
+                --,   DICF.DICTIONARYNAME             AS TOOLNAME
+                ,   FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) || '_' || PDN.PRODUCTDEFNAME || '_' || FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLNAME                
+                ,   TRDT.DURABLEDEFVERSION          AS TOOLVERSION                      --ToolVersion
+                ,   NVL(TRDT.QTY,0)                 AS QTY                              --(의뢰)수량
+                ,   DRDF.DURABLECLASSID             AS TOOLCATEGORYID
+                ,   FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLCATEGORY --Tool구분
+                ,	DRDF.FORM						AS FORMID							
+                ,	FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS FORM	--유형명(II)
+                ,	DRDF.TOOLKIND					AS TOOLKINDID							
+                ,	FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND	--Toll종류                
+                ,   DRDF.PRODUCTDEFID               AS PRODUCTDEFID                     --품목코드  
+                ,	DRDF.PRODUCTDEFVERSION			AS PRODUCTDEFVERSION				--품목Ver
+                ,   PDN.PRODUCTDEFNAME              AS PRODUCTDEFNAME                   --품목명 
+                ,   ''                              AS ROWSTATUS                            
+                ,   DRDF.FILMUSELAYER1              AS FILMUSELAYER1
+                ,   DRDF.FILMUSELAYER1              AS USELAYER
+                ,   DRDF.FILMUSELAYER2              AS FILMUSELAYER2
+                ,   TRDT.DESCRIPTION                AS DESCRIPTION						--*********************************설명(특이사항)
+                ,	NVL(DRDF.SUMMARY,0)				AS SUMMARY 							--합수, 20210312/APPEND
+                ,	NVL(DRDF.SCALEX,0)         		AS SCALEX							--SCALEX, 20210312/APPEND
+                ,	NVL(DRDF.SCALEY,0)				AS SCALEY							--SCALEY, 20210312/APPEND
+                ,	TRDT.VENDORID 					AS VENDORID							--제작처, 20210312/APPEND
+                ,	VDR.VENDORNAME					AS VENDORNAME						--제작처명, 20210315/APPEND
+                ,	TRDT.AREAID 					AS RECEIPTAREAID					--입고작업장, 20210312/APPEND
+                ,   DAR.DICTIONARYNAME              AS RECEIPTAREANAME					--입고작업장명, 20210312/APPEND
+                ,	TRQ.TOOLMAKETYPE				AS TOOLMAKETYPE						--제작구분, 20210312/APPEND
+                ,   DCM.DICTIONARYNAME              AS TOOLMAKETYPENAME                 --제작구분명, 20210312/APPEND
+                ,	TO_CHAR(TRQ.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE				--의뢰일자, 20210312/APPEND
+                ,   NVL(TRDT.ORDERQTY,0)			AS ORDERQTY							--수주량, 20210317/APPEND, DET로 컬럼 변경
+                ,	TRQ.REQUESTDEPARTMENT 			AS REQUESTDEPARTMENT				--요청부서, 20210312/APPEND
+                ,	TRQ.REQUESTUSER					AS REQUESTUSER						--요청자, 20210312/APPEND
+                ,	USR.USER_NM						AS REQUESTUSERNAME					--요청자명, 20210312/APPEND
+                ,	TO_CHAR(TRQ.DELIVERYDATE,'YYYY-MM-DD') AS DELIVERYDATE				--납기일, 20210312/APPEND
+                ,	TRQ.REQUESTCOMMENT				AS REQUESTCOMMENT					--*********************************의뢰사유,20210312 APPEND              
+                ,   FN_GETTOOLJOBTYPENAME(PDN.ENTERPRISEID, #{LANGUAGETYPE}, PDN.PRODUCTDEFID, PDN.PRODUCTDEFVERSION) AS JOBTYPENAME  
+                ,	PDN.PRODUCTIONTYPE				AS PRODUCTIONTYPE					--생산구분, 20210312/APPEND
+                ,   B.PRODUCTIONTYPENAME			AS PRODUCTIONTYPENAME				--생산구분명, 20210312/APPEND
+                ,	NVL(DRDF.OLB,0)					AS OLB								--OLB, 20210318/PHW/APPEND
+                ,	NVL(TRDT.NETPNL,0)				AS NETPNL							--NET_PNL, 20210318/PHW/APPEND
+                ,   '0'								AS CHK								--CHK, 20210312/APPEND
+                ,   TRQ.TOOLPROGRESSSTATUS			AS TOOLPROGRESSSTATUS				--결재진행상태(Approval:결재승인,Create:등록,DetailRegist:내역등록,Request:결재요청)
+                ,   TRQ.ENTERPRISEID			    AS ENTERPRISEID
+                ,	TRQ.PLANTID 			    	AS PLANTID
+                ,	TRQ.ISAPPROVALUSE  			    AS ISAPPROVALUSE 
+                ,	TRQ.REQUESTSEQUENCE				AS REQUESTSEQUENCE
+                ,	TRDT.REQUESTIDX						AS REQUESTIDX		--추가요청:IDX
+                ,	'0'								AS ROWFLAG							--ROWFLAG, 20210331/PHW/APPEND, 9상태값으로 추가시 클릭 무료화 하게 처리변수
+                ,	CASE WHEN TRQ.TOOLPROGRESSSTATUS = 'DetailRegist' THEN '' ELSE ROWNUM||'' END				AS LINENO								--등록상태의 편집가능시 수정번호로 사용
+                ,	TRDT.ORDERNO
+            FROM    TOM_TOOLREQUESTDETAIL            TRDT
+            INNER JOIN TOM_DURABLEDEFINITION         DRDF    ON TRDT.DURABLEDEFID       = DRDF.DURABLEDEFID
+                                                            					AND  TRDT.DURABLEDEFVERSION = DRDF.DURABLEDEFVERSION
+            LEFT OUTER JOIN CMD_DICTIONARY           DICF    ON DRDF.DURABLEDEFNAME     = DICF.DICTIONARYID
+                                                            				AND	DICF.LANGUAGETYPE      = #{LANGUAGETYPE}
+                                                            				AND	DICF.USE_YN = 'Y'
+			INNER JOIN TOM_TOOLREQUEST         		 TRQ     ON TRDT.REQUESTDATE       	= TRQ.REQUESTDATE			--20210312 APPEND (치공구 제작 수리 의뢰)
+                                                            AND  TRDT.REQUESTSEQUENCE   = TRQ.REQUESTSEQUENCE
+			INNER JOIN BAS_PRODUCTDEFINITION   		 PDN     ON TRQ.PRODUCTDEFID        = PDN.PRODUCTDEFID 			--20210312 APPEND (제품 정보 : 생산구분)
+                                                            		AND  TRQ.PRODUCTDEFVERSION  = PDN.PRODUCTDEFVERSION
+			LEFT OUTER JOIN BAS_VENDOR   		VDR     ON TRDT.VENDORID        	= VDR.VENDORID 				--20210312 APPEND (제작처/협력업체 : 제작처명)
+                                                            		AND  TRDT.ENTERPRISEID    	= VDR.ENTERPRISEID
+                                                            		AND  TRDT.PLANTID    		= VDR.PLANTID
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES        CDM 	 ON TRQ.TOOLMAKETYPE        = CDM.LOOKUP_CODE			--20210312 APPEND (제작구분)
+                                                      							AND  CDM.LOOKUP_TYPE        = 'ToolMakeType'
+            LEFT OUTER JOIN CMD_DICTIONARY           DCM 	 ON CDM.DICTIONARYID        = DCM.DICTIONARYID                                                      		
+                                                      						AND  DCM.LANGUAGETYPE       = #{LANGUAGETYPE}
+                                                      						AND	DCM.USE_YN = 'Y'
+            LEFT OUTER JOIN BAS_AREA                 SAC   	 ON SAC.AREAID              = TRDT.AREAID				--20210318 APPEND (작업장)
+        	LEFT OUTER JOIN CMD_DICTIONARY           DAR     ON DAR.DICTIONARYID        = SAC.AREANAME
+                                                            				AND	DAR.LANGUAGETYPE       = #{LANGUAGETYPE}
+                                                            				AND	DAR.USE_YN = 'Y'
+			LEFT JOIN 	(	
+						SELECT	C.LOOKUP_CODE CODEID
+				              , D.DICTIONARYNAME AS PRODUCTIONTYPENAME
+						FROM CMD_LOOKUP_VALUES	C
+						LEFT OUTER JOIN	CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID
+						WHERE	1=1
+							AND		C.LOOKUP_TYPE = 'ProductionType'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{LANGUAGETYPE}
+							--AND		D.USE_YN = 'Y'
+						) B	ON PDN.PRODUCTIONTYPE = B.CODEID                                                          
+            LEFT JOIN CMD_USERS                     USR 	ON  TRQ.REQUESTUSER         = USR.USER_ID				--20210312 APPEND
+			--##############################################################################################################################                                     
+            WHERE   TRDT.VALIDSTATE     = 'Valid'
+            AND     TRDT.REQUESTDATE        = TO_DATE(TRIM(SUBSTR(#{REQUESTDATE},1,10)), 'YYYY-MM-DD')                              
+            AND     TRDT.REQUESTSEQUENCE    = #{REQUESTSEQUENCE}
+            ORDER BY    TRDT.REQUESTSEQUENCE, TRDT.DURABLEDEFID
+	</select>
+	
+	<!-- 신규 -->
+	<select id="selectToolDetailCodeListByToolList" parameterType="map" resultType="hashmap">
+        --
+        -- GetToolDetailCodeListByTool
+        -- Version:10001
+        WITH LASTREQ AS 
+                    (
+                    SELECT  TRD1.DURABLEDEFID,
+						       TRD1.DURABLEDEFVERSION,
+						       TRD1.REQUESTDATE,
+						       TRD1.REQUESTSEQUENCE
+						FROM TOM_TOOLREQUESTDETAIL TRD1
+						WHERE (TRD1.DURABLEDEFID, TRD1.DURABLEDEFVERSION, TRD1.REQUESTDATE||TRD1.REQUESTSEQUENCE) IN (
+																				                                                                               SELECT  TRD2.DURABLEDEFID
+																				                                                                                    ,   TRD2.DURABLEDEFVERSION
+																				                                                                                    ,   MAX(TRD2.REQUESTDATE||TRD2.REQUESTSEQUENCE)
+																				                                                                                FROM    TOM_TOOLREQUESTDETAIL TRD2
+																				                                                                                GROUP   BY
+																				                                                                                        TRD2.DURABLEDEFID
+																				                                                                                    ,   TRD2.DURABLEDEFVERSION
+																				                                                                                )
+                    )        
+        SELECT
+        		'' AS TOOLNUMBER
+            ,    DRDF.DURABLEDEFID                   AS TOOLCODE
+            ,   DRDF.DURABLEDEFVERSION              AS TOOLVERSION				
+            --,   DCDF.DICTIONARYNAME                 AS TOOLNAME
+            ,	FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) || '_' || PDN.PRODUCTDEFNAME || '_' || FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLNAME					
+            
+            ,   DRDF.DURABLECLASSID                 AS TOOLCATEGORYID           --TOOL구분
+            ,   FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLCATEGORY --TOOL구분명
+            ,   DRDF.FORM                           AS TOOLFORMCODE             --Tool형식코드
+            ,   FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS TOOLFORM --Tool형식명            
+            ,   DRDF.TOOLKIND                     	AS TOOLKINDID     			--TOOL종류
+            ,	FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND	--Toll종류명
+            
+            ,   DRDF.PRODUCTDEFID                   AS PRODUCTDEFID
+            ,   DRDF.PRODUCTDEFVERSION              AS PRODUCTDEFVERSION
+            ,	PDN.PRODUCTDEFNAME					AS PRODUCTDEFNAME			--제품명
+            
+            ,   DRDF.FILMUSELAYER1                  AS FILMUSELAYER1
+            ,   DRDF.FILMUSELAYER2                  AS FILMUSELAYER2            
+            --##############################################################################################################################    
+            ,   TO_CHAR(TRD.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE			--의뢰일
+            ,   TRD.REQUESTSEQUENCE 				AS REQUESTSEQUENCE			--의뢰순번
+            ,	TRD.AREAID							AS AREAID					--작업장ID
+            ,   DAR.DICTIONARYNAME              	AS RECEIPTAREANAME			--입고작업장명, 20210331/APPEND
+            ,	TRD.VENDORID						AS VENDORID					--제작처ID
+            ,	VDR.VENDORNAME						AS VENDORNAME				--제작처명, 20210331/APPEND
+            ,	NVL(TRD.QTY,0)						AS QTY						--의뢰수량
+            ,	TRD.DESCRIPTION						AS DESCRIPTION				--특이사항
+            ,	NVL(TRD.ORDERQTY,0)					AS ORDERQTY
+            ,	NVL(DRDF.OLB,0)						AS OLB
+            ,	NVL(TRD.NETPNL,0)					AS NETPNL					
+            ,	TO_CHAR(TR.DELIVERYDATE,'YYYY-MM-DD') AS DELIVERYDATE			--납기일자
+            ,	TR.REQUESTCOMMENT					AS REQUESTCOMMENT			--의뢰사유
+            ,	NVL(DRDF.SUMMARY,0)					AS SUMMARY					--합수
+            ,	NVL(DRDF.SCALEX,0)					AS SCALEX					--SCALEX
+            ,	NVL(DRDF.SCALEY,0)					AS SCALEY					--SCALEY
+            --##############################################################################################################################
+        FROM    TOM_DURABLEDEFINITION            				DRDF 
+        INNER JOIN CMD_DICTIONARY                				DCDF     ON DRDF.DURABLEDEFNAME     = DCDF.DICTIONARYID
+                                                        								AND  DCDF.LANGUAGETYPE       = #{LANGUAGETYPE}
+                                                        								AND	DCDF.USE_YN = 'Y'
+        INNER JOIN BAS_PRODUCTDEFINITION        				PDN      ON DRDF.PRODUCTDEFID   	= PDN.PRODUCTDEFID
+                                                        								AND  DRDF.PRODUCTDEFVERSION  = PDN.PRODUCTDEFVERSION              
+		LEFT OUTER JOIN LASTREQ                 					TRQD    	ON  DRDF.DURABLEDEFID       = TRQD.DURABLEDEFID
+                                                                    					AND DRDF.DURABLEDEFVERSION  = TRQD.DURABLEDEFVERSION
+		LEFT OUTER JOIN TOM_TOOLREQUESTDETAIL				TRD		    ON TRQD.DURABLEDEFID       = TRD.DURABLEDEFID
+                                                        								AND  TRQD.DURABLEDEFVERSION  = TRD.DURABLEDEFVERSION   
+                                                                            			AND TRQD.REQUESTDATE = TRD.REQUESTDATE
+                                                                            			AND TRQD.REQUESTSEQUENCE = TRD.REQUESTSEQUENCE
+        LEFT OUTER JOIN TOM_TOOLREQUEST						TR		 	ON TRD.REQUESTDATE       = TR.REQUESTDATE
+                                                        								AND  TRD.REQUESTSEQUENCE  = TR.REQUESTSEQUENCE                                           					
+		--##############################################################################################################################                                                        				            
+		LEFT OUTER JOIN BAS_AREA                 				SAC   	 ON TRD.AREAID              = SAC.AREAID				--20210318 APPEND (작업장)
+        LEFT OUTER JOIN CMD_DICTIONARY           				DAR     ON DAR.DICTIONARYID        = SAC.AREANAME
+                                                            			AND  DAR.LANGUAGETYPE       = #{LANGUAGETYPE}             
+                                                            			AND	DAR.USE_YN = 'Y'      
+		--##############################################################################################################################
+		LEFT OUTER JOIN BAS_VENDOR   		 		 		VDR     ON TRD.VENDORID        	= VDR.VENDORID 				--20210312 APPEND (제작처/협력업체 : 제작처명)
+                                                            			AND  TRD.ENTERPRISEID    	= VDR.ENTERPRISEID
+                                                            			AND  TRD.PLANTID    		= VDR.PLANTID                                                            			                                     				                                      				               				
+		--##############################################################################################################################
+        WHERE 1=1
+        AND DRDF.VALIDSTATE         = 'Valid'
+        --AND DRCS.DURABLECLASSTYPE   = 'Tool'
+        <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+            AND     DRDF.ENTERPRISEID       = #{ENTERPRISEID}
+        </if>
+        <if test="PLANTID != null and PLANTID !='' ">
+            <!--AND       DRDF.PLANTID            = #{PLANTID}-->          	--DurableDefinition은 전사공통이라 Plant를 활용하지 않음
+        </if>
+        <if test="TOOLCATEGORY != null and TOOLCATEGORY !='' ">
+            AND     DRDF.DURABLECLASSID     = #{TOOLCATEGORY}
+        </if>
+        <if test="TOOLCATEGORYDETAIL != null and TOOLCATEGORYDETAIL !='' ">
+            AND     DRDF.FORM   			= #{TOOLCATEGORYDETAIL}
+        </if>
+        <if test="TOOLCODE != null and TOOLCODE !='' ">
+            AND     UPPER(DRDF.DURABLEDEFID)       LIKE '%' || UPPER(#{TOOLCODE}) || '%'
+        </if>
+        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+            AND     UPPER(DRDF.PRODUCTDEFID)       LIKE '%' || UPPER(#{PRODUCTDEFID}) || '%'
+        </if>
+        ORDER BY    DRDF.DURABLEDEFID,  DRDF.DURABLEDEFVERSION
+    </select>
+    
+    <!-- 수리/수정/증작 -->
+	<select id="selectDurableLotToolListByToolList"  parameterType="map" resultType="hashmap">
+		--
+		-- GetDurableLotToolListByTool(수리/수정)
+		-- Version:10001
+			WITH LASTREQLOT AS 
+                    (
+                    SELECT TRDL1.DURABLEDEFID,
+                    		TRDL1.DURABLEDEFVERSION,
+                    		TRDL1.REQUESTDATE,
+                    		TRDL1.REQUESTSEQUENCE,
+                    		TRDL1.DURABLELOTID
+                    FROM TOM_TOOLREQUESTDETAILLOT TRDL1
+                    WHERE (TRDL1.DURABLELOTID, TRDL1.REQUESTDATE||TRDL1.REQUESTSEQUENCE) IN (
+																	                    SELECT  	TRDL2.DURABLELOTID
+																	                       	 	,	MAX(TRDL2.REQUESTDATE||TRDL2.REQUESTSEQUENCE)
+																	                    FROM TOM_TOOLREQUESTDETAILLOT TRDL2
+																	                    GROUP BY TRDL2.DURABLELOTID
+																	                    )
+                    )
+			SELECT
+					DLOT.DURABLELOTID					AS TOOLNUMBER
+				,	DLOT.DURABLEDEFID					AS TOOLCODE
+				,	DLOT.DURABLEDEFVERSION				AS TOOLVERSION
+				--,	DCDF.DICTIONARYNAME					AS TOOLNAME
+				,	FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) || '_' || PDN.PRODUCTDEFNAME || '_' || FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLNAME
+				
+				,   DRDF.DURABLECLASSID                 AS TOOLCATEGORYID           --Tool구분
+                ,   FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLCATEGORY             			--Tool구분명
+                ,   DRDF.FORM                           AS TOOLFORMCODE             --Tool형식코드
+                ,   FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS TOOLFORM                --Tool형식                
+                ,   DRDF.TOOLKIND					    AS TOOLKINDID							
+                ,   FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND	--Toll종류
+                
+                ,   DRDF.PRODUCTDEFID                   AS PRODUCTDEFID
+            	,   DRDF.PRODUCTDEFVERSION              AS PRODUCTDEFVERSION
+            	,	PDN.PRODUCTDEFNAME					AS PRODUCTDEFNAME			--제품명
+                
+                ,	DRDF.FILMUSELAYER1					AS FILMUSELAYER1
+				,	DRDF.FILMUSELAYER2					AS FILMUSELAYER2				
+                --##############################################################################################################################
+            	,   TO_CHAR(TRD.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE			--의뢰일
+            	,   TRD.REQUESTSEQUENCE 				AS REQUESTSEQUENCE			--의뢰순번
+            	,	NVL(TRD.AREAID, 'X')							AS AREAID					--작업장ID
+            	,   NVL(DAR.DICTIONARYNAME, 'X')              	AS RECEIPTAREANAME			--입고작업장명, 20210331/APPEND
+            	,	NVL(TRD.VENDORID, 'X')						AS VENDORID					--제작처ID
+            	,	NVL(VDR.VENDORNAME, 'X')						AS VENDORNAME				--제작처명, 20210331/APPEND
+            	,	NVL(TRD.QTY,0)						AS QTY						--의뢰수량
+            	,	TRD.DESCRIPTION						AS DESCRIPTION				--특이사항
+            	,	NVL(TRD.ORDERQTY,0)					AS ORDERQTY
+            	,	NVL(DRDF.OLB,0)						AS OLB
+            	,	NVL(TRD.NETPNL,0)					AS NETPNL					
+            	,	NVL(TO_CHAR(TR.DELIVERYDATE,'YYYY-MM-DD'), 'X') AS DELIVERYDATE			--납기일자
+            	,	TR.REQUESTCOMMENT					AS REQUESTCOMMENT			--의뢰사유
+            	,	NVL(DRDF.SUMMARY,0)					AS SUMMARY					--합수
+            	,	NVL(DRDF.SCALEX,0)					AS SCALEX					--SCALEX
+            	,	NVL(DRDF.SCALEY,0)					AS SCALEY					--SCALEY
+            	--##############################################################################################################################                
+				--,	DLOT.DURABLELOTID					AS TOOLNUMBER
+				--,	DLOT.USEDCOUNT						AS USECOUNT
+				--,	DLOT.TOTALUSEDCOUNT					AS TOTALUSECOUNT
+				--,	DLOT.TOTALCLEANCOUNT				AS TOTALCLEANCOUNT
+				--,	DLOT.TOTALREPAIRCOUNT				AS TOTALREPAIRCOUNT				
+				--,	AR.AREAID							AS AREAID					--[LOT기준 작업장ID]
+				--,	DCAR.DICTIONARYNAME					AS AREANAME					--[LOT기준 작업장명]
+				--,	DLOT.DURABLESTATE					AS DURABLESTATE 
+				--,	STS.STATENAME						AS STATENAME
+				
+			FROM	TOM_DURABLELOT						DLOT 
+			INNER JOIN TOM_DURABLEDEFINITION	DRDF 		ON	DLOT.DURABLEDEFID 		= DRDF.DURABLEDEFID
+																			AND	DLOT.DURABLEDEFVERSION	= DRDF.DURABLEDEFVERSION
+			INNER JOIN CMD_DICTIONARY				DCDF		ON	DRDF.DURABLEDEFNAME		= DCDF.DICTIONARYID
+																			AND	DCDF.LANGUAGETYPE		= #{LANGUAGETYPE}
+																			AND 	DCDF.USE_YN = 'Y'
+			--##############################################################################################################################
+			INNER JOIN BAS_PRODUCTDEFINITION    PDN      	ON DRDF.PRODUCTDEFID   	= PDN.PRODUCTDEFID
+                                                        					AND  DRDF.PRODUCTDEFVERSION  = PDN.PRODUCTDEFVERSION
+			LEFT OUTER JOIN LASTREQLOT 				TRDL	 ON DLOT.DURABLELOTID       = TRDL.DURABLELOTID
+            LEFT OUTER JOIN TOM_TOOLREQUESTDETAIL			TRD	 ON TRDL.DURABLEDEFID       = TRD.DURABLEDEFID
+                                                                 			AND  TRDL.DURABLEDEFVERSION  = TRD.DURABLEDEFVERSION                     
+                                                                 			AND TRDL.REQUESTDATE = TRD.REQUESTDATE 
+                                                                 			AND TRDL.REQUESTSEQUENCE = TRD.REQUESTSEQUENCE     
+			LEFT OUTER JOIN TOM_TOOLREQUEST		TR		 	ON TRD.REQUESTDATE       = TR.REQUESTDATE
+                                                        					AND  TRD.REQUESTSEQUENCE  = TR.REQUESTSEQUENCE                              
+			--=============================================================================================================================                                                        				            
+			LEFT OUTER JOIN BAS_AREA                 	SAC   	 	ON TRD.AREAID              = SAC.AREAID			--20210318 APPEND (작업장)
+        	LEFT OUTER JOIN CMD_DICTIONARY       DAR     	ON DAR.DICTIONARYID        = SAC.AREANAME
+                                                        					AND  DAR.LANGUAGETYPE       = #{LANGUAGETYPE}             
+                                                        					AND 	DAR.USE_YN = 'Y'      
+			--=============================================================================================================================
+			LEFT OUTER JOIN BAS_VENDOR   		 	VDR     	ON TRD.VENDORID        	= VDR.VENDORID 				--20210312 APPEND (제작처/협력업체 : 제작처명)
+                                                        					AND  TRD.ENTERPRISEID    	= VDR.ENTERPRISEID
+                                                        					AND  TRD.PLANTID    		= VDR.PLANTID                                                            			                                     				                                      				               				
+			--##############################################################################################################################                                              		                          		
+			LEFT OUTER JOIN BAS_AREA					AR			ON	DLOT.AREAID				= AR.AREAID
+			LEFT OUTER JOIN CMD_DICTIONARY		DCAR		ON	AR.AREANAME				= DCAR.DICTIONARYID
+																			AND	DCAR.LANGUAGETYPE		= #{LANGUAGETYPE}
+																			AND 	DCAR.USE_YN = 'Y'
+			LEFT OUTER JOIN BAS_STATE					STS		ON	DLOT.DURABLESTATE		= STS.STATEID
+																			AND	STS.STATEMODELID		= 'DurableState'
+			WHERE	DRDF.VALIDSTATE			= 'Valid' 
+			AND		DLOT.DURABLESTATE		IN ('Available', 'InUse')
+			--AND		DRCS.DURABLECLASSTYPE	= 'Tool'
+			AND		UPPER(DLOT.ISHOLD)				= 'N'					
+			<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+				AND		DLOT.ENTERPRISEID		= #{ENTERPRISEID}
+			</if>
+			<if test="PLANTID != null and PLANTID !='' ">
+				<!-- AND		DLOT.PLANTID		= #{PLANTID}-->
+			</if>
+			<if test="TOOLCODE != null and TOOLCODE !='' ">
+				AND		UPPER(DLOT.DURABLELOTID)		LIKE '%' || UPPER(#{TOOLCODE}) || '%'
+			</if>
+			<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+				AND 	UPPER(DRDF.PRODUCTDEFID)		LIKE '%' || UPPER(#{PRODUCTDEFID}) || '%'
+			</if>
+			AND		NOT EXISTS (
+										SELECT 
+												SUBMOVE.DURABLELOTID
+										FROM	TOM_TOOLMOVE SUBMOVE	
+										WHERE	SUBMOVE.DURABLELOTID	= DLOT.DURABLELOTID
+										AND		SUBMOVE.RECEIPTDATE		IS NULL
+										)
+			ORDER BY	DLOT.DURABLEDEFID,		DLOT.DURABLEDEFVERSION, 	DLOT.DURABLELOTID
+	</select>
+	
+	<!-- 제품번호 존재여부 -->
+	<select id="selectProductDefinition" parameterType="map" resultType="hashmap">
+		SELECT  PRODUCTDEFID
+			   ,PRODUCTDEFVERSION
+			   ,VALIDSTATE
+		FROM BAS_PRODUCTDEFINITION
+		WHERE 1=1
+		AND PRODUCTDEFID 		= #{PRODUCTDEFID}
+		AND PRODUCTDEFVERSION 	= #{PRODUCTDEFVERSION}
+    </select>
+    
+	<!-- 의뢰순번 채번 -->
+	<select id="selectToolRequestDateSequence" parameterType="map" resultType="hashmap">
+		SELECT NVL(MAX(REQUESTSEQUENCE),0)+1||'' AS REQUESTSEQUENCE 
+		FROM TOM_TOOLREQUEST
+		WHERE 1=1
+		AND TO_CHAR(REQUESTDATE,'YYYYMMDD') = TO_CHAR(TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD'),'YYYYMMDD')
+    </select>
+    
+    <!-- 치공구버젼 채번 : 2021-04-01 작성 -->
+    <!-- 2021-04-12 : 변경 : 존재하면 사용, 존재하지 않으면 MAX+1 -->
+    <select id="selectToolDurableDefinitionVersion" parameterType="map" resultType="hashmap">
+    	SELECT CASE WHEN MAXDURABLEDEFVERSION = 'X' THEN
+    					'01'
+    				ELSE
+    					CASE WHEN (
+    									SELECT COUNT(*)
+										FROM TOM_DURABLEDEFINITION
+										WHERE DURABLEDEFID = #{TOOLCODE}
+										AND SUMMARY = #{SUMMARY}
+										AND SCALEX = #{SCALEX}
+										AND SCALEY = #{SCALEY}
+										)=0 THEN
+										(
+										SELECT 
+											LPAD((TO_NUMBER(SUBSTR(MAXDURABLEDEFVERSION,LENGTH(MAXDURABLEDEFVERSION)-1))+1),2,'0')
+										FROM(
+												SELECT MAX(DURABLEDEFVERSION) AS MAXDURABLEDEFVERSION
+												FROM TOM_DURABLEDEFINITION
+												WHERE DURABLEDEFID = #{TOOLCODE}
+												)
+										)
+								ELSE
+										(
+										 SELECT MAX(DURABLEDEFVERSION)
+										 FROM TOM_DURABLEDEFINITION
+									 	 WHERE DURABLEDEFID = #{TOOLCODE}
+										 AND SUMMARY = #{SUMMARY}
+										 AND SCALEX = #{SCALEX}
+										 AND SCALEY = #{SCALEY}
+										)
+						END		
+    			 END AS NEWTOOLVERSION,
+    			 CASE WHEN (SELECT MAX(DURABLEDEFVERSION)
+								 FROM TOM_DURABLEDEFINITION
+							 	 WHERE DURABLEDEFID = #{TOOLCODE}
+								 AND SUMMARY = #{SUMMARY}
+								 AND SCALEX = #{SCALEX}
+								 AND SCALEY = #{SCALEY}) > 0 THEN --버젼 존재하는지 체크
+								'Y' 
+						ELSE 
+								'N' 
+				 END EXISTVERSIONYN
+		FROM(
+				SELECT NVL(MAX(DURABLEDEFID),'X') AS MAXDURABLEDEFVERSION
+				FROM TOM_DURABLEDEFINITION
+				WHERE DURABLEDEFID = #{TOOLCODE}
+				)
+    </select>
+    
+    <insert id="insertToolDurableDefinition" parameterType="map" >
+    	INSERT INTO TOM_DURABLEDEFINITION (
+			DURABLEDEFID,					<!-- 영구성 치공구 정의 ID -->
+			DURABLEDEFVERSION,			<!-- 영구성 치공구 정의 Version -->
+			DURABLECLASSID,				<!-- 영구성 자재 그룹 ID -->
+			DURABLEDEFNAME,				<!-- 치공구 정의명 -->
+			ENTERPRISEID,					<!-- 회사 ID -->
+			PLANTID,							<!-- Site ID -->
+			PRODUCTDEFID,					<!-- 제품 정의 ID -->
+			PRODUCTDEFVERSION,			<!-- 제품 정의 Version -->
+			DURABLETYPE,					<!-- 치공구유형 -->
+			USEDFACTOR,					<!-- 연배 -->
+			FORM,								<!-- 형식 -->
+			SUMMARY,						<!-- 합수 -->
+			SCALEX,							<!-- SCALE X -->
+			SCALEY,							<!-- SCALE Y -->
+			OLB,								<!-- OLB -->
+			HITCOUNT,						<!-- 타수PNL기준 -->
+			TOOLKIND,						<!-- TOOLKIND -->
+			
+			CREATOR,
+			CREATEDTIME,
+			MODIFIER,
+			MODIFIEDTIME,
+			LASTTXNHISTKEY,
+			LASTTXNID,
+			LASTTXNUSER,
+			LASTTXNTIME,
+			LASTTXNCOMMENT,
+			VALIDSTATE
+		) VALUES (
+			#{TOOLCODE},					--툴번호
+			#{TOOLVERSION},				--툴버젼
+			#{TOOLCATEGORY},
+			#{TOOLCODE},					--다국어코드
+			#{ENTERPRISEID},
+			#{PLANTID},
+			#{PRODUCTDEFID2},
+			#{PRODUCTDEFVERSION},
+			'Tool',
+			0,
+			#{FORM},
+			NVL(#{SUMMARY},0),
+			NVL(#{SCALEX},0),
+			NVL(#{SCALEY},0),
+			NVL(#{OLB},0),
+			0,
+			#{TOOLKINDID},
+			
+			#{CREATOR},					<!-- TR -->
+			SYSDATE,
+			#{MODIFIER},
+			SYSDATE,
+			#{LASTTXNHISTKEY},
+			#{LASTTXNID},
+			#{LASTTXNUSER},
+			SYSDATE,
+			#{LASTTXNCOMMENT},
+			'Valid'
+		)
+    </insert>
+    
+    <insert id="insertToolDurableDefinitionLang" parameterType="map" >
+    	INSERT INTO CMD_DICTIONARY
+    		(
+    		DICTIONARYID,
+			LANGUAGETYPE,
+			DICTIONARYNAME,
+			DESCRIPTION,
+			USE_YN,
+			CREATED_BY,
+			CREATION_DATE,
+			LAST_UPDATED_BY,
+			LAST_UPDATE_DATE,
+			GRP_ID,
+			DICTIONARYCLASSID
+			)
+		SELECT #{TOOLCODE} AS TOOLCODE,
+			   B.LANGNAME,
+			   CASE WHEN LANGNAME = 'en-US' THEN '(E)'
+                    WHEN LANGNAME = 'zh-CN' THEN '(C)'
+                    WHEN LANGNAME = 'vi-VN' THEN '(V)'
+                    WHEN LANGNAME = 'ko-KR' THEN ''
+               END || #{TOOLNAME},
+			   'DURABLEDEFID20210401',
+			   'Y',			   
+			   #{CREATOR},
+			   SYSDATE,			   
+			   #{CREATOR},
+			   SYSDATE,
+			   #{TOOLCODE},
+			   'Management'
+		FROM DUAL A,
+		     (SELECT 'en-US' AS LANGNAME FROM DUAL UNION ALL
+		      SELECT 'zh-CN' AS LANGNAME FROM DUAL UNION ALL
+		      SELECT 'vi-VN' AS LANGNAME FROM DUAL UNION ALL
+		      SELECT 'ko-KR' AS LANGNAME FROM DUAL
+		     ) B
+		WHERE 0 = (SELECT COUNT(*) FROM CMD_DICTIONARY WHERE DICTIONARYID = #{TOOLCODE} AND LANGUAGETYPE = B.LANGNAME AND USE_YN = 'Y')
+    </insert>
+    
+    <!-- tool 의뢰 정보 추가 -->
+    <insert id="insertToolRequest" parameterType="map" >
+    	INSERT INTO TOM_TOOLREQUEST (
+			REQUESTDATE,				<!-- [PK] 의뢰일 -->
+			REQUESTSEQUENCE,			<!-- [PK] 의뢰순서 -->
+			PRODUCTDEFID,				<!-- 제품 정의 ID -->
+			PRODUCTDEFVERSION,			<!-- 제품 정의 Version -->
+			ENTERPRISEID,				<!-- 회사 ID -->
+			PLANTID,					<!-- Site ID -->
+			REQUESTDEPARTMENT,			<!-- 요청부서ID -->
+			REQUESTUSER,				<!-- 요청자 -->
+			TOOLMAKETYPE,				<!-- 제작구분 -->
+			DELIVERYDATE,				<!-- 납기일 -->
+			REQUESTQTY,					<!-- 의뢰수량(누적) -->
+			REQUESTCOMMENT,				<!-- 의뢰사유 -->
+			ISAPPROVALUSE,				<!-- 승인사용여부 -->
+			APPROVALNO,					<!-- 결재문서번호 -->
+			TOOLPROGRESSSTATUS,			<!-- TOOL요청진행 -->
+			
+			CREATOR,					<!-- 생성자 -->
+			CREATEDTIME,				<!-- 생성일 -->
+			MODIFIER,					<!-- 수정자 -->
+			MODIFIEDTIME,				<!-- 수정일 -->
+			LASTTXNHISTKEY,				<!-- 마지막TXN HistKey -->
+			LASTTXNID,					<!-- 마지막TXN ID -->
+			LASTTXNUSER,				<!-- 마지막TXN 사용자 -->
+			LASTTXNTIME,				<!-- 마지막TXN 시간 -->
+			LASTTXNCOMMENT,				<!-- 마지막TXN 코멘트 -->
+			VALIDSTATE,					<!-- 유효여부 -->
+			ORDERYN						<!-- 발주여부 -->
+		) VALUES (
+			TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD'),
+			#{REQUESTSEQUENCE},
+			#{PRODUCTDEFID},
+			#{PRODUCTDEFVERSION},
+			#{ENTERPRISEID},
+			#{PLANTID},
+			#{REQUESTDEPARTMENT},
+			#{REQUESTUSER},
+			#{TOOLMAKETYPE},
+			TO_DATE(REPLACE(#{DELIVERYDATE},'-',''),'YYYYMMDD'),
+			#{REQUESTQTY},
+			#{REQUESTCOMMENT},
+			#{ISAPPROVALUSE},
+			#{APPROVALNO},
+			#{TOOLPROGRESSSTATUS},
+			
+			#{CREATOR},					<!-- TR -->
+			SYSDATE,
+			#{MODIFIER},
+			SYSDATE,
+			#{LASTTXNHISTKEY},
+			#{LASTTXNID},
+			#{LASTTXNUSER},
+			SYSDATE,
+			#{LASTTXNCOMMENT},
+			'Valid',
+			''
+		)
+    </insert>
+    
+    <!-- 의뢰 마스터 update -->
+	<update id="updateToolRequest" parameterType="map">
+		UPDATE TOM_TOOLREQUEST
+		SET DELIVERYDATE		= #{DELIVERYDATE},		<!-- 납기일자 -->
+			REQUESTDEPARTMENT	= #{REQUESTDEPARTMENT},	<!-- 의뢰부서 -->
+			REQUESTUSER			= #{REQUESTUSER},		<!-- 의뢰자 -->
+			REQUESTCOMMENT		= #{REQUESTCOMMENT}		<!-- 의뢰사유 -->
+		WHERE 1=1
+		AND REQUESTDATE			= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}									<!-- 의뢰순서 -->
+    </update>
+    
+    <!-- tool 의뢰 내역 정보 추가 -->
+    <insert id="insertToolRequestDetail" parameterType="map" >
+    	INSERT INTO TOM_TOOLREQUESTDETAIL (
+			DURABLEDEFID,				<!-- [PK] 치공구 정의 ID (TOLL NO) -->
+			DURABLEDEFVERSION,		<!-- [PK] 치공구 정의 Version -->
+			REQUESTDATE,				<!-- [PK] 의뢰일 -->
+			REQUESTSEQUENCE,		<!-- [PK] 의뢰순서 -->
+			REQUESTIDX,					<!-- [PK] 의뢰IDX -->
+			PLANTID,						<!-- [PK] Site ID -->
+			ENTERPRISEID,				<!-- 회사 ID -->
+			AREAID,						<!-- 작업장 ID -->
+			VENDORID,					<!-- 제작업체ID -->
+			OWNSHIPTYPE,				<!-- 소유구분 -->
+			QTY,							<!-- 의뢰수량 -->
+			ORDERQTY,					<!-- 수주량 -->
+			NETPNL,		
+			DESCRIPTION,				<!-- 설명(특이사항) -->
+			
+			CREATOR,					<!-- 생성자 -->
+			CREATEDTIME,				<!-- 생성일 -->
+			MODIFIER,					<!-- 수정자 -->
+			MODIFIEDTIME,				<!-- 수정일 -->
+			LASTTXNHISTKEY,				<!-- 마지막TXN HistKey -->
+			LASTTXNID,					<!-- 마지막TXN ID -->
+			LASTTXNUSER,				<!-- 마지막TXN 사용자 -->
+			LASTTXNTIME,				<!-- 마지막TXN 시간 -->
+			LASTTXNCOMMENT,				<!-- 마지막TXN 코멘트 -->
+			VALIDSTATE					<!-- 유효여부 -->
+		) VALUES (
+			#{DURABLEDEFID},
+			#{DURABLEDEFVERSION},
+			TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD'),
+			#{REQUESTSEQUENCE},
+			#{REQUESTIDX},
+			#{PLANTID},
+			#{ENTERPRISEID},
+			#{AREAID},
+			#{VENDORID},
+			#{OWNSHIPTYPE},
+			#{QTY},
+			#{ORDERQTY},
+			#{NETPNL},
+			#{DESCRIPTION},		
+				
+			#{CREATOR}, 			<!-- TR -->
+			SYSDATE,
+			#{MODIFIER},
+			SYSDATE,
+			#{LASTTXNHISTKEY},
+			#{LASTTXNID},
+			#{LASTTXNUSER},
+			SYSDATE,
+			#{LASTTXNCOMMENT},
+			'Valid'
+		)
+    </insert>
+    
+    
+    
+    <!-- tool 의뢰 내역 정보 수정 -->
+    <update id="updateToolRequestDetail" parameterType="map">
+    	UPDATE TOM_TOOLREQUESTDETAIL
+		SET
+			AREAID 					= #{AREAID},				<!-- 작업장 ID --> 
+			VENDORID 				= #{VENDORID},				<!-- 제작업체ID -->
+			OWNSHIPTYPE 			= #{OWNSHIPTYPE},			<!-- 소유구분 --> 
+			QTY 						= #{QTY},					<!-- 의뢰수량 -->
+			ORDERQTY 				= #{ORDERQTY},				<!-- 수주량 -->			
+			NETPNL					= #{NETPNL},				<!-- NETPNL -->
+			DESCRIPTION 			= #{DESCRIPTION},			<!-- 설명(특이사항) -->
+			
+			MODIFIER 				= #{MODIFIER},				<!-- 수정자 -->
+			MODIFIEDTIME 			= SYSDATE,					<!-- 수정일 -->
+			LASTTXNHISTKEY 		= #{LASTTXNHISTKEY},		<!-- 마지막TXN HistKey -->
+			LASTTXNID 				= #{LASTTXNID},				<!-- 마지막TXN ID -->
+			LASTTXNUSER 			= #{LASTTXNUSER},			<!-- 마지막TXN 사용자 -->
+			LASTTXNTIME 			= SYSDATE,					<!-- 마지막TXN 시간 -->
+			LASTTXNCOMMENT 	= #{LASTTXNCOMMENT},		<!-- 마지막TXN 코멘트 -->
+			VALIDSTATE 				= 'Valid'				<!-- 유효여부 -->
+		WHERE 1=1
+		AND DURABLEDEFID 		= #{DURABLEDEFID}				<!-- 치공구 정의 ID -->
+		AND DURABLEDEFVERSION 	= #{DURABLEDEFVERSION}			<!-- 치공구 정의 Version -->
+		AND REQUESTDATE			= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}			<!-- 의뢰순서 -->   
+		AND REQUESTIDX 	= #{REQUESTIDX}			<!-- 의뢰IDX --> 	
+    </update> 
+    
+    <!-- 치공구 정의 수정 -->
+    <update id="updateDurableDefinition" parameterType="map">
+    	UPDATE TOM_DURABLEDEFINITION
+		SET
+			SCALEX 					= #{SCALEX},
+			SCALEY 					= #{SCALEY},
+			OLB						= #{OLB},
+			
+			SUMMARY 				= #{SUMMARY},
+			DURABLECLASSID 		= #{DURABLECLASSID},
+			FORM 					= #{FORM},
+			TOOLKIND				= #{TOOLKIND},
+			
+			MODIFIER 				= #{MODIFIER},				<!-- 수정자 -->
+			MODIFIEDTIME 			= SYSDATE,					<!-- 수정일 -->
+			LASTTXNHISTKEY 		= #{LASTTXNHISTKEY},		<!-- 마지막TXN HistKey -->
+			LASTTXNID 				= #{LASTTXNID},			<!-- 마지막TXN ID -->
+			LASTTXNUSER 			= #{LASTTXNUSER},			<!-- 마지막TXN 사용자 -->
+			LASTTXNTIME 			= SYSDATE,					<!-- 마지막TXN 시간 -->
+			LASTTXNCOMMENT 	= #{LASTTXNCOMMENT},	<!-- 마지막TXN 코멘트 -->
+			VALIDSTATE 				= 'Valid'						<!-- 유효여부 -->
+		WHERE 1=1
+		AND DURABLEDEFID 		= #{DURABLEDEFID}		<!-- 치공구 정의 ID -->
+		AND DURABLEDEFVERSION 	= #{DURABLEDEFVERSION}			<!-- 치공구 정의 Version -->
+    </update>
+    
+    
+    
+    <!-- 치공구 발주 메일 내용 List -->
+	<select id="selectToolRequestMailList" parameterType="map" resultType="hashmap">
+		    SELECT
+                    TRDT.DURABLEDEFID               AS TOOLCODE                         --Tool코드
+                ,   DICF.DICTIONARYNAME             AS TOOLNAME
+                ,   TRDT.DURABLEDEFVERSION          AS TOOLVERSION                      --ToolVersion
+                ,   NVL(TRDT.QTY,0)                 AS QTY                              --(의뢰)수량
+                ,   DRDF.DURABLECLASSID             AS TOOLCATEGORYID
+                ,   FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLCATEGORY --Tool구분
+                ,	DRDF.FORM						AS FORMID							
+                ,	FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS FORM --유형명(II)
+                ,	DRDF.TOOLKIND					AS TOOLKINDID							
+                ,	FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND --Toll종류                
+                ,   DRDF.PRODUCTDEFID               AS PRODUCTDEFID                     --품목코드  
+                ,	DRDF.PRODUCTDEFVERSION			AS PRODUCTDEFVERSION				--품목Ver
+                ,   PDN.PRODUCTDEFNAME              AS PRODUCTDEFNAME                   --품목명 
+                ,   ''                              AS ROWSTATUS                            
+                ,   DRDF.FILMUSELAYER1              AS FILMUSELAYER1
+                ,   DRDF.FILMUSELAYER1              AS USELAYER
+                ,   DRDF.FILMUSELAYER2              AS FILMUSELAYER2
+                ,   TRDT.DESCRIPTION                AS DESCRIPTION						--*********************************설명(특이사항)
+                ,	NVL(DRDF.SUMMARY,0)				AS SUMMARY 							--합수, 20210312/APPEND
+                ,	NVL(DRDF.SCALEX,0)         		AS SCALEX							--SCALEX, 20210312/APPEND
+                ,	NVL(DRDF.SCALEY,0)    			AS SCALEY							--SCALEY, 20210312/APPEND
+                ,	TRDT.VENDORID 					AS VENDORID							--제작처, 20210312/APPEND
+                ,	VDR.VENDORNAME					AS VENDORNAME						--제작처명, 20210315/APPEND
+                ,	TRDT.AREAID 					AS RECEIPTAREAID					--입고작업장, 20210312/APPEND
+                ,   DAR.DICTIONARYNAME              AS RECEIPTAREANAME					--입고작업장명, 20210312/APPEND
+                ,	TRQ.TOOLMAKETYPE				AS TOOLMAKETYPE						--제작구분, 20210312/APPEND
+                ,   DCM.DICTIONARYNAME              AS TOOLMAKETYPENAME                 --제작구분명, 20210312/APPEND
+                ,	TO_CHAR(TRQ.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE				--의뢰일자, 20210312/APPEND
+                ,   NVL(TRDT.ORDERQTY,0) 			AS ORDERQTY							--수주량, 20210317/APPEND
+                ,	TRQ.REQUESTDEPARTMENT 			AS REQUESTDEPARTMENT				--요청부서, 20210312/APPEND
+                ,	TRQ.REQUESTUSER					AS REQUESTUSER						--요청자, 20210312/APPEND
+                ,	USR.USER_NM						AS REQUESTUSERNAME					--요청자명, 20210312/APPEND
+                ,	TO_CHAR(TRQ.DELIVERYDATE,'YYYY-MM-DD') AS DELIVERYDATE				--납기일, 20210312/APPEND
+                ,	TRQ.REQUESTCOMMENT				AS REQUESTCOMMENT					--*********************************의뢰사유,20210312 APPEND                
+                ,	PDN.PRODUCTIONTYPE				AS PRODUCTIONTYPE					--생산구분, 20210312/APPEND
+                ,   B.PRODUCTIONTYPENAME			AS PRODUCTIONTYPENAME				--생산구분명, 20210312/APPEND
+                ,	NVL(DRDF.OLB,0)					AS OLB								--OLB, 20210318/PHW/APPEND
+                ,	NVL(TRDT.NETPNL,0) 				AS NETPNL							--NET_PNL, 20210318/PHW/APPEND
+                ,   '0'								AS CHK								--CHK, 20210312/APPEND
+                ,   TRQ.TOOLPROGRESSSTATUS			AS TOOLPROGRESSSTATUS				--결재진행상태(Approval:결재승인,Create:등록,DetailRegist:내역등록,Request:결재요청)
+                ,   TRQ.ENTERPRISEID			    AS ENTERPRISEID
+                ,	TRQ.PLANTID 			    	AS PLANTID
+                ,	TRQ.ISAPPROVALUSE  			AS ISAPPROVALUSE 
+                ,	TRQ.REQUESTSEQUENCE		AS REQUESTSEQUENCE
+                ,	PDN.CUSTOMERID				AS CUSTOMERID				--고객사ID
+                ,   CUST.CUSTOMERNAME			AS CUSTOMERNAME			--고객사명
+            FROM    TOM_TOOLREQUESTDETAIL            TRDT
+            INNER JOIN TOM_DURABLEDEFINITION         DRDF    ON TRDT.DURABLEDEFID       = DRDF.DURABLEDEFID
+                                                            AND  TRDT.DURABLEDEFVERSION = DRDF.DURABLEDEFVERSION
+            LEFT OUTER JOIN CMD_DICTIONARY           DICF    ON DRDF.DURABLEDEFNAME     = DICF.DICTIONARYID
+                                                            AND  DICF.LANGUAGETYPE      = #{LANGUAGETYPE}      
+                                                            AND  DICF.USE_YN          		= 'Y'                                               
+			INNER JOIN TOM_TOOLREQUEST         		 TRQ     ON TRDT.REQUESTDATE       	= TRQ.REQUESTDATE			--20210312 APPEND (치공구 제작 수리 의뢰)
+                                                            AND  TRDT.REQUESTSEQUENCE   = TRQ.REQUESTSEQUENCE                                                            
+			INNER JOIN BAS_PRODUCTDEFINITION   		 PDN     	ON TRQ.PRODUCTDEFID        = PDN.PRODUCTDEFID 			--20210312 APPEND (제품 정보 : 생산구분)
+                                                            					AND  TRQ.PRODUCTDEFVERSION  = PDN.PRODUCTDEFVERSION
+			LEFT OUTER JOIN BAS_CUSTOMER        		CUST    	ON  PDN.ENTERPRISEID = CUST.ENTERPRISEID 
+				                                                   				AND PDN.PLANTID = CUST.PLANTID
+				                                                   				AND PDN.CUSTOMERID =  CUST.CUSTOMERID  
+			INNER JOIN BAS_VENDOR   		 		 VDR     ON TRDT.VENDORID        	= VDR.VENDORID 				--20210312 APPEND (제작처/협력업체 : 제작처명)
+                                                            AND  TRDT.ENTERPRISEID    	= VDR.ENTERPRISEID
+                                                            AND  TRDT.PLANTID    		= VDR.PLANTID
+            LEFT OUTER JOIN CMD_LOOKUP_VALUES        CDM 	 ON TRQ.TOOLMAKETYPE        = CDM.LOOKUP_CODE			--20210312 APPEND (제작구분)
+                                                      		AND  CDM.LOOKUP_TYPE        = 'ToolMakeType'
+            LEFT OUTER JOIN CMD_DICTIONARY           DCM 	 ON CDM.DICTIONARYID        = DCM.DICTIONARYID                                                      		
+                                                      		AND  DCM.LANGUAGETYPE       = #{LANGUAGETYPE}
+                                                      		AND  DCM.USE_YN          	= 'Y'
+            LEFT OUTER JOIN BAS_AREA                 SAC   	 ON SAC.AREAID              = TRDT.AREAID				--20210318 APPEND (작업장)
+        	LEFT OUTER JOIN CMD_DICTIONARY           DAR     ON DAR.DICTIONARYID        = SAC.AREANAME
+                                                            AND  DAR.LANGUAGETYPE       = #{LANGUAGETYPE}
+                                                            AND  DAR.USE_YN          	= 'Y'
+			LEFT JOIN 	(	
+						SELECT	C.LOOKUP_CODE CODEID
+				              , D.DICTIONARYNAME	AS PRODUCTIONTYPENAME
+						FROM CMD_LOOKUP_VALUES	C
+						LEFT OUTER JOIN	CMD_DICTIONARY	D	ON	C.DICTIONARYID = D.DICTIONARYID
+						WHERE	1=1
+							AND		C.LOOKUP_TYPE = 'ProductionType'
+							AND		C.ENABLED_FLAG = 'Y'
+							AND		D.LANGUAGETYPE = #{LANGUAGETYPE}
+							--AND		D.USE_YN = 'Y'
+						) B	ON PDN.PRODUCTIONTYPE = B.CODEID                                                          
+            LEFT JOIN CMD_USERS                     USR 	ON  TRQ.REQUESTUSER         = USR.USER_ID				--20210312 APPEND
+            WHERE   TRDT.VALIDSTATE     = 'Valid'
+            AND     TRDT.REQUESTDATE        = TO_DATE(TRIM(SUBSTR(#{REQUESTDATE},1,10)), 'YYYY-MM-DD')                              
+            AND     TRDT.REQUESTSEQUENCE    = #{REQUESTSEQUENCE}		--발주/발주취소는 상단 요청에 대한 List 출력이므로 요청번호에 대한 모든 detail 리스트를 출력 한다.
+            
+            AND	  (TRDT.DURABLEDEFID, 
+            		   TRDT.DURABLEDEFVERSION, 
+            		   TO_CHAR(TRDT.REQUESTDATE,'YYYY-MM-DD'), 
+            		   TRDT.REQUESTSEQUENCE, 
+            		   TRDT.REQUESTIDX) IN (
+            		                               SELECT VALUE, 
+            		                                         VALUE2, 
+            		                                         VALUE3, 
+            		                                         TO_NUMBER(VALUE4), 
+            		                                         TO_NUMBER(VALUE5)
+												   FROM UFN_SELECTSTRINGTOSPLIT5(#{SELSTR},',','|')
+												   )
+            
+            ORDER BY    TRDT.REQUESTSEQUENCE, TRDT.DURABLEDEFID
+	</select>
+	
+	
+	<select id="selectLastOrderNoSequence" parameterType="map" resultType="hashmap">
+		SELECT TO_CHAR(TO_NUMBER(NVL(MAX(ORDERNO), TO_CHAR(SYSDATE,'YYYYMMDD')||'00')) +1,'9999999999') AS NEXTORDERNO
+		FROM TOM_TOOLREQUESTDETAIL 
+		WHERE  TO_CHAR(REQUESTDATE,'YYYY-MM-DD') = (SELECT VALUE3
+												   						FROM UFN_SELECTSTRINGTOSPLIT5(#{SELSTR},',','|')
+												   						GROUP BY VALUE3)
+	</select>
+    
+    <!-- 발주 처리 -->
+	<update id="saveOrder" parameterType="map">
+		UPDATE TOM_TOOLREQUEST
+		SET ORDERYN 	= 'Y'
+		WHERE REQUESTDATE		= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}									<!-- 의뢰순서 -->
+    </update>
+    
+    <!-- 발주 처리 :: 발주번호 저장 -->
+    <update id="saveDetailOrderNoSave" parameterType="map">
+		UPDATE TOM_TOOLREQUESTDETAIL TRDT
+		SET ORDERNO 	= TRIM(#{NEXTORDERNO})
+		WHERE 1=1
+		AND (TRDT.DURABLEDEFID, 
+               TRDT.DURABLEDEFVERSION, 
+               TO_CHAR(TRDT.REQUESTDATE,'YYYY-MM-DD'), 
+               TRDT.REQUESTSEQUENCE, 
+               TRDT.REQUESTIDX) IN (
+            	                           SELECT VALUE, 
+            	                                     VALUE2, 
+            	                                     VALUE3, 
+            	                                     TO_NUMBER(VALUE4), 
+            	                                     TO_NUMBER(VALUE5)
+				   					       FROM UFN_SELECTSTRINGTOSPLIT5(#{SELSTR},',','|')
+										   )
+    </update>
+    
+    <!-- 발주 취소 처리 -->
+	<update id="saveOrderCancel" parameterType="map">
+		UPDATE TOM_TOOLREQUEST
+		SET ORDERYN 	= 'N'
+		WHERE REQUESTDATE		= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}									<!-- 의뢰순서 -->
+    </update>
+    
+    <!-- 발주 취소 처리 :: 발주번호 NULL 처리 -->
+    <update id="saveDetailOrderNoCancel" parameterType="map">
+		UPDATE TOM_TOOLREQUESTDETAIL TRDT
+		SET ORDERNO 	= NULL
+		WHERE 1=1
+		AND (TRDT.DURABLEDEFID, 
+               TRDT.DURABLEDEFVERSION, 
+               TO_CHAR(TRDT.REQUESTDATE,'YYYY-MM-DD'), 
+               TRDT.REQUESTSEQUENCE, 
+               TRDT.REQUESTIDX) IN (
+            	                           SELECT VALUE, 
+            	                                     VALUE2, 
+            	                                     VALUE3, 
+            	                                     TO_NUMBER(VALUE4), 
+            	                                     TO_NUMBER(VALUE5)
+				   					       FROM UFN_SELECTSTRINGTOSPLIT5(#{SELSTR},',','|')
+										   )
+    </update>
+
+
+	
+	
+	<!-- tool 의뢰 내역 정보 삭제 -->
+	<delete id="deleteToolRequestDetail" parameterType="map">
+		DELETE FROM TOM_TOOLREQUESTDETAIL
+		WHERE 1=1
+		AND DURABLEDEFID 		= #{DURABLEDEFID}				<!-- 치공구 정의 ID -->
+		AND DURABLEDEFVERSION 	= #{DURABLEDEFVERSION}			<!-- 치공구 정의 Version -->
+		AND REQUESTDATE			= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}									<!-- 의뢰순서 -->
+		AND REQUESTIDX 	= #{REQUESTIDX}									<!-- 의뢰IDX -->
+    </delete>
+    
+    <!-- 의뢰Lot정보 삭제 -->
+	<delete id="deleteToolRequestDetailLot" parameterType="map">
+		DELETE FROM TOM_TOOLREQUESTDETAILLOT
+		WHERE 1=1
+		AND DURABLEDEFID 		= #{DURABLEDEFID}				<!-- 치공구 정의 ID -->
+		AND DURABLEDEFVERSION 	= #{DURABLEDEFVERSION}			<!-- 치공구 정의 Version -->
+		AND REQUESTDATE			= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE 	= #{REQUESTSEQUENCE}									<!-- 의뢰순서 -->
+		AND REQUESTIDX 	= #{REQUESTIDX}									<!-- 의뢰IDX -->
+    </delete>
+    
+    <!-- 의로단계 삭제 : 신규/증작 -->
+    <delete id="deleteToolLot" parameterType="map">
+    	DELETE FROM TOM_DURABLELOT
+	    WHERE   DURABLELOTID 		IN (
+	    										SELECT DURABLELOTID
+	    										FROM TOM_TOOLREQUESTDETAILLOT
+	    										WHERE DURABLEDEFID = #{DURABLEDEFID}
+												AND DURABLEDEFVERSION = #{DURABLEDEFVERSION}
+												AND REQUESTDATE = TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')
+												AND REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+												AND REQUESTIDX 	= #{REQUESTIDX}									<!-- 의뢰IDX -->
+												)
+    </delete>
+    <delete id="deleteToolLotHistory" parameterType="map">
+    	DELETE FROM TOM_DURABLELOTHISTORY
+	    WHERE   DURABLELOTID 		IN (
+	    										SELECT DURABLELOTID
+	    										FROM TOM_TOOLREQUESTDETAILLOT
+	    										WHERE DURABLEDEFID = #{DURABLEDEFID}
+												AND DURABLEDEFVERSION = #{DURABLEDEFVERSION}
+												AND REQUESTDATE = TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')
+												AND REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+												AND REQUESTIDX 	= #{REQUESTIDX}									<!-- 의뢰IDX -->
+												)
+    </delete>
+    
+     <!-- 의로단계 삭제 : 수정 -->
+    <delete id="deleteToolLot2" parameterType="map">
+    	DELETE FROM TOM_DURABLELOT
+	    WHERE   DURABLELOTID 		IN (
+	    										SELECT NEXTDURABLELOTID <!-- 입고시점에 사용할 Tool코드 -->
+	    										FROM TOM_TOOLREQUESTDETAILLOT
+	    										WHERE DURABLEDEFID = #{DURABLEDEFID}
+												AND DURABLEDEFVERSION = #{DURABLEDEFVERSION}
+												AND REQUESTDATE = TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')
+												AND REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+												AND REQUESTIDX 	= #{REQUESTIDX}									<!-- 의뢰IDX -->
+												)
+    </delete>
+    <delete id="deleteToolLotHistory2" parameterType="map">
+    	DELETE FROM TOM_DURABLELOTHISTORY
+	    WHERE   DURABLELOTID 		IN (
+	    										SELECT NEXTDURABLELOTID <!-- 입고시점에 사용할 Tool코드 -->
+	    										FROM TOM_TOOLREQUESTDETAILLOT
+	    										WHERE DURABLEDEFID = #{DURABLEDEFID}
+												AND DURABLEDEFVERSION = #{DURABLEDEFVERSION}
+												AND REQUESTDATE = TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')
+												AND REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+												AND REQUESTIDX 	= #{REQUESTIDX}									<!-- 의뢰IDX -->
+												)
+    </delete>
+    
+    
+    
+    
+    
+    
+    
+    <!-- tool 의뢰 정보 삭제 -->
+	<delete id="deleteToolRequest" parameterType="map">
+		DELETE FROM TOM_TOOLREQUEST
+		WHERE 1=1
+		AND REQUESTDATE 	= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE = #{REQUESTSEQUENCE}									<!-- 의뢰순서 -->
+		AND 0 = (
+				SELECT COUNT(*) 
+				FROM TOM_TOOLREQUESTDETAIL 
+				WHERE 1=1
+				AND REQUESTDATE 	= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')
+				AND REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+				)
+    </delete>
+    
+    
+    
+
+	<!-- 치공구 의뢰서 [1] 제품정보 -->
+	<select id="selectLine1" parameterType="map" resultType="hashmap">
+		SELECT 	PRDF.CUSTOMERID				--수주처코드
+				 ,	CTM.CUSTOMERNAME			--거래처명		
+				 ,	TREQ.PRODUCTDEFID			--품목코드
+				 ,	PRDF.PRODUCTDEFNAME		--품목명
+				 ,	PRDF.PCSPNL AS SUMMARY	--합수
+				 ,	'' AS ORDERQTY					--수주량(빈킨으로출력:20210427)
+		FROM TOM_TOOLREQUEST 					TREQ
+		INNER JOIN BAS_PRODUCTDEFINITION     PRDF    ON TREQ.PRODUCTDEFID           = PRDF.PRODUCTDEFID
+                                                                   	  AND  TREQ.PRODUCTDEFVERSION     = PRDF.PRODUCTDEFVERSION
+		INNER JOIN BAS_CUSTOMER  				CTM     ON PRDF.CUSTOMERID 			= CTM.CUSTOMERID                                                                   	  
+		WHERE TREQ.REQUESTDATE = TO_DATE(REPLACE(#{REQUESTDATE},'-',''), 'YYYYMMDD')
+		AND TREQ.REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+    </select>
+    
+    <!-- 치공구 의뢰서 [2] 재작업 치공구 정보 -->
+	<select id="selectLine2" parameterType="map" resultType="hashmap">
+		SELECT 	TREQ.TOOLMAKETYPE					AS TOOLMAKETYPE             			--제작구분2
+                 ,	DICD.DICTIONARYNAME				AS TOOLMAKETYPENAME					--제작구분명
+                 ,	DRDF.TOOLKIND					AS TOOLKINDID							
+                 ,	FN_GETTOOLKINDNAME(DRDF.ENTERPRISEID, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND	--Toll종류
+                 ,	DRDF.FORM						AS FORMID							
+                 ,	FN_GETTOOLFORMNAME(DRDF.ENTERPRISEID, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS FORM	--유형명(II)
+				 ,	TRDT.DURABLEDEFID					AS TOOLCODE								--치공구ID
+                 ,  DCDF.DICTIONARYNAME				AS TOOLNAME                  			--치공구명
+                 ,	TO_CHAR(TRDT.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE				--요청일자
+                 ,	TO_CHAR(NVL(TREQ.DELIVERYDATE, TRDT.REQUESTDATE), 'YYYY-MM-DD')	AS TOOLREWORKMAKEDATE		--제작일자(=납기일자),없으면요청일
+                 ,	TRDT.QTY									AS TOOLREWORKQTY						--증작수량
+                 ,	TRDT.VENDORID							AS VENDORID								--제작업체ID
+                 ,	VNDR.VENDORNAME					AS MAKEVENDOR               			--제작업체명
+                 ,	NVL(DRDF.USEDLIMIT,0) AS USEDLIMIT												--보증타수
+                 ,	NVL(	(SELECT SUM(TOTALUSEDCOUNT)
+                    		FROM TOM_DURABLELOT TDL
+                    		WHERE TDL.DURABLEDEFID = TRDT.DURABLEDEFID
+                    		AND TDL.DURABLEDEFVERSION = TRDT.DURABLEDEFVERSION
+                    		)
+                    	,0) AS RESULTLIMIT																	--실적타수(누적타수)
+                 ,	NVL(	(SELECT SUM(TOTALCLEANCOUNT)
+                    		FROM TOM_DURABLELOT TDL
+                    		WHERE TDL.DURABLEDEFID = TRDT.DURABLEDEFID
+                    		AND TDL.DURABLEDEFVERSION = TRDT.DURABLEDEFVERSION
+                    		)
+                    	,0) AS TOTALCLEANCOUNT														--연마횟수
+                 ,	TO_CHAR(TREQ.DELIVERYDATE,'YYYY-MM-DD') AS TOOLREWORKREQUESTRECEIPT												--요청납기
+                 ,	'' AS TOOLREWORKRULERECEIPT														--기준납기
+                 ,  '' AS TOOLREWORKADDTYPE															--증작형태 
+		FROM TOM_TOOLREQUESTDETAIL 					TRDT		
+		INNER JOIN TOM_TOOLREQUEST       				TREQ		ON TRDT.REQUESTDATE           = TREQ.REQUESTDATE
+                                                                   				AND  TRDT.REQUESTSEQUENCE           = TREQ.REQUESTSEQUENCE     
+		INNER JOIN TOM_DURABLEDEFINITION            DRDF		ON TRDT.DURABLEDEFID           = DRDF.DURABLEDEFID
+                                                                  				AND  TRDT.DURABLEDEFVERSION     = DRDF.DURABLEDEFVERSION
+        INNER JOIN CMD_DICTIONARY                    	DCDF		ON DRDF.DURABLEDEFNAME         = DCDF.DICTIONARYID
+                                                                   				AND  DCDF.LANGUAGETYPE          = #{LANGUAGETYPE}                
+																				AND  DCDF.USE_YN            	   = 'Y'                                                                   				                                                   				
+		LEFT OUTER JOIN CMD_LOOKUP_VALUES          TMCD		ON TREQ.TOOLMAKETYPE           = TMCD.LOOKUP_CODE
+                                                                   				AND  TMCD.LOOKUP_TYPE           = 'ToolMakeType'
+        LEFT OUTER JOIN CMD_DICTIONARY               DICD		ON TMCD.DICTIONARYID           = DICD.DICTIONARYID                                                                   				
+                                                                   				AND  DICD.LANGUAGETYPE          = #{LANGUAGETYPE}
+                                                                   				AND  DICD.USE_YN            	   = 'Y'                        
+		LEFT OUTER JOIN BAS_VENDOR                   VNDR    ON TRDT.VENDORID               = VNDR.VENDORID                                                                   				   	  
+		WHERE TRDT.REQUESTDATE = TO_DATE(REPLACE(#{REQUESTDATE},'-',''), 'YYYYMMDD')
+		AND TRDT.REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+		ORDER BY TRDT.CREATEDTIME ASC
+    </select>
+    
+    <!-- 치공구 의뢰서 [3] 증작분 보유 현황 -->
+	<select id="selectLine3" parameterType="map" resultType="hashmap">
+		SELECT 	TREQ.TOOLMAKETYPE					AS TOOLMAKETYPE             			--제작구분3
+                 ,	DICD.DICTIONARYNAME				AS TOOLMAKETYPENAME					--제작구분명
+                 ,	DRDF.TOOLKIND					AS TOOLKINDID							
+                 ,	FN_GETTOOLKINDNAME(DRDF.ENTERPRISEID, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND	--Toll종류
+                 ,	DRDF.FORM						AS FORMID							
+                 ,	FN_GETTOOLFORMNAME(DRDF.ENTERPRISEID, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS FORM	--유형명(II)
+				 ,	TRDT.DURABLEDEFID					AS TOOLCODE								--치공구ID
+                 ,  DCDF.DICTIONARYNAME				AS TOOLNAME                  			--치공구명
+                 ,	TRDL.DURABLELOTID					AS TOOLNUMBER							--치공구코드
+                 ,	TO_CHAR(TRDT.REQUESTDATE,'YYYY-MM-DD') AS REQUESTDATE				--요청일자
+                 ,  TO_CHAR(NVL(TREQ.DELIVERYDATE, TRDT.REQUESTDATE), 'YYYY-MM-DD')	AS TOOLREWORKMAKEDATE		--제작일자(=납기일자),없으면요청일
+                 ,	TRDT.VENDORID							AS VENDORID								--제작업체ID
+                 ,	VNDR.VENDORNAME					AS MAKEVENDOR               			--제작업체명
+                 ,  '' AS TOOLREWORKADDTYPE															--증작형태
+                 ,	CASE WHEN ISHOLD = 'N' THEN 'Y' ELSE 'N' END AS USEYN	--사용유무
+		FROM TOM_TOOLREQUESTDETAIL 					TRDT		
+		INNER JOIN TOM_TOOLREQUEST       				TREQ		ON TRDT.REQUESTDATE           = TREQ.REQUESTDATE
+                                                                   				AND  TRDT.REQUESTSEQUENCE           = TREQ.REQUESTSEQUENCE
+		INNER JOIN TOM_TOOLREQUESTDETAILLOT		TRDL		ON TRDT.REQUESTDATE           = TRDL.REQUESTDATE
+                                                                   				AND  TRDT.REQUESTSEQUENCE           = TRDL.REQUESTSEQUENCE
+                                                                   				AND  TRDT.DURABLEDEFID           = TRDL.DURABLEDEFID
+                                                                   				AND  TRDT.DURABLEDEFVERSION           = TRDL.DURABLEDEFVERSION                                                                   				    
+		INNER JOIN TOM_DURABLELOT						TDL		ON TRDL.DURABLELOTID           = TDL.DURABLELOTID
+		INNER JOIN TOM_DURABLEDEFINITION            DRDF		ON TRDT.DURABLEDEFID           = DRDF.DURABLEDEFID
+                                                                  				AND  TRDT.DURABLEDEFVERSION     = DRDF.DURABLEDEFVERSION
+        INNER JOIN CMD_DICTIONARY                    	DCDF		ON DRDF.DURABLEDEFNAME         = DCDF.DICTIONARYID
+                                                                   				AND  DCDF.LANGUAGETYPE          = #{LANGUAGETYPE}             
+                                                                   				AND  DCDF.USE_YN            	   = 'Y'                                                      				
+		LEFT OUTER JOIN CMD_LOOKUP_VALUES          TMCD		ON TREQ.TOOLMAKETYPE           = TMCD.LOOKUP_CODE
+                                                                   				AND  TMCD.LOOKUP_TYPE           = 'ToolMakeType'
+        LEFT OUTER JOIN CMD_DICTIONARY               DICD		ON TMCD.DICTIONARYID           = DICD.DICTIONARYID
+                                                                   				AND  DICD.LANGUAGETYPE          = #{LANGUAGETYPE}
+                                                                   				AND  DICD.USE_YN            	   = 'Y'                        
+		LEFT OUTER JOIN BAS_VENDOR                   VNDR    ON TRDT.VENDORID               = VNDR.VENDORID                                                          				   	  
+		WHERE 1=1 --TREQ.TOOLMAKETYPE = 'Add'
+		--1. 의뢰서의 증작분 보유 현황은 같은 치공구ID의 보유 현황만 표시
+		
+		AND (TRDT.DURABLEDEFID) IN (
+												SELECT DURABLEDEFID
+												FROM TOM_TOOLREQUESTDETAIL TREQ2
+												WHERE TREQ2.REQUESTDATE = TO_DATE(REPLACE(#{REQUESTDATE},'-',''), 'YYYYMMDD')
+												AND TREQ2.REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+											  )
+		AND (TRDT.REQUESTDATE, TRDT.REQUESTSEQUENCE) NOT IN (SELECT TO_DATE(REPLACE(#{REQUESTDATE},'-',''), 'YYYYMMDD'), #{REQUESTSEQUENCE} FROM DUAL)
+		ORDER BY TRDT.REQUESTDATE, TRDT.REQUESTSEQUENCE
+    </select>
+    
+	
+	<!-- 의뢰 삭제 -->
+	<delete id="deleteRequest" parameterType="map">
+		DELETE FROM TOM_TOOLREQUEST
+		WHERE 1=1
+		AND REQUESTDATE			= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE 		= #{REQUESTSEQUENCE}											<!-- 의뢰순서 -->
+    </delete>
+    
+    <!-- 의뢰 상세 삭제 -->
+    <delete id="deleteRequestDetail" parameterType="map">
+		DELETE FROM TOM_TOOLREQUESTDETAIL
+		WHERE 1=1
+		AND REQUESTDATE			= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE 		= #{REQUESTSEQUENCE}											<!-- 의뢰순서 -->
+    </delete>
+    
+    <!-- 의뢰Lot 삭제 -->
+    <delete id="deleteRequestLot" parameterType="map">
+		DELETE FROM TOM_TOOLREQUESTDETAILLOT
+		WHERE 1=1
+		AND REQUESTDATE			= TO_DATE(REPLACE(#{REQUESTDATE},'-',''),'YYYYMMDD')	<!-- 의뢰일 -->
+		AND REQUESTSEQUENCE 		= #{REQUESTSEQUENCE}											<!-- 의뢰순서 -->
+    </delete>
+    
+        
+</mapper>

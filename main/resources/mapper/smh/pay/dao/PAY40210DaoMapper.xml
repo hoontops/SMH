@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pay.dao.PAY40210Dao">
+
+    <!-- 근태승인내역 조회 -->
+    <select id="selectAttendanceApproveList" parameterType="map" resultType="hashmap">
+        /* smh.pay.dao.PAY40110Dao.selectAttendanceApproveList */
+                SELECT DEF.APPLY_DATE                                             /* 신청일자        */
+             , DEF.ORG_NAME                                               /* 부서명          */
+             , DEF.GRADE_NAME                                             /* 직급            */
+             , DEF.EMPLOYEE_NUMBER                                        /* 사번            */
+             , DEF.EMP_NAME                                               /* 성명            */
+             , HJSHR_PERSON_EMPNAME_FNC(DEF.MGR_PERSON_ID) AS MGR_NAME    /* 승인권자        */
+             , DEF.START_DATE                                             /* 시작일자        */
+             , DEF.END_DATE                                               /* 종료일자        */
+             , DEF.REQUEST_DAY                                            /* 신청일수/시간   */
+             , DEF.CALENDER_NAME                                          /* 구분명          */
+             , DEF.STATUS_NAME                                            /* 상태명          */
+             , DEF.APPROVAL_CONTENTS                                      /* CONTENTS        */
+             , DEF.CALENDER_TYPE                                          /* 구분            */
+             , DEF.STATUS_CODE                                            /* 상태            */
+             , DEF.OBJECT_VERSION_NUMBER                                  /* OBJECT NUBMER   */
+             , DEF.HJSPAY_WORK_APPLY_SEQ                                  /* PK 일련번호     */
+             , DEF.PERSON_ID                                              /* PERSON_ID       */
+             , DEF.CLOSE_FLAG                                             /* 연차마감        */
+             , DEF.MGR_PERSON_ID                                          /* 관리자 PERSONID */
+             , '0' AS CHK
+             , DEF.CONTENTS												  /* 내용			*/
+             , DEF.ALTER_WORK_DAY										  /* 대체근무일  	*/
+             , DEF.BUSINESS_TYPE										  /* 국내외구분  	*/
+             , DEF.BUSINESS_LOCAL										  /* 출장지역  	*/
+          FROM
+             ( SELECT PPF.EMPLOYEE_NUMBER                                                                   AS  EMPLOYEE_NUMBER            /* 사번          */
+                    , PPF.KOR_NAME                                                                          AS  EMP_NAME                   /* 성명          */
+                    , PPF.KOR_GRADE                                                                         AS  GRADE_NAME                 /* 직급          */
+                    , TO_CHAR(HWA.APPLY_DATE, 'YYYY-MM-DD')                                                 AS  APPLY_DATE                 /* 신청일자      */
+                    , TO_CHAR(HWA.APPLY_DATE, 'YYYYMM')                                                     AS  COND_DATE                  /* 신청일자(조건)*/
+                    , HWA.REQUEST_DAY                                                                       AS  REQUEST_DAY                /* 신청일수/시간 */
+                    , HWA.CALENDER_TYPE                                                                     AS  CALENDER_TYPE              /* 구분          */
+                    , HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ATTENDANCE_TYPE', HWA.CALENDER_TYPE)                 AS  CALENDER_NAME              /* 구분명        */
+                    , APP.STATUS_CODE                                                                       AS  STATUS_CODE                /* 상태코드      */
+                    , APP.STATUS_NAME                                                                       AS  STATUS_NAME                /* 상태명        */
+                    , APP.STATUS_TYPE                                                                       AS  STATUS_TYPE                /* 상태TYPE      */
+                    , HWA.APPROVAL_CONTENTS                                                                 AS  APPROVAL_CONTENTS          /* CONTENTS      */
+                    , HWA.OBJECT_VERSION_NUMBER                                                             AS  OBJECT_VERSION_NUMBER      /* OBJECT NUBMER */
+                    , HWA.HJSPAY_WORK_APPLY_SEQ                                                             AS  HJSPAY_WORK_APPLY_SEQ      /* PK 일련번호   */
+                    , HWA.CONTENTS																			AS	CONTENTS				   /* 내용			*/
+                    , HWA.ALTER_WORK_DAY																	AS	ALTER_WORK_DAY			   /* 대체근무일  	*/
+                    , HWA.BUSINESS_TYPE                                                             		AS  BUSINESS_TYPE      		   /* 국내외구분   */
+                    , HWA.BUSINESS_LOCAL                                                             		AS  BUSINESS_LOCAL     		   /* 출장지역   */
+                    , PPF.PERSON_ID                                                                         AS  PERSON_ID                  /* PERSON_ID     */
+                    , PPF.ORGANIZATION_ID                                                                   AS  ORGANIZATION_ID            /* ORG_ID        */
+                    , PPF.ORG_NAME                                                                          AS  ORG_NAME                   /* ORG_NAME      */
+                    , DECODE(HWA.CALENDER_TYPE, '310'
+                                              , TO_CHAR(HWA.START_DATE, 'YYYY-MM-DD ') || TO_CHAR(HWA.START_DATE_TIME,'HH24:MI')
+                                              , TO_CHAR(HWA.START_DATE, 'YYYY-MM-DD'))              AS  START_DATE                 /* 시작일자      */
+                    , DECODE(HWA.CALENDER_TYPE, '310'
+                                              , TO_CHAR(HWA.END_DATE, 'YYYY-MM-DD ') || TO_CHAR(HWA.END_DATE_TIME,'HH24:MI')
+                                              , TO_CHAR(HWA.END_DATE, 'YYYY-MM-DD'))                AS  END_DATE                   /* 종료일자      */
+                    , NVL((SELECT HYH.ATTRIBUTE1
+                             FROM HJSPAY_EXCHANGE_YEARLY_HOLIDAY HYH
+                            WHERE HYH.PERSON_ID   = HWA.PERSON_ID
+                              AND HYH.APPLY_YYYY  = TO_CHAR(HWA.START_DATE, 'YYYY')), 'N')                  AS CLOSE_FLAG                  /* 연차마감      */
+                    , (SELECT XGR.PERSON_ID
+                         FROM HJSPFM_ORG_MANAGER_V1 XGR
+                        WHERE PPF.ORGANIZATION_ID   = XGR.ORGANIZATION_ID
+                          AND TRUNC(SYSDATE) BETWEEN XGR.EFFECTIVE_START_DATE AND XGR.EFFECTIVE_END_DATE)   AS MGR_PERSON_ID               /* 승인권자 ID   */
+                 FROM
+                    (
+                      SELECT FLV.LOOKUP_CODE    AS STATUS_CODE
+                           , FLV.MEANING        AS STATUS_NAME
+                           , FLV.ATTRIBUTE6     AS STATUS_TYPE
+                        FROM FND_LOOKUP_VALUES  FLV
+                       WHERE FLV.LOOKUP_TYPE    = 'HJS_HR_APPROVAL_STATUS'
+                         AND FLV.ENABLED_FLAG   = 'Y'
+                         AND FLV.LANGUAGE       = 'US'
+                         <if test="ATTRIBUTE6 != null and ATTRIBUTE6 !=''">
+                         AND FLV.ATTRIBUTE6     =  #{ATTRIBUTE6}  /* Param3: 상태 - 결재대기(N):10, 30  결재완료(Y):20, 40, 50 */
+                         </if>
+                    ) APP,
+                    ( SELECT DISTINCT HOH.CHILD_ORGANIZATION_ID
+                        FROM HJSPFM_ORG_HIERARCHY_V1    HOH
+                      CONNECT BY HOH.PARENT_ORGANIZATION_ID  = PRIOR HOH.CHILD_ORGANIZATION_ID
+                      START WITH HOH.CHILD_ORGANIZATION_ID  IN (
+                                                                  SELECT HOM.ORGANIZATION_ID
+                                                                    FROM HJSPFM_ORG_MANAGER_V1 HOM
+                                                                   WHERE 1=1
+                                                                     AND HOM.PERSON_ID  = #{PERSONID}     /* 로그인 PERSON ID */
+                                                                     AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE
+                                                                                            AND HOM.EFFECTIVE_END_DATE
+                                                               )
+                    ) ORG
+                    , HJS_SSHR_EMPLOYEE_LOV_V   PPF
+                    , HJSPAY_WORK_APPLY         HWA
+                WHERE 1=1
+                  AND NOT EXISTS ( SELECT 'x'
+                                     FROM HJSPAY_WORK_APPLY HWA1
+                                    WHERE HWA1.REQUEST_DAY <![CDATA[<]]> 0
+                                      AND HWA1.STATUS = '20'
+                                      AND HWA1.CALENDER_TYPE = '310'
+                                      AND HWA1.HJSPAY_WORK_APPLY_SEQ = HWA.HJSPAY_WORK_APPLY_SEQ
+                                 )
+                  AND HWA.PERSON_ID             = PPF.PERSON_ID
+                  AND HWA.STATUS                = APP.STATUS_CODE
+                  AND PPF.PERSON_TYPE          != 'Vessel'
+                  AND TRUNC(SYSDATE)            BETWEEN PPF.EFFECTIVE_START_DATE    AND PPF.EFFECTIVE_END_DATE
+                  AND PPF.ORGANIZATION_ID       = ORG.CHILD_ORGANIZATION_ID
+                ORDER BY HWA.APPLY_DATE DESC
+                    , PPF.ORG_NAME
+                    , PPF.GRADE_SEQ
+                    , PPF.KOR_NAME
+             ) DEF
+     WHERE 1=1
+       AND  DEF.COND_DATE       = NVL(#{COND_DATE}, DEF.COND_DATE)   /* Param1: 조회년월 */
+       <if test="ORGANIZATION_ID != null and ORGANIZATION_ID !=''">             
+       AND  DEF.ORGANIZATION_ID = NVL(#{ORGANIZATION_ID}, DEF.ORGANIZATION_ID)  /* Param2: 부서  */
+       </if>
+
+    </select>
+	<!-- 프로시져 Call  -->
+   	<select id="saveAttendanceApprove" statementType="CALLABLE"  parameterType="hashmap">
+        { call HJSPAY_ATTEND_APRV_BL_WEB_PKG.UPDATE_ATTENDANCE_APRV
+            (	
+                 #{HJSPAY_WORK_APPLY_SEQ, 	mode=IN}
+               , #{PERSON_ID,  				mode=IN}
+               , TO_DATE(#{APPLY_DATE, 		mode=IN},'YYYY-MM-DD')
+               , TO_DATE(#{START_DATE,		mode=IN},'YYYY-MM-DD')
+               , TO_DATE(#{START_DATE_TIME, mode=IN},'HH24:MI')
+               , TO_DATE(#{END_DATE, 		mode=IN},'YYYY-MM-DD')
+               , TO_DATE(#{END_DATE_TIME, 	mode=IN},'HH24:MI')
+               , #{REQUEST_DAY, 			mode=IN}
+               , #{CALENDER_TYPE, 			mode=IN}
+               , #{APPROVAL_CONTENTS, 		mode=IN}
+               , #{STATUS_CODE, 			mode=IN}
+               , #{MGR_PERSON_ID, 			mode=IN}
+               , #{OBJECT_VERSION_NUMBER,  	mode=IN}
+               , #{CHECK_FLAG, 				mode=IN}
+               , #{PERSONID, 				mode=IN}
+               , #{PERSONID, 				mode=IN}
+             )
+        }
+   	</select>
+   	<!-- 프로시져 Call  -->
+   	<select id="saveAttendanceApproveReturn" statementType="CALLABLE"  parameterType="hashmap">
+        { call HJSPAY_ATTEND_APRV_BL_WEB_PKG.UPDATE_ATTENDANCE_REJECT
+            (	
+                 #{HJSPAY_WORK_APPLY_SEQ, 	mode=IN}
+               , #{PERSON_ID,  				mode=IN}
+               , TO_DATE(#{APPLY_DATE, 		mode=IN},'YYYY-MM-DD')
+               , #{CALENDER_TYPE, 			mode=IN}
+			   , #{STATUS_CODE, 			mode=IN}
+			   , #{MGR_PERSON_ID, 			mode=IN}
+               , #{APPROVAL_CONTENTS, 		mode=IN}
+               , #{OBJECT_VERSION_NUMBER,  	mode=IN}
+               , #{PERSONID, 				mode=IN}
+               , #{PERSONID, 				mode=IN}
+             )
+        }
+   	</select>
+   	<!-- 근태 대리신청 성명조회 -->
+    <select id="selectEmployeeList" parameterType="map" resultType="hashmap">
+    	SELECT PPF.PERSON_ID   AS PERSON_ID
+		     , PPF.KOR_NAME    AS EMP_NAME
+		  FROM HJS_SSHR_EMPLOYEE_LOV_V  PPF
+		 WHERE 1=1
+		   AND TRUNC(SYSDATE)      BETWEEN PPF.EFFECTIVE_START_DATE  AND PPF.EFFECTIVE_END_DATE
+		   AND PPF.ORGANIZATION_ID IN ( SELECT HOM.ORGANIZATION_ID
+		                                  FROM HJSPFM_ORG_MANAGER_V1  HOM
+		                                 WHERE 1=1
+		                                   AND HOM.PERSON_ID  = #{PERSONID}     /* 로그인 PERSON ID 3324 */
+		                                   AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE AND HOM.EFFECTIVE_END_DATE
+		                               )
+		ORDER BY PPF.KOR_NAME
+    </select>
+    <!-- 프로시져 Call  -->
+   	<select id="saveEmployee" statementType="CALLABLE"  parameterType="hashmap">
+        { call HJSPAY_ATTEND_APRV_BL_WEB_PKG.INSERT_MSS_ATTENDANCE_APRV
+            (	
+                 #{CALENDER_TYPE, 				mode=IN}
+               , #{PERSON_ID,  					mode=IN}
+               , TO_DATE(#{START_DATE,			mode=IN},'YYYY-MM-DD')
+               , TO_DATE(#{START_DATE_TIME, 	mode=IN},'HH24:MI')
+               , TO_DATE(#{END_DATE, 			mode=IN},'YYYY-MM-DD')
+               , TO_DATE(#{END_DATE_TIME, 		mode=IN},'HH24:MI')
+			   , #{REQUEST_DAY, 				mode=IN}
+			   , #{CONTENTS, 					mode=IN}
+               , #{APPROVAL_CONTENTS, 			mode=IN}
+               , #{BUSINESS_TYPE,  				mode=IN}
+               , #{BUSINESS_LOCAL, 				mode=IN}
+               , #{PERSONID, 					mode=IN}
+             )
+        }
+   	</select>
+</mapper>

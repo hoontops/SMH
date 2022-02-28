@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+	PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+	"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 권한메뉴 관리
+    설명          : 권한메뉴 테이블 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2017.10.01
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.10.01     진성하     최초  생성
+-->
+
+<!-- 메뉴 관리 -->
+<mapper namespace="com.nbdf.cmd.cm.cmsy.dao.CMSY01400Dao">
+
+    <!-- 메뉴조회 -->
+	<select id="selectCmdJobAuthMenuMpngList" resultType="hashmap" parameterType="hashmap">
+	/* "com.nbdf.cmd.cm.cmsy.dao.CMSY01400Dao.selectCmdJobAuthMenuMpngList" */
+        SELECT
+			#{JOB_AUTH_ID} AS JOB_AUTH_ID               
+			,C.JOB_MENU_ID               
+			,DECODE(INS_AUTH_YN,'Y','1','0') AS INS_AUTH_YN               
+			,DECODE(QRY_AUTH_YN,'Y','1','0') AS QRY_AUTH_YN               
+			,DECODE(UPD_AUTH_YN,'Y','1','0') AS UPD_AUTH_YN               
+			,DECODE(DEL_AUTH_YN,'Y','1','0') AS DEL_AUTH_YN               
+			,AUTH_NM
+			,MENU_NM
+			,MENU_LVS
+			,UPPER_MENU          
+		FROM (SELECT
+				B.JOB_AUTH_ID               
+				,A.JOB_MENU_ID               
+				,A.INS_AUTH_YN               
+				,A.QRY_AUTH_YN               
+				,A.UPD_AUTH_YN               
+				,A.DEL_AUTH_YN               
+				,B.AUTH_NM
+			FROM CMD_JOB_AUTH_MENU_MPNG A, CMD_JOB_AUTH_MNG B
+		    WHERE A.JOB_AUTH_ID = B.JOB_AUTH_ID
+		    AND B.PLANTID=#{PLANTID}
+		    AND B.JOB_AUTH_ID =  #{JOB_AUTH_ID}) A,
+			(SELECT
+	             JOB_MENU_ID
+	             , MENU_NM
+	             , MENU_RM
+	             , USE_YN
+	             , MENU_GRP
+	             , MENU_SEQ
+	             , MENU_LVS
+	             , UPPER_MENU
+	             , PGE_URL
+	             , ROWNUM AS RN
+	          FROM CMD_JOB_MENU_MNG
+	          WHERE USE_YN = 'Y'
+	          START WITH UPPER_MENU IS NULL CONNECT
+	          BY PRIOR JOB_MENU_ID = UPPER_MENU
+	          ORDER SIBLINGS BY MENU_SEQ) C
+		WHERE A.JOB_MENU_ID(+) = C.JOB_MENU_ID 
+		order by RN
+	</select>
+
+    <!-- 메뉴등록 -->
+    <insert id="insertCmdJobAuthMenuMpng" parameterType="hashMap">
+    INSERT  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01400Dao.insertCmdJobAuthMenuMpng" */
+    INTO     CMD_JOB_AUTH_MENU_MPNG
+                (	JOB_AUTH_ID               
+					,JOB_MENU_ID               
+					,INS_AUTH_YN               
+					,QRY_AUTH_YN               
+					,UPD_AUTH_YN               
+					,DEL_AUTH_YN               
+					,CREATED_BY                
+					,CREATION_DATE             
+					,LAST_UPDATED_BY           
+					,LAST_UPDATE_DATE                
+                )
+    VALUES 	(
+                #{JOB_AUTH_ID}
+                ,#{JOB_MENU_ID}               
+				,DECODE(#{INS_AUTH_YN},'1','Y','0','N', #{INS_AUTH_YN})              
+				,DECODE(#{QRY_AUTH_YN},'1','Y','0','N', #{QRY_AUTH_YN})              
+				,DECODE(#{UPD_AUTH_YN},'1','Y','0','N', #{UPD_AUTH_YN})              
+				,DECODE(#{DEL_AUTH_YN},'1','Y','0','N', #{DEL_AUTH_YN})              
+			    ,#{CREATED_BY}
+			    ,SYSDATE
+				,#{LAST_UPDATED_BY}      
+				,SYSDATE     
+			    )
+    </insert>
+
+   <!-- 메뉴 삭제 -->
+    <delete id="deleteCmdJobAuthMenuMpng" parameterType="hashMap">
+    DELETE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01400Dao.deleteCmdJobAuthMenuMpng" */
+    FROM    CMD_JOB_AUTH_MENU_MPNG
+    WHERE  JOB_AUTH_ID = #{JOB_AUTH_ID}
+    AND JOB_MENU_ID = #{JOB_MENU_ID}
+    </delete>
+
+    <!-- 메뉴 수정 -->
+    <update id="updateCmdJobAuthMenuMpng" parameterType="hashMap">
+    UPDATE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01400Dao.updateCmdJobAuthMenuMpng" */  
+    CMD_JOB_AUTH_MENU_MPNG
+    SET     INS_AUTH_YN		= DECODE(#{INS_AUTH_YN},'1','Y','0','N', #{INS_AUTH_YN})     
+			,QRY_AUTH_YN    = DECODE(#{QRY_AUTH_YN},'1','Y','0','N', #{QRY_AUTH_YN})     
+			,UPD_AUTH_YN    = DECODE(#{UPD_AUTH_YN},'1','Y','0','N', #{UPD_AUTH_YN})           
+			,DEL_AUTH_YN    = DECODE(#{DEL_AUTH_YN},'1','Y','0','N', #{DEL_AUTH_YN})     
+			,LAST_UPDATED_BY	= #{LAST_UPDATED_BY}          
+			,LAST_UPDATE_DATE 	= SYSDATE                   
+    WHERE  JOB_AUTH_ID = #{JOB_AUTH_ID}
+    AND JOB_MENU_ID = #{JOB_MENU_ID}
+    </update>
+
+    <!-- 메뉴 수정 -->
+    <select id="selectCmdJobAuthMenuMpngCnt" resultType="Integer" parameterType="hashmap">
+    select  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01400Dao.selectCmdJobAuthMenuMpngCnt" */  
+    	count(*)
+    from CMD_JOB_AUTH_MENU_MPNG
+    WHERE  JOB_AUTH_ID = #{JOB_AUTH_ID}
+    AND JOB_MENU_ID = #{JOB_MENU_ID}
+    </select>
+  </mapper>

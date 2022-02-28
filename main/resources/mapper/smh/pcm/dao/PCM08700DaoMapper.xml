@@ -1,0 +1,669 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM08700Dao">
+<!-- 공정관리물류창고 출고 -->    
+
+    <!-- 공정관리물류창고 출고 조회 -->
+    <select id="selectOutsourceDistributionList" parameterType="map" resultType="hashmap">
+		--
+        -- GetOutsourcedDistribution
+        -- Version:10001
+        WITH WLQ AS
+            (
+                SELECT
+                        RST.LOTHISTKEY
+                    ,   RST.LOTID
+                    ,   RST.RECEIPTSEQUENCE
+                    ,   RST.PLANTID
+                    ,   RST.AREAID
+                    ,   RST.LOTTYPE
+                    ,   RST.RECEIPTDATE
+                    ,   RST.RECEIPTUSER
+                    ,   RST.CHECKDATE
+                    ,   RST.CHECKUSER
+                    ,   MIN(RST.PATHSEQUENCE)  AS PATHMIN
+                    ,   MAX(RST.PATHSEQUENCE)  AS PATHMAX
+                    ,   MIN(RST.USERSEQUENCE)  AS USERMIN
+                    ,   MAX(RST.USERSEQUENCE)  AS USERMAX
+                    ,   MAX(case when RST.PATHPRIMARY   = RST.PATHSEQUENCE then RST.PATHSEQUENCE end ) as PATHMAXPRIMARY
+                    ,   MAX(case when RST.PATHALTERNATE = RST.PATHSEQUENCE then RST.PATHSEQUENCE end ) as PATHMAXALTERNATE
+                    ,   MAX(case when RST.PATHPRIMARY   = RST.PATHSEQUENCE then RST.USERSEQUENCE end ) as USERMAXPRIMARY
+                    ,   MAX(case when RST.PATHALTERNATE = RST.PATHSEQUENCE then RST.USERSEQUENCE end ) as USERMAXALTERNATE
+                FROM
+                    (  
+                        SELECT 
+                                OSL.LOTHISTKEY 
+                            ,   OSL.LOTID
+                            ,   OSL.RECEIPTSEQUENCE
+                            ,   OSL.PLANTID
+                            ,   SLT.LOTTYPE
+                            ,   OSS.PATHSEQUENCE
+                            ,   OSS.USERSEQUENCE
+                            ,   OSS.PROCESSSEGMENTID
+                            ,   OSS.PROCESSSEGMENTVERSION
+                            ,   OSS.AREAID               AS AREAID
+                            ,   OSL.RECEIPTDATE
+                            ,   OSL.RECEIPTUSER
+                            ,   OSL.CHECKDATE
+                            ,   OSL.CHECKUSER
+                            ,   UFN_OSP_SELECTSAMEAREASEQ(OSL.LOTID,'PRIMARY')   AS PATHPRIMARY
+                            ,   UFN_OSP_SELECTSAMEAREASEQ(OSL.LOTID,'ALTERNATE') AS PATHALTERNATE
+                        FROM       OSM_OSPRECEIPTSENDLOT         OSL
+                        INNER JOIN PCM_LOT                       SLT   ON  SLT.LOTID            = OSL.LOTID
+                        INNER JOIN BAS_PLANT                     SPL   ON  SPL.PLANTID          = OSL.PLANTID
+                        INNER JOIN OSM_OSPRECEIPTSENDLOTSEGMENT  OSS   ON  OSS.LOTHISTKEY       = OSL.LOTHISTKEY
+                                                                      AND OSS.LOTID            = OSL.LOTID
+                                                                      AND OSS.RECEIPTSEQUENCE  = OSL.RECEIPTSEQUENCE
+                        WHERE  1=1 
+                        AND     OSL.PLANTID        = #{P_PLANTID}
+                        AND     OSL.SENDDATE       IS NULL
+                        <if test = "P_LOTID != null and P_LOTID !='' ">
+                            AND     OSL.LOTID = #{P_LOTID}
+                        </if>
+                        <if test="P_LOTTYPE != null and P_LOTTYPE !='' and !(P_LOTTYPE eq '*'.toString()) ">
+                            AND     SLT.LOTTYPE = #{P_LOTTYPE}
+                        </if>
+                        <if test = "P_RECEIPTUSER != null and P_RECEIPTUSER !='' ">
+                            AND     OSL.RECEIPTUSER = #{P_RECEIPTUSER}
+                        </if>
+                        <if test = "P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                            AND     SLT.PRODUCTDEFID     = #{P_PRODUCTDEFID}
+                        </if>
+                        <if test = "P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' ">
+                            AND     SLT.PROCESSSEGMENTID = #{P_PROCESSSEGMENTID}
+                        </if>
+                        <if test = "P_PRODUCTDEFVERSION != null and P_PRODUCTDEFVERSION !='' ">
+                            AND     SLT.PRODUCTDEFVERSION = #{P_PRODUCTDEFVERSION}
+                        </if>
+                        <if test = "P_RECEIPTDATE_PERIODFR != null and P_RECEIPTDATE_PERIODFR !='' ">
+                            AND     OSL.RECEIPTDATE <![CDATA[>=]]> TO_TIMESTAMP( #{P_RECEIPTDATE_PERIODFR} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS') 
+                        </if>
+                        <if test = "P_RECEIPTDATE_PERIODTO != null and P_RECEIPTDATE_PERIODTO !='' ">
+                            AND     OSL.RECEIPTDATE <![CDATA[<]]>  TO_TIMESTAMP( #{P_RECEIPTDATE_PERIODTO} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS') 
+                        </if>
+                        <if test="P_YESNO != null and P_YESNO !='' and (P_YESNO eq 'Y'.toString()) ">
+                            AND     OSL.CHECKDATE IS NOT NULL
+                        </if>
+                        <if test="P_YESNO != null and P_YESNO !='' and (P_YESNO eq 'N'.toString()) ">
+                            AND     OSL.CHECKDATE IS  NULL
+                        </if>
+                    )   RST
+                GROUP BY    RST.LOTHISTKEY 
+                        ,   RST.LOTID
+                        ,   RST.RECEIPTSEQUENCE
+                        ,   RST.PLANTID
+                        ,   RST.AREAID
+                        ,   RST.LOTTYPE
+                        ,   RST.RECEIPTDATE
+                        ,   RST.RECEIPTUSER
+                        ,   RST.CHECKDATE
+                        ,   RST.CHECKUSER
+                        ,   RST.PATHPRIMARY 
+                        ,   RST.PATHALTERNATE 
+            )
+        SELECT
+                LWS.ENTERPRISEID
+            ,   LWS.PLANTID
+            ,   LWS.TXNHISTKEY                        AS LOTHISTKEY
+            ,   WLQ.RECEIPTSEQUENCE
+            ,   LWS.LOTID
+            ,   WLQ.LOTTYPE
+            ,   LWS.PRODUCTDEFID
+            ,   LWS.PRODUCTDEFVERSION
+            ,   PRD.PRODUCTDEFNAME
+            ,   LWS.PROCESSDEFID
+            ,   LWS.PROCESSDEFVERSION
+            ,   LWS.PROCESSSEGMENTID
+            ,   DIC.DICTIONARYNAME                     AS PROCESSSEGMENTNAME
+            --, LWS.PROCESSSEGMENTID                   AS PREVPROCESSSEGMENTID
+            ,   DCC.DICTIONARYNAME                     AS PREVPROCESSSEGMENTNAME
+            ,   LWS.AREAID
+            ,   DAR.DICTIONARYNAME                     AS AREANAME
+            ,   HST.PREVAREAID                         AS PREVAREAID
+            ,   DAP.DICTIONARYNAME                     AS PREVAREANAME
+            ,   HST.PCSQTY           AS PCSQTY
+            ,   HST.ARRAYQTY         AS ARRAYQTY
+            ,   HST.PANELQTY        AS PANELQTY
+            ,   CASE WHEN PRD.PCSMM =0         THEN 0
+                     WHEN HST.PCSQTY  IS NULL  THEN 0
+                     ELSE HST.PCSQTY / PRD.PCSMM
+                END                                       AS  OSPMM
+            ,   SAC.OWNTYPE
+            ,   WLQ.RECEIPTDATE
+            ,   WLQ.RECEIPTUSER
+            ,   URR.USER_NM                              AS RECEIPTUSERNAME 
+            ,   WLQ.CHECKDATE
+            ,   WLQ.CHECKUSER
+            ,   URC.USER_NM                              AS CHECKUSERNAME 
+            ,   WLQ.USERMIN ||' ~ '||  WLQ.USERMAX        AS USERSEQUENCENAME
+            ,   WLQ.USERMIN ||' ~ '||  NVL(WLQ.USERMAXALTERNATE , WLQ.USERMAX)       AS ALTERNATESEQUENCENAME
+            ,   WLQ.PATHMIN                               AS PATHSEQUENCESTART 
+            ,   WLQ.PATHMAX                               AS PATHSEQUENCEEND
+            ,   SPL.WORKTIME
+        FROM                                        WLQ
+        INNER JOIN PCM_LOTWORKRESULT                 LWS   ON    LWS.TXNHISTKEY            = WLQ.LOTHISTKEY    
+                                                          AND   LWS.LOTID                 = WLQ.LOTID
+        INNER JOIN BAS_PROCESSPATH                   SPH   ON    SPH.PROCESSDEFID          = LWS.PROCESSDEFID
+                                                          AND   SPH.PROCESSDEFVERSION     = LWS.PROCESSDEFVERSION
+                                                          AND   SPH.PROCESSSEGMENTID      = LWS.PROCESSSEGMENTID
+                                                          AND   SPH.PROCESSSEGMENTVERSION = LWS.PROCESSSEGMENTVERSION
+                                                          AND   SPH.VALIDSTATE            = 'Valid'
+        LEFT OUTER JOIN PCM_LOTHISTORY               HST   ON    HST.LOTID                 = LWS.LOTID
+                                                          AND   HST.TXNHISTKEY            = LWS.PREVSENDLOTHISTKEY
+        LEFT OUTER JOIN BAS_PRODUCTDEFINITION        PRD   ON    PRD.PRODUCTDEFID          = LWS.PRODUCTDEFID          --제품
+                                                          AND   PRD.PRODUCTDEFVERSION     = LWS.PRODUCTDEFVERSION
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT           PRS   ON    PRS.PROCESSSEGMENTID      = LWS.PROCESSSEGMENTID
+                                                          AND   PRS.PROCESSSEGMENTVERSION = LWS.PROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_DICTIONARY               DIC   ON    DIC.DICTIONARYID          = PRS.PROCESSSEGMENTNAME
+                                                          AND   DIC.LANGUAGETYPE          = #{LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_AREA                     SAC   ON    SAC.AREAID                = LWS.AREAID
+           
+        LEFT OUTER JOIN CMD_DICTIONARY               DAR   ON    DAR.DICTIONARYID          = SAC.AREANAME
+                                                          AND   DAR.LANGUAGETYPE          = #{LANGUAGETYPE}
+                                                               
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT           PSP   ON    PSP.PROCESSSEGMENTID      = HST.PREVPROCESSSEGMENTID
+                                                          AND   PSP.PROCESSSEGMENTVERSION = HST.PREVPROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_DICTIONARY               DCC   ON    DCC.DICTIONARYID          = PSP.PROCESSSEGMENTNAME
+                                                          AND   DCC.LANGUAGETYPE          =  #{LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_AREA                     SAP   ON    SAP.AREAID                = HST.PREVAREAID     
+           
+        LEFT OUTER JOIN CMD_DICTIONARY               DAP   ON    DAP.DICTIONARYID          = SAP.AREANAME
+                                                          AND   DAP.LANGUAGETYPE          = #{LANGUAGETYPE}
+        LEFT OUTER JOIN CMD_USERS                     URR   ON    URR.USER_ID                = WLQ.RECEIPTUSER     
+        LEFT OUTER JOIN CMD_USERS                     URC   ON    URC.USER_ID                = WLQ.CHECKUSER    
+        LEFT OUTER JOIN BAS_PLANT                    SPL   ON    SPL.PLANTID               = WLQ.PLANTID   
+        WHERE   1=1
+        AND     LWS.PLANTID        = #{P_PLANTID}
+        <if test="P_AREAID != null and P_AREAID !='' and !(P_AREAID eq '*'.toString()) ">
+            AND     WLQ.AREAID = #{P_AREAID}
+        </if>              
+    </select>
+    
+    
+    <!--
+ 	설       명   	: 외주처 배분 팝업 공정 현황 조회용
+	생   성   자   	: 최별
+ 	생   성   일   	: 2019-07-08
+ 	수  정   이  력 	: 
+	파  라   미  터 	: 
+                 P_PLANTID          site   
+                 P_PROCESSSEGMENTID 공정    
+                 P_STARTDATE        현재일자
+                 P_ENDDATE          현재일자 +1
+                 P_STARTMONTH       당월시작일
+                 P_ENDMONTH         당월+1 
+    -->
+    <select id="selectOutsourcedDistributionPopup" parameterType="map" resultType="hashmap">     
+        --
+        -- GetOutsourcedDistributionPopup
+        -- Version:10001
+        SELECT 
+                SAA.OWNTYPE
+            ,   CMM.PROCESSSEGMENTID
+            ,   DIC.DICTIONARYNAME  AS PROCESSSEGMENTNAME
+            ,   CMM.ENTERPRISEID
+            ,   CMM.AREAID
+            ,   DAA.DICTIONARYNAME  AS  AREANAME
+            ,   CMM.PLANTID
+            ,   CMM.ALLOCATERATE
+            ,   CMM.SENDPANELQTYMON
+            ,   CMM.SENDPANELQTYDAY
+            ,   0.0 AS SENDPANELQTYMONRATE
+            ,   0.0 AS SENDPANELQTYDAYRATE
+            ,   SUM(CMM.SENDPANELQTYMON ) OVER() AS SENDPANELQTYMONSUM
+            ,   SUM(CMM.SENDPANELQTYDAY ) OVER() AS SENDPANELQTYDAYSUM
+            ,   CDD.PANELQTY                     AS PROPANELQTY
+            ,   CDD.WAITFORRECEIVEPNLQTY
+            ,   CDD.WAITPNLQTY
+            ,   CDD.RUNPNLQTY
+            ,   CDD.WAITFORSENDPNLQTY
+        FROM 
+            (
+                SELECT 
+                        SPG.PROCESSSEGMENTID
+                    ,   CAR.ENTERPRISEID
+                    ,   CAR.AREAID
+                    ,   CAR.PLANTID
+                    ,   CAR.ALLOCATERATE
+                    ,   NVL(SUM(CWR.SENDPANELQTY),0) AS SENDPANELQTYMON
+                    ,   NVL(SUM(CASE WHEN CWR.SENDTIME 		<![CDATA[>=]]>	TO_TIMESTAMP(#{P_STARTDATE}, 'YYYY-MM-DD HH24:MI:SS')						--20200305 BY PHW 이전소스 수정함.
+                                          AND  CWR.SENDTIME <![CDATA[< ]]>	TO_TIMESTAMP(#{P_ENDDATE}, 'YYYY-MM-DD HH24:MI:SS')  THEN CWR.SENDPANELQTY 	--20200305 BY PHW 이전소스 수정함.
+                                          ELSE 0 END ),0) AS SENDPANELQTYDAY
+                FROM       OSM_OSPALLOCATESEGMENT   CAS
+                INNER JOIN BAS_PROCESSSEGMENT       SPG    ON  SPG.PROCESSSEGMENTCLASSID  = CAS.PROCESSSEGMENTCLASSID		
+                                                          AND SPG.VALIDSTATE        = 'Valid'
+                INNER JOIN OSM_OSPALLOCATERATE      CAR    ON  CAR.PROCESSSEGMENTCLASSID  = CAS.PROCESSSEGMENTCLASSID		
+                                                          AND CAR.ENTERPRISEID      = CAS.ENTERPRISEID 
+                                                          AND CAR.PLANTID           = CAS.PLANTID 
+                                                          AND CAR.YEARMONTH         = CAS.YEARMONTH 
+                                                          AND CAR.VALIDSTATE        = 'Valid'
+                INNER JOIN BAS_PLANT                 SPL   ON  SPL.PLANTID           = CAS.PLANTID 							
+                LEFT OUTER JOIN PCM_LOTWORKRESULT    CWR   ON  CWR.PROCESSSEGMENTID  = SPG.PROCESSSEGMENTID
+                                                          AND CWR.ENTERPRISEID      = CAR.ENTERPRISEID 
+                                                          AND CWR.AREAID            = CAR.AREAID
+                                                          AND CWR.PLANTID           = CAR.PLANTID
+                                                          AND CWR.SENDTIME          <![CDATA[>=]]> 	TO_TIMESTAMP(#{P_STARTMONTH}, 'YYYY-MM-DD HH24:MI:SS') --20200305 BY PHW 이전소스 수정함.
+                                                          AND CWR.SENDTIME          <![CDATA[< ]]> 	TO_TIMESTAMP(#{P_ENDMONTH}, 'YYYY-MM-DD HH24:MI:SS')   --20200305 BY PHW 이전소스 수정함.
+                WHERE 1=1
+                AND     CAS.PLANTID                   = #{P_PLANTID}
+                AND     SPG.PROCESSSEGMENTID          = #{P_PROCESSSEGMENTID}
+                AND     CAS.YEARMONTH                 = #{P_YEARMONTH}
+                AND     CAS.ISALLOCATE                = 'Y'
+                AND     CAS.VALIDSTATE = 'Valid'
+                GROUP BY    SPG.PROCESSSEGMENTID
+                        ,   CAR.ENTERPRISEID
+                        ,   CAR.AREAID
+                        ,   CAR.PLANTID     
+                        ,   CAR.ALLOCATERATE
+            ) CMM
+        LEFT OUTER JOIN 
+            (
+                SELECT
+                        SPG.PROCESSSEGMENTID
+                    ,   CAR.ENTERPRISEID
+                    ,   CAR.AREAID
+                    ,   CAR.PLANTID
+                    ,   NVL(SUM(SLT.PANELQTY),0) AS PANELQTY
+                    ,   SUM(CASE WHEN SLT.PROCESSSTATE ='WaitForReceive'       THEN SLT.PANELQTY
+                                 ELSE 0 END ) AS WAITFORRECEIVEPNLQTY
+                    ,   SUM(CASE WHEN SLT.PROCESSSTATE ='Wait'                 THEN SLT.PANELQTY
+                                 ELSE 0 END ) AS WAITPNLQTY
+                    ,   SUM(CASE WHEN SLT.PROCESSSTATE ='Run'                  THEN SLT.PANELQTY
+                                 ELSE 0 END ) AS RUNPNLQTY
+                    ,   SUM(CASE WHEN SLT.PROCESSSTATE ='WaitForSend'          THEN SLT.PANELQTY
+                                 ELSE 0 END ) AS WAITFORSENDPNLQTY
+                FROM    OSM_OSPALLOCATESEGMENT      CAS
+                INNER JOIN BAS_PROCESSSEGMENT       SPG    ON  SPG.PROCESSSEGMENTCLASSID  = CAS.PROCESSSEGMENTCLASSID			
+                                                          AND SPG.VALIDSTATE             = 'Valid'
+                INNER JOIN OSM_OSPALLOCATERATE      CAR    ON  CAR.PROCESSSEGMENTCLASSID  = CAS.PROCESSSEGMENTCLASSID			
+                                                          AND CAR.ENTERPRISEID      = CAS.ENTERPRISEID 
+                                                          AND CAR.PLANTID           = CAS.PLANTID 
+                                                          AND CAR.YEARMONTH         = CAS.YEARMONTH 
+                                                          AND CAR.VALIDSTATE        = 'Valid'
+                INNER JOIN BAS_PLANT                 SPL   ON  SPL.PLANTID           = CAS.PLANTID 								
+                LEFT OUTER JOIN PCM_LOT              SLT   ON  SLT.PROCESSSEGMENTID = SPG.PROCESSSEGMENTID
+                                                          AND SLT.ENTERPRISEID     = CAR.ENTERPRISEID 
+                                                          AND SLT.AREAID           = CAR.AREAID
+                                                          AND SLT.PLANTID          = CAR.PLANTID
+                                                          AND SLT.LOTSTATE  IN ('InProduction','InTransit')
+                WHERE 1=1
+                AND     CAS.PLANTID                   = #{P_PLANTID}
+                AND     SPG.PROCESSSEGMENTID          = #{P_PROCESSSEGMENTID}
+                AND     CAS.YEARMONTH                 = #{P_YEARMONTH}
+                AND     CAS.ISALLOCATE                = 'Y' 
+                AND     CAS.VALIDSTATE                = 'Valid'
+                GROUP BY 
+                            SPG.PROCESSSEGMENTID
+                        ,   CAR.ENTERPRISEID
+                        ,   CAR.AREAID
+                        ,   CAR.PLANTID     
+            ) CDD           ON  CDD.PROCESSSEGMENTID = CMM.PROCESSSEGMENTID
+                            AND CDD.ENTERPRISEID     = CMM.ENTERPRISEID 
+                            AND CDD.AREAID           = CMM.AREAID
+                            AND CDD.PLANTID          = CMM.PLANTID
+        INNER JOIN BAS_AREA                SAA  ON  SAA.AREAID                = CMM.AREAID					
+         
+        LEFT OUTER JOIN CMD_DICTIONARY     DAA  ON  DAA.DICTIONARYID          = SAA.AREANAME
+                                               AND DAA.LANGUAGETYPE          = #{LANGUAGETYPE}                               
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT PRS  ON  PRS.PROCESSSEGMENTID      = CMM.PROCESSSEGMENTID
+        LEFT OUTER JOIN CMD_DICTIONARY     DIC  ON  DIC.DICTIONARYID          = PRS.PROCESSSEGMENTNAME
+                                          AND  DIC.LANGUAGETYPE              = #{LANGUAGETYPE}
+    </select>
+    
+    
+    <!--
+ 	설       명		: 외주처 배분 팝업 공정 현황 조회용
+ 	생   성   자		: 최별
+ 	생   성   일		: 2019-07-08
+ 	수  정   이  력	: 
+ 	파  라   미  터	: 
+                 P_LOTID           site   
+                 P_LOTHISTKEY      공정    
+                 P_RECEIPTSEQUENCE
+  
+    --> 
+    <select id="selectOutsourcedDistributionLotSegmentid" parameterType="map" resultType="hashmap">
+        --
+        -- GetOutsourcedDistributionLotSegmentid
+        -- Version:10001
+        SELECT
+                OSS.LOTHISTKEY
+            ,   OSS.LOTID
+            ,   OSS.RECEIPTSEQUENCE
+            ,   CLW.PRODUCTDEFID
+            ,   CLW.PRODUCTDEFVERSION
+            ,   OSS.PROCESSDEFID
+            ,   OSS.PROCESSDEFVERSION
+            ,   OSS.PROCESSSEGMENTID
+            ,   OSS.PROCESSSEGMENTVERSION
+            ,   DIC.DICTIONARYNAME            AS PROCESSSEGMENTNAME
+            ,   OSS.PATHSEQUENCE
+            ,   OSS.USERSEQUENCE
+            ,   OSS.RESOURCEID
+            ,   MMR.DESCRIPTION               AS RESOURCENAME
+            ,   OSS.AREAID
+            ,   DAR.DICTIONARYNAME            AS AREANAME
+            ,   OSS.PREVRESOURCEID            AS PREVRESOURCEID
+            ,   MMR.DESCRIPTION               AS PREVRESOURCENAME
+            ,   OSS.AREAID                    AS PREVAREAID
+            ,   OSS.PLANTID
+            ,   CLW.WORKCOUNT
+            ,   OSL.CHECKDATE
+            ,   URC.USER_NM                   AS CHECKUSERNAME
+            ,   OSL.CHECKUSER
+            ,   OSS.ENTERPRISEID
+        FROM            OSM_OSPRECEIPTSENDLOTSEGMENT  OSS
+        INNER      JOIN OSM_OSPRECEIPTSENDLOT         OSL  ON  OSL.LOTHISTKEY            = OSS.LOTHISTKEY
+                                                          AND OSL.LOTID                 = OSS.LOTID
+                                                          AND OSL.RECEIPTSEQUENCE       = OSS.RECEIPTSEQUENCE
+        INNER      JOIN PCM_LOTWORKRESULT             CLW  ON  CLW.TXNHISTKEY            = OSS.LOTHISTKEY
+                                                          AND CLW.LOTID                 = OSS.LOTID
+        INNER      JOIN BAS_RESOURCE                  MMR  ON  MMR.RESOURCEID            = OSS.RESOURCEID
+                                                          AND MMR.PLANTID               = OSS.PLANTID
+                                                          AND MMR.ENTERPRISEID          = OSS.ENTERPRISEID
+        LEFT OUTER JOIN CMD_USERS                      URC  ON  URC.USER_ID                = OSL.CHECKUSER  
+        LEFT OUTER JOIN BAS_AREA                      SAC  ON  SAC.AREAID                = OSS.AREAID
+        LEFT OUTER JOIN CMD_DICTIONARY                DAR  ON  DAR.DICTIONARYID          = SAC.AREANAME
+                                                          AND DAR.LANGUAGETYPE          = #{LANGUAGETYPE}
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT            PRS  ON  PRS.PROCESSSEGMENTID      = OSS.PROCESSSEGMENTID
+                                                          AND PRS.PROCESSSEGMENTVERSION = OSS.PROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_DICTIONARY               DIC   ON  DIC.DICTIONARYID          = PRS.PROCESSSEGMENTNAME
+                                                          AND  DIC.LANGUAGETYPE         = #{LANGUAGETYPE} 
+        WHERE   1=1
+        AND     OSS.LOTHISTKEY        = #{P_LOTHISTKEY}
+        AND     OSS.LOTID             = #{P_LOTID}
+        AND     OSS.RECEIPTSEQUENCE   = #{P_RECEIPTSEQUENCE}
+        ORDER BY OSS.PATHSEQUENCE
+    </select>
+    
+    
+    <!--
+	설       명   	: 회사별 plant 정보 가져오기 
+	생   성   자   	: 최별
+	생   성   일   	: 2019-08-05
+ 	수  정   이  력 	: 
+    -->
+    <select id="selectPlantidInformatByCsm" parameterType="map" resultType="hashmap">
+   	 	--
+        -- GetPlantidInformatByCsm
+        -- Version:10001
+        SELECT
+                SPL.PLANTID
+            ,   SPL.ENTERPRISEID
+            ,   SPL.PLANTNAME
+            ,   SPL.ADDRESS
+            ,   SPL.PHONE
+            ,   SPL.FAXNO
+            ,   SPL.LANGUAGE
+            ,   SPL.ISOSPBUDGETCONTROL
+            ,   SPL.ISOSPETCBUDGETCONTROL
+            ,   NVL(SPL.WORKTIME,'08:30:00') AS WORKTIME
+            ,   SPL.TIMEZONE
+            ,   SPL.DESCRIPTION
+        FROM    BAS_PLANT SPL
+        WHERE   1=1
+        AND     SPL.PLANTID = #{P_PLANTID}
+    </select>
+    
+    
+  <!--
+    설       명   : RESOURCE 정보 가져오기
+    생   성   자   : 최별
+    생   성   일   : 2019-10-31
+    수  정   이  력 : 
+    -->
+    <select id="selectResourceidListByOspList" parameterType="map" resultType="hashmap">
+    	--
+        -- Id : GetResourceidListByOsp
+        -- Version : 10001         
+        SELECT 
+                MMR.RESOURCEID
+            ,   MMR.DESCRIPTION AS RESOURCENAME
+            ,   MMR.AREAID
+            ,   DAA.DICTIONARYNAME        AS  AREANAME
+        FROM       BAS_BILLOFRESOURCE   SBR
+        INNER JOIN BAS_RESOURCE         MMR ON  MMR.RESOURCEID            = SBR.RESOURCEID
+                                           AND MMR.PLANTID               = SBR.PLANTID
+                                           AND MMR.ENTERPRISEID          = SBR.ENTERPRISEID
+        LEFT OUTER  JOIN BAS_AREA       SAR ON  SAR.AREAID                = MMR.AREAID
+                                           AND SAR.PLANTID               = MMR.PLANTID 
+        LEFT OUTER  JOIN CMD_DICTIONARY DAA ON  DAA.DICTIONARYID          = SAR.AREANAME
+                                           AND DAA.LANGUAGETYPE          = #{LANGUAGETYPE}
+        WHERE 1=1
+        AND     SBR.RESOURCETYPE          = 'Resource'
+        AND     SBR.VALIDSTATE            = 'Valid'
+        AND     SBR.PRODUCTDEFID          = #{P_PRODUCTDEFID}
+        AND     SBR.PRODUCTDEFVERSION     = #{P_PRODUCTDEFVERSION}
+        AND     SBR.PROCESSDEFID          = #{P_PROCESSDEFID}
+        AND     SBR.PROCESSDEFVERSION     = #{P_PROCESSDEFVERSION}
+        AND     SBR.PROCESSSEGMENTID      = #{P_PROCESSSEGMENTID}
+        AND     SBR.PROCESSSEGMENTVERSION = #{P_PROCESSSEGMENTVERSION}
+        AND     SBR.PLANTID               = #{P_PLANTID}
+        <if test="P_AREAID != null and P_AREAID !='' and !(P_AREAID eq '*'.toString()) ">
+            AND     MMR.AREAID = #{P_AREAID}
+        </if>
+        <if test="P_RESOURCENAME != null and P_RESOURCENAME !='' and !(P_RESOURCENAME eq '*'.toString()) ">
+            AND (
+            		UPPER(MMR.RESOURCEID)  LIKE '%' || UPPER(#{P_RESOURCENAME}) || '%'
+            	OR  UPPER(MMR.DESCRIPTION) LIKE '%' || UPPER(#{P_RESOURCENAME}) || '%'
+            	)
+        </if>
+    </select>
+	
+    
+    <select id="selectOspreceiptsendlot" parameterType="map" resultType="hashmap">
+  		SELECT
+				OLT.LOTID,
+				OLT.LOTHISTKEY,
+				OLT.RECEIPTSEQUENCE,
+				OLT.SENDAREAID,
+				OLT.SENDUSER
+		FROM	OSM_OSPRECEIPTSENDLOT	OLT	 
+		WHERE	1=1
+		AND		OLT.LOTID             = #{LOTID}
+		AND		OLT.LOTHISTKEY        = #{LOTHISTKEY}
+		AND		OLT.RECEIPTSEQUENCE   = #{RECEIPTSEQUENCE}
+	</select>
+    
+    <update id="updateOspreceiptsendlot" parameterType="map">
+         UPDATE OSM_OSPRECEIPTSENDLOT
+         SET
+					CHECKDATE 	= #{CHECKDATE}
+				,	CHECKUSER 	= #{CHECKUSER}
+				
+				,	VALIDSTATE 	= #{VALIDSTATE}
+				,	LASTTXNID 	= #{LASTTXNID}
+					
+				,	MODIFIER 	= #{MODIFIER}
+				,	MODIFIEDTIME= SYSDATE
+		WHERE
+			LOTID  = #{LOTID}
+		AND LOTHISTKEY  = #{LOTHISTKEY}
+		AND RECEIPTSEQUENCE  = #{RECEIPTSEQUENCE}
+    </update>
+    
+    <!-- PCM/0870M/공정관리-외주창고입출고공정 조회 -->	
+	<select id="selectOspreceiptsendlotSegment" parameterType="map" resultType="hashmap">
+		SELECT
+				OSS.LOTHISTKEY,
+				OSS.LOTID,
+				OSS.RECEIPTSEQUENCE,
+				OSS.PROCESSDEFID,
+				OSS.PROCESSDEFVERSION,
+				OSS.PROCESSSEGMENTID,
+				OSS.PROCESSSEGMENTVERSION,
+				OSS.RESOURCEID,
+				OSS.AREAID
+		FROM	OSM_OSPRECEIPTSENDLOTSEGMENT	OSS	 
+		WHERE	1=1
+		AND LOTHISTKEY = #{LOTHISTKEY}							<!-- Lot HistKey -->
+		AND LOTID = #{LOTID}									<!-- LOT ID -->
+		AND RECEIPTSEQUENCE = #{RECEIPTSEQUENCE}				<!-- 입고순번 -->
+		AND PROCESSDEFID = #{PROCESSDEFID}						<!-- 라우팅 ID -->
+		AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}			<!-- 라우팅 Version -->
+		AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}				<!-- 공정 ID -->
+		AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}	<!-- 공정 Version -->		
+	</select>
+    
+    
+    <!-- PCM/0870M/공정관리-외주창고입출고공정 수정 -->	
+	<update id="updateOspreceiptsendlotSegment" parameterType="map" >
+		UPDATE 
+			OSM_OSPRECEIPTSENDLOTSEGMENT
+		SET
+			PREVRESOURCEID = #{PREVRESOURCEID},					<!-- 이전자원ID -->
+			PREVAREAID = 	#{PREVAREAID},						<!-- 이전작업장ID -->
+			RESOURCEID = 	#{RESOURCEID},						<!-- 자원ID -->
+			AREAID = 		#{AREAID},							<!-- 작업장 ID -->				
+			
+			VALIDSTATE = 	#{VALIDSTATE},						<!-- 유효여부 -->
+			LASTTXNID = 	#{LASTTXNID},						<!-- 마지막TXN ID -->
+			
+			MODIFIER = 		#{MODIFIER},						<!-- 수정자 -->
+			MODIFIEDTIME = SYSDATE								<!-- 수정일 -->
+		WHERE 1=1
+		AND LOTHISTKEY = #{LOTHISTKEY}							<!-- Lot HistKey -->
+		AND LOTID = #{LOTID}									<!-- LOT ID -->
+		AND RECEIPTSEQUENCE = #{RECEIPTSEQUENCE}				<!-- 입고순번 -->
+		AND PROCESSDEFID = #{PROCESSDEFID}						<!-- 라우팅 ID -->
+		AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}			<!-- 라우팅 Version -->
+		AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}				<!-- 공정 ID -->
+		AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}	<!-- 공정 Version -->
+	</update>
+	
+	<select id="selectLot" parameterType="map" resultType="hashmap">
+		SELECT
+				SLT.LOTID
+		FROM	PCM_LOT	SLT	 
+		WHERE	1=1
+		AND LOTID = #{LOTID}									<!-- LOT ID -->		
+	</select>
+	
+	<update id="updateLot" parameterType="map">
+		UPDATE PCM_LOT
+		SET
+			  AREAID 		= #{AREAID},
+			  RESOURCEID 	= #{RESOURCEID},
+			  MODIFIER 		= #{MODIFIER},						<!-- 수정자 -->
+			  MODIFIEDTIME 	= SYSDATE							<!-- 수정일 -->
+		WHERE LOTID = #{LOTID}									<!-- LOT ID -->		
+	</update>
+	
+	<select id="selectLotWorkResult" parameterType="map" resultType="hashmap">
+		SELECT
+				LWS.TXNHISTKEY,
+				LWS.LOTID,
+				LWS.SENDUSER
+		FROM	PCM_LOTWORKRESULT	LWS	 
+		WHERE	1=1
+		AND TXNHISTKEY = #{LOTHISTKEY}							<!-- Lot HistKey -->		
+		AND LOTID = #{LOTID}									<!-- LOT ID -->
+	</select>
+    
+    
+    <update id="updateLotWorkResult" parameterType="map" >
+		UPDATE 
+			PCM_LOTWORKRESULT
+		SET
+			AREAID = 		#{AREAID},							<!-- 작업장 ID -->
+			RESOURCEID = 	#{RESOURCEID},						<!-- 자원ID -->
+			
+			MODIFIER = 		#{MODIFIER},						<!-- 수정자 -->
+			MODIFIEDTIME = 	SYSDATE								<!-- 수정일 -->
+		WHERE 1=1
+		AND TXNHISTKEY = #{TXNHISTKEY}							<!-- TXN HistKey -->
+		AND LOTID = #{LOTID}									<!-- LOT ID -->
+	</update>
+	
+	<update id="updateOspreceiptsendlot2" parameterType="map">
+         UPDATE 
+         	OSM_OSPRECEIPTSENDLOT
+         SET
+					CHECKDATE 	= #{CHECKDATE}
+				,	CHECKUSER 	= #{CHECKUSER}
+				,	SENDAREAID 	= #{SENDAREAID}
+				
+				,	VALIDSTATE 	= #{VALIDSTATE}
+				,	LASTTXNID 	= #{LASTTXNID}
+					
+				,	MODIFIER 	= #{MODIFIER}
+				,	MODIFIEDTIME= SYSDATE
+		WHERE
+			LOTID  = #{LOTID}
+		AND LOTHISTKEY  = #{LOTHISTKEY}
+		AND RECEIPTSEQUENCE  = #{RECEIPTSEQUENCE}
+    </update>
+    
+    <select id="selectLotarea" parameterType="map" resultType="hashmap">
+		SELECT
+				PLA.LOTID,
+				PLA.PROCESSDEFID,
+				PLA.PROCESSDEFVERSION,
+				PLA.PROCESSSEGMENTID,
+				PLA.PROCESSSEGMENTVERSION,
+				PLA.WORKCOUNT
+		FROM	PCM_LOTAREA	PLA	 
+		WHERE 1=1
+		AND LOTID = #{LOTID}									<!-- LOT ID -->
+		AND PROCESSDEFID = #{PROCESSDEFID}						<!-- 라우팅 ID -->
+		AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}			<!-- 라우팅 Version -->
+		AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}				<!-- 공정 ID -->
+		AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}	<!-- 공정 Version -->
+		AND WORKCOUNT = #{WORKCOUNT}							<!-- 작업차수 -->
+	</select>
+	
+	<update id="updateLotarea" parameterType="map" >
+		UPDATE 
+			PCM_LOTAREA
+		SET
+			USERSEQUENCE = #{USERSEQUENCE},			<!-- ProcessPath 상의 사용자 순서 -->
+			AREAID = #{AREAID},						<!-- 작업장 ID -->
+			RESOURCEID = #{RESOURCEID},				<!-- 자원ID -->
+			
+			MODIFIER = #{MODIFIER},					<!-- 수정자 -->
+			MODIFIEDTIME = SYSDATE					<!-- 수정일 -->
+		WHERE 1=1
+		AND LOTID = #{LOTID}									<!-- LOT ID -->
+		AND PROCESSDEFID = #{PROCESSDEFID}						<!-- 라우팅 ID -->
+		AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}			<!-- 라우팅 Version -->
+		AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}				<!-- 공정 ID -->
+		AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}	<!-- 공정 Version -->
+		AND WORKCOUNT = #{WORKCOUNT}							<!-- 작업차수 -->
+	</update>
+	
+	<update id="insertLotarea" parameterType="map" >
+		INSERT INTO PCM_LOTAREA
+			(
+			 LOTID,
+			 PROCESSDEFID,
+			 PROCESSDEFVERSION,
+			 PROCESSSEGMENTID,
+			 PROCESSSEGMENTVERSION,
+			 WORKCOUNT,
+			 USERSEQUENCE,
+			 RESOURCEID,
+			 AREAID,
+			 CREATOR,
+			 CREATEDTIME,
+			 MODIFIER,
+			 MODIFIEDTIME
+		) VALUES (
+			 #{LOTID},
+			 #{PROCESSDEFID},
+			 #{PROCESSDEFVERSION},
+			 #{PROCESSSEGMENTID},
+			 #{PROCESSSEGMENTVERSION},
+			 #{WORKCOUNT},
+			 #{USERSEQUENCE},
+			 #{RESOURCEID},
+			 #{AREAID},
+			 #{CREATOR},
+			 SYSDATE,
+			 #{MODIFIER},
+			 SYSDATE
+		)
+	</update>
+
+</mapper>

@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS02600Dao">
+    
+    <select id="selectItemHistoryList" parameterType="map" resultType="hashmap">   		
+			 /* smh.bas.dao.BAS02600Dao.selectItemHistoryList */
+	  SELECT A.PLANTID
+      ,A.PRODUCTDEFID
+      ,MAX(A.ITEMID) ITEMID
+      ,MAX(A.CUSTOMERREV) CUSTOMERREV
+      ,A.PRODUCTDEFVERSION
+      ,MAX(A.PRODUCTNAME) PRODUCTNAME
+      ,MAX(A.SPECOWNERNAME) SPECOWNERNAME
+      ,MAX(A.CREATEDTIME) CREATEDTIME
+      ,MAX(A.GOVERNANCENO) GOVERNANCENO
+      ,MAX(A.RCPRODUCTDEFID) RCPRODUCTDEFID
+      ,MAX(A.RCPRODUCTDEFVERSION) RCPRODUCTDEFVERSION
+      ,MAX(A.ISRC) ISRC
+      ,MAX(A.ISPCN) ISPCN
+      ,MIN(A.PCNREQUESTDATE) PCNREQUESTDATE
+      ,MAX(A.CHANGECOMMENT) CHANGECOMMENT
+      ,MAX(A.CHANGENOTE) CHANGENOTE
+      ,MAX(A.APPROVALNO) CHANGEPOINTNO
+      ,MAX(A.ACCEPTFLAG) ACCEPTFLAG
+      ,MAX(A.INPUTSHRINKX) INPUTSHRINKX
+      ,MAX(A.INPUTSHRINKY) INPUTSHRINKY
+FROM   (
+        
+        SELECT PRD.PLANTID
+               ,PRD.PRODUCTDEFID
+               ,CASE
+                    WHEN LENGTH(PRD.PRODUCTDEFID) = 9 THEN
+                     SUBSTR(PRD.PRODUCTDEFID, 0, LENGTH(PRD.PRODUCTDEFID) - 2)
+                    ELSE
+                     SUBSTR(PRD.PRODUCTDEFID, 0, LENGTH(PRD.PRODUCTDEFID) - 2)
+                END AS ITEMID
+               ,SUBSTR(PRD.PRODUCTDEFID, length(PRD.PRODUCTDEFID)-1,2) CUSTOMERREV
+               ,PRD.PRODUCTDEFVERSION
+               ,COALESCE(PDN.DICTIONARYNAME, PRD.PRODUCTDEFNAME) AS PRODUCTNAME
+               ,SU.USERNAME AS SPECOWNERNAME
+               ,PRD.CREATEDTIME
+               ,GVC.GOVERNANCENO
+               ,GVC.RCPRODUCTDEFID AS RCPRODUCTDEFID
+               ,GVC.RCPRODUCTDEFVERSION AS RCPRODUCTDEFVERSION
+               ,CASE
+                    WHEN GVC.GOVERNANCENO IS NOT NULL THEN
+                     'Y'
+                    ELSE
+                     'N'
+                END AS ISRC
+               ,CASE
+                    WHEN PCN.APPROVALNO IS NOT NULL THEN
+                     'Y'
+                    ELSE
+                     'N'
+                END AS ISPCN
+               ,PCN.REQUESTDATE AS PCNREQUESTDATE
+               ,CHANGECOMMENT1 || CHR(10) || CHANGECOMMENT2 || CHR(10) ||
+                CHANGECOMMENT3 || CHR(10) || CHANGECOMMENT4 || CHR(10) ||
+                CHANGECOMMENT5 AS CHANGECOMMENT
+               ,CHANGENOTE1 || CHR(10) || CHANGENOTE2 || CHR(10) || CHANGENOTE3 ||
+                CHR(10) || CHANGENOTE4 || CHR(10) || CHANGENOTE5 AS CHANGENOTE
+               ,PCN.APPROVALNO
+               ,SCT.ACCEPTFLAG
+               ,SPC.INPUTSHRINKX
+               ,SPC.INPUTSHRINKY
+        FROM   BAS_PRODUCTDEFINITION PRD
+        LEFT   JOIN CMD_DICTIONARY PDN
+        ON     PRD.PRODUCTDEFNAME = PDN.DICTIONARYID
+        AND    PDN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        
+        LEFT   JOIN BAS_PRODUCTITEMSPEC SPC
+        ON     PRD.PRODUCTDEFID = SPC.ITEMID
+        AND    PRD.PRODUCTDEFVERSION = SPC.ITEMVERSION
+        AND    PRD.ENTERPRISEID = SPC.ENTERPRISEID
+        LEFT   JOIN CMD_USER_V SU
+        ON     SU.USERID = SPC.SPECIFICATIONMAN
+        LEFT   JOIN BAS_GOVERNANCE GVC
+        ON     PRD.PRODUCTDEFID = GVC.PRODUCTDEFID
+        AND    PRD.PRODUCTDEFVERSION = GVC.PRODUCTDEFVERSION
+        AND    GVC.GOVERNANCETYPE = 'RunningChange'
+        AND    GVC.STATUS = 'Confirm'        
+        LEFT   JOIN BAS_PRODUCTITEMSPECCOMMENT SCT
+        ON     PRD.PRODUCTDEFID = SCT.ITEMID
+        AND    PRD.PRODUCTDEFVERSION = SCT.ITEMVERSION
+        
+        LEFT   JOIN (SELECT QA.APPROVALNO
+                           ,QA.PROCESSTYPE
+                           ,QA.CHARGETYPE
+                           ,QA."sequence"
+                           ,QA.CHARGERID
+                           ,QA.APPROVALSTATE
+                           ,CASE
+                                WHEN QA.APPROVALSTATE = 'Reclamation' THEN
+                                 'Y'
+                                ELSE
+                                 CASE
+                                     WHEN (LAG(QA.APPROVALSTATE) OVER (PARTITION BY APPROVALNO ORDER BY "sequence") = 'Approval' 
+                                           OR LAG(QA.APPROVALSTATE) OVER (PARTITION BY APPROVALNO ORDER BY "sequence") IS NULL) AND
+                                          (LEAD(QA.APPROVALSTATE) OVER (PARTITION BY APPROVALNO ORDER BY "sequence") != 'Approval' 
+                                          OR LEAD(QA.APPROVALSTATE) OVER (PARTITION BY APPROVALNO ORDER BY "sequence") IS NULL 
+                                          OR LEAD(QA.APPROVALSTATE) OVER (PARTITION BY APPROVALNO ORDER BY "sequence") = '') AND
+                                          QA.APPROVALSTATE IS NOT NULL AND
+                                          QA.APPROVALSTATE != '' AND
+                                          QA.APPROVALSTATE != 'Companion' THEN
+                                      'Y'
+                                     ELSE
+                                      'N'
+                                 END
+                            END AS ISTURN
+                           ,LAG(QA.APPROVALSTATE) OVER (PARTITION BY APPROVALNO ORDER BY "sequence")
+                           ,CP.PRODUCTDEFID
+                           ,CP.PRODUCTDEFVERSION
+                           ,CP.REQUESTDATE
+                     FROM   QAM_CHANGEPOINT CP
+                     LEFT   JOIN QAM_QCAPPROVAL QA
+                     ON     CP.CHANGEPOINTNO = QA.APPROVALNO
+                     WHERE  1 = 1
+                     AND    QA.APPROVALTYPE = 'ChangePointManagement') PCN
+        ON     PRD.PRODUCTDEFID = PCN.PRODUCTDEFID
+        AND    PRD.PRODUCTDEFVERSION = PCN.PRODUCTDEFVERSION
+        <!-- AND    PCN.ISTURN = 'Y' 임시 주석처리--> 
+        AND    PCN.APPROVALSTATE = 'Approval'
+        WHERE  1 = 1
+        AND    PRD.PRODUCTCLASSID = 'Product'
+	    <if test="PLANTID != null and PLANTID !='' "> 
+	        AND PRD.PLANTID = #{PLANTID}
+	    </if>
+		<if test="P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='' ">
+			<![CDATA[
+				AND	PRD.CREATEDTIME >= to_timestamp( #{P_PERIOD_PERIODFR} || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+			]]>
+		</if>
+		<if test="P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='' ">
+			<![CDATA[
+				AND	PRD.CREATEDTIME <= to_timestamp( #{P_PERIOD_PERIODTO} || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+			]]>
+		</if>
+
+	    <if test="CUSTOMER != null and CUSTOMER !='' "> 
+	      AND UPPER(SUBSTR(PRD.PRODUCTDEFID, length(PRD.PRODUCTDEFID)-1,2))  LIKE '%' || UPPER(#{CUSTOMER}) || '%'
+	    </if>
+
+	    <if test="ITEMID != null and ITEMID !='' "> 
+	    AND EXISTS
+		                        (
+	                            SELECT  1
+	                            FROM    UFN_SELECTSTRINGTOSPLIT(#{ITEMID} ||',' , ',')      LMP
+	                            WHERE   CASE WHEN LENGTH(PRD.PRODUCTDEFID) = 9 THEN
+									                     SUBSTR(PRD.PRODUCTDEFID, 0, LENGTH(PRD.PRODUCTDEFID) - 2)
+									                    ELSE
+									                     SUBSTR(PRD.PRODUCTDEFID, 0, LENGTH(PRD.PRODUCTDEFID) - 2)
+									                END = LMP.VALUE
+	                        )   
+	    </if>
+	    	    
+	    <if test="SPECOWNER != null and SPECOWNER !='' "> 
+	        	          AND EXISTS
+                               (
+                                   SELECT  1
+                                   FROM    UFN_SELECTSTRINGTOSPLIT(#{SPECOWNER}, ',')      LMP
+                                   WHERE   SPC.SPECIFICATIONMAN = LMP.VALUE                                            
+                               )
+	    </if>
+	    
+   ) A
+
+GROUP  BY A.PLANTID
+         ,A.PRODUCTDEFID
+         ,A.PRODUCTDEFVERSION
+ORDER  BY A.PRODUCTDEFID
+    </select>     
+</mapper>

@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS05200Dao">
+
+    <!--
+		설		명	: 자사 작업자 관리 - Tree 선택 후 Main 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-27 
+		수  정   이  력	:
+	-->
+	<select id="selecBasAreaPersonMainList" parameterType="map" resultType="hashmap">
+			--
+			-- "GetAreaworkerList"
+			-- Version:10001
+			/* selecBasAreaPersonMainList - 자사 작업자 관리 - Tree 선택 후 Main 조회 */
+			SELECT 
+				A.ENTERPRISEID	
+				,A.PLANTID	
+				,A.AREAID	
+				,A.WORKERNAME	
+				,A.USERID	
+				,A.EMPLOYEENO	
+				,A.DEPARTMENT	
+				,A.OWNTYPE	
+				,A.WORKERTYPE	
+				,A.ISMAINAREA	
+				,A.DESCRIPTION	
+				,CU.USER_NM AS CREATOR
+				,TO_CHAR(A.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+				,MU.USER_NM AS MODIFIER
+				,TO_CHAR(A.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME				
+				,A.VALIDSTATE	
+				,A.WORKERNO	
+			FROM	BAS_AREAWORKER A 
+			LEFT OUTER JOIN CMD_USERS    CU   
+						 ON   A.CREATOR  = CU.USER_ID
+			LEFT OUTER JOIN CMD_USERS    MU   
+						 ON   A.MODIFIER = MU.USER_ID
+			WHERE 1=1 
+				AND A.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+			<if test="PLANTID != null and PLANTID !='' "> 
+				AND A.PLANTID = #{PLANTID}
+			</if>
+			<if test="AREAID != null and AREAID !='' "> 
+				AND A.AREAID = #{AREAID}
+			</if>		
+			<if test="VALIDSTATE != null and VALIDSTATE !='' "> 
+				AND A.VALIDSTATE = #{VALIDSTATE}
+			</if>
+    </select>
+    
+    
+    <!--
+		설		명	: 자사 작업자 관리 - 사용자 ID 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-27 
+		수  정   이  력	:
+	-->
+	<select id="selecUserAreaPersonList" parameterType="map" resultType="hashmap">
+			--
+			-- GetUserAreaPerson
+			-- 10001
+			
+			SELECT	
+						U.USER_ID       		AS USERID
+					,	U.USER_NM       	AS USERNAME
+					,	NVL(D.DEPT_NM ,U.DEPT_NM)       AS DEPARTMENT       -- 부서 코드에 따른 명으로 변경
+					,	U.CLPS_CD       	AS POSITION
+					,	U.MBPH_NO       	AS CELLPHONENUMBER
+					,	U.EMAIL_ADDR    	AS EMAILADDRESS
+					,	U.USE_YN        		AS VALIDSTATE
+                    ,   U.DEPT_CD
+                    ,   ''   					AS CHK
+				FROM	CMD_USERS				U
+                LEFT OUTER JOIN CMD_DEPTS       D
+                ON U.DEPT_CD = D.DEPT_CD
+				WHERE	1 = 1
+				AND		DECODE( NVL(U.USE_YN,'N'), 'Y', 'Valid', 'Invalid') = 'Valid' 
+				
+                
+				<if test="USERID != null and USERID !='' and !(USERID eq '*'.toString()) ">
+					AND 	UPPER(U.USER_ID) LIKE  '%' || UPPER(#{USERID})|| '%'  
+				</if>
+				<if test="DEPARTMENT != null and DEPARTMENT !='' and !(DEPARTMENT eq '*'.toString()) ">
+					AND 	UPPER(U.DEPT_CD) LIKE  '%' || UPPER(#{DEPARTMENT})|| '%'  
+				</if>
+				<if test="USERNAME != null and USERNAME !='' and !(USERNAME eq '*'.toString()) ">
+					AND 	UPPER(U.USER_NM) LIKE  '%' || UPPER(#{USERNAME})|| '%'
+				</if>
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+					AND 	U.PLANTID = #{PLANTID}
+				</if>
+    </select>
+    
+    <!--
+        설       명   : 자사 작업자 관리 - 이미 존재 하는지 조회
+        생   성   자   : 김진현
+        생   성   일   : 2021-04-28
+        수  정   이  력 :
+    -->
+    <select id="selectChkAreaPersonList" parameterType="map" resultType="hashmap">
+            
+                /* selectChkAreaPersonList - 자사 작업자 관리 - 이미 존재 하는지 조회 */
+                SELECT  ENTERPRISEID
+                    	,   PLANTID
+                    	,   AREAID
+                    	,   WORKERNAME
+                    	,   USERID
+                 FROM   BAS_AREAWORKER
+                WHERE   1 = 1
+                  AND   ENTERPRISEID    =   #{ENTERPRISEID}
+                  AND   PLANTID         	=   #{PLANTID}
+                  AND   AREAID          	=   #{AREAID}
+                  AND   WORKERNAME   =   #{WORKERNAME}
+                  AND   USERID          	=   #{USERID}
+    </select>
+    
+    <!--
+        설       명   : 자사 작업자 관리 - 저장(등록)
+        생   성   자   : 김진현
+        생   성   일   : 2021-04-28
+        수  정   이  력 :
+    --> 
+    <insert id="insertAreaPerson" parameterType="map">
+    /* insertAreaPerson - 자사 작업자 관리 - 저장(등록) */
+	INSERT INTO BAS_AREAWORKER( 
+        ENTERPRISEID  
+        ,PLANTID  
+        ,AREAID  
+        ,WORKERNAME  
+        ,USERID  
+        ,EMPLOYEENO  
+        ,DEPARTMENT  
+        ,OWNTYPE  
+        ,WORKERTYPE  
+        ,ISMAINAREA  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE  
+        ,WORKERNO        ) 
+    VALUES( 
+        #{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{AREAID}  
+        ,#{WORKERNAME}  
+        ,#{USERID}  
+        ,#{EMPLOYEENO}  
+        ,#{DEPARTMENT}  
+        ,#{OWNTYPE}  
+        ,#{WORKERTYPE}  
+        ,#{ISMAINAREA}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}  
+        ,#{WORKERNO}    )
+    </insert>
+    
+    <!--
+        설       명   : 자사 작업자 관리 - 저장(수정)
+        생   성   자   : 김진현
+        생   성   일   : 2021-04-28
+        수  정   이  력 :
+    -->
+	<update id="updateAreaPerson" parameterType="map" >
+		/* updateAreaPerson - 자사 작업자 관리 - 저장(수정) */
+		UPDATE BAS_AREAWORKER 
+		SET 
+				EMPLOYEENO 			= #{EMPLOYEENO}     
+			,	DEPARTMENT 			= #{DEPARTMENT}     
+			,	OWNTYPE 				= #{OWNTYPE}     
+			,	WORKERTYPE 			= #{WORKERTYPE}     
+			,	ISMAINAREA 			= #{ISMAINAREA}     
+			,	DESCRIPTION 			= #{DESCRIPTION}             
+			,	MODIFIER 				= #{MODIFIER}     
+			,	MODIFIEDTIME 			= SYSDATE     
+			,	LASTTXNHISTKEY 		= #{LASTTXNHISTKEY}     
+			,	LASTTXNID 				= #{LASTTXNID}     
+			,	LASTTXNUSER 			= #{LASTTXNUSER}     
+			,	LASTTXNTIME 			= SYSDATE     
+			,	LASTTXNCOMMENT 	= #{LASTTXNCOMMENT}     
+			,	VALIDSTATE 			= #{VALIDSTATE}     
+			,	WORKERNO 				= #{WORKERNO}
+		WHERE ENTERPRISEID 			= #{ENTERPRISEID}
+		  AND PLANTID 				= #{PLANTID}
+		  AND AREAID 					= #{AREAID}
+	 	  AND WORKERNAME 		= #{WORKERNAME}
+		  AND USERID 					= #{USERID}
+    </update>
+    
+    <!--
+        설       명   : 자사 작업자 관리 - 저장(삭제)
+        생   성   자   : 김진현
+        생   성   일   : 2021-04-28
+        수  정   이  력 :
+    -->
+	<update id="deleteAreaPerson" parameterType="map" > 
+		DELETE FROM BAS_AREAWORKER 
+		WHERE ENTERPRISEID 	= #{ENTERPRISEID}
+		AND PLANTID 			= #{PLANTID}
+		AND AREAID 			= #{AREAID}
+		AND WORKERNAME 	= #{WORKERNAME}
+		AND USERID 			= #{USERID}
+    </update>
+    
+
+</mapper>

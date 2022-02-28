@@ -1,0 +1,307 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS04500Dao">
+	<sql id="insertDictionary">
+	BAS_COMMON_PKG.GENERATE_DICTIONARY
+	</sql>
+
+   <select id="selectUserGroupList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS04500Dao.selectUserGroupList */
+		SELECT BU.USERGROUPID
+			      ,BU.DICTIONARYID AS USERGROUPNAME_KEY
+			      ,D1.DICTIONARYNAME AS USERGROUPNAME_KR
+			      ,D2.DICTIONARYNAME AS USERGROUPNAME_US
+			      ,D3.DICTIONARYNAME AS USERGROUPNAME_CN
+			      ,D4.DICTIONARYNAME AS USERGROUPNAME_VN
+			      ,DIC.DICTIONARYNAME AS USERGROUPNAME
+			      ,BU.DESCRIPTION
+			      ,BU.ENTERPRISEID
+			      ,BU.PLANTID
+			      ,U1.USER_NM        AS CREATOR
+			      ,BU.CREATEDTIME
+			      ,U2.USER_NM        AS MODIFIER
+			      ,BU.MODIFIEDTIME
+			      ,BU.VALIDSTATE
+			      ,NULL              AS CHK
+        FROM   BAS_USERGROUP       BU
+        LEFT OUTER JOIN CMD_DICTIONARY     D1  ON  BU.DICTIONARYID = D1.DICTIONARYID
+                            AND D1.LANGUAGETYPE = 'ko-KR'
+        LEFT OUTER JOIN CMD_DICTIONARY     D2  ON  BU.DICTIONARYID = D2.DICTIONARYID
+                            AND D2.LANGUAGETYPE = 'en-US'
+        LEFT OUTER JOIN CMD_DICTIONARY     D3  ON  BU.DICTIONARYID = D3.DICTIONARYID
+                            AND D3.LANGUAGETYPE = 'zh-CN'
+        LEFT OUTER JOIN CMD_DICTIONARY     D4  ON   BU.DICTIONARYID = D4.DICTIONARYID
+                            AND D4.LANGUAGETYPE = 'vi-VN'
+        LEFT OUTER JOIN CMD_DICTIONARY     DIC  ON   BU.DICTIONARYID = DIC.DICTIONARYID
+                            AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN CMD_USERS        U1  ON  BU.CREATOR = U1.USER_ID
+        LEFT OUTER JOIN CMD_USERS        U2  ON  BU.MODIFIER = U2.USER_ID
+        WHERE 1 = 1
+		<choose>
+			<when test="SEARCHCONDITION eq 'ALLVIEWS'.toString()">
+				AND (UPPER(BU.USERGROUPID) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+					OR  UPPER(BU.DESCRIPTION) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+					OR (UPPER(D1.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+							OR	 UPPER(D2.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+							OR UPPER(D3.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+							OR	 UPPER(D4.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')	)
+				 )
+			</when>
+			<when test="SEARCHCONDITION eq 'USERGROUPID2'.toString()">
+				AND UPPER(BU.USERGROUPID) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%' 
+			</when>
+			<when test="SEARCHCONDITION eq 'USERCLASSNAME2'.toString()">
+		        AND (UPPER(D1.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+					OR	 UPPER(D2.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+					OR UPPER(D3.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+					OR	 UPPER(D4.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')	)				
+			</when>
+			<when test="SEARCHCONDITION eq 'DESCRIPTION'.toString()">
+				AND UPPER(BU.DESCRIPTION) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+			</when>			
+	    </choose>        
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+        	AND   BU.VALIDSTATE = #{VALIDSTATE}
+        </if>            
+     ORDER BY BU.USERGROUPID
+    </select>
+    
+    <select id="chkUserGroupList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS04500Dao.chkUserGroupList */
+	 	 SELECT  BU.USERGROUPID			      
+          FROM  BAS_USERGROUP       BU        
+         WHERE  1 = 1
+        	AND  BU.USERGROUPID = #{USERGROUPID}
+    </select>
+    
+     <select id="selectUserGroupUserList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS04500Dao.selectUserGroupUserList */
+		    SELECT BU.USERGROUPID
+				      ,BU.USERID
+				      ,BU.VALIDSTATE
+				      ,U1.USERNAME AS USER_NM
+				      ,U1.DEPARTMENT AS DEPT_CD
+				      ,U1.POSITION AS JIKWI_CD
+				      ,U1.EMAILADDRESS AS EMAIL_ADDR
+				      ,U1.MBPH_NO
+				      ,NULL AS CHK
+				FROM   BAS_USERGROUPUSER BU
+				LEFT   OUTER JOIN CMD_USER_V U1
+				ON     BU.USERID = U1.USERID
+			WHERE  1 = 1
+		<if test="USERGROUPID != null and USERGROUPID !='' ">
+			AND    BU.USERGROUPID = #{USERGROUPID}
+		</if>
+      <choose>
+			<when test="SEARCHCONDITION eq 'ALLVIEWS'.toString()">
+				AND (UPPER(BU.USERID) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+					 	OR UPPER(U1.USERNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+					 	OR UPPER(U1.DEPARTMENT) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+					 	OR UPPER(U1.POSITION) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+					 	OR UPPER(U1.EMAILADDRESS) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+					 	OR UPPER(U1.MBPH_NO) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+				 )
+			</when>
+			<when test="SEARCHCONDITION eq 'USERID'.toString()">
+				AND UPPER(BU.USERID) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%' 
+			</when>
+			<when test="SEARCHCONDITION eq 'USERNAME'.toString()">
+		        AND UPPER(U1.USERNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')									
+			</when>
+			<when test="SEARCHCONDITION eq 'DEPARTMENT'.toString()">
+				AND UPPER(U1.DEPARTMENT) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+			</when>			
+			<when test="SEARCHCONDITION eq 'POSITION'.toString()">
+				AND UPPER(U1.POSITION) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+			</when>
+			<when test="SEARCHCONDITION eq 'EMAILADDRESS'.toString()">
+				AND UPPER(U1.EMAILADDRESS) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+			</when>
+			<when test="SEARCHCONDITION eq 'PHONENUMBER'.toString()">
+				AND UPPER(U1.MBPH_NO) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+			</when>
+	    </choose>                   
+        ORDER  BY BU.USERID
+        
+    </select>
+    
+     <select id="getUserGroupUserList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS04500Dao.getUserGroupUserList */
+	    	SELECT A.USER_ID
+			      ,A.USER_NM
+			      ,A.DEPT_CD
+			      ,A.JIKWI_CD
+			      ,A.EMAIL_ADDR
+			      ,A.MBPH_NO
+			      ,A.SEARCH_KEY
+	    	FROM (SELECT U1.USERID AS USER_ID
+						      ,U1.USERNAME AS USER_NM
+						      ,U1.DEPARTMENT AS DEPT_CD
+						      ,U1.POSITION AS JIKWI_CD
+						      ,U1.EMAILADDRESS AS EMAIL_ADDR
+						      ,U1.MBPH_NO
+						      ,U1.USERID || ' ' || U1.USERNAME  || ' ' ||  U1.DEPARTMENT || ' ' || U1.EMAILADDRESS || ' ' || U1.MBPH_NO AS SEARCH_KEY 
+					FROM   CMD_USER_V U1
+					WHERE  NOT EXISTS (SELECT 1
+										        FROM   BAS_USERGROUPUSER BU
+										        WHERE  BU.USERID = U1.USERID
+										        AND    BU.USERGROUPID = #{USERGROUPID} ) ) A
+				WHERE 1=1
+					 <if test="SEARCH_KEY != null and SEARCH_KEY !='' ">			
+						AND UPPER(SEARCH_KEY) LIKE '%' || UPPER(#{SEARCH_KEY}) || '%'
+					</if>
+					<if test="USER_ID != null and USER_ID !='' ">			
+						AND UPPER(USERID) LIKE '%' || UPPER(#{USER_ID}) || '%'
+					</if>
+					<if test="USER_NM != null and USER_NM !='' ">			
+						AND UPPER(USERNAME) LIKE '%' || UPPER(#{USER_NM}) || '%'
+					</if>
+					<if test="EMAIL_ADDR != null and EMAIL_ADDR !='' ">			
+						AND UPPER(EMAILADDRESS) LIKE '%' || UPPER(#{EMAIL_ADDR}) || '%'
+					</if>
+					<if test="MBPH_NO != null and MBPH_NO !='' ">			
+						AND UPPER(MBPH_NO) LIKE '%' || UPPER(#{MBPH_NO}) || '%'
+					</if>
+					<if test="DEPT_CD != null and DEPT_CD !='' ">			
+						AND UPPER(DEPARTMENT) LIKE '%' || UPPER(#{DEPT_CD}) || '%'
+					</if>
+					        
+        ORDER  BY USER_ID        
+    </select>
+    
+     <select id="checkUserGroupUserList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS04500Dao.checkUserGroupUserList */
+		    SELECT  BU.USERGROUPID
+				      ,BU.USERID				      
+			 FROM  BAS_USERGROUPUSER BU				
+			WHERE 1 = 1		
+			   AND  BU.USERGROUPID = #{USERGROUPID}
+			   AND  BU.USERID	= #{USERID}  
+    </select>
+    
+     <select id="checkUserGroupChildList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS04500Dao.checkUserGroupChildList */
+		    SELECT  BU.USERGROUPID
+				      ,BU.USERID				      
+			 FROM  BAS_USERGROUPUSER BU				
+			WHERE 1 = 1		
+			   AND  BU.USERGROUPID = #{USERGROUPID}			     
+    </select>
+    
+  <insert id="insertUserGroup" parameterType="map">
+  DECLARE
+  BEGIN
+    INSERT /* smh.bas.dao.BAS04500Dao.insertUserGroup */	INTO BAS_USERGROUP
+		     	(USERGROUPID
+				,USERGROUPNAME
+				,DICTIONARYID
+				,DESCRIPTION
+				,CREATOR
+				,CREATEDTIME
+				,MODIFIER
+				,MODIFIEDTIME
+				,LASTTXNHISTKEY
+				,LASTTXNID
+				,LASTTXNUSER
+				,LASTTXNTIME
+				,LASTTXNCOMMENT
+				,VALIDSTATE
+				)
+			VALUES
+				(#{USERGROUPID}
+				,#{USERGROUPNAME_KR}
+				,#{USERGROUPNAME_KEY}
+				,#{DESCRIPTION}
+				,#{CREATOR}
+				,SYSDATE
+				,#{MODIFIER}
+				,SYSDATE
+				,#{LASTTXNHISTKEY}
+				,#{LASTTXNID}
+				,#{CREATOR}
+				,SYSDATE
+				,#{LASTTXNCOMMENT}
+				,#{VALIDSTATE}
+			);
+		    	
+		<!-- 다국어 테이블 저장용 -->							
+				IF #{USERGROUPNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_USERGROUP','ko-KR',#{USERGROUPNAME_KEY}, #{CREATOR}, #{USERGROUPNAME_KR}); END IF;
+				IF #{USERGROUPNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_USERGROUP','en-US',#{USERGROUPNAME_KEY}, #{CREATOR}, #{USERGROUPNAME_US}); END IF;
+				IF #{USERGROUPNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_USERGROUP','zh-CN',#{USERGROUPNAME_KEY}, #{CREATOR}, #{USERGROUPNAME_CN}); END IF;
+				IF #{USERGROUPNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_USERGROUP','vi-VN',#{USERGROUPNAME_KEY}, #{CREATOR}, #{USERGROUPNAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		END;
+    </insert>  
+    
+  <update id="updateUserGroup" parameterType="map">
+  DECLARE
+  BEGIN  		
+     /* smh.bas.dao.BAS04500Dao.updateUserGroup */	
+     UPDATE BAS_USERGROUP SET								
+			 DESCRIPTION = #{DESCRIPTION}	     
+			,VALIDSTATE			=#{VALIDSTATE}
+			,MODIFIER			=#{MODIFIER}
+			,MODIFIEDTIME		=SYSDATE
+			,LASTTXNHISTKEY	=#{LASTTXNHISTKEY}
+			,LASTTXNID			=#{LASTTXNID}
+			,LASTTXNUSER		=#{MODIFIER}
+			,LASTTXNTIME		=SYSDATE
+	WHERE USERGROUPID = #{USERGROUPID};		    	
+			<!-- 다국어 테이블 저장용 -->							
+				IF #{USERGROUPNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_USERGROUP','ko-KR',#{USERGROUPNAME_KEY}, #{CREATOR}, #{USERGROUPNAME_KR}); END IF;
+				IF #{USERGROUPNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_USERGROUP','en-US',#{USERGROUPNAME_KEY}, #{CREATOR}, #{USERGROUPNAME_US}); END IF;
+				IF #{USERGROUPNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_USERGROUP','zh-CN',#{USERGROUPNAME_KEY}, #{CREATOR}, #{USERGROUPNAME_CN}); END IF;
+				IF #{USERGROUPNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_USERGROUP','vi-VN',#{USERGROUPNAME_KEY}, #{CREATOR}, #{USERGROUPNAME_VN}); END IF;
+			<!-- 다국어 테이블 저장용 -->
+		END;
+    </update>   
+    
+    <delete id="deleteUserGroup" parameterType="map" >
+     /* smh.bas.dao.BAS04500Dao.deleteUserGroup */  
+    DECLARE 
+    BEGIN
+    	DELETE  FROM BAS_USERGROUP		WHERE USERGROUPID = #{USERGROUPID};
+    	
+    	DELETE  FROM CMD_DICTIONARY 	WHERE DICTIONARYID = #{USERGROUPNAME_KEY};
+    END;
+    </delete>
+    
+    
+      <insert id="insertUserGroupUser" parameterType="map">
+    INSERT /* smh.bas.dao.BAS04500Dao.insertUserGroupUser */	INTO BAS_USERGROUPUSER
+		     	(USERGROUPID
+				,USERID				
+				,CREATOR
+				,CREATEDTIME
+				,MODIFIER
+				,MODIFIEDTIME
+				,LASTTXNHISTKEY
+				,LASTTXNID
+				,LASTTXNUSER
+				,LASTTXNTIME
+				,LASTTXNCOMMENT
+				,VALIDSTATE
+				)
+			VALUES
+				(#{USERGROUPID}
+				,#{USERID}				
+				,#{CREATOR}
+				,SYSDATE
+				,#{MODIFIER}
+				,SYSDATE
+				,#{LASTTXNHISTKEY}
+				,#{LASTTXNID}
+				,#{CREATOR}
+				,SYSDATE
+				,#{LASTTXNCOMMENT}
+				,#{VALIDSTATE}
+			)
+    </insert>
+    
+    <delete id="deleteUserGroupUser" parameterType="map" >
+     /* smh.bas.dao.BAS04500Dao.deleteUserGroupUser */      
+    	DELETE  FROM BAS_USERGROUPUSER	WHERE USERID = #{USERID}    
+    </delete>
+</mapper>

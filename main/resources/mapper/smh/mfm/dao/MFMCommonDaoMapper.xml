@@ -1,0 +1,236 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM00001Dao">
+<!-- TOM 공통 DAO (조회조건 및 Grid 컴포넌트) -->      
+    
+    <!-- 대공정 -->
+	<select id="selectProcessList" parameterType="map" resultType="hashmap">
+		<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+	    SELECT
+	    	  '1' AS GBN
+	         ,NULL AS CODE
+	         ,#{CMB_TYPE} AS NAME     
+	    FROM DUAL
+	    UNION ALL
+	    </if>
+	    SELECT	    '2' AS GBN
+	                ,   LSC.LOADSEGMENTCLASSID AS CODE
+					,	D1.DICTIONARYNAME		AS NAME
+					
+				FROM	BAS_LOADSEGMENTCLASS		LSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	ON	LSC.LOADSEGMENTCLASSNAME = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = #{LANGUAGETYPE}        -- 다국어 코드 
+				WHERE	1 = 1
+				AND		LSC.ENTERPRISEID    			= #{ENTERPRISEID}
+				AND		LSC.PLANTID         			= #{PLANTID}
+				AND		LOADSEGMENTCLASSTYPE 	= 'TopLoadSegmentClass'
+				
+				--대공정
+				 
+				--중공정
+				 
+				--소공정
+				 
+				
+				AND		LSC.VALIDSTATE = 'Valid'
+				ORDER BY 1,3
+ 	</select>
+ 	
+ 	<!-- 중공정 -->
+ 	<select id="selectMidProcessList" parameterType="map" resultType="hashmap">
+ 		<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+	    SELECT
+	    	  '1' AS GBN
+	         ,NULL AS CODE
+	         ,#{CMB_TYPE} AS NAME     
+	    FROM DUAL
+	    UNION ALL
+	    </if>
+	    SELECT		'2' AS GBN
+	    			,	LSC.LOADSEGMENTCLASSID AS CODE
+					,	D1.DICTIONARYNAME		AS NAME
+					
+				FROM	BAS_LOADSEGMENTCLASS		LSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	ON	LSC.LOADSEGMENTCLASSNAME = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = #{LANGUAGETYPE}        -- 다국어 코드 
+				WHERE	1 = 1
+				AND		LSC.ENTERPRISEID    			= #{ENTERPRISEID}
+				AND		LSC.PLANTID         			= #{PLANTID}
+				AND		LOADSEGMENTCLASSTYPE 	= 'MiddleLoadSegmentClass'
+				
+				--대공정				
+				 
+				--중공정
+				 
+				--소공정
+				 
+				
+				AND		LSC.VALIDSTATE = 'Valid'
+				ORDER BY 1,3
+ 	</select>
+ 	
+ 	<!-- 소공정 -->
+ 	<select id="selectMinProcessList" parameterType="map" resultType="hashmap">
+ 		<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+	    SELECT
+	    	  '1' AS GBN
+	         ,NULL AS CODE
+	         ,#{CMB_TYPE} AS NAME     
+	    FROM DUAL
+	    UNION ALL
+	    </if>
+	    SELECT		'2' AS GBN
+	    			,	LSC.LOADSEGMENTCLASSID AS CODE
+					,	D1.DICTIONARYNAME		AS NAME					
+				FROM	BAS_LOADSEGMENTCLASS		LSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	ON	LSC.LOADSEGMENTCLASSNAME = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = #{LANGUAGETYPE}        -- 다국어 코드 
+				WHERE	1 = 1
+				AND		LSC.ENTERPRISEID    			= #{ENTERPRISEID}
+				AND		LSC.PLANTID         			= #{PLANTID}
+				AND		LOADSEGMENTCLASSTYPE 	= 'SmallLoadSegmentClass'
+				
+				--대공정				
+				 
+				--중공정
+				 
+				--소공정
+				 
+				
+				AND		LSC.VALIDSTATE = 'Valid'
+				ORDER BY 1,3
+ 	</select>
+ 	
+ 	<select id="selectProductDefVerList" parameterType="map" resultType="hashmap">
+ 		<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+	    SELECT
+	         NULL AS CODE
+	        ,#{CMB_TYPE} AS NAME     
+	    FROM DUAL
+	    UNION ALL
+	    </if>
+ 		SELECT PD.PRODUCTDEFVERSION AS CODE,
+ 		         PD.PRODUCTDEFVERSION AS NAME
+ 		FROM BAS_PRODUCTDEFINITION PD
+ 		WHERE 1=1
+ 		<if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+			AND		EXISTS
+					(
+						SELECT	1
+						FROM	ufn_selectStringToSplit(#{P_PRODUCTDEFID}, ',')		MAP
+						WHERE	PD.PRODUCTDEFID = MAP.VALUE
+					)
+		</if>
+		GROUP BY PD.PRODUCTDEFVERSION
+ 	</select>
+ 	
+ 	<!-- 제품군 리스트 -->
+	<select id="selectProductKindList" parameterType="map" resultType="hashmap">
+			<if test="CMB_TYPE != null and CMB_TYPE != '' and !(CMB_TYPE eq ''.toString())  and !(CMB_TYPE eq 'VAL'.toString()) "> 
+		    SELECT
+		    	 '0' AS ORD,
+		         NULL AS CODE,
+		         #{CMB_TYPE} AS NAME     
+		    FROM DUAL
+		    UNION ALL
+		    </if>
+			SELECT ORD, CODE, NAME
+            FROM (
+                SELECT 
+                        '1' AS ORD,
+                        SPLIT_PART(CATEGORYID,'.',2)	 AS CODE,
+                        SPLIT_PART(CATEGORYID,'.',2)	 AS NAME
+                FROM BAS_CATEGORY
+                WHERE "level"='3'
+                AND SPLIT_PART(CATEGORYID,'.',2) IS NOT NULL
+                GROUP BY SPLIT_PART(CATEGORYID,'.',2)                
+                ) CATEGORY
+                LEFT OUTER JOIN BAS_ITEMMASTER ITM 	ON CATEGORY.CODE = ITM.ITEMID
+		                                                  			AND MASTERDATACLASSID='Model'
+		    WHERE NVL(ITM.LEADTIME,0)+NVL(ITM.TACTTIME,0)>0                                              
+            ORDER BY 1, CODE
+	</select>	
+ 	
+ 	<!-- 일자구하기(6일,30일,90일) : 진현ConnectBy이용 -->
+	<select id="selectDayDulationList2" parameterType="map" resultType="hashmap">
+		select TO_CHAR((TO_DATE(SUBSTR(#{P_LOADDATE},1,8), 'YYYYMMDD')-(+LEVEL-1)), 'YYYY-MM-DD') AS DATE2
+				,level AS LV 
+		from dual 
+		connect by level <![CDATA[<=]]> (TO_DATE(SUBSTR(#{P_LOADDATE},1,8), 'YYYYMMDD') - (TO_DATE(SUBSTR(#{P_LOADDATE},1,8), 'YYYYMMDD')-1))+(CASE 	WHEN #{P_LOADTYPE} = 'SixDay' THEN 6
+																																																	WHEN #{P_LOADTYPE} = 'ThirtyDay' THEN 30
+																																																	WHEN #{P_LOADTYPE} = 'NinetyDay' THEN 90
+																																														  END)-1
+	</select>
+	
+	<select id="selectDayDulationList" parameterType="map" resultType="hashmap">
+		SELECT TO_CHAR(TO_DATE(SUBSTR(#{P_LOADDATE},1,8), 'YYYYMMDD')+LEVEL-1, 'YYYY-MM-DD') AS DATE2
+		FROM DUAL 
+		CONNECT BY LEVEL <![CDATA[<=]]> (TO_DATE(SUBSTR(#{P_LOADDATE},1,8), 'YYYYMMDD')+(CASE 	WHEN #{P_LOADTYPE} = 'SixDay' THEN 6
+																																WHEN #{P_LOADTYPE} = 'ThirtyDay' THEN 30
+																																WHEN #{P_LOADTYPE} = 'NinetyDay' THEN 90
+																													  END)-TO_DATE(SUBSTR(#{P_LOADDATE},1,8), 'YYYYMMDD')) 
+	</select>
+	
+	<!-- 품목 그룹 구하기 -->
+	<select id="selectItemGroupName" parameterType="map" resultType="hashmap">
+		SELECT PRODUCTDEFCLASSGROUPNAME
+        FROM BAS_PRODUCTDEFINITION
+        WHERE 1=1
+        AND LOADOWNER LIKE '%' || #{P_RECEIPTUSER} || '%'
+       	<if test="P_ITEMGROUP != null and P_ITEMGROUP !='' ">
+        	AND     PRODUCTDEFCLASSGROUPNAME = (	
+        															SELECT PRODUCTDEFCLASSGROUPNAME
+        															FROM (
+        																	SELECT ROWNUM AS NO, PRODUCTDEFCLASSGROUPNAME
+                                                                            FROM (
+				        															SELECT PRODUCTDEFCLASSGROUPNAME
+				        															FROM BAS_PRODUCTDEFINITION
+				        															WHERE 1=1
+				        															AND LOADOWNER LIKE '%' || #{P_RECEIPTUSER} || '%'
+				        															AND PRODUCTDEFCLASSGROUPNAME IS NOT NULL
+				        															GROUP BY PRODUCTDEFCLASSGROUPNAME
+				        															ORDER BY 1
+				        															)
+        																	)
+        															WHERE 1=1
+        															AND NO = #{P_ITEMGROUP}
+        															)
+        </if>
+        AND PRODUCTDEFCLASSGROUPNAME IS NOT NULL
+        GROUP BY PRODUCTDEFCLASSGROUPNAME
+        ORDER BY 1
+	</select>
+	
+	
+	<!-- 수주계획 차수 리스트 -->
+	<select id="selectProductPlanChasuList" parameterType="map" resultType="hashmap">
+			SELECT 
+                     A.SEQUENCE AS CODE,
+                     A.SEQUENCE ||
+                         CASE WHEN A.CONFIRMYN = 'Y' THEN
+                                    ' (' || NVL((
+                                        SELECT B.DICTIONARYNAME
+                                        FROM CMD_DICTIONARY B
+                                        WHERE B.DICTIONARYID = '9BA379EC313844F3B702BC9176E2158D'
+                                        AND B.LANGUAGETYPE = #{LANGUAGETYPE}
+                                        ),' ') || ')'
+                              ELSE 
+                                    ' '
+                         END AS NAME
+             FROM (
+             		SELECT
+                      		"sequence"||'' AS SEQUENCE,
+                      		NVL(CONFIRMYN,'N') AS CONFIRMYN
+             		FROM PCM_SALESPOFORCAST
+             		WHERE INPUTWEEK = SUBSTR(REPLACE(#{YYYYW},'-','_')||'W',3)
+             		GROUP BY "sequence",
+             					  CONFIRMYN
+                     ) A
+             WHERE A.SEQUENCE IS NOT NULL
+             ORDER BY A.SEQUENCE                 
+	</select>
+	
+
+</mapper>

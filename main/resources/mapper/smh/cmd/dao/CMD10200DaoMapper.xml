@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+  
+<mapper namespace="smh.cmd.dao.CMD10200Dao">
+	
+	<!--selecMaxPage  -->
+<select id="selecMaxPage" parameterType="map" resultType="hashmap">
+SELECT MAX(X.MAX_PAGE) as MAX_PAGE
+  FROM (
+        SELECT CEIL(ROW_NUMBER() OVER (ORDER BY T.HJSHR_BOARD_ITEM_SEQ DESC)/5) AS MAX_PAGE
+          FROM HJSHR_BOARD_ITEMS T
+       )X
+</select>
+
+    <!--selectNoticeList -->
+<select id="selectNoticeList" parameterType="map" resultType="hashmap">
+		/* smh.cmd.dao.CMD10200Dao.selectNoticeList */
+		/*NOTICEList 게시판 조회 쿼리					*/
+
+SELECT
+         C.HJSHR_BOARD_ITEM_SEQ   AS     HJSHR_BOARD_ITEM_SEQ  -- 게시판 KEY 
+        ,C.PAGE_NUMBER            AS     PAGE_NUMBER           -- 페이징
+        ,C.ITEM_GROUP_ID          AS     ITEM_GROUP_ID         -- 분류 (사용하지 않음)\
+        ,C.MEANING                AS     MEANING               -- 분류명 (사용하지 않음)
+        ,C.UPDATE_DATE            AS     UPDATE_DATE           -- 등록일자
+        ,C.TITLE                  AS     TITLE                 -- 제목
+ FROM
+(
+SELECT  HBI.HJSHR_BOARD_ITEM_SEQ                                         AS HJSHR_BOARD_ITEM_SEQ  -- 게시판 KEY 
+     , CEIL(ROW_NUMBER() OVER (ORDER BY HJSHR_BOARD_ITEM_SEQ DESC)/5)   AS PAGE_NUMBER      -- 페이징
+     , HBI.ITEM_GROUP_ID                                                AS ITEM_GROUP_ID         -- 분류 (사용하지 않음)
+     , CLV.MEANING                                                      AS MEANING               -- 분류명 (사용하지 않음)
+     , TO_CHAR(HBI.LAST_UPDATE_DATE, 'YYYY-MM-DD')                      AS UPDATE_DATE           -- 등록일자
+     , HBI.TITLE                                                         AS TITLE                 -- 제목
+  FROM HJSHR_BOARD_ITEMS       HBI
+     , CMD_LOOKUP_VALUES       CLV
+ WHERE 1=1
+   AND HBI.BOARD_ID      = '0'  -- 업무구분 (0:게시판, 1:FAQ, 2:인사자료 구분)
+   AND HBI.ANNOUNCE_TYPE = 'Y'  -- 게시판 공지여부
+   AND CLV.LOOKUP_TYPE   = 'SM_BOARD_ITEM_GROUP'
+   AND HBI.ITEM_GROUP_ID = CLV.LOOKUP_CODE
+ ORDER BY HBI.LAST_UPDATE_DATE DESC
+ )C
+	WHERE 1=1
+	AND PAGE_NUMBER = 1
+	
+</select>
+
+
+    <!--selecMyTodoList -->
+<select id="selecMyTodoList" parameterType="map" resultType="hashmap">
+		/* smh.cmd.dao.CMD10200Dao.selecMyTodoList */
+		/* MytoDoList 게시판 조회 쿼리					*/
+SELECT DEF.ITEM_1
+      ,DEF.ITEM_2
+      ,DEF.ITEM_3
+  FROM (
+                     SELECT '평가'                                                                         AS ITEM_1
+                          , SUBSTR(HJSHRF_LOOKUP_DESC_FNC('APPRAISAL_TYPE', CHO.APPRAISAL_TYPE), 4)      AS ITEM_2  /* 평가구분 */
+                          , HJSHRF_LOOKUP_DESC_FNC('APPRAISAL_ASSESSMENT_STATUS', CHO.ASSESSMENT_STATUS) AS ITEM_3  /* 상태명   */
+                          , CHO.USER_CNT                                                                 AS ITEM_4  /* 대상자수 */
+                       FROM
+                          (
+                            SELECT HAMV.APPRAISAL_YEAR                      AS APPRAISAL_YEAR
+                                 , HAMV.APPRAISAL_TYPE                      AS APPRAISAL_TYPE
+                                 , HAMV.ASSESSMENT_STATUS                   AS ASSESSMENT_STATUS
+                                 , COUNT(HAMV.HJSPFM_APPRAISAL_MASTER_SEQ)  AS USER_CNT
+                              FROM HJSPFM_APPRAISAL_MASTER_V HAMV
+                             WHERE 1=1
+                               --AND HAMV.appraisal_type        = 'A110'     /* 평가구분-업적평가 */
+                               AND HAMV.STATUS                = '020'      /* OPEN */
+                               AND HAMV.APPRAISAL_SEQUENCE    = '1'        /* 차수 */
+                               AND HAMV.APPRAISEE_ID          =  #{PERSONID}     /* 로그인 PERSON ID 3324 */
+                               AND HAMV.APPRAISAL_TEMPLATE_ID > 0  
+                             GROUP BY HAMV.APPRAISAL_YEAR
+                                 , HAMV.APPRAISAL_TYPE
+                                 , HAMV.ASSESSMENT_STATUS
+                          ) CHO   
+       UNION ALL
+       SELECT CHO.ITEM_TYPE            AS ITEM_1  /* 유형명      */
+            , CHO.ACTNAME              AS ITEM_2                   
+            , TO_CHAR(CHO.REQUEST_CNT) AS ITEM_3  /* ACTION NAME */
+            , CHO.REQUEST_CNT          AS ITEM_4  /* 신청건수      */   
+         FROM
+            (
+              SELECT '근태'                                      AS ITEM_TYPE
+                   , 'Attendance Request'                      AS ACTNAME
+                   , NVL(SUM(DECODE(HWA.STATUS, '10', 1)), 0)  AS REQUEST_CNT   -- 대기
+                   , NVL(SUM(DECODE(HWA.STATUS, '20', 1)), 0)  AS APPROVAL_CNT  -- 승인
+                FROM HJSPAY_WORK_APPLY  HWA
+               WHERE 1=1
+                 AND HWA.PERSON_ID    =   #{PERSONID}  /* 로그인 PERSON ID 3324 */
+                 AND TRUNC(HWA.APPLY_DATE) BETWEEN TRUNC(ADD_MONTHS(SYSDATE, -1) + 1) AND SYSDATE          
+            ) CHO
+   ) DEF
+  WHERE 1=1         
+
+</select>
+
+    <!--selectLeadersTodoList -->
+<select id="selectLeadersTodoList" parameterType="map" resultType="hashmap">
+		/* smh.cmd.dao.CMD10200Dao.selectLeadersTodoList */
+		/* LeadersTodoList 게시판 조회 쿼리					*/
+SELECT DEF.ITEM_1
+      ,DEF.ITEM_2
+      ,DEF.ITEM_3
+      ,DEF.ITEM_4
+  FROM (
+                     SELECT '평가'                                                                         AS ITEM_1
+                          , SUBSTR(HJSHRF_LOOKUP_DESC_FNC('APPRAISAL_TYPE', CHO.APPRAISAL_TYPE), 4)      AS ITEM_2  /* 평가구분 */
+                          , HJSHRF_LOOKUP_DESC_FNC('APPRAISAL_ASSESSMENT_STATUS', CHO.ASSESSMENT_STATUS) AS ITEM_3  /* 상태명   */
+                          , CHO.USER_CNT                                                                 AS ITEM_4  /* 대상자수 */
+                       FROM
+                          (
+                            SELECT HAMV.APPRAISAL_YEAR                      AS APPRAISAL_YEAR
+                                 , HAMV.APPRAISAL_TYPE                      AS APPRAISAL_TYPE
+                                 , HAMV.ASSESSMENT_STATUS                   AS ASSESSMENT_STATUS
+                                 , COUNT(HAMV.HJSPFM_APPRAISAL_MASTER_SEQ)  AS USER_CNT
+                              FROM HJSPFM_APPRAISAL_MASTER_V HAMV
+                             WHERE 1=1
+                               AND HAMV.APPRAISAL_TYPE        IN ('A110', 'A120')     /* 평가구분-업적평가, 역량평가 */
+                               AND HAMV.STATUS                = '020'      /* OPEN */
+                               AND HAMV.APPRAISAL_SEQUENCE    = '1'        /* 차수 */
+                               AND
+                                (
+                                  HAMV.PARTICIPANT_ID_1 = 57055 OR     /* 로그인 PERSON ID 3324 */
+                                  HAMV.PARTICIPANT_ID_2 = 57055 OR
+                                  HAMV.PARTICIPANT_ID_3 = 57055 OR
+                                  HAMV.APPRAISER_1ST_ID = 57055 OR
+                                  HAMV.APPRAISER_2ND_ID = 57055
+                                )
+                               AND HAMV.APPRAISAL_TEMPLATE_ID > 0  
+                             GROUP BY HAMV.APPRAISAL_YEAR
+                                 , HAMV.APPRAISAL_TYPE
+                                 , HAMV.ASSESSMENT_STATUS
+                          ) CHO   
+       UNION ALL
+       SELECT CHO.ITEM_TYPE            AS ITEM_1  /* 유형명      */
+            , CHO.ACTNAME              AS ITEM_2                   
+            , NULL                     AS ITEM_3  /* ACTION NAME */
+            , CHO.REQUEST_CNT          AS ITEM_4  /* 신청건수      */   
+         FROM
+            (
+              SELECT '근태'                                      AS ITEM_TYPE
+                   , 'Attendance Request'                      AS ACTNAME
+                   , NVL(SUM(DECODE(HWA.STATUS, '10', 1)), 0)  AS REQUEST_CNT   -- 대기
+                   , NVL(SUM(DECODE(HWA.STATUS, '20', 1)), 0)  AS APPROVAL_CNT  -- 승인
+                FROM HJSPAY_WORK_APPLY  HWA
+                   , PER_ALL_ASSIGNMENTS_F  PAF
+               WHERE 1=1
+                 AND PAF.PERSON_ID       = HWA.PERSON_ID  
+                 AND PAF.PRIMARY_FLAG    = 'Y'  
+                 AND PAF.ASSIGNMENT_TYPE = 'E'  
+                 AND HWA.STATUS          = '10'
+                 AND TRUNC(SYSDATE)      BETWEEN PAF.EFFECTIVE_START_DATE
+                                             AND NVL(PAF.EFFECTIVE_END_DATE, TO_DATE('4712/12/31', 'YYYY/MM/DD'))
+                 AND PAF.ORGANIZATION_ID IN (
+                                              SELECT HOM.ORGANIZATION_ID
+                                                FROM HJSPFM_ORG_MANAGER_V1  HOM
+                                               WHERE 1=1
+                                                 AND HOM.PERSON_ID  = 57055     /* 로그인 PERSON ID 3324 */
+                                                 AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE AND HOM.EFFECTIVE_END_DATE
+                                            )        
+            ) CHO
+   ) DEF
+  WHERE 1=1 
+</select>
+
+    <!--selectNoticePageList -->
+<select id="selectNoticePageList" parameterType="map" resultType="hashmap">
+		/* smh.cmd.dao.CMD10200Dao.selectNoticePageList */
+		/* NOTICE 게시판 조회 쿼리					*/
+
+SELECT
+         C.HJSHR_BOARD_ITEM_SEQ   AS     HJSHR_BOARD_ITEM_SEQ  -- 게시판 KEY 
+        ,C.PAGE_NUMBER            AS     PAGE_NUMBER           -- 페이징
+        ,C.ITEM_GROUP_ID          AS     ITEM_GROUP_ID         -- 분류 (사용하지 않음)\
+        ,C.MEANING                AS     MEANING               -- 분류명 (사용하지 않음)
+        ,C.UPDATE_DATE            AS     UPDATE_DATE           -- 등록일자
+        ,C.TITLE                  AS     TITLE                 -- 제목
+ FROM
+(
+SELECT  HBI.HJSHR_BOARD_ITEM_SEQ                                         AS HJSHR_BOARD_ITEM_SEQ  -- 게시판 KEY 
+     , CEIL(ROW_NUMBER() OVER (ORDER BY HJSHR_BOARD_ITEM_SEQ DESC)/5)   AS PAGE_NUMBER      -- 페이징
+     , HBI.ITEM_GROUP_ID                                                AS ITEM_GROUP_ID         -- 분류 (사용하지 않음)
+     , CLV.MEANING                                                      AS MEANING               -- 분류명 (사용하지 않음)
+     , TO_CHAR(HBI.LAST_UPDATE_DATE, 'YYYY-MM-DD')                      AS UPDATE_DATE           -- 등록일자
+     , HBI.TITLE                                                         AS TITLE                 -- 제목
+  FROM HJSHR_BOARD_ITEMS       HBI
+     , CMD_LOOKUP_VALUES       CLV
+ WHERE 1=1
+   AND HBI.BOARD_ID      = '0'  -- 업무구분 (0:게시판, 1:FAQ, 2:인사자료 구분)
+   AND HBI.ANNOUNCE_TYPE = 'Y'  -- 게시판 공지여부
+   AND CLV.LOOKUP_TYPE   = 'SM_BOARD_ITEM_GROUP'
+   AND HBI.ITEM_GROUP_ID = CLV.LOOKUP_CODE
+ ORDER BY HBI.LAST_UPDATE_DATE DESC
+ )C
+	WHERE 1=1
+	<if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+	AND PAGE_NUMBER = #{PAGE_NUMBER}
+	</if>
+	 
+</select>
+
+
+
+		
+</mapper>

@@ -1,0 +1,325 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.tom.dao.TOM01000Dao">
+<!-- 치공구 정보 관리 -->    
+
+	<!-- 상단 Grid -->
+	<select id="selectToolInformationListByToolList" parameterType="map" resultType="hashmap">
+		--
+		-- GetToolInformationListByTool
+		-- Version:10001
+			SELECT
+					DRLT.DURABLELOTID							AS TOOLNUMBER					--Tool번호
+				,	DRDF.DURABLEDEFID							AS TOOLCODE						--Tool코드
+				,	DRDF.DURABLEDEFVERSION					AS TOOLVERSION					--Tool Version
+				,	DCDF.DICTIONARYNAME						AS TOOLNAME						--치공구명
+				,	PDDF.PRODUCTDEFID							AS PRODUCTDEFID					--품목코드
+				,	PDDF.PRODUCTDEFNAME						AS PRODUCTDEFNAME				--품목명
+				,	PDDF.PRODUCTDEFVERSION					AS PRODUCTDEFVERSION			--품목버전
+				,	DRLT.AREAID										AS AREAID							--작업장아이디
+				,	DCAR.DICTIONARYNAME						AS AREANAME 						--작업장
+				,	DRLT.DURABLESTATE							AS DURABLESTATEID				--상태아이디
+				,	STSS.STATENAME								AS DURABLESTATE					--상태
+				,	CASE
+						WHEN DRLT.ISHOLD = 'Y'
+							THEN '1'
+						ELSE '0'
+					END												AS ISHOLD							--Hold 여부
+				,	DRLT.DURABLECLEANSTATE					AS DURABLECLEANSTATEID		--연마상태아이디
+				,	NVL(STSC.STATENAME,0)						AS DURABLECLEANSTATE			--연마상태
+				
+				,	NVL(DRLT.USEDCOUNT,0)						AS USEDCOUNT						--사용타수				
+				,	NVL(DRLT.TOTALUSEDCOUNT,0)				AS TOTALUSEDCOUNT				--누적사용타수
+				
+				,	NVL(DRLT.USEDLIMIT,0)						AS USEDLIMIT						--보증타수
+				,	NVL(DRLT.CLEANLIMIT,0)						AS CLEANLIMIT						--연마기준타수
+				
+				--,	NVL(CASE WHEN NVL(DRLT.USEDLIMIT,0)=0 THEN  DRDF.USEDLIMIT	
+				--             ELSE DRLT.USEDLIMIT	
+				--        END,0) 										AS USEDLIMIT						--보증타수
+				--,	NVL(CASE WHEN NVL(DRLT.CLEANLIMIT,0)=0 THEN  DRDF.CLEANLIMIT	
+				--             ELSE DRLT.CLEANLIMIT	
+				--        END,0) 										AS CLEANLIMIT						--보증타수
+				        
+				,	NVL(DRLT.TOTALCLEANCOUNT,0)				AS TOTALCLEANCOUNT			--연마횟수
+				,	NVL(DRLT.TOTALREPAIRCOUNT,0)			AS TOTALREPAIRCOUNT			--수리횟수
+				,	NVL(DRLT.WEIGHT,0)							AS WEIGHT							--무게
+				,	NVL(DRLT.HORIZONTAL,0)						AS HORIZONTAL					--가로
+				,	NVL(DRLT.VERTICAL,0)							AS VERTICAL							--세로
+				,	NVL(DRLT.HEIGHT,0)							AS THEIGHT							--높이
+				,	NVL(DRLT.POLISHTHICKNESS, 0)				AS POLISHTHICKNESS				--두께
+				,	NVL(DRLT.TOTALPOLISHTHICKNESS, 0)		AS TOTALPOLISHTHICKNESS		--두께
+				,	NVL(DRLT.TOTALPOLISHTHICKNESS, 0) 
+						- NVL(DRLT.POLISHTHICKNESS, 0)		AS ORIGINTHICKNESS				--변경여부파악용 누적연마두께
+				,	NVL(DRDF.THICKNESSLIMIT,0)					AS TOOLTHICKNESSLIMIT			--두께기준
+				,	NVL(DRLT.CREATEDTHICKNESS,0)				AS CREATEDTHICKNESS			--두께
+				,	NVL(DRDF.USEDFACTOR,0)						AS USEDFACTOR 					--연배
+				
+				,	NVL(DRDF.SUMMARY,0)						AS SUMMARY 						--합수, 20210312/APPEND
+                ,	NVL(DRDF.SCALEX,0)         					AS SCALEX							--SCALEX, 20210312/APPEND
+                ,	NVL(DRDF.SCALEY,0)							AS SCALEY							--SCALEY, 20210312/APPEND
+                ,	0													AS OLB								--OLB, 20210318/PHW/APPEND
+                ,	0													AS NETPNL							--NET_PNL, 20210318/PHW/APPEND
+                ,	NVL(DRDF.HITCOUNT,0)						AS HITCOUNT						--PNL타수, 20210427/PHW/APPEND
+				
+				,	DRLT.VENDORID									AS MAKEVENDORID				--제작업체아이디
+				,	VNDC.VENDORNAME							AS MAKEVENDOR					--제작업체
+				
+				,	NVL(DRLT.LASTTXNCOMMENT,'')				AS UPDATEREASON				--변경사유
+				,	CASE
+						WHEN DRLT.ISHOLD = 'Y'
+							THEN 1
+						ELSE 0
+					END												AS ORIGINISHOLD					--변경여부 파악용 Hold 여부
+				,	DRLT.DURABLESTATE							AS ORIGINDURABLESTATEID		--변경여부 파악용 상태아이디
+				
+				,	DRDF.DURABLECLASSID						AS TOOLTYPEID
+				,	FN_GETTOOLTYPENAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID) AS TOOLTYPE											--Tool구분
+				,	DRDF.FORM										AS TOOLFORMCODE
+				,	FN_GETTOOLFORMNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM) AS TOOLFORM						--Tool형식
+				,   DRDF.TOOLKIND									AS TOOLKINDID
+				,	FN_GETTOOLKINDNAME(#{ENTERPRISEID}, #{LANGUAGETYPE}, DRDF.DURABLECLASSID, DRDF.FORM, DRDF.TOOLKIND) AS TOOLKIND 	--TOOL종류
+				
+				,	NVL(DRDF.CLEANLIMIT,0)                      AS MSTCLEANLIMIT
+				,	NVL(DRDF.USEDLIMIT,0)                       	AS MSTUSEDLIMIT
+				,	'0'													AS CHK
+				,	TO_CHAR(DRLT.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS')  AS CREATEDATE             			--수정일
+				,	USRS.USER_NM AS CREATENAME             			--수정자
+			FROM	TOM_DURABLELOT						DRLT
+			INNER JOIN TOM_DURABLEDEFINITION	DRDF	ON	DRLT.DURABLEDEFID		= DRDF.DURABLEDEFID
+																		AND	DRLT.DURABLEDEFVERSION	= DRDF.DURABLEDEFVERSION
+			INNER JOIN CMD_DICTIONARY				DCDF	ON	DRDF.DURABLEDEFNAME		= DCDF.DICTIONARYID
+																		AND	DCDF.LANGUAGETYPE		= #{LANGUAGETYPE}
+																		AND  DCDF.USE_YN                = 'Y'
+			INNER JOIN BAS_PRODUCTDEFINITION		PDDF	ON	DRDF.PRODUCTDEFID		= PDDF.PRODUCTDEFID
+																		AND	DRDF.PRODUCTDEFVERSION	= PDDF.PRODUCTDEFVERSION
+			LEFT OUTER JOIN	BAS_AREA				DRAR	ON	DRLT.AREAID				= DRAR.AREAID
+			LEFT OUTER JOIN CMD_DICTIONARY		DCAR	ON	DRAR.AREANAME			= DCAR.DICTIONARYID
+																		AND	DCAR.LANGUAGETYPE		= #{LANGUAGETYPE}
+																		AND  DCAR.USE_YN                = 'Y'
+			LEFT OUTER JOIN BAS_STATE					STSS	ON	DRLT.DURABLESTATE		= STSS.STATEID
+																		AND	STSS.STATEMODELID		= 'DurableState'
+			LEFT OUTER JOIN BAS_STATE					STSC	ON	DRLT.DURABLECLEANSTATE	= STSC.STATEID
+																		AND	STSC.STATEMODELID		= 'CleanState'	
+			LEFT OUTER JOIN BAS_VENDOR					VNDC	ON	DRLT.VENDORID			= VNDC.VENDORID																		
+			INNER JOIN CMD_USERS						USRS	ON	DRLT.CREATOR			= USRS.USER_ID																																																			
+			WHERE	DRDF.VALIDSTATE 		= 'Valid'
+			AND		PDDF.VALIDSTATE			= 'Valid'
+			<if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+				AND		DRLT.ENTERPRISEID		= #{ENTERPRISEID}
+			</if>
+			<if test="P_PLANTID != null and P_PLANTID !='' ">
+				AND		DRLT.PLANTID			= #{P_PLANTID}
+			</if>
+			<if test="AREAID != null and AREAID !='' ">
+				AND		DRLT.AREAID				= #{AREAID}
+			</if>
+			<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+				AND		PDDF.PRODUCTDEFID		= #{PRODUCTDEFID}
+			</if>
+			<if test="P_TOOLNO != null and P_TOOLNO !='' ">
+				AND	UPPER(DRLT.DURABLELOTID) LIKE '%' || UPPER(#{P_TOOLNO}) || '%'
+			</if>
+			<if test="DURABLESTATE != null and DURABLESTATE !='' ">
+				AND		DRLT.DURABLESTATE		= #{DURABLESTATE}
+			</if>
+			<if test="ISHOLD != null and ISHOLD !='' ">
+				AND		DRLT.ISHOLD				= #{ISHOLD}
+			</if>
+			<if test="DURABLELOTID != null and DURABLELOTID !='' ">
+				AND		UPPER(DRLT.DURABLELOTID)		LIKE '%' || UPPER(#{DURABLELOTID}) || '%'
+			</if>
+			ORDER BY	PDDF.PRODUCTDEFID,	DRDF.DURABLEDEFID,	DRLT.DURABLELOTID
+    </select>
+	
+	<!-- 하단 Grid -->
+	<select id="selectToolInformationReasonList" parameterType="map" resultType="hashmap">
+		SELECT 
+					DRLT.DURABLESTATE				AS DURABLESTATE			--상태코드				
+				,	DRLT.DESCRIPTION					AS DESCRIPTION			--비고
+				,	CASE	WHEN DRLT.TXNID2 = 'ToolMoveSend' 				THEN '이동출고'
+							WHEN DRLT.TXNID2 = 'ToolMoveSendCancel' 			THEN '이동출고 취소'
+						  	WHEN DRLT.TXNID2 = 'ToolMove' 						THEN '이동입고'
+						   	WHEN DRLT.TXNID2 = 'Create' 							THEN '최초생성'
+						   	WHEN DRLT.TXNID2 = 'ToolMakeReceipt' 				THEN '제작입고'
+						   	WHEN DRLT.TXNID2 = 'ToolMakeReceiptCancel' 		THEN '제작입고 취소'
+						   	WHEN DRLT.TXNID2 = 'ToolRepairReceipt' 				THEN '수리입고'
+						   	WHEN DRLT.TXNID2 = 'ToolRepairSendCancel' 		THEN '수리출고 취소'
+						   	WHEN DRLT.TXNID2 = 'ToolRepairSend' 				THEN '수리출고'
+						   	ELSE '미정의' 
+					END 									AS UPDATEREASON		--변경사유
+				,	TO_CHAR(DRLT.MODIFIEDTIME,'YYYY-MM-DD HH24:MI:SS')	AS UPDATEDATE			--일자
+		FROM TOM_DURABLELOTHISTORY		DRLT
+		WHERE DRLT.DURABLELOTID = #{TOOLNUMBER}
+		ORDER BY DRLT.MODIFIEDTIME
+	</select>
+	
+	
+	
+	<select id="selectDurableLot" parameterType="map" resultType="hashmap">
+		SELECT 
+				DURABLELOTID
+		FROM TOM_DURABLELOT
+		WHERE DURABLELOTID = #{DURABLELOTID}
+	</select>
+	
+	<select id="selectDurableDefinition" parameterType="map" resultType="hashmap">
+		SELECT 
+				DURABLEDEFNAME
+		FROM TOM_DURABLEDEFINITION
+		WHERE DURABLEDEFID = #{DURABLEDEFID}
+		AND DURABLEDEFVERSION = #{DURABLEDEFVERSION}
+	</select>
+	
+	
+	<update id="updateDulableDefinition" parameterType="map">
+		UPDATE TOM_DURABLEDEFINITION
+		SET HITCOUNT		= #{HITCOUNT},		--PNL타수
+			
+			MODIFIER		= #{MODIFIER},
+			MODIFIEDTIME 	= SYSDATE,
+			LASTTXNHISTKEY 	= #{LASTTXNHISTKEY},
+			LASTTXNID		= #{LASTTXNID},
+			LASTTXNUSER 	= #{LASTTXNUSER},
+			LASTTXNTIME 	= SYSDATE,
+			LASTTXNCOMMENT 	= #{LASTTXNCOMMENT}		--변경사유
+		WHERE DURABLEDEFID = #{DURABLEDEFID}
+		AND DURABLEDEFVERSION = #{DURABLEDEFVERSION}
+    </update>
+    
+    <update id="updateDulableDefinitionHistory" parameterType="map">
+		INSERT INTO TOM_DURABLEDEFINITIONHISTORY
+			(
+				  TXNHISTKEY
+				, DURABLEDEFID
+				, DURABLEDEFVERSION
+				, DURABLECLASSID
+				, DURABLEDEFNAME
+				, ENTERPRISEID
+				, PLANTID
+				, PRODUCTDEFID
+				, PRODUCTDEFVERSION
+				, DURABLETYPE
+				, MINCAPACITY
+				, MAXCAPACITY
+				, USEDLIMITTYPE
+				, USEDLIMIT
+				, CLEANLIMITTYPE
+				, CLEANLIMIT
+				, TOOLTYPE
+				, TOOLDETAILTYPE
+				, THICKNESSLIMIT
+				, USEDFACTOR
+				, FILMUSELAYER
+				, VERSIONSTATE
+				
+				, FORM
+				, DESCRIPTION
+				, CREATOR
+				, CREATEDTIME
+				, MODIFIER
+				, MODIFIEDTIME
+				
+				, TXNGROUPHISTKEY
+				, TXNID
+				, TXNUSER
+				, TXNTIME				
+				, TXNREASONCODECLASS
+				, TXNREASONCODE
+				, TXNCOMMENT
+				, VALIDSTATE
+				
+				, HITCOUNT
+				, SUMMARY
+				
+				, FILMUSELAYER2
+				, SCALEX
+				, SCALEY
+				, TOOLKIND
+				, MANUFACTURER
+				, RECEIPTAREAID
+				, OLB
+			)
+		SELECT
+				 #{LASTTXNHISTKEY}
+				, DURABLEDEFID
+				, DURABLEDEFVERSION
+				, DURABLECLASSID
+				, DURABLEDEFNAME
+				, ENTERPRISEID
+				, PLANTID
+				, PRODUCTDEFID
+				, PRODUCTDEFVERSION
+				, DURABLETYPE
+				, MINCAPACITY
+				, MAXCAPACITY
+				, USEDLIMITTYPE
+				, USEDLIMIT
+				, CLEANLIMITTYPE
+				, CLEANLIMIT
+				, TOOLTYPE
+				, TOOLDETAILTYPE
+				, THICKNESSLIMIT
+				, USEDFACTOR
+				, FILMUSELAYER1
+				, VERSIONSTATE
+				
+				, FORM		
+				, DESCRIPTION
+				, CREATOR
+				, CREATEDTIME
+				, MODIFIER			
+				, MODIFIEDTIME		--시점데이터 이용
+				
+				, LASTTXNHISTKEY
+				, LASTTXNID
+				, LASTTXNUSER
+				, LASTTXNTIME
+				, 'TOM01000ServiceImpl'
+				, #{LASTTXNCOMMENT}
+				, LASTTXNCOMMENT
+				, VALIDSTATE
+				
+				, HITCOUNT
+				, SUMMARY
+				
+				, FILMUSELAYER2
+				, SCALEX
+				, SCALEY				
+				, TOOLKIND
+				, MANUFACTURER
+				, RECEIPTAREAID
+				, OLB
+		FROM TOM_DURABLEDEFINITION
+		WHERE DURABLEDEFID = #{DURABLEDEFID}
+		AND DURABLEDEFVERSION = #{DURABLEDEFVERSION}
+    </update>
+        	
+    <update id="updateDulableLot" parameterType="map">
+		UPDATE TOM_DURABLELOT
+		SET 
+			ISHOLD					= UPPER(#{ISHOLD}),
+			DURABLESTATE			= #{DURABLESTATE},
+			
+			USEDLIMIT				= #{USEDLIMIT},		--보증타수
+			CLEANLIMIT				= #{CLEANLIMIT},	--연마기준타수
+			
+			WEIGHT					= #{WEIGHT},
+			HORIZONTAL			= #{HORIZONTAL},
+			VERTICAL					= #{VERTICAL},
+			HEIGHT					= #{THEIGHT},
+			TOTALPOLISHTHICKNESS	= #{TOTALPOLISHTHICKNESS},
+			
+			MODIFIER		= #{MODIFIER},
+			MODIFIEDTIME 	= SYSDATE,
+			LASTTXNHISTKEY 	= #{LASTTXNHISTKEY},
+			LASTTXNID		= #{LASTTXNID},
+			LASTTXNUSER 	= #{LASTTXNUSER},
+			LASTTXNTIME 	= SYSDATE,
+			LASTTXNCOMMENT 	= #{LASTTXNCOMMENT}		--변경사유
+		WHERE DURABLELOTID = #{DURABLELOTID}
+    </update>
+	    
+</mapper>

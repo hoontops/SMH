@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM07800Dao">
+
+     <!--  인계 취소 리스트 조회 -->
+     <select id="selectLotWorkPacking" parameterType="map" resultType="hashmap">
+				SELECT  
+						null	AS CHK
+					,	L.LOTID
+                    ,   L.AREAID
+                    ,   L.USERSEQUENCE
+                    ,   L.PROCESSSEGMENTID
+                    ,   COALESCE(DC1.DICTIONARYNAME, SG.PROCESSSEGMENTNAME)     AS PROCESSSEGMENTNAME
+                    ,   L.PRODUCTDEFID
+                    ,   L.PRODUCTDEFVERSION
+                    ,   COALESCE(DC2.DICTIONARYNAME, PD.PRODUCTDEFNAME)         AS PRODUCTDEFNAME
+                    ,   L.UNIT
+                    ,   L.QTY
+                    ,   L.PANELQTY
+                    ,   L.PRODUCTIONORDERID
+                    ,   CU.CUSTOMERNAME
+                    ,   TO_CHAR(L.STARTEDDATE, 'YYYY-MM-DD')                    AS INPUTDATE
+                    ,   TO_CHAR(L.DUEDATE, 'YYYY-MM-DD')                        AS DUEDATE
+                    ,   COALESCE(DC3.DICTIONARYNAME, CD1.MEANING)              AS PRODUCTIONTYPE
+				FROM    PCM_LOT                  L
+                INNER JOIN BAS_PROCESSSEGMENT    SG  ON  L.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+                LEFT  JOIN CMD_DICTIONARY        DC1 ON  SG.PROCESSSEGMENTNAME = DC1.DICTIONARYID
+                                                    AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_PRODUCTDEFINITION PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                    AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                LEFT  JOIN CMD_DICTIONARY        DC2 ON  PD.PRODUCTDEFNAME = DC2.DICTIONARYID
+                                                    AND DC2.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT JOIN MFM_PRODUCTIONORDER   PO  ON  L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+                                                    AND L.LINENO = PO.LINENO
+                LEFT  JOIN BAS_CUSTOMER          CU  ON  PO.CUSTOMERID = CU.CUSTOMERID
+                LEFT  JOIN CMD_LOOKUP_VALUES              CD1 ON  PD.PRODUCTIONTYPE = CD1.LOOKUP_CODE
+                                                    AND CD1.LOOKUP_TYPE = 'ProductionType'
+                LEFT  JOIN CMD_DICTIONARY        DC3 ON  CD1.DICTIONARYID = DC3.DICTIONARYID
+                                                    AND DC3.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE   SG.PROCESSSEGMENTTYPE  = 'Package'
+				AND     L.PROCESSSTATE IN ('WaitForReceive')
+				AND     L.LOTSTATE = 'InProduction'
+				AND     COALESCE(L.ISHOLD, 'N') = 'N'
+				AND     COALESCE(L.ISLOCKING, 'N') = 'N'
+				AND		L.AREAID = #{AREAID}
+				<if test="LOTID != null and LOTID !='' ">
+				AND		L.LOTID = #{LOTID}
+			  	</if>
+    </select>
+  
+</mapper>

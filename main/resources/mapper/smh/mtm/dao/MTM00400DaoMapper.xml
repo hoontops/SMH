@@ -1,0 +1,626 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mtm.dao.MTM00400Dao">
+<!-- TOM 공통 DAO (조회조건 및 Grid 컴포넌트) -->      
+    
+    
+  	<!-- 등록 -->
+    <insert id="execPeriodQtySetVal" parameterType="map">
+    -- execPeriodQtySetVal
+	    DECLARE
+	    BEGIN					
+		  IFC_INV_PERIOD_QTY_PKG.SET_VALUE@ERPPROD( P_ORGANIZATION_CODE => #{P_PLANTID}					
+												  ,P_GROUP_CODE => #{P_CONSUMABLECLASSID} 				
+												  ,P_TRX_DATE_FROM => TO_DATE(#{P_CONPERIOD_PERIODFR},'YYYYMMDD') 						
+												  ,P_TRX_DATE_TO => TO_DATE(#{P_CONPERIOD_PERIODTO},'YYYYMMDD') 	 					
+												  ,P_ITEM_CODE => #{P_ITEM_CODE} 					
+												  ,P_SUBINVENTORY_CODE => #{P_WAREHOUSEID}					
+												  ,P_LOT_NUMBER => #{P_LOT_NUMBER}					
+												  ,P_TYPE => #{P_TYPE}	
+                                      			  ,P_ITEM_DESC => #{P_ITEM_NAME}											  				
+												  );					
+  
+		END;
+    </insert>	
+	
+	<!-- 품목 팝업 -->
+	<select id="selectItemMasterPopupList" parameterType="map" resultType="hashmap">
+	-- selectItemMasterPopupList
+		SELECT
+			  ITEMID
+			, ITEMNAME
+			, ITEMVERSION
+			, MASTERDATACLASSID   -- 품목 그룹 ID
+			, PRODUCTIONTYPE      -- 생산구분
+			, DECODE(SUBSTR(ITEMID, 0, 1), '2', ITEMID || '|' || ITEMVERSION, ITEMID)  AS ITEMDEF
+		FROM
+		BAS_ITEMMASTER
+		WHERE 1 = 1
+		<if test="P_ITEMDEFNAME != null and P_ITEMDEFNAME != ''">
+		  AND (UPPER(ITEMID) LIKE '%' || UPPER(#{P_ITEMDEFNAME}) || '%' OR UPPER(ITEMNAME) LIKE '%' || UPPER(#{P_ITEMDEFNAME}) || '%')
+		</if>
+		ORDER BY ITEMID, ITEMVERSION
+	</select>
+		
+	<!-- 자재현황 main 조회  -->
+	<select id="selectConsumableLotStatisticsList" parameterType="map" resultType="hashmap">
+	-- selectConsumableLotStatisticsList
+		    <choose>
+          	<when test="P_TYPE != null and P_TYPE !='' and P_TYPE == 'ITEM'"> 
+			-- ITEM         품목
+				SELECT
+					  ENTERPRISEID
+					, PLANTID 
+					, ITEM_CODE        -- 자재코드
+					, ITEM_DESCRIPTION  -- 자재명
+					, UOM               -- 단위
+					, BEGIN_QUANTITY     -- 기본수량
+					, PO_DELIVER_QUANTITY      -- 구매입고
+					, SUBINV_DELIVER_QUANTITY  -- 재고이동
+					, ETC_DELIVER_QUANTITY     -- 기타입고
+					, WIP_RECEIPT_QUANAITY     -- 생산입고
+					, INPUT_QUANTITY           -- 입고합계
+					, PO_RETURN_QUANTITY       -- 구매반품
+					, SUBINV_ISSUE_QUANTITY    -- 재고이동
+					, ETC_ISSUE_QUANTITY       -- 기타출고
+					, WIP_ISSUE_QUANTITY       -- 생산출고
+					, OUTPUT_QUANTITY          -- 출고합계
+					, PRE_QUANTITY
+					, POST_QUANTITY
+					, ONHAND_QUANTITY
+					, RECEIPTQTY  -- 인수수량
+					, CONSUMEDQTY  -- 할당수량 
+					, DECODE(CONSUMEDQTY, NULL, NULL, END_QUANTITY - CONSUMEDQTY) AS AVAIL_INV -- 가용재고
+					, END_QUANTITY             -- 재고수량
+				FROM
+				(			
+				SELECT
+				  M.ENTERPRISEID
+				, M.PLANTID 
+				, M.ITEM_CODE        -- 자재코드
+				, M.ITEM_DESCRIPTION  -- 자재명
+				, M.UOM				AS   UOM             -- 단위
+				, M.BEGIN_QUANTITY		AS   BEGIN_QUANTITY  -- 기본수량
+				, M.PO_DELIVER_QUANTITY       AS PO_DELIVER_QUANTITY -- 구매입고
+				, M.SUBINV_DELIVER_QUANTITY  AS SUBINV_DELIVER_QUANTITY -- 재고이동
+				, M.ETC_DELIVER_QUANTITY      AS ETC_DELIVER_QUANTITY  -- 기타입고
+				, M.WIP_RECEIPT_QUANAITY      AS WIP_RECEIPT_QUANAITY -- 생산입고
+				, M.INPUT_QUANTITY              AS INPUT_QUANTITY -- 입고합계
+				, M.PO_RETURN_QUANTITY       AS PO_RETURN_QUANTITY -- 구매반품
+				, M.SUBINV_ISSUE_QUANTITY    AS SUBINV_ISSUE_QUANTITY -- 재고이동
+				, M.ETC_ISSUE_QUANTITY         AS ETC_ISSUE_QUANTITY -- 기타출고
+				, M.WIP_ISSUE_QUANTITY        AS WIP_ISSUE_QUANTITY -- 생산출고
+				, M.OUTPUT_QUANTITY           AS OUTPUT_QUANTITY -- 출고합계
+				, M.PRE_QUANTITY               AS PRE_QUANTITY
+				, M.POST_QUANTITY            AS POST_QUANTITY
+				, M.ONHAND_QUANTITY         AS ONHAND_QUANTITY
+				, CASE WHEN TO_DATE(#{P_CONPERIOD_PERIODTO}, 'YYYYMMDD') -  TO_DATE(TO_CHAR(SYSDATE,'YYYYMMDD'),'YYYYMMDD') <![CDATA[>=]]> 0 THEN
+					(SELECT SUM(NVL(C.LOTQTY,0)) FROM MTM_CONSUMABLERECEIPT C
+							 WHERE 1 = 1
+							   AND C.ENTERPRISEID     = M.ENTERPRISEID
+							   AND C.PLANTID          = M.PLANTID
+							   AND C.CONSUMABLEDEFID  = M.ITEM_CODE 
+							   ) 		
+				 ELSE
+					NULL
+				 END  AS RECEIPTQTY  -- 인수수량		
+				, CASE WHEN TO_DATE(#{P_CONPERIOD_PERIODTO}, 'YYYYMMDD') -  TO_DATE(TO_CHAR(SYSDATE,'YYYYMMDD'),'YYYYMMDD') <![CDATA[>=]]> 0 THEN
+					CASE WHEN SUBSTR(M.ITEM_CODE, 0, 1) = '2' THEN
+						(SELECT SUM(NVL(L.CONSUMEDQTY,0)) FROM MTM_CONSUMEMATERIALLOT_V L 
+							WHERE 1 = 1   
+							  AND L.ENTERPRISEID = M.ENTERPRISEID
+							  AND L.PLANTID      = M.PLANTID
+							  AND L.MATERIALDEFID || L.MATERIALDEFVERSION = M.ITEM_CODE
+						)
+					  ELSE
+						 (SELECT SUM(NVL(L.CONSUMEDQTY,0)) FROM MTM_CONSUMEMATERIALLOT_V L 
+							WHERE 1 = 1   
+							  AND L.ENTERPRISEID = M.ENTERPRISEID
+							  AND L.PLANTID      = M.PLANTID
+							  AND L.MATERIALDEFID      = M.ITEM_CODE        
+							)
+					  END		
+				 ELSE
+					NULL
+				 END  AS CONSUMEDQTY  -- 할당수량 
+				, M.END_QUANTITY   AS  END_QUANTITY            -- 재고수량
+				FROM 
+				IFC_MES_S_MTL_SUMMARY_V@ERPPROD M
+				WHERE 1 = 1
+				  AND M.ENTERPRISEID = #{P_ENTERPRISEID}
+				 -- Site
+				<if test="P_PLANTID != null and P_PLANTID !='' ">
+					AND M.PLANTID	= #{P_PLANTID}
+				</if>
+				  -- 품목코드
+				<if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">
+					AND M.ITEM_CODE	= #{P_ITEM_CODE}
+				</if>
+				  -- 품목명
+				<if test="P_ITEM_NAME != null and P_ITEM_NAME !='' ">
+					AND M.ITEM_DESCRIPTION LIKE '%' || #{P_ITEM_NAME}  || '%'
+				</if>				
+				-- 재고수량 0 제외
+				<if test="P_ISSTOCKQTY != null and P_ISSTOCKQTY !='' ">
+					AND M.END_QUANTITY <![CDATA[>]]> 0
+				</if>	
+				)
+				ORDER BY ITEM_CODE      
+          	</when>
+          	<when test="P_TYPE != null and P_TYPE !='' and P_TYPE == 'ITEM_LOT'"> 
+			-- ITEM_LOT   품목 + Lot
+				SELECT
+					  ENTERPRISEID
+					, PLANTID 
+					, ITEM_CODE        -- 자재코드
+					, ITEM_DESCRIPTION  -- 자재명
+					, UOM               -- 단위
+					, LOT_NUMBER         -- 자재 LOT NO
+					, BEGIN_QUANTITY     -- 기본수량
+					, PO_DELIVER_QUANTITY      -- 구매입고
+					, SUBINV_DELIVER_QUANTITY  -- 재고이동
+					, ETC_DELIVER_QUANTITY     -- 기타입고
+					, WIP_RECEIPT_QUANAITY     -- 생산입고
+					, INPUT_QUANTITY           -- 입고합계
+					, PO_RETURN_QUANTITY       -- 구매반품
+					, SUBINV_ISSUE_QUANTITY    -- 재고이동
+					, ETC_ISSUE_QUANTITY       -- 기타출고
+					, WIP_ISSUE_QUANTITY       -- 생산출고
+					, OUTPUT_QUANTITY          -- 출고합계
+					, PRE_QUANTITY
+					, POST_QUANTITY
+					, ONHAND_QUANTITY
+					, RECEIPTQTY  -- 인수수량
+					, CONSUMEDQTY  -- 할당수량 
+					, DECODE(CONSUMEDQTY, NULL, NULL, END_QUANTITY - CONSUMEDQTY) AS AVAIL_INV -- 가용재고
+					, END_QUANTITY             -- 재고수량
+				FROM
+				(			
+				SELECT
+				  M.ENTERPRISEID
+				, M.PLANTID 
+				, M.ITEM_CODE        -- 자재코드
+				, M.ITEM_DESCRIPTION  -- 자재명
+				, M.UOM						AS   UOM             -- 단위
+				, M.LOT_NUMBER         -- 자재 LOT NO
+				, M.BEGIN_QUANTITY				AS   BEGIN_QUANTITY  -- 기본수량
+				, M.PO_DELIVER_QUANTITY		AS   PO_DELIVER_QUANTITY   -- 구매입고
+				, M.SUBINV_DELIVER_QUANTITY    AS  SUBINV_DELIVER_QUANTITY-- 재고이동
+				, M.ETC_DELIVER_QUANTITY		AS  ETC_DELIVER_QUANTITY   -- 기타입고
+				, M.WIP_RECEIPT_QUANAITY		AS  WIP_RECEIPT_QUANAITY   -- 생산입고
+				, M.INPUT_QUANTITY				AS  INPUT_QUANTITY         -- 입고합계
+				, M.PO_RETURN_QUANTITY			AS  PO_RETURN_QUANTITY     -- 구매반품
+				, M.SUBINV_ISSUE_QUANTITY		AS  SUBINV_ISSUE_QUANTITY  -- 재고이동
+				, M.ETC_ISSUE_QUANTITY			AS  ETC_ISSUE_QUANTITY     -- 기타출고
+				, M.WIP_ISSUE_QUANTITY			AS  WIP_ISSUE_QUANTITY     -- 생산출고
+				, M.OUTPUT_QUANTITY			AS  OUTPUT_QUANTITY        -- 출고합계
+				, M.PRE_QUANTITY				AS  PRE_QUANTITY
+				, M.POST_QUANTITY				AS  POST_QUANTITY
+				, M.ONHAND_QUANTITY			AS	ONHAND_QUANTITY
+				, CASE WHEN TO_DATE(#{P_CONPERIOD_PERIODTO}, 'YYYYMMDD') -  TO_DATE(TO_CHAR(SYSDATE,'YYYYMMDD'),'YYYYMMDD') <![CDATA[>=]]> 0 THEN
+					(SELECT SUM(NVL(C.LOTQTY,0)) FROM MTM_CONSUMABLERECEIPT C
+							 WHERE 1 = 1
+							   AND C.ENTERPRISEID     = M.ENTERPRISEID
+							   AND C.PLANTID          = M.PLANTID
+							   AND C.CONSUMABLEDEFID  = M.ITEM_CODE 
+							   AND C.CONSUMABLELOTID  = M.LOT_NUMBER -- 자재 Lot Id
+							   ) 		
+				 ELSE
+					NULL
+				 END  AS RECEIPTQTY  -- 인수수량		
+				, CASE WHEN TO_DATE(#{P_CONPERIOD_PERIODTO}, 'YYYYMMDD') -  TO_DATE(TO_CHAR(SYSDATE,'YYYYMMDD'),'YYYYMMDD') <![CDATA[>=]]> 0 THEN
+					CASE WHEN SUBSTR(M.ITEM_CODE, 0, 1) = '2' THEN
+						(SELECT SUM(NVL(L.CONSUMEDQTY,0)) FROM MTM_CONSUMEMATERIALLOT_V L 
+							WHERE 1 = 1   
+							  AND L.ENTERPRISEID = M.ENTERPRISEID
+							  AND L.PLANTID      = M.PLANTID
+							  AND L.MATERIALDEFID || L.MATERIALDEFVERSION = M.ITEM_CODE
+							  AND L.MATERIALLOTID      = M.LOT_NUMBER)
+					  ELSE
+						 (SELECT SUM(NVL(L.CONSUMEDQTY,0)) FROM MTM_CONSUMEMATERIALLOT_V L 
+							WHERE 1 = 1   
+							  AND L.ENTERPRISEID = M.ENTERPRISEID
+							  AND L.PLANTID      = M.PLANTID
+							  AND L.MATERIALDEFID      = M.ITEM_CODE        
+							  AND L.MATERIALLOTID      = M.LOT_NUMBER)
+					  END		
+				 ELSE
+					NULL
+				 END  AS CONSUMEDQTY  -- 할당수량 
+				, M.END_QUANTITY     AS  END_QUANTITY            -- 재고수량
+				FROM 
+				IFC_MES_S_MTL_SUMMARY_V@ERPPROD M
+				WHERE 1 = 1
+				  AND M.ENTERPRISEID = #{P_ENTERPRISEID}
+				 -- Site
+				<if test="P_PLANTID != null and P_PLANTID !='' ">
+					AND M.PLANTID	= #{P_PLANTID}
+				</if>
+				  -- 품목코드
+				<if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">
+					AND M.ITEM_CODE	= #{P_ITEM_CODE}
+				</if>
+				  -- 품목명
+				<if test="P_ITEM_NAME != null and P_ITEM_NAME !='' ">
+					AND M.ITEM_DESCRIPTION LIKE '%' || #{P_ITEM_NAME}  || '%'
+				</if>				
+				-- 재고수량 0 제외
+				<if test="P_ISSTOCKQTY != null and P_ISSTOCKQTY !='' ">
+					AND M.END_QUANTITY <![CDATA[>]]> 0
+				</if>	
+				)		   
+				ORDER BY ITEM_CODE, LOT_NUMBER      
+          	</when>
+          	<when test="P_TYPE != null and P_TYPE !='' and P_TYPE == 'ITEM_SUB'"> 
+			-- ITEM_SUB   품목 + 창고코드
+				SELECT
+					  ENTERPRISEID
+					, PLANTID 
+					, ITEM_CODE        -- 자재코드
+					, ITEM_DESCRIPTION  -- 자재명
+					, UOM               -- 단위
+					, SUBINVENTORY_CODE  -- 창고 ID
+					, SUBINVENTORY_NAME  -- 창고명
+					, BEGIN_QUANTITY     -- 기본수량
+					, PO_DELIVER_QUANTITY      -- 구매입고
+					, SUBINV_DELIVER_QUANTITY  -- 재고이동
+					, ETC_DELIVER_QUANTITY     -- 기타입고
+					, WIP_RECEIPT_QUANAITY     -- 생산입고
+					, INPUT_QUANTITY           -- 입고합계
+					, PO_RETURN_QUANTITY       -- 구매반품
+					, SUBINV_ISSUE_QUANTITY    -- 재고이동
+					, ETC_ISSUE_QUANTITY       -- 기타출고
+					, WIP_ISSUE_QUANTITY       -- 생산출고
+					, OUTPUT_QUANTITY          -- 출고합계
+					, PRE_QUANTITY
+					, POST_QUANTITY
+					, ONHAND_QUANTITY
+					, RECEIPTQTY  -- 인수수량
+					, CONSUMEDQTY  -- 할당수량 
+					, DECODE(CONSUMEDQTY, NULL, NULL, END_QUANTITY - CONSUMEDQTY) AS AVAIL_INV -- 가용재고
+					, END_QUANTITY             -- 재고수량
+				FROM
+				(			
+				SELECT
+				  M.ENTERPRISEID
+				, M.PLANTID 
+				, M.ITEM_CODE        -- 자재코드
+				, M.ITEM_DESCRIPTION  -- 자재명
+				, M.UOM               AS UOM               -- 단위
+				, M.SUBINVENTORY_CODE  -- 창고 ID
+				, M.SUBINVENTORY_NAME  -- 창고명
+				, M.BEGIN_QUANTITY					AS   BEGIN_QUANTITY   -- 기본수량
+				, M.PO_DELIVER_QUANTITY			AS   PO_DELIVER_QUANTITY    -- 구매입고
+				, M.SUBINV_DELIVER_QUANTITY		AS   SUBINV_DELIVER_QUANTITY -- 재고이동
+				, M.ETC_DELIVER_QUANTITY			AS   ETC_DELIVER_QUANTITY   -- 기타입고
+				, M.WIP_RECEIPT_QUANAITY			AS   WIP_RECEIPT_QUANAITY   -- 생산입고
+				, M.INPUT_QUANTITY					AS   INPUT_QUANTITY         -- 입고합계
+				, M.PO_RETURN_QUANTITY				AS   PO_RETURN_QUANTITY     -- 구매반품
+				, M.SUBINV_ISSUE_QUANTITY			AS   SUBINV_ISSUE_QUANTITY   -- 재고이동
+				, M.ETC_ISSUE_QUANTITY				AS   ETC_ISSUE_QUANTITY    -- 기타출고
+				, M.WIP_ISSUE_QUANTITY				AS   WIP_ISSUE_QUANTITY    -- 생산출고
+				, M.OUTPUT_QUANTITY				AS   OUTPUT_QUANTITY        -- 출고합계
+				, M.PRE_QUANTITY					AS   PRE_QUANTITY
+				, M.POST_QUANTITY					AS   POST_QUANTITY
+				, M.ONHAND_QUANTITY				AS   ONHAND_QUANTITY
+				, CASE WHEN TO_DATE(#{P_CONPERIOD_PERIODTO}, 'YYYYMMDD') -  TO_DATE(TO_CHAR(SYSDATE,'YYYYMMDD'),'YYYYMMDD') <![CDATA[>=]]> 0 THEN
+					(SELECT SUM(NVL(C.LOTQTY,0)) FROM MTM_CONSUMABLERECEIPT C
+							 WHERE 1 = 1
+							   AND C.ENTERPRISEID     = M.ENTERPRISEID
+							   AND C.PLANTID          = M.PLANTID
+							   AND C.CONSUMABLEDEFID  = M.ITEM_CODE 
+							   AND C.WAREHOUSEID      = M.SUBINVENTORY_CODE
+							   ) 		
+				 ELSE
+					NULL
+				 END  AS RECEIPTQTY  -- 인수수량		
+				, CASE WHEN TO_DATE(#{P_CONPERIOD_PERIODTO}, 'YYYYMMDD') -  TO_DATE(TO_CHAR(SYSDATE,'YYYYMMDD'),'YYYYMMDD') <![CDATA[>=]]> 0 THEN
+					CASE WHEN SUBSTR(M.ITEM_CODE, 0, 1) = '2' THEN
+						(SELECT SUM(NVL(L.CONSUMEDQTY,0)) FROM MTM_CONSUMEMATERIALLOT_V L 
+							WHERE 1 = 1   
+							  AND L.WAREHOUSEID  = M.SUBINVENTORY_CODE
+							  AND L.ENTERPRISEID = M.ENTERPRISEID
+							  AND L.PLANTID      = M.PLANTID
+							  AND L.MATERIALDEFID || L.MATERIALDEFVERSION = M.ITEM_CODE
+							  )
+					  ELSE
+						 (SELECT SUM(NVL(L.CONSUMEDQTY,0)) FROM MTM_CONSUMEMATERIALLOT_V L 
+							WHERE 1 = 1   
+							  AND L.WAREHOUSEID  = M.SUBINVENTORY_CODE
+							  AND L.ENTERPRISEID = M.ENTERPRISEID
+							  AND L.PLANTID      = M.PLANTID
+							  AND L.MATERIALDEFID      = M.ITEM_CODE        
+							 )
+					  END		
+				 ELSE
+					NULL
+				 END  AS CONSUMEDQTY  -- 할당수량 
+				, M.END_QUANTITY      AS  END_QUANTITY             -- 재고수량
+				FROM 
+				IFC_MES_S_MTL_SUMMARY_V@ERPPROD M
+				WHERE 1 = 1
+				  AND M.ENTERPRISEID = #{P_ENTERPRISEID}
+				 -- Site
+				<if test="P_PLANTID != null and P_PLANTID !='' ">
+					AND M.PLANTID	= #{P_PLANTID}
+				</if>
+				  -- 품목코드
+				<if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">
+					AND M.ITEM_CODE	= #{P_ITEM_CODE}
+				</if>
+				  -- 품목명
+				<if test="P_ITEM_NAME != null and P_ITEM_NAME !='' ">
+					AND M.ITEM_DESCRIPTION LIKE '%' || #{P_ITEM_NAME}  || '%'
+				</if>				
+				-- 재고수량 0 제외
+				<if test="P_ISSTOCKQTY != null and P_ISSTOCKQTY !='' ">
+					AND M.END_QUANTITY <![CDATA[>]]> 0
+				</if>	
+				)						     
+				ORDER BY ITEM_CODE, SUBINVENTORY_CODE      
+          	</when>
+          	<otherwise>
+			-- NULL        품목 + Lot + 창고코드
+				SELECT
+					  ENTERPRISEID
+					, PLANTID 
+					, ITEM_CODE        -- 자재코드
+					, ITEM_DESCRIPTION  -- 자재명
+					, UOM               -- 단위
+					, LOT_NUMBER         -- 자재 LOT NO
+					, SUBINVENTORY_CODE  -- 창고 ID
+					, SUBINVENTORY_NAME  -- 창고명
+					, BEGIN_QUANTITY     -- 기본수량
+					, PO_DELIVER_QUANTITY      -- 구매입고
+					, SUBINV_DELIVER_QUANTITY  -- 재고이동
+					, ETC_DELIVER_QUANTITY     -- 기타입고
+					, WIP_RECEIPT_QUANAITY     -- 생산입고
+					, INPUT_QUANTITY           -- 입고합계
+					, PO_RETURN_QUANTITY       -- 구매반품
+					, SUBINV_ISSUE_QUANTITY    -- 재고이동
+					, ETC_ISSUE_QUANTITY       -- 기타출고
+					, WIP_ISSUE_QUANTITY       -- 생산출고
+					, OUTPUT_QUANTITY          -- 출고합계
+					, PRE_QUANTITY
+					, POST_QUANTITY
+					, ONHAND_QUANTITY
+					, RECEIPTQTY  -- 인수수량
+					, CONSUMEDQTY  -- 할당수량 
+					, DECODE(CONSUMEDQTY, NULL, NULL, END_QUANTITY - CONSUMEDQTY) AS AVAIL_INV -- 가용재고
+					, END_QUANTITY             -- 재고수량
+				FROM
+				(
+				SELECT
+				  M.ENTERPRISEID
+				, M.PLANTID 
+				, M.ITEM_CODE        -- 자재코드
+				, M.ITEM_DESCRIPTION  -- 자재명
+				, M.UOM               -- 단위
+				, M.LOT_NUMBER         -- 자재 LOT NO
+				, M.SUBINVENTORY_CODE  -- 창고 ID
+				, M.SUBINVENTORY_NAME  -- 창고명
+				, M.BEGIN_QUANTITY     -- 기본수량
+				, M.PO_DELIVER_QUANTITY      -- 구매입고
+				, M.SUBINV_DELIVER_QUANTITY  -- 재고이동
+				, M.ETC_DELIVER_QUANTITY     -- 기타입고
+				, M.WIP_RECEIPT_QUANAITY     -- 생산입고
+				, M.INPUT_QUANTITY           -- 입고합계
+				, M.PO_RETURN_QUANTITY       -- 구매반품
+				, M.SUBINV_ISSUE_QUANTITY    -- 재고이동
+				, M.ETC_ISSUE_QUANTITY       -- 기타출고
+				, M.WIP_ISSUE_QUANTITY       -- 생산출고
+				, M.OUTPUT_QUANTITY          -- 출고합계
+				, M.PRE_QUANTITY
+				, M.POST_QUANTITY
+				, M.ONHAND_QUANTITY
+				, CASE WHEN TO_DATE(#{P_CONPERIOD_PERIODTO}, 'YYYYMMDD') -  TO_DATE(TO_CHAR(SYSDATE,'YYYYMMDD'),'YYYYMMDD') <![CDATA[>=]]> 0 THEN
+					(SELECT SUM(NVL(C.LOTQTY,0)) FROM MTM_CONSUMABLERECEIPT C
+							 WHERE 1 = 1
+							   AND C.ENTERPRISEID     = M.ENTERPRISEID
+							   AND C.PLANTID          = M.PLANTID
+							   AND C.CONSUMABLEDEFID  = M.ITEM_CODE 
+							   AND C.WAREHOUSEID      = M.SUBINVENTORY_CODE
+							   AND C.CONSUMABLELOTID  = M.LOT_NUMBER -- 자재 Lot Id
+							   ) 		
+				 ELSE
+					NULL
+				 END  AS RECEIPTQTY  -- 인수수량		
+				, CASE WHEN TO_DATE(#{P_CONPERIOD_PERIODTO}, 'YYYYMMDD') -  TO_DATE(TO_CHAR(SYSDATE,'YYYYMMDD'),'YYYYMMDD') <![CDATA[>=]]> 0 THEN
+					CASE WHEN SUBSTR(M.ITEM_CODE, 0, 1) = '2' THEN
+						(SELECT SUM(NVL(L.CONSUMEDQTY,0)) FROM MTM_CONSUMEMATERIALLOT_V L 
+							WHERE 1 = 1   
+							  AND L.WAREHOUSEID  = M.SUBINVENTORY_CODE
+							  AND L.ENTERPRISEID = M.ENTERPRISEID
+							  AND L.PLANTID      = M.PLANTID
+							  AND L.MATERIALDEFID || L.MATERIALDEFVERSION = M.ITEM_CODE
+							  AND L.MATERIALLOTID      = M.LOT_NUMBER)
+					  ELSE
+						 (SELECT SUM(NVL(L.CONSUMEDQTY,0)) FROM MTM_CONSUMEMATERIALLOT_V L 
+							WHERE 1 = 1   
+							  AND L.WAREHOUSEID  = M.SUBINVENTORY_CODE
+							  AND L.ENTERPRISEID = M.ENTERPRISEID
+							  AND L.PLANTID      = M.PLANTID
+							  AND L.MATERIALDEFID      = M.ITEM_CODE        
+							  AND L.MATERIALLOTID      = M.LOT_NUMBER)
+					  END		
+				 ELSE
+					NULL
+				 END  AS CONSUMEDQTY  -- 할당수량 
+				, M.END_QUANTITY             -- 재고수량
+				FROM 
+				IFC_MES_S_MTL_SUMMARY_V@ERPPROD M
+				WHERE 1 = 1
+				  AND M.ENTERPRISEID = #{P_ENTERPRISEID}
+				 -- Site
+				<if test="P_PLANTID != null and P_PLANTID !='' ">
+					AND M.PLANTID	= #{P_PLANTID}
+				</if>
+				  -- 품목코드
+				<if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">
+					AND M.ITEM_CODE	= #{P_ITEM_CODE}
+				</if>
+				  -- 품목명
+				<if test="P_ITEM_NAME != null and P_ITEM_NAME !='' ">
+					AND M.ITEM_DESCRIPTION LIKE '%' || #{P_ITEM_NAME}  || '%'
+				</if>				
+				-- 재고수량 0 제외
+				<if test="P_ISSTOCKQTY != null and P_ISSTOCKQTY !='' ">
+					AND M.END_QUANTITY <![CDATA[>]]> 0
+				</if>			
+				)  
+				ORDER BY ITEM_CODE, LOT_NUMBER, SUBINVENTORY_CODE
+          	</otherwise>
+		</choose>
+	</select>
+	
+	<!-- 자재현황detail조회    -->
+	<select id="selectConsumablelotStatisticsDetailInfoList" parameterType="map" resultType="hashmap">
+	-- selectConsumablelotStatisticsDetailInfoList
+		SELECT 
+		  ENTERPRISEID
+		, PLANTID
+		, ITEM_CODE
+		, ITEM_REVISION
+		, ITEM_LOT_NO
+		, TRANSACTION_DETAIL
+		, TO_CHAR(TRANSACTION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS TRANSACTION_DATE
+		, TRANSACTION_TYPE_NAME
+		, LOT_NO
+		, SUBINVENTORY_CODE_FR
+		, SUBINVENTORY_NAME_FR
+		, SUBINVENTORY_CODE_TO
+		, SUBINVENTORY_NAME_TO
+		, RECEIPT_QTY
+		, ISSUE_QTY
+		, ACCOUNT_ALLIAS_NAME
+		, ACCOUNT_ALLIAS_DESC   
+		FROM IFC_MES_S_MTL_TRANSACTION_V@ERPPROD   -- 자재현황 라인 정보
+		WHERE 1 = 1
+		  AND ENTERPRISEID  = #{P_ENTERPRISEID}
+		  AND PLANTID        = #{P_PLANTID}		 
+		  and transaction_date <![CDATA[>=]]> TO_DATE(#{P_CONPERIOD_PERIODFR},'YYYYMMDD') + 8.5 / 24
+  		  and transaction_date <![CDATA[<]]> TO_DATE(#{P_CONPERIOD_PERIODTO},'YYYYMMDD') + 1 + 8.5 / 24 - 1 / (24 * 60 * 60)
+		   
+		<choose>
+          	<when test="P_TYPE != null and P_TYPE !='' and P_TYPE == 'ITEM'"> 
+			-- ITEM         품목
+				AND ITEM_CODE     = #{P_ITEM_CODE}		
+          	</when>
+          	<when test="P_TYPE != null and P_TYPE !='' and P_TYPE == 'ITEM_LOT'"> 
+			-- ITEM_LOT   품목 + Lot
+			<if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">
+    			AND ITEM_CODE     = #{P_ITEM_CODE}
+    		</if> 		
+    		<if test="P_LOT_NUMBER != null and P_LOT_NUMBER !='' ">
+				AND ITEM_LOT_NO   = #{P_LOT_NUMBER}
+			</if>
+          	</when>
+          	<when test="P_TYPE != null and P_TYPE !='' and P_TYPE == 'ITEM_SUB'"> 
+			-- ITEM_SUB   품목 + 창고코드
+			<if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">
+   				AND ITEM_CODE     = #{P_ITEM_CODE}
+   			</if>   			
+   			<if test="P_SUBINVENTORY_CODE != null and P_SUBINVENTORY_CODE !='' ">
+				AND SUBINVENTORY_CODE_FR = #{P_SUBINVENTORY_CODE}
+			</if>
+          	</when>
+          	<otherwise>
+			-- NULL        품목 + Lot + 창고코드
+			<if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">
+				AND ITEM_CODE     = #{P_ITEM_CODE}
+			</if>		
+			<if test="P_LOT_NUMBER != null and P_LOT_NUMBER !='' ">
+				AND ITEM_LOT_NO   = #{P_LOT_NUMBER}
+			</if>
+			<if test="P_SUBINVENTORY_CODE != null and P_SUBINVENTORY_CODE !='' ">
+				AND SUBINVENTORY_CODE_FR = #{P_SUBINVENTORY_CODE}
+			</if>
+          	</otherwise>
+		</choose>			  
+		ORDER BY ITEM_CODE,  ITEM_LOT_NO, SUBINVENTORY_CODE_FR
+	</select>	
+	
+		<!-- 인수수량 조회    -->
+	<select id="selectConsumablelotStatisticsReceiptInfoList" parameterType="map" resultType="hashmap">
+	-- selectConsumablelotStatisticsReceiptInfoList
+		SELECT
+			  TO_CHAR(RECEIPTDATE, 'YYYY-MM-DD HH24:MI:SS') AS RECEIPTDATE
+			, CONSUMABLELOTID
+			, WAREHOUSEID
+			, LOTQTY
+			, REQUESTNO
+			, ISSUENUM
+		FROM
+		MTM_CONSUMABLERECEIPT
+		WHERE 1 = 1
+		  AND ENTERPRISEID  = #{P_ENTERPRISEID}
+		  AND PLANTID        = #{P_PLANTID}
+		  <if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">	
+		  AND CONSUMABLEDEFID   = #{P_ITEM_CODE}
+		  </if>		  
+		  <if test="P_LOT_NUMBER != null and P_LOT_NUMBER !='' ">
+		  AND CONSUMABLELOTID   = #{P_LOT_NUMBER}
+		  </if>
+		  <if test="P_SUBINVENTORY_CODE != null and P_SUBINVENTORY_CODE !='' ">
+		  AND WAREHOUSEID = #{P_SUBINVENTORY_CODE}	  
+		  </if>
+		ORDER BY CONSUMABLEDEFID,  CONSUMABLELOTID, WAREHOUSEID
+	</select>	
+	
+	<!-- 할당수량 조회    -->
+	<select id="selectConsumablelotStatisticsConsumedInfoList" parameterType="map" resultType="hashmap">
+	-- selectConsumablelotStatisticsConsumedInfoList
+	    <choose>
+         	<when test="P_ITEM_TYPE != null and P_ITEM_TYPE !='' and P_ITEM_TYPE == 'Y'.toString() "> 
+				SELECT
+					  TO_CHAR(CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					, MATERIALLOTID
+					, LOTID
+					, WAREHOUSEID
+					, CONSUMEDQTY
+				FROM
+				MTM_CONSUMEMATERIALLOT_V
+				WHERE 1 = 1
+				  AND ENTERPRISEID  = #{P_ENTERPRISEID}
+				  AND PLANTID        = #{P_PLANTID}
+				  <if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">
+				  AND MATERIALDEFID || MATERIALDEFVERSION  = #{P_ITEM_CODE}
+				  </if>
+				  <if test="P_LOT_NUMBER != null and P_LOT_NUMBER !='' ">
+				  AND MATERIALLOTID   = #{P_LOT_NUMBER}
+				  </if>
+				  <if test="P_SUBINVENTORY_CODE != null and P_SUBINVENTORY_CODE !='' ">
+				  AND WAREHOUSEID = #{P_SUBINVENTORY_CODE}	  
+				  </if>
+				ORDER BY MATERIALDEFID,  MATERIALLOTID, WAREHOUSEID
+         	</when>
+         	<otherwise>
+				SELECT
+					  TO_CHAR(CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					, MATERIALLOTID
+					, LOTID
+					, WAREHOUSEID
+					, CONSUMEDQTY
+				FROM
+				MTM_CONSUMEMATERIALLOT_V
+				WHERE 1 = 1
+				  AND ENTERPRISEID  = #{P_ENTERPRISEID}
+				  AND PLANTID        = #{P_PLANTID}
+				  <if test="P_ITEM_CODE != null and P_ITEM_CODE !='' ">
+				  AND MATERIALDEFID   = #{P_ITEM_CODE}
+				  </if>
+				  <if test="P_LOT_NUMBER != null and P_LOT_NUMBER !='' ">
+				  AND MATERIALLOTID   = #{P_LOT_NUMBER}
+				  </if>
+				  <if test="P_SUBINVENTORY_CODE != null and P_SUBINVENTORY_CODE !='' ">
+				  AND WAREHOUSEID = #{P_SUBINVENTORY_CODE}	  
+				  </if>
+				ORDER BY MATERIALDEFID,  MATERIALLOTID, WAREHOUSEID
+		    </otherwise>
+		</choose>	
+	</select>	
+	
+	
+</mapper>

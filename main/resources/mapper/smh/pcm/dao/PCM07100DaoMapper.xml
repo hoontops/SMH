@@ -1,0 +1,786 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM07100Dao">
+   <select id="selectLotListForFinalInspection" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM07100Dao.selectLotListForFinalInspection */
+			--
+			-- Id : SelectLotListForFinalInspection
+			-- Version : 10001
+		WITH LOTLIST AS
+                (
+                    SELECT  L.PARENTLOTID                                   AS PARENTLOT
+                        ,   L.LOTID
+                        ,   L.PRODUCTDEFID
+                        ,   L.PRODUCTDEFVERSION
+                        ,   COALESCE(DC.DICTIONARYNAME, PD.PRODUCTDEFNAME)  AS PRODUCTDEFNAME
+                        ,   L.UNIT
+                        ,   L.QTY
+                        ,   L.PANELQTY
+                        ,	L.PANELPERQTY
+                        ,	0												AS SPLITQTY
+                        ,	0												AS DEFECTQTY
+                        ,	SD.DICTIONARYNAME								AS PROCESSSEGMENTNAME
+                        ,	AD.DICTIONARYNAME								AS AREANAME
+                        ,	L.AREAID
+                        ,	L.RESOURCEID
+                        --2020-03-07 강유라 재작업 판단2
+                        ,	L.SUBPROCESSDEFID
+                        ,	L.ISREWORK
+          				,  PD.PCSPNL
+          				,   L.WORKCOUNT
+                    FROM        PCM_LOT                  L
+                    INNER JOIN  BAS_PRODUCTDEFINITION    PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                            AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                    LEFT JOIN   CMD_DICTIONARY           DC  ON  PD.PRODUCTDEFNAME = DC.DICTIONARYID
+                                                            AND DC.LANGUAGETYPE = #{LANGUAGETYPE}
+                    LEFT JOIN   BAS_PROCESSSEGMENT       SG  ON  L.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+                    LEFT JOIN   BAS_PROCESSSEGMENTCLASS  SC  ON  SG.PROCESSSEGMENTCLASSID = SC.PROCESSSEGMENTCLASSID
+                    LEFT OUTER JOIN CMD_DICTIONARY  		SD  ON  SG.PROCESSSEGMENTNAME = SD.DICTIONARYID
+                    										AND SD.LANGUAGETYPE =#{LANGUAGETYPE}
+                    INNER JOIN BAS_AREA					AR  ON  L.AREAID = AR.AREAID
+                    LEFT OUTER JOIN CMD_DICTIONARY		AD  ON  AR.AREANAME = AD.DICTIONARYID
+                    										AND AD.LANGUAGETYPE = #{LANGUAGETYPE}
+				    WHERE   COALESCE(L.ISLOCKING, 'N') = 'N'
+				    AND 	COALESCE(L.ISHOLD, 'N') = 'N'
+				    AND     SC.PROCESSSEGMENTCLASSID IN ('7026', '7534')
+				    AND		L.LOTSTATE <![CDATA[<>]]> 'Terminated'
+				    AND		L.PROCESSSTATE = #{PROCESSSTATE}
+				    AND 	L.AREAID = #{AREAID}
+				    AND     NVL(L.ISDEFECTED,'N') = 'N'
+				    AND		(
+				    			(
+				    				PARENTLOTID IN (
+					                                SELECT	PARENTLOTID
+					                                FROM 	PCM_LOT
+					                                WHERE 	PLANTID = #{PLANTID}
+					                                AND 	LOTID = #{LOTID}
+					                                AND		PROCESSSTATE = #{PROCESSSTATE}
+					                             )
+					            )
+				            	OR LOTID IN (
+					                            SELECT	PARENTLOTID
+					                            FROM 	PCM_LOT
+					                            WHERE 	PLANTID = #{PLANTID}
+					                            AND 	LOTID = #{LOTID}
+					                            AND		PROCESSSTATE = #{PROCESSSTATE}
+				                         	)
+				                OR 
+				                (
+				                	PARENTLOTID IN (
+						                            SELECT	LOTID
+						                            FROM 	PCM_LOT
+						                            WHERE 	PLANTID = #{PLANTID}
+						                            AND 	LOTID = #{LOTID}
+						                            AND		PROCESSSTATE = #{PROCESSSTATE}
+					                         	)
+					               AND L.LOTCREATEDTYPE = 'FinalInspect'	
+					            )
+				            )
+				),
+				INSPECTION AS
+                (
+                    SELECT  L.LOTID
+                        ,   LISTAGG(IW.INSPECTIONUSER, ',') WITHIN GROUP (ORDER BY IR."degree" DESC )	AS INSPECTIONUSER
+                        ,   LISTAGG(IP.INSPECTORNAME, ',') WITHIN GROUP (ORDER BY IR."degree" DESC ) 	AS INSPECTORNAME
+                        ,   RANK() OVER (PARTITION BY IR.RESOURCEID ORDER BY IR."degree" DESC) AS RNK
+                    FROM    LOTLIST                     L
+                    LEFT JOIN QAM_INSPECTIONRESULT       IR  ON  L.LOTID = IR.RESOURCEID
+                                                            AND IR.INSPECTIONDEFID = 'FinishInspection'
+                                                            AND L.WORKCOUNT   = IR.WORKCOUNT
+					LEFT JOIN PCM_INSPECTIONWORKER		IW	ON 	IR.RESOURCETYPE = 'FinishInspection'
+															AND IR.RESOURCEID = IW.RESOURCEID
+															AND IR.PROCESSRELNO = IW.PROCESSRELNO
+															AND IR.PROCESSDEFID = IW.PROCESSDEFID
+															AND IR.PROCESSDEFVERSION = IW.PROCESSDEFVERSION
+															AND IR.PROCESSSEGMENTID = IW.PROCESSSEGMENTID
+															AND IR.WORKCOUNT = IW.WORKCOUNT
+                    LEFT JOIN QAM_QCINSPECTOR            IP  ON  IW.INSPECTIONUSER = IP.INSPECTORID
+                    GROUP BY L.LOTID, IR.RESOURCEID, IR."degree"
+                )
+                SELECT  L.*
+                    ,   IR.INSPECTIONUSER
+                    ,   IR.INSPECTORNAME
+                    ,	'1' AS CHK
+                FROM    LOTLIST         L
+                LEFT JOIN INSPECTION    IR  ON L.LOTID = IR.LOTID
+                WHERE IR.RNK = 1
+                
+                 --2020-03-07 강유라 재작업/일반의 경우 조회조건 추가
+                <if test="ISREWORK != null and ISREWORK !='' ">
+                	<choose>
+	          			<when test="ISREWORK eq 'Y'.toString()">
+		          			AND	NOT COALESCE(L.SUBPROCESSDEFID, '') =''
+		                 	AND 	COALESCE(L.ISREWORK, 'N') ='Y'
+	          			</when>	          			
+	          			<otherwise>
+		          			AND	COALESCE(L.SUBPROCESSDEFID, '') =''
+							AND 	COALESCE(L.ISREWORK, 'N') ='N'
+	          			</otherwise>
+	          		</choose>
+                </if>
+    </select>   
+    
+     <select id="getFinalInspector" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM07100Dao.getFinalInspector */
+			--
+			-- Id : GetFinalInspector
+			-- Version : 10001
+			SELECT DISTINCT X.INSPECTORID
+			           ,   X.INSPECTORNAME
+			           ,   X.GRADE
+			        FROM
+			        (
+			          SELECT  
+			              QI.INSPECTORID
+			            ,  QI.INSPECTORNAME
+			            ,   QC.GRADE
+			            ,   RANK() OVER (ORDER BY CASE WHEN RESOURCEID = #{PRODUCTDEFID} AND RESOURCEVERSION =#{PRODUCTDEFVERSION} THEN 1 ELSE 100 END)  RN
+			          FROM BAS_INSPECTIONITEMREL         IR
+			          INNER JOIN QAM_QCINSPECTORGRADE       QC ON  IR.INSPECTORDEGREE = QC.GRADE
+			                                                   AND QC.INSPECTIONCLASSID = 'FinishInspection'
+			          INNER JOIN QAM_QCINSPECTOR            QI ON  QI.INSPECTIONCLASSID = 'FinishInspection'                                  
+			                                                   AND QI.SCORE >= QC.LOWERSCORE
+			                                                   AND QC.PLANTID = QI.PLANTID
+			          WHERE   1 = 1
+			          AND    IR.RESOURCETYPE = 'Product'
+			          AND   IR.INSPECTIONDEFID = 'ShipmentInspection'
+			          AND   IR.RESOURCEID IN  (#{PRODUCTDEFID},'*')
+			          AND    IR.RESOURCEVERSION IN (#{PRODUCTDEFVERSION},'*')
+			          AND     QI.AREAID = #{AREAID}
+			        )X
+			        -- 다중입력 처리 WHERE RN=1 
+	</select>
+	
+    <select id="selectLotEquipmentData" parameterType="map" resultType="hashmap">
+    		SELECT 		/* selectLotEquipmentData */
+				*	
+			FROM 	PCM_LOTEQUIPMENT 
+			WHERE 	1=1
+			AND 	LOTID = #{LOTID}
+			AND		TXNHISTKEY = #{TXNHISTKEY}			
+    </select>
+
+    <delete id="deleteLotEquipmentData" parameterType="map" >
+    		 		/* deleteLotEquipmentData */
+			DELETE	
+			FROM 	PCM_LOTEQUIPMENT 
+			WHERE 	1=1
+			AND 		LOTID = #{LOTID}
+			AND		TXNHISTKEY = #{TXNHISTKEY}			
+    </delete>
+    
+    <update id="updateLotEquipmentData" parameterType="map">
+    	/* updateLotEquipmentData */
+    	UPDATE PCM_LOTEQUIPMENT	SET		
+    			PROCESSSTATE 	= #{PROCESSSTATE} 
+    		,	TRACKOUTTIME 	= #{TRACKOUTTIME}
+    		,   LOTQTY			= #{LOTQTY}    		
+    		,	TXNID 			= #{TXNID}
+    	WHERE 1=1
+    		AND LOTID 								= #{LOTID}
+    		AND PROCESSSEGMENTID           	= #{PROCESSSEGMENTID}
+		    AND PROCESSSEGMENTVERSION    = #{PROCESSSEGMENTVERSION}
+		    AND WORKCOUNT						= #{WORKCOUNT}
+    </update>
+    
+    <insert id="insertLotEquipmentData" parameterType="map">
+    	/* insertLotEquipmentData */    	
+	    INSERT INTO PCM_LOTEQUIPMENT(  LOTID  
+					                                 , TXNHISTKEY  
+					                                 , EQUIPMENTID  
+					                                 , PROCESSSTATE  
+					                                 , PROCESSSEGMENTID  
+					                                 , PROCESSSEGMENTVERSION  
+					                                 , WORKCOUNT  
+					                                 , TRACKINTIME
+					                                 , TRACKOUTTIME
+					                                 , LOTQTY
+					                                 , CREATOR  
+					                                 , CREATEDTIME  
+					                                 , MODIFIER  
+					                                 , MODIFIEDTIME  
+					                                 , TXNGROUPHISTKEY  
+					                                 , TXNID  
+					                                 , TXNUSER  
+					                                 , TXNTIME  
+					                                 , TXNREASONCODECLASS  
+					                                 , TXNREASONCODE  
+					                                 , TXNCOMMENT
+					                                ) VALUES (  #{LOTID}  
+					                                          , #{TXNHISTKEY}  
+					                                          , #{EQUIPMENTID}  
+					                                          , #{PROCESSSTATE}  
+					                                          , #{PROCESSSEGMENTID}  
+					                                          , #{PROCESSSEGMENTVERSION}  
+					                                          , #{WORKCOUNT}  
+					                                          , #{TRACKINTIME}
+					                                          , #{TRACKOUTTIME}
+					                                          , #{LOTQTY}
+					                                          , #{CREATOR}  
+					                                          , SYSDATE  
+					                                          , #{MODIFIER}  
+					                                          , SYSDATE  
+					                                          , #{TXNGROUPHISTKEY}  
+					                                          , #{TXNID}  
+					                                          , #{TXNUSER}  
+					                                          , SYSDATE
+					                                          , #{TXNREASONCODECLASS}  
+					                                          , #{TXNREASONCODE}  
+					                                          , #{TXNCOMMENT}
+					                                         )
+	</insert>
+    
+	<select id="selectEquipmentData" parameterType="map" resultType="hashmap">
+    		/* selectEquipmentData */
+    		SELECT 	 EQUIPMENTID
+						,RECIPECLASSID
+						,EQUIPMENTCLASSID
+						,EQUIPMENTNAME
+						,ENTERPRISEID
+						,PLANTID
+						,AREAID
+						,LOCATIONID
+						,EQUIPMENTTYPE
+						,DETAILEQUIPMENTTYPE
+						,PARENTEQUIPMENTID
+						,STATEMODELID
+						,VENDORID
+						,MODEL
+						,SERIALNO
+						,PROCESSUNIT
+						,MINCAPACITY
+						,MAXCAPACITY
+						,TACTTIME
+						,LEADTIME
+						,STATE
+						,E10STATE
+						,CONTROLMODE
+						,OPERATIONMODE
+						,CURRENTRECIPEDEFID
+						,CURRENTRECIPEDEFVERSION
+						,PROCESSEDLOTCOUNT
+						,LASTLOTID
+						,LASTPRODUCTDEFID
+						,LASTPRODUCTDEFVERSION
+						,LASTPROCESSSEGMENTID
+						,LASTPROCESSSEGMENTVERSION
+						,TCID
+						,DESCRIPTION
+						,CREATOR
+						,CREATEDTIME
+						,MODIFIER
+						,MODIFIEDTIME
+						,LASTTXNHISTKEY
+						,LASTTXNID
+						,LASTTXNUSER
+						,LASTTXNTIME
+						,LASTTXNCOMMENT
+						,VALIDSTATE
+						,EQUIPMENTNUM	
+			FROM 	BAS_EQUIPMENT 
+			WHERE 	1=1
+			AND 		EQUIPMENTID = #{EQUIPMENTID}
+    </select>
+    
+    <update id="updateEquipmentData" parameterType="map">
+    	/* updateEquipmentData */
+    	UPDATE BAS_EQUIPMENT	SET		
+    			STATE 	= #{STATE} 
+    		,	LASTTXNID 			= #{LASTTXNID}
+    	WHERE 1=1
+    		AND 		EQUIPMENTID = #{EQUIPMENTID}
+    </update>
+    
+        <select id="GetInspectionDegreeInfo" parameterType="map" resultType="hashmap">
+    		 		/* GetInspectionDegreeInfo */
+			  	 SELECT  	NVL(MAX("degree"), 1) 	AS INSPDEGREE			  	  
+				  FROM  	QAM_INSPECTIONRESULT
+				 WHERE  RESOURCETYPE = #{RESOURCETYPE}
+					AND  	RESOURCEID = #{RESOURCEID}
+					AND  	INSPECTIONDEFID = #{INSPECTIONDEFID}
+					AND 	ENTERPRISEID = #{ENTERPRISEID}
+					AND	PLANTID	= #{PLANTID}
+					AND  INSPECTIONDATE IS NOT NULL
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+					AND 	PRODUCTDEFID	= #{PRODUCTDEFID}
+				</if>
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+					AND 	PRODUCTDEFVERSION	= #{PRODUCTDEFVERSION}
+				</if>
+				<if test="PROCESSDEFID != null and PROCESSDEFID !='' ">
+					AND 	PROCESSDEFID	= #{PROCESSDEFID}
+				</if>
+				<if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' ">
+					AND 	PROCESSDEFVERSION	= #{PROCESSDEFVERSION}
+				</if>
+				<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+					AND 	PROCESSSEGMENTID	= #{PROCESSSEGMENTID}
+				</if>
+				<!-- <if test="WORKCOUNT != null and WORKCOUNT !='' ">
+					AND 	WORKCOUNT	= #{WORKCOUNT}
+				</if>			 -->
+    </select>
+    
+     <insert id="insertInspectionResult" parameterType="map">
+    	/* insertInspectionResult */
+    	INSERT INTO QAM_INSPECTIONRESULT	
+    			(
+    			TXNHISTKEY
+				,RESOURCETYPE
+				,RESOURCEID
+				,PROCESSRELNO
+				,INSPECTIONDEFID
+				,"degree"
+				,ENTERPRISEID
+				,PLANTID
+				,PRODUCTDEFID
+				,PRODUCTDEFVERSION
+				,PROCESSDEFID
+				,PROCESSDEFVERSION
+				,PROCESSSEGMENTID
+				,PROCESSSEGMENTVERSION
+				,INSPECTIONQTY
+				,AREAID
+				,WORKCOUNT
+				,INSPECTIONDATE				
+				,CREATOR
+				,CREATEDTIME
+				,MODIFIER
+				,MODIFIEDTIME
+				,TXNGROUPHISTKEY
+				,TXNID
+				,TXNUSER
+				,TXNTIME
+				,TXNCOMMENT
+				)
+	    		VALUES
+	    		(
+	    		 #{TXNHISTKEY}
+				,#{RESOURCETYPE}
+				,#{RESOURCEID}
+				,#{PROCESSRELNO}
+				,#{INSPECTIONDEFID}				
+				,#{DEGREE}
+				,#{ENTERPRISEID}
+				,#{PLANTID}
+				,#{PRODUCTDEFID}
+				,#{PRODUCTDEFVERSION}
+				,#{PROCESSDEFID}
+				,#{PROCESSDEFVERSION}
+				,#{PROCESSSEGMENTID}
+				,#{PROCESSSEGMENTVERSION}
+				,TO_NUMBER(#{INSPECTIONQTY})
+				,#{AREAID}
+				,#{WORKCOUNT}
+				,#{INSPECTIONDATE}
+				,#{CREATOR}
+				,SYSDATE
+				,#{MODIFIER}
+				,SYSDATE
+				,#{TXNGROUPHISTKEY}
+				,#{TXNID}
+				,#{TXNUSER}
+				,SYSDATE
+				,#{TXNCOMMENT}				
+	    		)		
+    </insert>    		
+    
+     <update id="updateInspectionResult" parameterType="map">
+    	/* updateInspectionResult */
+    	UPDATE QAM_INSPECTIONRESULT SET 	
+		    			INSPECTIONDATE = #{INSPECTIONDATE}
+		    			,AREAID	= #{AREAID}
+		    			,TXNID	= #{TXNID}
+		    			,TXNUSER	= #{TXNUSER}
+		    			,TXNTIME	= #{TXNTIME}
+    		 WHERE TXNHISTKEY = #{TXNHISTKEY}
+    			AND RESOURCETYPE = #{RESOURCETYPE}
+    			AND RESOURCEID = #{RESOURCEID}
+    			AND PROCESSRELNO = #{PROCESSRELNO}
+    </update>   
+
+    <update id="updateSplitLot" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.updateSplitLot */
+	    UPDATE  PCM_LOT 
+	    SET 
+	         LOTCREATEDTYPE 		= 	#{LOTCREATEDTYPE}     
+	        ,PROCESSSTATE 			= 	#{PROCESSSTATE}     
+	        ,CREATEDQTY 			= 	#{CREATEDQTY}     
+	        ,UNIT 						= 	#{UNIT}
+	        ,QTY 						= 	#{QTY}
+	        ,PCSQTY 					= 	#{PCSQTY}
+	        ,PANELQTY				=  #{PANELQTY}
+	        ,PANELPERQTY			=  #{PANELPERQTY}
+	        ,DEFECTQTY				=  #{DEFECTQTY}
+	        ,ISDEFECTED				=  #{ISDEFECTED}
+	        ,WEEK 					= 	#{WEEK}
+	        ,MODIFIER 				= #{MODIFIER}     
+	        ,MODIFIEDTIME 			= SYSDATE     
+	        ,LASTTXNUSER = #{LASTTXNUSER}     
+	        ,LASTTXNTIME = #{LASTTXNTIME}   
+    WHERE 1=1
+	   AND LOTID = #{LOTID}	  
+    </update>
+    
+    <update id="updateParentLot" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.updateParentLot */
+	    UPDATE  PCM_LOT 
+	    SET 
+	         PCSQTY 					= 	#{PCSQTY}
+	        ,PANELQTY				=  #{PANELQTY}
+	        ,MODIFIER 				= #{MODIFIER}     
+	        ,MODIFIEDTIME 			= SYSDATE     
+	        ,LASTTXNUSER = #{LASTTXNUSER}     
+	        ,LASTTXNTIME = #{LASTTXNTIME}   
+    WHERE 1=1
+	   AND LOTID = #{LOTID}	  
+    </update>
+    
+    
+    <insert id="insertInspectionWorker" parameterType="map">
+    	/* insertInspectionWorker */
+    	DECLARE
+    	BEGIN
+    				DELETE  FROM PCM_INSPECTIONWORKER
+    			    WHERE  RESOURCETYPE 		= #{RESOURCETYPE}
+    			   		AND RESOURCEID			= #{RESOURCEID}
+    			   		AND PROCESSRELNO 		= #{PROCESSRELNO}
+    			   		AND DEGREE 				= #{DEGREE}
+    			   		AND WORKCOUNT 		= #{WORKCOUNT}
+    			   		AND INSPECTIONUSER 	= #{INSPECTIONUSER};
+    			   		
+		    	INSERT INTO PCM_INSPECTIONWORKER	
+		    			(
+		    			TXNHISTKEY
+						,RESOURCETYPE
+						,RESOURCEID
+						,PROCESSRELNO
+						,INSPECTIONDEFID
+						,DEGREE
+						,ENTERPRISEID
+						,PLANTID
+						,PROCESSDEFID
+						,PROCESSDEFVERSION
+						,PROCESSSEGMENTID
+						,PROCESSSEGMENTVERSION
+						,WORKCOUNT				
+						,INSPECTIONUSER
+						,CREATOR
+						,CREATEDTIME
+						,TXNGROUPHISTKEY
+						,TXNUSER
+						,TXNTIME
+						,TXNREASONCODECLASS
+						,TXNREASONCODE
+						,TXNCOMMENT
+						)
+			    		VALUES
+			    		(
+			    		#{TXNHISTKEY}
+						,#{RESOURCETYPE}
+						,#{RESOURCEID}
+						,#{PROCESSRELNO}
+						,#{INSPECTIONDEFID}
+						,#{DEGREE}
+						,#{ENTERPRISEID}
+						,#{PLANTID}
+						,#{PROCESSDEFID}
+						,#{PROCESSDEFVERSION}
+						,#{PROCESSSEGMENTID}
+						,#{PROCESSSEGMENTVERSION}
+						,#{WORKCOUNT}
+						,#{INSPECTIONUSER}
+						,#{CREATOR}
+						,SYSDATE
+						,#{TXNGROUPHISTKEY}
+						,#{TXNUSER}
+						,SYSDATE
+						,#{TXNREASONCODECLASS}
+						,#{TXNREASONCODE}
+						,#{TXNCOMMENT}	    		
+			    		);			    		
+		END;
+    </insert>
+    
+        	
+	<select id="GetInspectionResultInfo" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM07100Dao.GetInspectionResultInfo */
+			--
+			-- Id : GetInspectionResultInfo
+			-- Version : 10001
+			SELECT TXNHISTKEY
+			      ,RESOURCETYPE
+			      ,RESOURCEID
+			      ,INSPECTIONDEFID
+			      ,INSPECTIONDEFVERSION
+			      ,"degree" AS DEGREE
+			      ,ENTERPRISEID
+			      ,PLANTID
+			      ,PRODUCTDEFID
+			      ,PRODUCTDEFVERSION
+			      ,PROCESSDEFID
+			      ,PROCESSDEFVERSION
+			      ,PROCESSSEGMENTID
+			      ,PROCESSSEGMENTVERSION
+			      ,INSPECTIONQTY
+			      ,INSPECTIONDATE
+			      ,INSPECTIONUSER
+			      ,INSPECTIONRESULT
+			FROM   QAM_INSPECTIONRESULT
+			WHERE  RESOURCETYPE = #{RESOURCETYPE}
+			AND    RESOURCEID = #{RESOURCEID}
+			AND    INSPECTIONDEFID = #{INSPECTIONDEFID}
+			AND    ENTERPRISEID = #{ENTERPRISEID}
+			AND    PLANTID = #{PLANTID}
+			AND    "degree" = #{INSPDEGREE}
+			<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+				AND PRODUCTDEFID = #{PRODUCTDEFID}
+			</if>
+			<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+				AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			</if>
+			<if test="PROCESSDEFID != null and PROCESSDEFID !='' ">
+				AND PROCESSDEFID = #{PROCESSDEFID}
+			</if>
+			<if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' ">
+				AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+			</if>
+			<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+				AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+			</if>
+<!-- 			<if test="WORKCOUNT != null and WORKCOUNT !='' ">
+				AND WORKCOUNT = #{WORKCOUNT}
+			</if> -->
+	</select>
+	<select id="selectInspResultData" parameterType="map" resultType="hashmap">
+		/* smh.pcm.dao.PCM07100Dao.selectInspResultData */
+			SELECT TXNHISTKEY
+					,RESOURCETYPE
+					,RESOURCEID
+					,PROCESSRELNO
+					,INSPECTIONDEFID
+					,INSPECTIONDEFVERSION
+					,"degree"
+					,ENTERPRISEID
+					,PLANTID
+					,INSPECTIONTYPE
+					,PRODUCTDEFID
+					,PRODUCTDEFVERSION
+					,PROCESSDEFID
+					,PROCESSDEFVERSION
+					,PROCESSSEGMENTID
+					,PROCESSSEGMENTVERSION
+					,EQUIPMENTID
+					,REQUESTUSER
+					,REQUESTDATE
+					,ACCEPTUSER
+					,ACCEPTDATE
+					,INSPECTIONQTY
+					,SAMPLEQTY
+					,SPECOUTQTY
+					,INSPECTIONRESULT
+					,INSPECTIONDATE
+					,INSPECTIONUSER
+					,ISSEND
+					,AREAID
+					,ISNCRPUBLISH
+					,DESCRIPTION
+					,CREATOR
+					,CREATEDTIME
+					,MODIFIER
+					,MODIFIEDTIME
+					,TXNGROUPHISTKEY
+					,TXNID
+					,TXNUSER
+					,TXNTIME
+					,TXNCOMMENT
+					,ISCOMPLETION
+					,RESULTITEM
+					,JUDGMENTCRITERIA
+					,WORKCOUNT
+					,INSPECTIONCLASSID
+			FROM   QAM_INSPECTIONRESULT
+			WHERE  TXNHISTKEY = #{TXNHISTKEY}
+			AND    RESOURCETYPE = #{RESOURCETYPE}
+			AND    RESOURCEID = #{RESOURCEID}
+			AND    PROCESSRELNO = #{PROCESSRELNO}			
+	</select>
+	
+	 <insert id="insertInspectionDefect" parameterType="map">
+    	/* insertInspectionDefect */
+    		    	INSERT INTO QAM_INSPECTIONDEFECT	
+		    			(
+		    			TXNHISTKEY
+						,RESOURCETYPE
+						,RESOURCEID
+						,DEFECTCODE
+						,PROCESSRELNO
+						,DEGREE
+						,DEFECTQTY
+						,REASONSEGMENTID
+						,REASONCONSUMABLELOTID
+						,REASONAREAID
+						,FILERESOURCEID
+						,QCSEGMENTID
+						,CREATOR
+						,CREATEDTIME
+						,MODIFIER
+						,MODIFIEDTIME
+						,TXNGROUPHISTKEY
+						,TXNID
+						,TXNUSER
+						,TXNTIME
+						,TXNCOMMENT
+
+						)
+			    		VALUES
+			    		(
+			    		#{TXNHISTKEY}
+						,#{RESOURCETYPE}
+						,#{RESOURCEID}
+						,#{DEFECTCODE}
+						,#{PROCESSRELNO}
+						,#{DEGREE}
+						,#{DEFECTQTY}
+						,#{REASONSEGMENTID}
+						,#{REASONCONSUMABLELOTID}
+						,#{REASONAREAID}
+						,#{FILERESOURCEID}
+						,#{QCSEGMENTID}
+						,#{CREATOR}
+						,SYSDATE
+						,#{MODIFIER}
+						,SYSDATE
+						,#{TXNGROUPHISTKEY}
+						,#{TXNID}
+						,#{TXNUSER}
+						,SYSDATE
+						,#{TXNCOMMENT}
+			    		)
+    </insert>
+    
+        <update id="updateTrackinLot" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.updateTrackinLot */
+	    UPDATE  PCM_LOT 
+	    SET 
+	         TRACKINUSER 		= 	#{TRACKINUSER}     
+	        ,TRACKINTIME 			= 	#{TRACKINTIME}
+    WHERE 1=1
+	   AND LOTID = #{LOTID}	  
+    </update>
+    
+        <update id="updateSendLot" parameterType="map" >
+		/* smh.pcm.dao.PCM06900Dao.updateSendLot */
+	    UPDATE  PCM_LOT 
+	    SET 
+	         SENDTIME 		= 	#{SENDTIME}     
+	        ,SENDUSER 			= 	#{SENDUSER}
+	        ,LASTTXNID 			= 	#{LASTTXNID}
+    WHERE 1=1
+	   AND LOTID = #{LOTID}	  
+    </update>
+    
+<select id="selectProcesssegment" parameterType="map" resultType="hashmap">
+		/* smh.pcm.dao.PCM07100Dao.selectProcesssegment */
+			SELECT PROCESSSEGMENTID
+					,PROCESSSEGMENTVERSION
+					,PROCESSSEGMENTCLASSID
+					,PROCESSSEGMENTNAME
+					,ENTERPRISEID
+					,PLANTID
+					,AREAID
+					,PROCESSSEGMENTTYPE
+					,EQUIPMENTCLASSID
+					,ISTRACKINREQUIRED
+					,LEADTIME
+					,VERSIONSTATE
+					,STEPCLASS
+					,STEPTYPE
+					,ISIMPORTINSPECTION
+					,ISMAINSEGMENT
+					,WORKMETHOD
+					,QCTYPE
+					,ISDEFECTREASON
+					,MINWAITINGTIME
+					,MAXWAITINGTIME
+					,WORKUNIT
+					,DESCRIPTION
+					,CREATOR
+					,CREATEDTIME
+					,MODIFIER
+					,MODIFIEDTIME
+					,LASTTXNHISTKEY
+					,LASTTXNID
+					,LASTTXNUSER
+					,LASTTXNTIME
+					,LASTTXNCOMMENT
+					,VALIDSTATE
+			FROM   BAS_PROCESSSEGMENT
+			WHERE  PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+			AND    PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}						
+	</select>
+	<select id="selectUser" parameterType="map" resultType="hashmap">
+		/* smh.pcm.dao.PCM07100Dao.selectUser */
+			SELECT USERNAME
+			FROM   CMD_USER_V
+			WHERE  USERID = #{USERID}
+					
+	</select>
+
+<insert id="insertPcmLotworker" parameterType="map">
+	    INSERT 
+	      INTO PCM_LOTWORKER(  TXNHISTKEY  
+	                         , LOTID  
+	                         , ENTERPRISEID  
+	                         , PLANTID  
+	                         , AREAID  
+	                         , PRODUCTDEFID  
+	                         , PRODUCTDEFVERSION  
+	                         , PROCESSDEFID  
+	                         , PROCESSDEFVERSION  
+	                         , PROCESSPATHID  
+	                         , USERSEQUENCE  
+	                         , PROCESSSEGMENTID  
+	                         , PROCESSSEGMENTVERSION  
+	                         , WORKCOUNT  
+	                         , WORKERNAME  
+	                         , USERID  
+	                         , DESCRIPTION  
+	                         , CREATOR  
+	                         , CREATEDTIME  
+	                         , TXNGROUPHISTKEY  
+	                         , TXNUSER  
+	                         , TXNTIME  
+	                         , TXNREASONCODECLASS  
+	                         , TXNREASONCODE  
+	                         , TXNCOMMENT        
+	                        ) VALUES(  #{TXNHISTKEY}  
+	                                 , #{LOTID}  
+	                                 , #{ENTERPRISEID}  
+	                                 , #{PLANTID}  
+	                                 , #{AREAID}  
+	                                 , #{PRODUCTDEFID}  
+	                                 , #{PRODUCTDEFVERSION}  
+	                                 , #{PROCESSDEFID}  
+	                                 , #{PROCESSDEFVERSION}  
+	                                 , #{PROCESSPATHID}  
+	                                 , #{USERSEQUENCE}  
+	                                 , #{PROCESSSEGMENTID}  
+	                                 , #{PROCESSSEGMENTVERSION}  
+	                                 , #{WORKCOUNT}  
+	                                 , #{WORKERNAME}  
+	                                 , #{USERID}  
+	                                 , #{DESCRIPTION}  
+	                                 , #{CREATOR}  
+	                                 , SYSDATE  
+	                                 , #{TXNGROUPHISTKEY}  
+	                                 , #{TXNUSER}  
+	                                 , #{TXNTIME}  
+	                                 , #{TXNREASONCODECLASS}  
+	                                 , #{TXNREASONCODE}  
+	                                 , #{TXNCOMMENT}    
+	                                )
+	</insert>	
+</mapper>

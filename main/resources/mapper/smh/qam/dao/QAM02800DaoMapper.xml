@@ -1,0 +1,854 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM02800Dao">
+	<!-- 변경점 신청 등록화면의 변경점 이력을 조회한다. AS-IS :  GetChangePointHistory Ver. 100001 -->
+    <select id="selectChangePointList" parameterType="map" resultType="hashmap">
+    <![CDATA[
+    	/* smh.qam.dao.QAM02800Dao.selectChangePointList */
+        WITH CTE_PROCESSTYPE AS
+        (
+          SELECT 
+              A.APPROVALNO
+            ,  A.PROCESSTYPE 
+            ,  A.CHARGETYPE
+            ,  A."sequence" AS SEQUENCE
+            ,  A.CHARGERID
+            ,  A.APPROVALSTATE
+            ,  CASE WHEN A.APPROVALSTATE = 'Reclamation' THEN 'Y'
+                 		ELSE 
+	                	CASE
+								WHEN (LAG(A.APPROVALSTATE) OVER (PARTITION BY A.APPROVALNO ORDER BY A."sequence") = 'Approval' OR LAG(A.APPROVALSTATE) OVER (PARTITION BY A.APPROVALNO ORDER BY A."sequence") IS NULL)
+								AND (LEAD(A.APPROVALSTATE) OVER (PARTITION BY A.APPROVALNO ORDER BY A."sequence") != 'Approval' OR LEAD(A.APPROVALSTATE) OVER (PARTITION BY A.APPROVALNO ORDER BY A."sequence") IS NULL)
+								AND A.APPROVALSTATE IS NOT NULL
+								AND A.APPROVALSTATE != 'Companion' THEN 'Y'
+								ELSE 'N'
+						END
+				END AS ISTURN
+            ,  CASE WHEN B.SEQ = A."sequence"
+                 THEN
+                 CASE WHEN A.APPROVALSTATE = 'Approval'
+                     THEN 'ApprovalComplete'
+                     ELSE 'ApprovalProgress' 
+                 END
+                 ELSE 'ApprovalProgress'
+              END                            AS APPROVALRESULT
+          FROM   QAM_QCAPPROVAL      A
+          INNER JOIN (SELECT   
+                APPROVALNO
+              ,  MAX("sequence")    AS SEQ
+            FROM   QAM_QCAPPROVAL 
+            WHERE   1 = 1  
+            AND   APPROVALTYPE = 'ChangePointManagement'
+            GROUP BY 
+                APPROVALNO)B        ON   B.APPROVALNO = A.APPROVALNO
+          WHERE   1 = 1  
+          AND   A.APPROVALTYPE = 'ChangePointManagement'
+
+        )
+        , CTE_APPROVALSTATE AS
+        (
+          SELECT 
+              A.LOOKUP_CODE 
+            ,  B.DICTIONARYNAME     AS CODENAME
+          FROM   CMD_LOOKUP_VALUES          A 
+          LEFT OUTER JOIN CMD_DICTIONARY   B  ON   B.DICTIONARYID = A.DICTIONARYID
+                            AND B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+          WHERE LOOKUP_TYPE = 'DraftSettleState'
+          UNION
+          SELECT 
+              A.LOOKUP_CODE 
+            ,  B.DICTIONARYNAME     AS CODENAME
+          FROM   CMD_LOOKUP_VALUES          A 
+          LEFT OUTER JOIN CMD_DICTIONARY   B  ON   B.DICTIONARYID = A.DICTIONARYID
+                            AND B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+          WHERE LOOKUP_TYPE = 'ApprovalSettleState'
+        ), CTE_CHARGETYPE AS 
+        (
+          SELECT 
+              A.LOOKUP_CODE 
+            ,  B.DICTIONARYNAME     AS CODENAME
+          FROM   CMD_LOOKUP_VALUES          A 
+          LEFT OUTER JOIN CMD_DICTIONARY   B  ON   B.DICTIONARYID = A.DICTIONARYID
+                            AND B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+          WHERE LOOKUP_TYPE = 'RoleClassification1'
+          UNION
+          SELECT 
+              A.LOOKUP_CODE 
+            ,  B.DICTIONARYNAME     AS CODENAME
+          FROM   CMD_LOOKUP_VALUES          A 
+          LEFT OUTER JOIN CMD_DICTIONARY   B  ON   B.DICTIONARYID = A.DICTIONARYID
+                            AND B.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+          WHERE LOOKUP_TYPE = 'RoleClassification2'  
+        )
+        SELECT 
+            CP.CHANGEPOINTTYPE                                -- 변경점 구분
+          ,  TO_CHAR(CP.REQUESTDATE, 'YYYY-MM-DD HH24:MI:SS') AS REQUESTDATE                                  -- 변경점 신청일
+          ,  CP.REQUESTDEPARTMENT                              -- 변경점 신청부서
+          ,  NVL(D.DEPT_NM, CP.REQUESTDEPARTMENT) AS REQUESTDEPARTMENTNAME
+          ,  CP.CUSTOMERID                                  -- 고객사ID
+          ,  C.CUSTOMERNAME                                   -- 고객사명
+          ,  CP.PRODUCTDEFID                                  -- 품목ID
+          ,  CP.PRODUCTDEFVERSION                              -- 품목Version
+          ,  PD.PRODUCTDEFNAME                                 -- 품목명
+          ,  DECODE(CP.PRODUCTDEFID, NULL, 'N','Y') AS ITEMUSEYN
+          ,  CP.PROCESSSEGMENTID                               -- 공정ID
+          ,   CP.PROCESSSEGMENTVERSION                             -- 공정Version
+          ,   PSD.DICTIONARYNAME                    AS PROCESSSEGMENTNAME  -- 공정명
+          ,  CP.SEGMENTTYPE                                  -- 공정분류
+          ,  (SELECT LISTAGG(D.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY D.DICTIONARYID)    AS   SEGMENTTYPENAME  
+               FROM   ufn_selectStringToSplit(CP.SEGMENTTYPE, ',')  MAP
+               LEFT OUTER JOIN CMD_LOOKUP_VALUES               C   ON C.LOOKUP_CODE = MAP.VALUE
+                                              AND C.LOOKUP_TYPE = 'ProcessClass'
+               LEFT OUTER JOIN CMD_DICTIONARY             D   ON D.DICTIONARYID = C.DICTIONARYID
+                                              AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE})     AS SEGMENTTYPENAME   -- 공정분류명
+          ,  CP.CHANGETYPE              -- 변경유형
+          ,  (SELECT LISTAGG(D.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY D.DICTIONARYID)     AS   CHANGETYPENAME  
+               FROM   ufn_selectStringToSplit(CP.CHANGETYPE, ',')    MAP
+               LEFT OUTER JOIN CMD_LOOKUP_VALUES               C   ON C.LOOKUP_CODE = MAP.VALUE
+                                              AND C.LOOKUP_TYPE = 'ChangeType1'
+               LEFT OUTER JOIN CMD_DICTIONARY             D   ON D.DICTIONARYID = C.DICTIONARYID
+                                              AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE})     AS CHANGETYPENAME   -- 변경유형명                                               
+          ,  CP.APPLICATIONTYPE                              -- 적용구분                                                                  
+          ,  (SELECT LISTAGG(D.DICTIONARYNAME, ',') WITHIN GROUP(ORDER BY D.DICTIONARYID)    AS   CHANGETYPENAME  
+               FROM   ufn_selectStringToSplit(CP.APPLICATIONTYPE, ',')    MAP
+               LEFT OUTER JOIN CMD_LOOKUP_VALUES               C   ON C.LOOKUP_CODE = MAP.VALUE
+                                              AND C.LOOKUP_TYPE = 'ApplicationType'
+               LEFT OUTER JOIN CMD_DICTIONARY             D   ON D.DICTIONARYID = C.DICTIONARYID
+                                              AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE})     AS APPLICATIONTYPENAME   -- 적용구분명
+          ,  CP.RATINGDECISION                              -- 등급분류
+          ,  PT.APPROVALNO                                -- 결재번호
+          ,  PT.PROCESSTYPE                                 -- 절차구분
+          ,  C1D.DICTIONARYNAME           AS PROCESSTYPENAME             -- 절차구분명
+          ,  PT.CHARGETYPE                                -- 역할구분
+          ,  CT.CODENAME              AS CHARGETYPENAME            -- 역할구분명
+          ,  U.USERNAME                                   -- 담당자  
+          ,  PT.APPROVALSTATE                               -- 결재상태  
+          ,  AP.CODENAME             AS APPROVALSTATENAME           -- 결재상태명
+          ,  PT.APPROVALRESULT                              -- 결재결과
+          ,  C2D.DICTIONARYNAME          AS APPROVALRESULTNAME           -- 결재결과명
+          ,  CP.CHANGEPOINTNO                              -- 변경점 관리번호
+          ,  CP.SUBJECT                                  -- 변경제목
+          ,  CP.CONSUMABLENAME                              -- 자재명
+          ,  CP.LOTID                                  -- Lot No
+          ,  CP.STOCKSTATUS                                -- 재고현황        
+          ,  CP.CHANGEITEMMGNT                              -- 변경품관리
+          ,  CP.STOCKHANDLEMETHOD                             -- 재고처리방안
+          ,  CP.REASONCOMMENTS                              -- 변경사유
+          ,  CP.BEFORECOMMENTS                              -- 변경전
+          ,  CP.AFTERCOMMENTS                              -- 변경후
+          ,  CP.CHANGEDETAILS                               -- 변경세부내용
+          , NULL AS CHK
+        FROM   QAM_CHANGEPOINT            CP 
+        LEFT OUTER JOIN CTE_PROCESSTYPE       PT  ON   PT.APPROVALNO = CP.CHANGEPOINTNO
+                                AND PT.ISTURN = 'Y'
+        LEFT OUTER JOIN BAS_CUSTOMER         C   ON   C.ENTERPRISEID = CP.ENTERPRISEID
+                                AND C.PLANTID = CP.PLANTID
+                                AND C.CUSTOMERID = CP.CUSTOMERID
+        LEFT OUTER JOIN BAS_PRODUCTDEFINITION     PD   ON   PD.PRODUCTDEFID = CP.PRODUCTDEFID
+                                AND PD.PRODUCTDEFVERSION = CP.PRODUCTDEFVERSION
+        LEFT OUTER JOIN BAS_PROCESSSEGMENT       PS   ON   PS.PROCESSSEGMENTID = CP.PROCESSSEGMENTID
+                                AND PS.PROCESSSEGMENTVERSION = CP.PROCESSSEGMENTVERSION
+        LEFT OUTER JOIN CMD_USER_V           U   ON   U.USERID = PT.CHARGERID
+        LEFT OUTER JOIN CTE_APPROVALSTATE       AP   ON   AP.LOOKUP_CODE = PT.APPROVALSTATE
+        LEFT OUTER JOIN CTE_CHARGETYPE         CT   ON   CT.LOOKUP_CODE = PT.CHARGETYPE
+        LEFT OUTER JOIN CMD_LOOKUP_VALUES           C1   ON   C1.LOOKUP_CODE = PT.PROCESSTYPE
+                                AND C1.LOOKUP_TYPE = 'ProcedureType'
+        LEFT OUTER JOIN CMD_LOOKUP_VALUES           C2   ON   C2.LOOKUP_CODE = PT.APPROVALRESULT
+                                AND C2.LOOKUP_TYPE = 'ApprovalProgressResult'
+        LEFT OUTER JOIN CMD_DICTIONARY         PSD ON   PSD.DICTIONARYID = PS.PROCESSSEGMENTNAME
+                                AND PSD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN CMD_DICTIONARY         C1D ON   C1D.DICTIONARYID = C1.DICTIONARYID
+                                AND C1D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN CMD_DICTIONARY         C2D ON   C2D.DICTIONARYID = C2.DICTIONARYID
+                                AND C2D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN CMD_DEPTS                   D    ON CP.REQUESTDEPARTMENT = D.DEPT_CD
+        WHERE   1 = 1
+ 		]]>
+		<if test="P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='' ">
+			<![CDATA[
+				AND	CP.REQUESTDATE >= to_timestamp( #{P_PERIOD_PERIODFR} || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+			]]>
+		</if>
+		<if test="P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='' ">
+			<![CDATA[
+				AND	CP.REQUESTDATE <= to_timestamp( #{P_PERIOD_PERIODTO} || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+			]]>
+		</if>
+	    <if test="CHANGEPOINTNO != null and CHANGEPOINTNO !='' "> 
+	        AND CP.CHANGEPOINTNO = #{CHANGEPOINTNO}
+	    </if>
+	    <if test="PLANTID != null and PLANTID !='' "> 
+	        AND CP.PLANTID = #{PLANTID}
+	    </if>
+	    <if test="REQUESTDEPARTMENT != null and REQUESTDEPARTMENT !='' "> 
+	        AND CP.REQUESTDEPARTMENT = #{REQUESTDEPARTMENT}
+	    </if>
+	    <!-- <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' "> 
+		    AND EXISTS
+		                     (
+                    SELECT  1
+                    FROM  ufn_selectstringtosplitdouble(#{P_PRODUCTDEFID}, ',', '|')  MAP
+                    WHERE  CP.PRODUCTDEFID = MAP.VALUE1
+                    AND    (CP.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 = '')
+                  )
+	    </if>    --> 
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+            AND CP.PRODUCTDEFID = #{PRODUCTDEFID}                            -- 품목 조회조건
+        </if>
+        <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+            AND CP.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}                            -- 품목 Rev
+        </if>
+	    <if test="CUSTOMERID != null and CUSTOMERID !='' "> 
+	        AND CP.CUSTOMERID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{CUSTOMERID}, ',')) --고객
+	    </if>
+        <if test="SEGMENTTYPE != null and SEGMENTTYPE !='' "> 
+         AND   EXISTS (
+                    SELECT   1
+                          FROM   ufn_selectStringToSplit(CP.SEGMENTTYPE, ',')  MAP                      
+                          WHERE   MAP.VALUE =#{SEGMENTTYPE}
+                   )	        
+	    </if>
+	    <if test="CHANGETYPE != null and CHANGETYPE !='' ">
+         AND   EXISTS (
+                    SELECT   1
+                          FROM   ufn_selectStringToSplit(CP.CHANGETYPE, ',')  MAP                      
+                          WHERE   MAP.VALUE =#{CHANGETYPE}
+                   )
+	    </if>
+	    <if test="RATINGDECISION != null and RATINGDECISION !='' "> 
+         AND   EXISTS (
+                    SELECT   1
+                          FROM   ufn_selectStringToSplit(CP.RATINGDECISION, ',')  MAP                      
+                          WHERE   MAP.VALUE =#{RATINGDECISION}
+                   )
+	    </if>
+	    
+	    <if test="PROCESSTYPE != null and PROCESSTYPE !='' "> 
+	        AND PT.PROCESSTYPE = #{PROCESSTYPE}
+	    </if>    
+
+	    <if test="APPROVALSTATE != null and APPROVALSTATE !='' "> 
+	        AND PT.APPROVALSTATE = #{APPROVALSTATE}
+	    </if>    
+	    
+	    <if test="CHANGEPOINTTYPE != null and CHANGEPOINTTYPE !='' "> 
+	        AND CP.CHANGEPOINTTYPE = #{CHANGEPOINTTYPE}
+	    </if>
+       ORDER BY	CP.REQUESTDATE DESC         
+    </select>    
+        
+    <!-- ID 신규채번 -->
+	<select id="selectNewItemID"  statementType="CALLABLE" parameterType="map">
+		/* smh.bas.dao.QAM02800Dao.selectNewItemID */
+		{#{O_NEWID,mode=OUT,jdbcType=VARCHAR ,javaType=string} = call BAS_COMMON_PKG.FN_GET_ID(
+										   #{CLASSID}
+										  ,#{PREFIX}
+				 						  ,#{CREATOR}
+				 						  ,'5'
+										)
+	     }
+    </select>
+    
+    <!-- 신뢰성 검증 의뢰 > 결제자 조회 AS-IS : GetUserApproval  Ver.10001-->
+    <select id="selectUserApproval" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.QAM02800Dao."selectUserApproval" */
+   SELECT U.PLANTID
+   			  ,U.ENTERPRISEID
+		      ,U.USERID AS CHARGERID
+		      ,U.USERNAME
+		      ,U.DEPT_CD AS DEPARTMENT
+		      ,U.POSITION
+		      ,U.CELLPHONENUMBER
+		      ,U.EMAILADDRESS
+		      ,U.DEPARTMENT AS DEPARTMENTNAME
+		      ,U.USE_YN
+		FROM   CMD_USER_V U
+		WHERE  1 = 1
+		AND    U.USE_YN = 'Y'
+		<if test="USERIDNAME != null and USERIDNAME !='' ">
+			AND    (UPPER(U.USERID) LIKE UPPER('%'	|| #{USERIDNAME} ||	'%') OR
+		      					UPPER(U.USERNAME) LIKE UPPER('%'	|| #{USERIDNAME}	||	'%'))
+		</if>
+		<if test="USERID != null and USERID !='' ">
+			AND	 U.USERID = #{USERID}
+		</if>
+		<choose>
+	         <when test="PLANTID != null and PLANTID !='' ">
+	         		AND U.PLANTID = #{PLANTID}
+	         </when>
+	         <otherwise>
+	         		AND    U.PLANTID = #{SESSION_SITETYPE}
+	         </otherwise>
+	  	</choose>
+	</select>		
+	
+	<!-- 변경점 신청 등록화면 팝업의 변경점 검토/승인 내용을 조회한다. AS-IS : GetChangePointReview Ver.10001 -->
+    <select id="selectChangePointReview" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.QAM02800Dao.selectChangePointReview */
+  	SELECT  CPR.USERID -- 사용자 ID
+		      ,U.USERNAME -- 사용자명
+		      ,U.DEPARTMENT AS  DEPARTMENTNAME-- 부서명
+		      ,CPR.REVIEWDATE -- 검토일시
+		      ,CPR.REVIEWCOMMENTS -- 검토내용
+		      ,CPR.CHANGEPOINTNO -- 변경점 관리번호
+		      ,CPR.SEQUENCE -- 순서
+	FROM   QAM_CHANGEPOINTREVIEW CPR
+	 LEFT   OUTER JOIN CMD_USER_V U  ON     U.USERID = CPR.USERID
+	WHERE  1 = 1
+	   AND    CPR.CHANGEPOINTNO = #{CHANGEPOINTNO}
+	</select>		
+
+	<!-- 신뢰성 검증 의뢰 > 결제자 조회 AS-IS : GetQCApproval  -->
+    <select id="selectQCApproval" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.QAM02800Dao.selectQCApproval */
+  		WITH DT_ROLE AS
+		(
+			SELECT	LOOKUP_CODE,MEANING
+			 FROM	CMD_LOOKUP_VALUES
+			WHERE	LOOKUP_TYPE IN('RoleClassification1','RoleClassification2')
+		)
+		SELECT A.APPROVALTYPE
+			  ,	 A."sequence" AS SEQUENCE
+			  ,	 A.ENTERPRISEID
+	 		  ,	 A.PLANTID
+	          ,  A.PROCESSTYPE
+	          ,  A.CHARGETYPE
+	          ,  R.MEANING                    AS CHARGETYPENAME
+	          ,  A.CHARGERID
+	          ,  A.DEPARTMENT
+	          ,  NVL(D.DEPT_NM, A.DEPARTMENT) AS DEPARTMENTNAME
+	          ,  A.APPROVALSTATE
+	          ,  A.APPROVALSTATE                  AS APPROVALSTATE_ORG
+	          ,  A.APPROVALTIME
+	          ,  A.REJECTCOMMENTS
+	          ,  A.DESCRIPTION
+	          ,  U.USERNAME
+	          ,  U.EMAILADDRESS
+	        FROM  QAM_QCAPPROVAL                  A
+	        LEFT JOIN DT_ROLE                     R    ON A.CHARGETYPE = R.LOOKUP_CODE  
+	        LEFT JOIN CMD_USER_V                  U    ON A.CHARGERID = U.USERID          
+	        LEFT JOIN CMD_DEPTS                   D    ON A.DEPARTMENT = D.DEPT_CD
+	        WHERE  1 = 1
+	        AND    A.APPROVALTYPE = 'ChangePointManagement'
+	        AND   A.APPROVALNO = #{CHANGEPOINTNO}
+	        ORDER BY A."sequence"
+	</select>		
+	
+	<!-- Lot 조회 팝업 그리드 데이터를 조회 한다 AS-IS : GetLotIdListByReliabilityVerificationNonRegularRequest Ver.10001 -->
+    <select id="selectLotList" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.QAM02800Dao.selectLotList */
+   	WITH WIPLIST 
+				AS
+				(
+					SELECT 	L.LOTID
+						,	L.LOTTYPE
+						,	L.PRODUCTDEFID
+						,	L.PRODUCTDEFVERSION
+						,	PD.PRODUCTDEFNAME
+						,	L.PROCESSDEFID				--라우팅 ID
+						,	L.PROCESSDEFVERSION			--라우팅 Version
+						,	L.PROCESSSEGMENTID			--공정 ID
+						,	L.PROCESSSEGMENTVERSION		--공정 Version
+						,	SGD.DICTIONARYNAME 			AS PROCESSSEGMENTNAME
+						,	L.USERSEQUENCE
+						,	L.PLANTID
+						,	L.AREAID
+						,	AD.DICTIONARYNAME 			AS AREANAME
+						,	NVL(PD.RTRSHT, 'SHT')	AS RTRSHT
+						,	L.UNIT
+						,	L.QTY
+						,	L.PCSQTY
+						,	L.PANELQTY
+						,	(PD.PCSMM * L.QTY)			AS M2QTY 
+						,	PO.PLANENDTIME
+						,	L.WEEK
+						,	L.LOTSTATE
+						,	L.LOTCREATEDTYPE
+			        FROM    PCM_LOT              		L
+			        INNER JOIN BAS_PRODUCTDEFINITION		PD	ON	L.PRODUCTDEFID = PD.PRODUCTDEFID
+				    										AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+					INNER JOIN MFM_PRODUCTIONORDER		PO	ON	L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+															AND L.LINENO = PO.LINENO
+					INNER JOIN BAS_PROCESSSEGMENT		SG	ON	L.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+															AND L.PROCESSSEGMENTVERSION = SG.PROCESSSEGMENTVERSION
+					-- 중공정
+					LEFT JOIN BAS_PROCESSSEGMENTCLASS	MSC	ON	SG.PROCESSSEGMENTCLASSID = MSC.PROCESSSEGMENTCLASSID AND MSC.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+					--LEFT JOIN SF_PROCESSSEGMENT			MPS	ON	MSC.PROCESSSEGMENTCLASSID = MPS.PROCESSSEGMENTCLASSID 
+					-- 대공정
+					LEFT JOIN BAS_PROCESSSEGMENTCLASS	TSC ON	MSC.PARENTPROCESSSEGMENTCLASSID = TSC.PROCESSSEGMENTCLASSID AND TSC.PROCESSSEGMENTCLASSTYPE = 'MiddleProcessSegmentClass'
+					--LEFT JOIN SF_PROCESSSEGMENT			TPS	ON	TSC.PROCESSSEGMENTCLASSID = TPS.PROCESSSEGMENTCLASSID	
+					LEFT OUTER JOIN BAS_AREA 			A 	ON 	A.AREAID = L.AREAID
+					LEFT OUTER JOIN CMD_DICTIONARY	 	SGD ON 	SGD.DICTIONARYID = SG.PROCESSSEGMENTNAME
+															AND SGD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+					LEFT OUTER JOIN CMD_DICTIONARY	 	AD 	ON 	AD.DICTIONARYID = A.AREANAME
+															AND AD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			        WHERE   L.LOTSTATE IN ('InProduction', 'InTransit')
+			        AND 	NVL(L.ISDEFECTED, 'N') = 'N'
+			        --AND     NVL(L.ISHOLD, 'N') = 'N'
+			        --AND     NVL(L.ISLOCKING, 'N') = 'N'
+			       <if test="PLANTID != null and PLANTID !='' ">
+			        	AND		L.PLANTID = #{PLANTID}
+			        </if>			        
+			       <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+			        	AND		PD.PRODUCTDEFID = #{PRODUCTDEFID}
+			        </if>
+			        
+      			    <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+			        	AND		PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			        </if>
+			        		        
+              <if test="LOTID != null and LOTID !='' ">
+               AND   EXISTS (
+                      SELECT  1
+                      FROM  UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',')    MAP
+                      WHERE  L.LOTID = MAP.VALUE
+                    )
+            </if>
+          )
+        SELECT   L.*
+          ,  TRUNC(PLANENDTIME) - TRUNC(SYSDATE) AS LEFTDATE
+          -- 인수Step 수량
+          ,  WR.RECEIVEPCSQTY
+          ,  WR.RECEIVEPANELQTY
+          -- 시작 Step 수량
+          ,  WR.WORKSTARTPCSQTY
+          ,  WR.WORKSTARTPANELQTY
+          -- 완료 Step 수량
+          ,  WR.WORKENDPCSQTY
+          ,  WR.WORKENDPANELQTY
+          -- 인계 Step 수량
+          ,  WR.SENDPCSQTY
+          ,  WR.SENDPANELQTY
+          -- 공정 LeadTime
+          ,  (NVL(WR.RECEIVELEADTIME, 0) + NVL(WR.WORKSTARTLEADTIME, 0) + 
+             NVL(WR.WORKENDLEADTIME, 0) + NVL(WR.SENDLEADTIME, 0)) AS LEADTIME
+          FROM   WIPLIST            L
+          LEFT JOIN PCM_LOTWORKRESULT      WR  ON  L.LOTID = WR.LOTID
+                              AND L.PROCESSSEGMENTID = WR.PROCESSSEGMENTID
+                              AND L.USERSEQUENCE = WR.USERSEQUENCE
+          WHERE   1 = 1
+          AND   L.LOTCREATEDTYPE NOT IN ('Claim')
+          ORDER BY 
+              TO_NUMBER(L.USERSEQUENCE)
+	</select>		
+	
+	<!--  변경점 신청서 등록 Popup의 저장한 Lot을 조회한다 AS-IS : GetSaveLotId-->
+ 	<select id="selectSaveLotList" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.QAM02800Dao.selectSaveLotList */
+   	WITH WIPLIST AS
+	 (SELECT L.LOTID
+	        ,L.LOTTYPE
+	        ,L.PRODUCTDEFID
+	        ,L.PRODUCTDEFVERSION
+	        ,PD.PRODUCTDEFNAME
+	        ,L.PROCESSDEFID --라우팅 ID
+	        ,L.PROCESSDEFVERSION --라우팅 Version
+	        ,L.PROCESSSEGMENTID --공정 ID
+	        ,L.PROCESSSEGMENTVERSION --공정 Version
+	        ,SGD.DICTIONARYNAME AS PROCESSSEGMENTNAME
+	        ,L.USERSEQUENCE
+	        ,L.PLANTID
+	        ,L.AREAID
+	        ,AD.DICTIONARYNAME AS AREANAME
+	        ,NVL(PD.RTRSHT, 'SHT') AS RTRSHT
+	        ,L.UNIT
+	        ,L.QTY
+	        ,L.PCSQTY
+	        ,L.PANELQTY
+	        ,(PD.PCSMM * L.QTY) AS M2QTY
+	        ,PO.PLANENDTIME
+	        ,L.WEEK
+	        ,L.LOTSTATE
+	  FROM   PCM_LOT L
+	  INNER  JOIN BAS_PRODUCTDEFINITION PD
+	  ON     L.PRODUCTDEFID = PD.PRODUCTDEFID
+	  AND    L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+	  INNER  JOIN MFM_PRODUCTIONORDER PO
+	  ON     L.PRODUCTIONORDERID = PO.PRODUCTIONORDERID
+	  AND    L.LINENO = PO.LINENO
+	  INNER  JOIN BAS_PROCESSSEGMENT SG
+	  ON     L.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+	  AND    L.PROCESSSEGMENTVERSION = SG.PROCESSSEGMENTVERSION
+	  -- 중공정
+	  LEFT   JOIN BAS_PROCESSSEGMENTCLASS MSC
+	  ON     SG.PROCESSSEGMENTCLASSID = MSC.PROCESSSEGMENTCLASSID
+	  AND    MSC.PROCESSSEGMENTCLASSTYPE = 'TopProcessSegmentClass'
+	  --LEFT JOIN SF_PROCESSSEGMENT      MPS  ON  MSC.PROCESSSEGMENTCLASSID = MPS.PROCESSSEGMENTCLASSID 
+	  -- 대공정
+	  LEFT   JOIN BAS_PROCESSSEGMENTCLASS TSC
+	  ON     MSC.PARENTPROCESSSEGMENTCLASSID = TSC.PROCESSSEGMENTCLASSID
+	  AND    TSC.PROCESSSEGMENTCLASSTYPE = 'MiddleProcessSegmentClass'
+	  --LEFT JOIN SF_PROCESSSEGMENT      TPS  ON  TSC.PROCESSSEGMENTCLASSID = TPS.PROCESSSEGMENTCLASSID  
+	  LEFT   OUTER JOIN BAS_AREA A
+	  ON     A.AREAID = L.AREAID
+	  LEFT   OUTER JOIN CMD_DICTIONARY SGD
+	  ON     SGD.DICTIONARYID = SG.PROCESSSEGMENTNAME
+	  AND    SGD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+	  LEFT   OUTER JOIN CMD_DICTIONARY AD
+	  ON     AD.DICTIONARYID = A.AREANAME
+	  AND    AD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+	  WHERE  L.LOTSTATE IN ('InProduction', 'InTransit')
+	  AND    NVL(L.ISDEFECTED, 'N') = 'N'
+		<choose>
+	         <when test="LOTID != null and LOTID !='' ">
+	         		AND 	EXISTS (
+												SELECT	1
+												FROM	UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',')		MAP
+												WHERE	L.LOTID = MAP.VALUE
+											)
+							OR 		UPPER(L.LOTID) LIKE '%' || UPPER(#{LOTID}) || '%'
+	         </when>
+	         <otherwise>
+	         		AND	1 = 0
+	         </otherwise>
+	  	</choose>
+	  )
+	SELECT L.*
+	      ,TRUNC(PLANENDTIME) - TRUNC(SYSDATE) AS LEFTDATE
+	       -- 인수Step 수량
+	      ,WR.RECEIVEPCSQTY
+	      ,WR.RECEIVEPANELQTY
+	       -- 시작 Step 수량
+	      ,WR.WORKSTARTPCSQTY
+	      ,WR.WORKSTARTPANELQTY
+	       -- 완료 Step 수량
+	      ,WR.WORKENDPCSQTY
+	      ,WR.WORKENDPANELQTY
+	       -- 인계 Step 수량
+	      ,WR.SENDPCSQTY
+	      ,WR.SENDPANELQTY
+	       -- 공정 LeadTime
+	      ,(NVL(WR.RECEIVELEADTIME, 0) + NVL(WR.WORKSTARTLEADTIME, 0) +
+	       NVL(WR.WORKENDLEADTIME, 0) + NVL(WR.SENDLEADTIME, 0)) AS LEADTIME
+	FROM   WIPLIST L
+	LEFT   JOIN PCM_LOTWORKRESULT WR
+	ON     L.LOTID = WR.LOTID
+	AND    L.PROCESSSEGMENTID = WR.PROCESSSEGMENTID
+	AND    L.USERSEQUENCE = WR.USERSEQUENCE
+	WHERE  1 = 1
+
+	</select>		
+	
+	<!--결재번호의 요청에 대해서 결재상태가 회수인지 조사한다.   GetIsDraft : 10001-->
+    <select id="selectIsDraft" parameterType="map" resultType="hashmap">
+    	/* smh.qam.dao.QAM02800Dao.selectIsDraft  */
+    	SELECT 	APPROVALNO
+		FROM 	QAM_QCAPPROVAL 					
+		WHERE 	APPROVALNO = #{APPROVALNO}
+		AND 	APPROVALTYPE = 'ChangePointManagement'
+		AND 	PROCESSTYPE = 'Draft'
+		AND 	(APPROVALSTATE = 'Reclamation' OR APPROVALSTATE IS NULL OR APPROVALSTATE = '')	
+    </select>
+    
+    <!--변경점 등록 팝업을 호출할때 이번 차례의 결재자가 누구인지 조사한다.   GetChangePointThisTimeApprovalUser : 10001-->
+    <select id="selectChangePointThisTimeApprovalUser" parameterType="map" resultType="hashmap">
+    	/* smh.qam.dao.QAM02800Dao.selectChangePointThisTimeApprovalUser  */
+   		SELECT * FROM 
+   			(SELECT 
+					CHARGERID
+					,PROCESSTYPE
+					,CHARGETYPE
+					, "sequence" AS SEQUENCE
+			FROM 	QAM_QCAPPROVAL
+			WHERE 	1 = 1
+			AND 	APPROVALNO = #{APPROVALNO}
+			AND 	APPROVALTYPE = 'ChangePointManagement'
+			AND 	(APPROVALSTATE IS NULL OR APPROVALSTATE = '' OR APPROVALSTATE = 'Companion')
+			ORDER BY 
+					"sequence", ROWNUM 
+			) 
+		WHERE ROWNUM = 1
+    </select>
+    
+    <!--전체 기안자/승인자의 상태를  조회  (state or role) GetApprovalAllStateByReliabilityVerificationRequest / GetApprovalAllRoleByReliabilityVerificationRequest : 10001-->
+    <select id="selectApprovalType" parameterType="map" resultType="hashmap">
+    	/* smh.qam.dao.QAM02800Dao.selectApprovalType  */
+    	SELECT  LOOKUP_CODE
+					,LOOKUP_TYPE
+					,FN_QAM_GET_DICTIONARYNAME(DICTIONARYID , #{SESSION_LANGUAGETYPE}) AS LOOKUP_NAME
+		FROM	CMD_LOOKUP_VALUES 
+		WHERE 1=1
+		AND ENABLED_FLAG = 'Y'
+		<if test="APPROVALTYPE != null and APPROVALTYPE != '' ">
+		   <choose>
+		      <when test='APPROVALTYPE == "ReviewSettleState"'>
+		          AND LOOKUP_TYPE IN ('DraftSettleState', 'ApprovalSettleState') 
+		      </when>
+		      <when test='APPROVALTYPE == "RoleClassification"'>
+		          AND LOOKUP_TYPE IN ('RoleClassification1', 'RoleClassification2') 
+		      </when>
+		      <otherwise>
+		         AND LOOKUP_TYPE = #{APPROVALTYPE}
+		   </otherwise>
+		   </choose>
+		</if>
+		ORDER BY LOOKUP_TYPE
+    </select>
+    
+    <!--품목선택시 고객정보 조회-->
+    <select id="selectProductCustomerInfo" parameterType="map" resultType="hashmap">
+    	/* smh.qam.dao.QAM02800Dao.selectProductCustomerInfo  */
+        SELECT BCU.CUSTOMERID
+             , BCU.CUSTOMERNAME
+          FROM BAS_PRODUCTITEMSPEC PIS
+             , BAS_CUSTOMER BCU
+         WHERE PIS.ENTERPRISEID = BCU.ENTERPRISEID
+           AND PIS.PLANTID      = BCU.PLANTID
+           AND PIS.VALIDSTATE   = BCU.VALIDSTATE
+           AND PIS.CUSTOMERID   = BCU.CUSTOMERID
+           AND PIS.VALIDSTATE   = 'Valid'
+           AND PIS.ENTERPRISEID = #{ENTERPRISEID}
+           AND PIS.PLANTID      = #{PLANTID}
+           AND PIS.ITEMID       = #{ITEMID}
+           AND PIS.ITEMVERSION  = #{ITEMVERSION}
+    </select>
+        
+    <!--
+	************************************************************
+	* 변경점관리
+	************************************************************
+	-->
+	<!-- 변경점관리 등록 -->
+    <insert id="insertQamChangepoint" parameterType="map">
+    INSERT INTO QAM_CHANGEPOINT( 
+        CHANGEPOINTNO  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,REQUESTDATE  
+        ,REQUESTDEPARTMENT  
+        ,SUBJECT  
+        ,PRODUCTDEFID  
+        ,PRODUCTDEFVERSION  
+        ,CONSUMABLENAME  
+        ,PROCESSSEGMENTID  
+        ,PROCESSSEGMENTVERSION  
+        ,LOTID  
+        ,STOCKSTATUS  
+        ,SEGMENTTYPE  
+        ,CHANGETYPE  
+        ,APPLICATIONTYPE  
+        ,CHANGEITEMMGNT  
+        ,CUSTOMERID  
+        ,STOCKHANDLEMETHOD  
+        ,REASONCOMMENTS  
+        ,BEFORECOMMENTS  
+        ,AFTERCOMMENTS  
+        ,CHANGEDETAILS  
+        ,CHANGEPOINTTYPE  
+        ,RATINGDECISION  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE        ) 
+    VALUES( 
+        #{CHANGEPOINTNO}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,TO_DATE(#{REQUESTDATE} , 'YYYYMMDDHH24MISS')
+        ,#{REQUESTDEPARTMENT}  
+        ,#{SUBJECT}  
+        ,#{PRODUCTDEFID}  
+        ,#{PRODUCTDEFVERSION}  
+        ,#{CONSUMABLENAME}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PROCESSSEGMENTVERSION}  
+        ,#{LOTID}  
+        ,#{STOCKSTATUS}  
+        ,#{SEGMENTTYPE}  
+        ,#{CHANGETYPE}  
+        ,#{APPLICATIONTYPE}  
+        ,#{CHANGEITEMMGNT}  
+        ,#{CUSTOMERID}  
+        ,#{STOCKHANDLEMETHOD}  
+        ,#{REASONCOMMENTS}  
+        ,#{BEFORECOMMENTS}  
+        ,#{AFTERCOMMENTS}  
+        ,#{CHANGEDETAILS}  
+        ,#{CHANGEPOINTTYPE}  
+        ,#{RATINGDECISION}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}    )
+    </insert>
+
+    <!-- 변경점관리 변경 -->
+    <update id="updateQamChangepoint" parameterType="map" >
+    UPDATE QAM_CHANGEPOINT 
+    SET 
+        REQUESTDEPARTMENT = #{REQUESTDEPARTMENT}     
+        ,SUBJECT = #{SUBJECT}     
+        ,PRODUCTDEFID = #{PRODUCTDEFID}     
+        ,PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}     
+        ,CONSUMABLENAME = #{CONSUMABLENAME}     
+        ,PROCESSSEGMENTID = #{PROCESSSEGMENTID}     
+        ,PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}     
+        ,LOTID = #{LOTID}     
+        ,STOCKSTATUS = #{STOCKSTATUS}     
+        ,SEGMENTTYPE = #{SEGMENTTYPE}     
+        ,CHANGETYPE = #{CHANGETYPE}     
+        ,APPLICATIONTYPE = #{APPLICATIONTYPE}     
+        ,CHANGEITEMMGNT = #{CHANGEITEMMGNT}     
+        ,CUSTOMERID = #{CUSTOMERID}     
+        ,STOCKHANDLEMETHOD = #{STOCKHANDLEMETHOD}     
+        ,REASONCOMMENTS = #{REASONCOMMENTS}     
+        ,BEFORECOMMENTS = #{BEFORECOMMENTS}     
+        ,AFTERCOMMENTS = #{AFTERCOMMENTS}     
+        ,CHANGEDETAILS = #{CHANGEDETAILS}     
+        ,CHANGEPOINTTYPE = #{CHANGEPOINTTYPE}     
+        ,RATINGDECISION = #{RATINGDECISION}     
+        ,DESCRIPTION = #{DESCRIPTION}             
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+    WHERE CHANGEPOINTNO = #{CHANGEPOINTNO}
+    </update>
+	
+	<!--
+	************************************************************
+	* 변경점 검토 정보
+	************************************************************
+	-->
+	<!-- 변경점 검토 정보 등록 -->
+    <insert id="insertQamChangepointreview" parameterType="map">
+    INSERT INTO QAM_CHANGEPOINTREVIEW( 
+        CHANGEPOINTNO  
+        ,SEQUENCE  
+        ,USERID  
+        ,REVIEWDATE  
+        ,REVIEWCOMMENTS  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE        ) 
+    VALUES( 
+        #{CHANGEPOINTNO}  
+        <!-- ,#{SEQUENCE}   -->
+        ,(SELECT NVL(MAX(SEQUENCE), 0) + 1
+			FROM 	QAM_CHANGEPOINTREVIEW
+			WHERE 	1 = 1
+			AND 	CHANGEPOINTNO = #{CHANGEPOINTNO} )
+        ,#{USERID}  
+        ,TO_DATE(#{REVIEWDATE} , 'YYYYMMDDHH24MISS')
+        ,#{REVIEWCOMMENTS}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}    )
+    </insert>
+
+    <!-- 변경점 검토 정보 변경 -->
+    <update id="updateQamChangepointreview" parameterType="map" >
+    UPDATE QAM_CHANGEPOINTREVIEW 
+    SET 
+        USERID = #{USERID}     
+        ,REVIEWDATE = TO_DATE(#{REVIEWDATE} , 'YYYYMMDDHH24MISS')
+        ,REVIEWCOMMENTS = #{REVIEWCOMMENTS}     
+        ,DESCRIPTION = #{DESCRIPTION}             
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = SYSDATE     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+        ,VALIDSTATE = #{VALIDSTATE}
+    WHERE CHANGEPOINTNO = #{CHANGEPOINTNO}
+    AND SEQUENCE = #{SEQUENCE}
+    </update>
+    
+    <!-- 변경점 검토 정보 삭제 -->
+    <update id="deleteQamChangepointreview" parameterType="map" > 
+    DELETE FROM QAM_CHANGEPOINTREVIEW 
+    WHERE CHANGEPOINTNO = #{CHANGEPOINTNO}
+    AND SEQUENCE = #{SEQUENCE}
+    </update>
+    
+    <!--
+	************************************************************
+	* 품질 결재 정보
+	************************************************************
+	-->
+	<!-- 품질 결재 정보 등록 -->
+    <insert id="insertQamQcapproval" parameterType="map">
+    INSERT INTO QAM_QCAPPROVAL( 
+        APPROVALNO  
+        ,APPROVALTYPE  
+        ,"sequence"  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,PROCESSTYPE  
+        ,CHARGETYPE  
+        ,CHARGERID  
+        ,DEPARTMENT  
+        ,APPROVALSTATE  
+        ,APPROVALTIME  
+        ,REJECTCOMMENTS  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE        ) 
+    VALUES( 
+        #{APPROVALNO}  
+        ,#{APPROVALTYPE}  
+        ,#{SEQUENCE}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{PROCESSTYPE}  
+        ,#{CHARGETYPE}  
+        ,#{CHARGERID}  
+        ,#{DEPARTMENT}  
+        ,#{APPROVALSTATE}  
+        ,#{APPROVALTIME}  
+        ,#{REJECTCOMMENTS}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}    )
+    </insert>
+    
+    <!-- 품질 결재 정보 삭제 -->
+    <update id="deleteQamQcapproval" parameterType="map" > 
+    DELETE FROM QAM_QCAPPROVAL 
+    WHERE APPROVALNO = #{APPROVALNO}
+    AND APPROVALTYPE = #{APPROVALTYPE}
+    <!-- AND "sequence" = #{SEQUENCE} -->
+    </update>
+    
+</mapper>

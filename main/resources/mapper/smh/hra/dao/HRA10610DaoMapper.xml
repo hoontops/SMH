@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.hra.dao.HRA10610Dao">
+
+    <!-- 증명서 신청내역 조회 -->
+    <select id="selectVarificationLetterList" parameterType="map" resultType="hashmap">
+        /* smh.hra.dao.HRA10610Dao.selectVarificationLetterList */
+        SELECT 0                                                AS CHECK_YN  /*CheckBox*/
+              ,DECODE(IN_A.APPROVE_YN, 'Y', '승인', 'N', '미승인') AS STATUS        /*상태명 */
+              ,TO_CHAR(IN_A.RECEIPT_DATE, 'YYYY-MM-DD')         AS RECEIPT_DATE     /*신청일자*/
+              ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_HRA_EMPLETTER', IN_A.CERTIFICATION_KIND) 
+                                                                AS CERTIFICATION_KIND_NM   /*증명서 종류명*/
+              ,IN_A.DOCUMENT_NO                                 AS DOCUMENT_NO             /*문서번호*/
+              ,IN_A.PRINT_NUMBER                                AS PRINT_NUMBER            /*신청매수*/
+              ,IN_A.PRINT_COUNT                                 AS PRINT_COUNT             /*출력매수*/
+              ,IN_A.PRESENTATION                                AS PRESENTATION            /*제출처*/
+              ,TO_CHAR(IN_A.ISSUE_DATE, 'YYYY-MM-DD')           AS ISSUE_DATE              /*최초발급일자*/
+              ,IN_A.CERTIFICATION_KIND                          AS CERTIFICATION_KIND      /*증명서종류 코드*/
+              ,IN_A.APPROVE_YN                                  AS APPROVE_YN              /*승인여부 */
+              ,CASE WHEN IN_A.DAY_COUNT <![CDATA[ < ]]> 0 THEN
+                 'N'
+               ELSE
+                   CASE WHEN IN_A.PRINT_NUMBER <![CDATA[ > ]]> NVL(IN_A.PRINT_COUNT,0) THEN
+                       'Y'
+                   ELSE
+                       'N'
+                   END
+               END                                              AS PRINT_FLAG
+              ,IN_A.PERSON_ID                                   AS PERSON_ID               /*PERSON_ID*/
+              ,IN_A.HJSHR_CERTIFICATION_SEQ                     AS HJSHR_CERTIFICATION_SEQ /*PK*/
+              ,IN_A.OBJECT_VERSION_NUMBER                       AS OBJECT_VERSION_NUMBER   /*OVN*/
+              ,IN_A.USED                                        AS USED
+              ,IN_A.NOTE                                        AS NOTE
+              ,(SELECT A.ESTABLISHMENT_ID 
+                  FROM PER_ALL_ASSIGNMENTS_F A 
+                 WHERE PERSON_ID = IN_A.PERSON_ID
+                  /*AND EFFECTIVE_START_DATE = (SELECT MAX(EFFECTIVE_START_DATE) 
+                                        FROM  PER_ALL_ASSIGNMENTS_F
+                                       WHERE PERSON_ID = IN_A.PERSON_ID)*/
+                  AND A.PRIMARY_FLAG ='Y'
+                  AND TRUNC(SYSDATE) BETWEEN EFFECTIVE_START_DATE AND EFFECTIVE_END_DATE /* 2016.03.24 추가 신상영 상무건으로 */
+                ) AS ESTABLISHMENT_ID
+        FROM (
+                SELECT HC.PERSON_ID
+                      ,HC.RECEIPT_DATE
+                      ,HC.ISSUE_DATE
+                      ,HC.CERTIFICATION_KIND
+                      ,HC.DOCUMENT_NO
+                      ,HC.PRINT_NUMBER
+                      ,HC.PRINT_COUNT
+                      ,HC.USED
+                      ,HC.NOTE
+                      ,HC.PRESENTATION
+                      ,HC.APPROVE_YN
+                      ,HC.HJSHR_CERTIFICATION_SEQ
+                      ,HC.OBJECT_VERSION_NUMBER
+                      ,HC.RECEIPT_DATE+14-TRUNC(SYSDATE)    AS DAY_COUNT
+                FROM   HJSHR_CERTIFICATION HC
+                WHERE  HC.PERSON_ID = #{PERSON_ID}
+               
+               <if test="CERTIFICATION_KIND != null and CERTIFICATION_KIND !='' ">
+                 AND  HC.CERTIFICATION_KIND = #{CERTIFICATION_KIND}
+               </if>
+           	) IN_A
+        WHERE  1=1
+        ORDER BY IN_A.RECEIPT_DATE DESC,  IN_A.PERSON_ID
+    </select>
+
+    <!-- 증명서 신청내역 변경여부 확인 -->
+    <select id="selectDuplicateChk" parameterType="map" resultType="string">
+        /* smh.hra.dao.HRA10610Dao.selectDuplicateChk */ 
+        SELECT 'Y'
+          FROM HJSHR_CERTIFICATION HC
+         WHERE HC.HJSHR_CERTIFICATION_SEQ       = #{HJSHR_CERTIFICATION_SEQ}    /*PK 일련번호*/
+           AND HC.OBJECT_VERSION_NUMBER         = #{OBJECT_VERSION_NUMBER} 
+    </select>
+
+    <!-- 증명서 신청내역 등록 -->
+    <insert id="insertVarificationLetter" parameterType="map">
+        /* smh.hra.dao.HRA10610Dao.insertVarificationLetter */
+        INSERT INTO HJSHR_CERTIFICATION
+        (     HJSHR_CERTIFICATION_SEQ       /*PK 일련번호*/
+             ,DOCUMENT_NO                   /*문서번호*/
+             ,RECEIPT_DATE                  /*접수일자*/
+             ,ISSUE_DATE                    /*발급일자*/
+             ,PERSON_ID                     /*사원ID*/
+             ,CERTIFICATION_KIND            /*증명서종류*/
+             ,PRINT_NUMBER                  /*출력매수*/
+             ,PRESENTATION                  /*제출처*/
+             ,USED                          /*용도*/
+             ,PRINT_COUNT                   /*출력횟수*/
+             ,APPROVE_YN                    /*승인여부*/
+             ,NOTE                          /*비고*/
+             ,ATTRIBUTE1                    /**/
+             ,ATTRIBUTE2                    /**/
+             ,ATTRIBUTE3                    /**/
+             ,ATTRIBUTE4                    /**/
+             ,ATTRIBUTE5                    /**/
+             ,ATTRIBUTE6                    /**/
+             ,ATTRIBUTE7                    /**/
+             ,ATTRIBUTE8                    /**/
+             ,ATTRIBUTE9                    /**/
+             ,ATTRIBUTE10                   /**/
+             ,ATTRIBUTE11                   /**/
+             ,ATTRIBUTE12                   /**/
+             ,ATTRIBUTE13                   /**/
+             ,ATTRIBUTE14                   /**/
+             ,ATTRIBUTE15                   /**/
+             ,CREATED_BY                    /*자료생성자*/
+             ,CREATION_DATE                 /*자료생성일*/
+             ,LAST_UPDATED_BY               /*최종수정자*/
+             ,LAST_UPDATE_DATE              /*최종수정일*/
+             ,LAST_UPDATE_LOGIN             /*로그인유저*/
+             ,OBJECT_VERSION_NUMBER         /**/
+        )VALUES(
+               HJSHR_CERTIFICATION_SEQ.NEXTVAL /*PK 일련번호*/
+             , HJSHR_GET_DOC_NO(#{RECEIPT_DATE}) /*문서번호*/
+             , #{RECEIPT_DATE}                 /*접수일자*/
+             , #{ISSUE_DATE}                   /*발급일자*/
+             , #{PERSON_ID}                    /*사원ID*/
+             , #{CERTIFICATION_KIND}           /*증명서종류*/
+             , #{PRINT_NUMBER}                 /*출력매수*/
+             , #{PRESENTATION}                 /*제출처*/
+             , #{USED}                         /*용도*/
+             , #{PRINT_COUNT}                  /*출력횟수*/
+             , #{APPROVE_YN}                   /*승인여부*/
+             , #{NOTE}                         /*비고*/
+             , #{ATTRIBUTE1}                   /**/
+             , #{ATTRIBUTE2}                   /**/
+             , #{ATTRIBUTE3}                   /**/
+             , #{ATTRIBUTE4}                   /**/
+             , #{ATTRIBUTE5}                   /**/
+             , #{ATTRIBUTE6}                   /**/
+             , #{ATTRIBUTE7}                   /**/
+             , #{ATTRIBUTE8}                   /**/
+             , #{ATTRIBUTE9}                   /**/
+             , #{ATTRIBUTE10}                  /**/
+             , #{ATTRIBUTE11}                  /**/
+             , #{ATTRIBUTE12}                  /**/
+             , #{ATTRIBUTE13}                  /**/
+             , #{ATTRIBUTE14}                  /**/
+             , #{ATTRIBUTE15}                  /**/
+             , #{PERSONID}                     /*자료생성자*/
+             , SYSDATE                         /*자료생성일*/
+             , #{PERSONID}                     /*최종수정자*/
+             , SYSDATE                         /*최종수정일*/
+             , #{PERSONID}                     /*로그인유저*/
+             , #{OBJECT_VERSION_NUMBER}        /**/
+        )
+    </insert>
+    
+    <!-- 증명서 신청내역 수정 -->
+    <update id="updateVarificationLetter" parameterType="map">
+        /* smh.hra.dao.HRA10610Dao.updateVarificationLetter */
+        UPDATE HJSHR_CERTIFICATION
+           SET RECEIPT_DATE                  = #{RECEIPT_DATE}               /*접수일자*/
+             , CERTIFICATION_KIND            = #{CERTIFICATION_KIND}         /*증명서종류*/
+             , PRINT_NUMBER                  = #{PRINT_NUMBER}               /*출력매수*/
+             , PRESENTATION                  = #{PRESENTATION}               /*제출처*/
+             , USED                          = #{USED}                       /*용도*/
+             , NOTE                          = #{NOTE}                       /*비고*/
+             , LAST_UPDATED_BY               = #{PERSONID}                   /*최종수정자*/
+             , LAST_UPDATE_DATE              = SYSDATE                       /*최종수정일*/
+             , LAST_UPDATE_LOGIN             = PERSONID                      /*로그인유저*/
+             , OBJECT_VERSION_NUMBER         = #{OBJECT_VERSION_NUMBER}+1    /**/
+         WHERE HJSHR_CERTIFICATION_SEQ       = #{HJSHR_CERTIFICATION_SEQ}    /*PK 일련번호*/
+    </update>
+    
+    <!--증명서 신청내역 삭제 -->
+    <delete id="deleteVarificationLetter" parameterType="map">
+        /* smh.hra.dao.HRA10610Dao.deleteVarificationLetter */
+        DELETE FROM HJSHR_CERTIFICATION
+         WHERE HJSHR_CERTIFICATION_SEQ       = #{HJSHR_CERTIFICATION_SEQ}    /*PK 일련번호*/
+           AND APPROVE_YN                    != 'Y'
+    </delete>
+
+</mapper>

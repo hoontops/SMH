@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.apr.dao.APR10310Dao">
+
+    <!-- 행동평가 Master 조회 -->
+	<select id="selectBehaviorUserList" parameterType="map" resultType="hashmap">
+		SELECT DEF.HJSPFM_APPRAISAL_MASTER_SEQ
+		  ,'' 								AS CHK
+	      ,DEF.APPRAISAL_TYPE
+	      ,DEF.APPRAISAL_YEAR
+	      ,DEF.APPRAISAL_SEQUENCE
+	      ,DEF.APPRAISAL_PERIOD
+	      ,DEF.APPRAISEE_EMPNO 				AS EMPLOYEE_NUMBER
+	      ,DEF.APPRAISEE_ID
+	      ,DEF.APPRAISEE_NAME
+	      ,DEF.APPRAISEE_ORG_NAME
+	      ,DEF.APPRAISEE_GRADE_NAME
+	      ,DEF.APPRAISEE_JOB_NAME
+	      ,DEF.APPRAISEE_POSITION_NAME
+	      ,DEF.EE_ASSESSMENT_STATUS 		AS  ASSESSMENT_STATUS
+	      ,DEF.EE_ASSESSMENT_STATUS_DESC	AS  ASSESSMENT_STATUS_DESC
+	  FROM (
+	        SELECT  HJSPFM_APPRAISAL_MASTER_SEQ
+	               ,APPRAISAL_TYPE
+	               ,APPRAISAL_YEAR || '/01/01' || ' ~ ' || APPRAISAL_YEAR || '/12/31' AS APPRAISAL_PERIOD
+	               ,APPRAISAL_SEQUENCE               
+	               ,APPRAISEE_ID             AS APPRAISEE_ID   
+	               ,APPRAISEE_EMPNO          AS APPRAISEE_EMPNO
+	               ,APPRAISEE_NAME           AS APPRAISEE_NAME
+	               ,APPRAISAL_YEAR           AS APPRAISAL_YEAR
+	               ,DECODE('ko-KR','ko-KR', APPRAISEE_ORG_NAME, APPRAISEE_ORG_ENG_NAME)       AS APPRAISEE_ORG_NAME
+	               ,DECODE('ko-KR','ko-KR', APPRAISEE_GRADE_NAME, APPRAISEE_GRADE_ENG_NAME)   AS APPRAISEE_GRADE_NAME
+	               ,DECODE('ko-KR','ko-KR', APPRAISEE_JOB_NAME, APPRAISEE_JOB_ENG_NAME)       AS APPRAISEE_JOB_NAME
+	               ,DECODE('ko-KR','ko-KR', APPRAISEE_POSITION, APPRAISEE_POSITION_NAME)      AS APPRAISEE_POSITION_NAME
+	               ,APPRAISER_AVG_SCORE
+	               ,SUBMIT_YN
+	               ,EE_ASSESSMENT_STATUS_DESC
+	               ,EE_ASSESSMENT_STATUS
+	          FROM HJSPFM_WEB_SM_APR_USER_REL_V
+	         WHERE 1=1
+	           AND APPRAISER_ID         = #{PERSONID}    /* 로그인 PERSON ID */
+	           AND APPRAISAL_TYPE       = 'A130'   /* 평가구분 - 행동평가 (A130)*/
+	           AND APPRAISAL_YEAR       = #{APPRAISAL_YEAR}   /* PARAM1: 평가년도 */
+	           AND APPRAISAL_SEQUENCE   = '1'      /* 평가차수         */ 
+	           AND EE_ASSESSMENT_STATUS = NVL(#{ASSESSMENT_STATUS}, EE_ASSESSMENT_STATUS)  /* 평가진행 상태 */
+	   ) DEF
+	WHERE 1=1
+	 ORDER BY DEF.APPRAISEE_NAME  
+	           
+	
+    </select> 
+    
+    
+	<select id="selectRatingList" parameterType="map" resultType="hashmap">
+		-- Rating List
+		SELECT PRL.RATING_LEVEL_ID, PRL.NAME, PRL.STEP_VALUE
+	         FROM PER_RATING_SCALES   PRC
+	            , PER_RATING_LEVELS   PRL
+	        WHERE 1=1
+	          AND PRL.RATING_SCALE_ID = PRC.RATING_SCALE_ID
+	          AND PRC.NAME            = '행동평가 항목척도'
+       	ORDER BY PRL.RATING_LEVEL_ID	
+	
+	           
+	
+    </select> 
+    
+    
+	<select id="selectBehaviorTableList" parameterType="map" resultType="hashmap">
+		SELECT SBV.HJSPFM_APPRAISAL_MASTER_SEQ AS HJSPFM_APPRAISAL_MASTER_SEQ
+      ,SBV.HJSPFM_SM_BEHAVIOR_SEQ      AS HJSPFM_SM_BEHAVIOR_SEQ
+      ,SBV.COMPETENCE_TYPE_NAME        AS TYPE_NAME 
+      ,SBV.COMPETENCE_ITEM_NAME        AS ITEM_NAME
+      ,SBV.COMPETENCE_DESCRIPTION      AS QUESTION_NAME
+      ,SBV.APPRAISAL_RATING            AS RATING
+      ,SBV.APPRAISAL_RATING_NM         AS RATING_NAME 
+      ,SBV.COMPETENCE_TYPE             AS COMPETENCE_TYPE
+      ,SBV.COMPETENCE_ID               AS COMPETENCE_ID     
+      ,SBV.APPRAISAL_TYPE
+      ,SBV.APPRAISAL_YEAR
+      ,SBV.APPRAISAL_SEQUENCE
+      ,SBV.EFFECTIVE_START_DATE
+      ,SBV.EFFECTIVE_END_DATE
+      ,SUV.APPRAISEE_ID
+      ,SUV.APPRAISEE_NAME
+	  FROM HJSPFM_WEB_SM_BEH_V           SBV
+	      ,HJSPFM_WEB_SM_APR_USER_REL_V  SUV
+	 WHERE 1=1
+	   AND SBV.HJSPFM_APPRAISAL_MASTER_SEQ = #{HJSPFM_APPRAISAL_MASTER_SEQ}   /* 평가 MASTER KEY 피평가자 KEY */
+	   AND SBV.APPRAISER_ID                = #{PERSONID}    /* 로그인 PERSON ID(평가자 ID)  */
+	   AND SBV.HJSPFM_APPRAISAL_MASTER_SEQ = SUV.HJSPFM_APPRAISAL_MASTER_SEQ
+	   AND SBV.APPRAISER_ID                = SUV.APPRAISER_ID
+
+	
+    </select> 
+    
+    
+    
+	<update id="updateBehaviorTable" parameterType="map">
+		UPDATE HJSPFM_SM_BEHAVIOR 
+	     SET APPRAISAL_RATING 	= #{RATING}  --평가점수 (STEP_VALUE)
+	          ,LAST_UPDATED_BY      = #{PERSONID}
+	          ,LAST_UPDATE_DATE     = sysdate
+	          ,OBJECT_VERSION_NUMBER = OBJECT_VERSION_NUMBER + 1
+	  	WHERE 1=1
+	     AND HJSPFM_SM_BEHAVIOR_SEQ  =  #{HJSPFM_SM_BEHAVIOR_SEQ} --행동평가 세부항목 Key값
+		
+    </update> 
+    
+    
+	<select id="selectRatingExists" parameterType="map" resultType="hashmap">
+		SELECT 'PASS'
+              FROM DUAL
+             WHERE 1=1
+               AND NOT EXISTS (
+                                SELECT 'x'
+                                  FROM HJSPFM_APPRAISAL_MASTER     HAM
+                                     , HJSPFM_SM_BEHAVIOR          HSB
+                                 WHERE 1=1
+                                   AND HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = HSB.HJSPFM_APPRAISAL_MASTER_SEQ
+                                   AND HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = #{HJSPFM_APPRAISAL_MASTER_SEQ}  /* 평가 Master Key */
+                                   AND HSB.APPRAISER_ID                 = #{PERSONID}   /* 평가자(로그인 PERSON ID) */
+                                   AND HSB.APPRAISAL_RATING             IS NULL                                     
+                              )
+    </select> 
+    
+    
+	<select id="selectRatingDetailCount" parameterType="map" resultType="hashmap">
+		SELECT COUNT(*) AS ROW_COUNT
+              FROM HJSPFM_APPRAISAL_MASTER          HAM
+                  ,HJSPFM_SM_BEHAVIOR               HSB
+             WHERE 1=1
+               AND HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = HSB.HJSPFM_APPRAISAL_MASTER_SEQ
+               AND HAM.HJSPFM_APPRAISAL_MASTER_SEQ  = #{HJSPFM_APPRAISAL_MASTER_SEQ} /* 평가 Master Key */
+               AND HSB.APPRAISER_ID                 = #{PERSONID}   /* 평가자(로그인 PERSON ID) */ 
+    </select> 
+    
+    
+    
+   	<update id="updateAppraisalUser" parameterType="map">
+		UPDATE HJSPFM_SM_APPRAISAL_USER
+		  SET  ATTRIBUTE1  	        	   = 'Y'
+		       ,LAST_UPDATED_BY             = #{PERSONID}
+		       ,LAST_UPDATE_DATE            = SYSDATE
+		       ,LAST_UPDATE_LOGIN           = #{PERSONID}
+		WHERE HJSPFM_APPRAISAL_MASTER_SEQ = #{HJSPFM_APPRAISAL_MASTER_SEQ}
+		   AND APPRAISER_ID	                 = #{PERSONID}   /* 평가자(로그인 PERSON ID) */ 
+		
+    </update> 
+    
+   	<update id="updateAppraisalMaster" parameterType="map">
+		UPDATE HJSPFM_APPRAISAL_MASTER
+	     SET   ASSESSMENT_STATUS           = '110' -- 1STAPP
+		       ,LAST_UPDATED_BY             = #{PERSONID}
+		       ,LAST_UPDATE_DATE            = SYSDATE
+		       ,LAST_UPDATE_LOGIN           = #{PERSONID}
+		       ,OBJECT_VERSION_NUMBER       = OBJECT_VERSION_NUMBER + 1 
+     	WHERE HJSPFM_APPRAISAL_MASTER_SEQ    = #{HJSPFM_APPRAISAL_MASTER_SEQ}
+		
+    </update> 
+    
+    
+    
+</mapper>

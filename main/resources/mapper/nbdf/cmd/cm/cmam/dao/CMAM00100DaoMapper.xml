@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : CMAM00100DaoMapper.xml
+    설명          : 알림서비스 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2017.04.13
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.04.13      진성하     최초  생성
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmam.dao.CMAM00100Dao">
+   <select id="selectUserGroupList" parameterType="map" resultType="hashmap">	    
+	    	/* com.nbdf.cmd.cm.cmam.dao.CMAM00100Dao.selectUserGroupList */
+		SELECT BU.USERGROUPID
+			      ,BU.DICTIONARYID AS USERGROUPNAME_KEY
+			      ,decode(#{SESSION_LANGUAGETYPE},'ko-KR',D1.DICTIONARYNAME,'en-US',D2.DICTIONARYNAME,'zh-CN',D3.DICTIONARYNAME,'vi-VN',D4.DICTIONARYNAME) AS USERGROUPNAME
+			      ,BU.DESCRIPTION
+			      ,BU.ENTERPRISEID
+			      ,BU.PLANTID
+			      ,U1.USER_NM        AS CREATOR
+			      ,BU.CREATEDTIME
+			      ,U2.USER_NM        AS MODIFIER
+			      ,BU.MODIFIEDTIME
+			      ,BU.VALIDSTATE
+			      ,NULL              AS CHK
+        FROM   BAS_USERGROUP       BU
+        LEFT OUTER JOIN CMD_DICTIONARY     D1  ON  BU.DICTIONARYID = D1.DICTIONARYID
+                            AND D1.LANGUAGETYPE = 'ko-KR'
+        LEFT OUTER JOIN CMD_DICTIONARY     D2  ON  BU.DICTIONARYID = D2.DICTIONARYID
+                            AND D2.LANGUAGETYPE = 'en-US'
+        LEFT OUTER JOIN CMD_DICTIONARY     D3  ON  BU.DICTIONARYID = D3.DICTIONARYID
+                            AND D3.LANGUAGETYPE = 'zh-CN'
+        LEFT OUTER JOIN CMD_DICTIONARY     D4  ON   BU.DICTIONARYID = D4.DICTIONARYID
+                            AND D4.LANGUAGETYPE = 'vi-VN'
+        LEFT OUTER JOIN CMD_DICTIONARY     DIC  ON   BU.DICTIONARYID = DIC.DICTIONARYID
+                            AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+        LEFT OUTER JOIN CMD_USERS        U1  ON  BU.CREATOR = U1.USER_ID
+        LEFT OUTER JOIN CMD_USERS        U2  ON  BU.MODIFIER = U2.USER_ID
+        WHERE 1 = 1
+		<choose>
+			<when test="SEARCHCONDITION eq 'ALLVIEWS'.toString()">
+				AND (UPPER(BU.USERGROUPID) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+					OR  UPPER(BU.DESCRIPTION) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+					OR (UPPER(D1.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+							OR	 UPPER(D2.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+							OR UPPER(D3.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+							OR	 UPPER(D4.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')	)
+				 )
+			</when>
+			<when test="SEARCHCONDITION eq 'USERGROUPID2'.toString()">
+				AND UPPER(BU.USERGROUPID) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%' 
+			</when>
+			<when test="SEARCHCONDITION eq 'USERCLASSNAME2'.toString()">
+		        AND (UPPER(D1.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+					OR	 UPPER(D2.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+					OR UPPER(D3.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')
+					OR	 UPPER(D4.DICTIONARYNAME) LIKE UPPER('%' || #{SEARCHVALUE} || '%')	)				
+			</when>
+			<when test="SEARCHCONDITION eq 'DESCRIPTION'.toString()">
+				AND UPPER(BU.DESCRIPTION) LIKE '%' || UPPER(#{SEARCHVALUE}) || '%'
+			</when>			
+	    </choose>        
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+        	AND   BU.VALIDSTATE = #{VALIDSTATE}
+        </if>            
+     ORDER BY BU.USERGROUPID
+    </select>
+    <!-- SMS 발송 저장 -->
+    <update id="insertSmsSndIfs" parameterType="hashmap">
+         INSERT /* "com.nbdf.cmd.cm.cmam.dao.CMAM00100Dao.insertSmsSndIfs"  */
+         INTO    CMD_SMS_IFS
+                    ( SND_PHN_ID       /* 보내는사람 휴대폰 번호  */
+                    , RCV_PHN_ID       /* 받는사람 휴대폰 번호     */
+                    , SND_MSG           /* 메시지 내용                   */
+                    , SND_PUSH_MSG  /* 우체국앱 PUSH 메시지   */
+                    , SND_DTTM        /* 예약시간 */
+                    , CREATION_DATE
+                    , TRAN_ID
+                    , LINK_STAT_CD
+                    )
+         VALUES (
+                       #{SND_PHN_ID}
+                     , #{RCV_PHN_ID}
+                     , SUBSTRB(#{SND_MSG}, 0, 118)
+                     , SUBSTRB(#{SND_PUSH_MSG}, 0, 1990)
+                     , TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS')
+                     , SYSDATE
+                     , CMD_GET_TRAN_ID_F(#{JOB_SYS_CD})
+                     , 'N'
+                     )
+     </update>
+
+    <!-- SMS  발송 이력 저장 -->
+    <update id="insertSmsSndngLogs" parameterType="hashmap">
+          <selectKey keyProperty="SNDNG_LOG_ID" resultType="Integer" order="BEFORE">
+          SELECT   /* "com.nbdf.cmd.cm.cmam.dao.CMAM00100Dao.insertSmsSndngLogs"  */
+                      CMD_SNDNG_LOGS_S.NEXTVAL
+          FROM     DUAL
+        </selectKey>
+         INSERT /* "com.nbdf.cmd.cm.cmam.dao.CMAM00100Dao.insertSmsSndngLogs"  */
+         INTO    CMD_SNDNG_LOGS
+                    ( SNDNG_LOG_ID     /* 발송 로그 ID           */
+                    , SNDNG_KND_CD     /* 발송 종류 코드    */
+                    , SENDER_INFO       /* 발송자 정보                 */
+                    , RCVER_INFO        /* 수신자 정보                 */
+                    , COMMENTS                     /* 내용                 */
+                    , KEEP_START_DATEC /* 보관 시작일자C */
+                    , CREATED_BY
+                    , CREATION_DATE
+                    )
+         VALUES (
+                     #{SNDNG_LOG_ID}
+                     , 'SMS'
+                     , #{SND_PHN}
+                     , #{RCV_PHN}
+                     , #{SND_MSG}
+                     , TO_CHAR(SYSDATE, 'YYYYMMDD')
+                     , #{CREATED_BY}
+                     , SYSDATE
+                     )
+    </update>
+
+    <!-- EMAIL  발송 이력 저장 -->
+    <update id="insertEmailSndngLogs" parameterType="hashmap">
+         INSERT /* "com.nbdf.cmd.cm.cmam.dao.CMAM00100Dao.insertEmailSndngLogs"  */
+         INTO    CMD_SNDNG_LOGS
+                    ( SNDNG_LOG_ID     /* 발송 로그 ID           */
+                    , SNDNG_KND_CD     /* 발송 종류 코드    */
+                    , SENDER_INFO       /* 발송자 정보                 */
+                    , SENDER_NAME       /* 발송자 정보                 */
+                    , RCVER_INFO        /* 수신자 정보                 */
+                    , CONTENT                     /* 내용                 */
+                    , SUBJECT_TEXT    /* 제목                 */
+                    , CC
+                    , KEEP_START_DATEC /* 보관 시작일자C */
+                    , SNDNG_YN
+                    , CREATED_BY
+                    , CREATION_DATE
+                    , ATCH_SRC_KEY
+                    , RCVER_NAME
+                    , ATCH_TY_CD
+                    )
+         VALUES (
+                     CMD_SNDNG_LOGS_S.NEXTVAL
+                     , 'EMAIL'
+                     , #{FROM_ADDR}
+                     , #{FROM_NAME}
+                     , #{TO_ADDR}
+                     , #{CONTENT}
+                     , #{SUBJECT}
+                     , #{TO_CC}
+                     , TO_CHAR(SYSDATE, 'YYYYMMDD')
+                     , #{SNDNG_YN}
+                     , #{CREATED_BY}
+                     , SYSDATE
+                     , #{ATCH_SRC_KEY}
+                     , #{TO_NAME}
+                     , #{ATCH_TY_CD}
+                     )
+    </update>
+
+	<select id="selectAtchSrcKey" resultType="hashmap" parameterType="hashmap">
+	   SELECT   /* "com.nbdf.cmd.cm.cmam.dao.CMAM00100Dao.selectAtchSrcKey"  */
+       		    CAST (sys_guid() AS VARCHAR2(100)) as ATCH_SRC_KEY
+       FROM     DUAL
+    </select>   
+    
+    <!-- 발송 로그 조회-->
+    <select id="selectCmdSndngLogsList" parameterType="map" resultType="hashmap">
+    SELECT 
+        A.SNDNG_LOG_ID	
+        ,A.JOB_SYS_CD	
+        ,A.SNDNG_KND_CD	
+        ,A.SENDER_INFO 
+        ,A.RCVER_INFO as EMAIL_ADDR	
+        ,A.CONTENT	
+        ,A.RESVE_DTMC	
+        ,A.SUBJECT_TEXT	
+        ,A.CC	
+        ,A.RM	
+        ,A.CREATED_BY	
+        ,A.CREATION_DATE	
+        ,A.LAST_UPDATED_BY	
+        ,A.LAST_UPDATE_DATE	
+        ,A.LAST_UPDATE_LOGIN	
+        ,A.SNDNG_YN
+        ,decode(A.SNDNG_YN,'Y','Success','F','Fail') as SNDNG_RESULT	
+        ,A.KEEP_START_DATEC	
+        ,A.SENDER_NAME	
+        ,A.ATCH_SRC_KEY
+        ,A.ATCH_TY_CD
+        ,A.RCVER_NAME as USER_NM	
+    FROM	CMD_SNDNG_LOGS A 
+    WHERE 1=1 
+    <if test="SNDNG_KND_CD != null and SNDNG_KND_CD !='' "> 
+        AND A.SNDNG_KND_CD = #{SNDNG_KND_CD}
+    </if>
+    <if test="SENDER_INFO != null and SENDER_INFO !='' "> 
+        AND A.SENDER_INFO = #{SENDER_INFO}
+    </if>
+    <if test="RCVER_INFO != null and RCVER_INFO !='' "> 
+        AND A.RCVER_INFO = #{RCVER_INFO}
+    </if>
+    <if test="SNDNG_YN != null and SNDNG_YN !='' "> 
+        AND A.SNDNG_YN = #{SNDNG_YN}
+    </if>
+    <if test="ATCH_SRC_KEY != null and ATCH_SRC_KEY !='' "> 
+        AND A.ATCH_SRC_KEY = #{ATCH_SRC_KEY}
+    </if>
+    </select>
+    
+     <select id="selectUserGroupUserList" parameterType="map" resultType="hashmap">	    
+	    	/* smh.bas.dao.BAS04500Dao.selectUserGroupUserList */
+		    SELECT  max(BU.USERGROUPID) as USERGROUPID
+		    		,max(USERGROUPNAME) AS AUTH_NM
+				      ,BU.USERID as USER_ID
+				      ,max(BU.VALIDSTATE) as VALIDSTATE
+				      ,max(U1.USER_NM) as USER_NM
+				      ,max(U1.DEPT_CD) as DEPT_CD
+				      ,max(CD.DEPT_NM) as DEPT_NM
+				      ,max(U1.JIKWI_CD) as JIKWI_CD
+				      ,max(CCV.MEANING) as JIKWI_NM
+				      ,max(U1.EMAIL_ADDR) as EMAIL_ADDR
+				      ,max(U1.MBPH_NO) as MBPH_NO
+				      ,NULL AS CHK
+				FROM   BAS_USERGROUPUSER BU
+				INNER JOIN CMD_USERS U1 ON   BU.USERID = U1.USER_ID
+				LEFT   OUTER JOIN CMD_DEPTS CD ON	CD.DEPT_CD = U1.DEPT_CD
+				LEFT   OUTER JOIN CMD_CODE_V CCV ON	CCV.CODEID = U1.JIKWI_CD AND CCV.CODECLASSID = 'HRPostCode'
+				INNER JOIN BAS_USERGROUP G ON G.USERGROUPID = BU.USERGROUPID
+			WHERE  1 = 1
+		<if test="USERGROUPID != null and USERGROUPID !='' ">
+			AND    BU.USERGROUPID = #{USERGROUPID}
+		</if>
+		<if test="USER_NM != null and USER_NM !='' ">
+			AND    U1.USER_NM LIKE '%'|| #{USER_NM}||'%'
+		</if>
+		<if test="USER_ID != null and USER_ID !='' ">
+			AND    BU.USERID LIKE '%'|| #{USER_ID}||'%'
+		</if>
+		<if test="DEPT_NM != null and DEPT_NM !='' ">
+			AND    CD.DEPT_NM LIKE '%'||#{DEPT_NM}||'%'
+		</if>
+        group by BU.USERID      
+        ORDER  BY BU.USERID
+        
+    </select>        
+</mapper>

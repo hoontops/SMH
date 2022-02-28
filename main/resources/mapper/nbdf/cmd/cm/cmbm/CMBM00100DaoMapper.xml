@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 고객번호 조회
+    설명         : 고객번호 조회
+    작성자       : Jeong Jun Myeong
+    최초작성일   : 2017.12.07
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.12.06    Jeong Jun Myeong     최초  생성
+-->
+
+
+<mapper namespace="com.nbdf.cmd.cm.cmbm.dao.CMBM00100Dao">
+    <sql id="FROM"> 
+	    FROM DRCR_HOUSE_MST           DHM
+           , ( SELECT HR.HOUSE_NO
+                    , HR.MOVE_IN_DATE
+                    , HR.MOVE_OUT_DATE
+                    , HR.LAST_YN
+                    , DCM.*
+                 FROM DRCR_CUST_HOUSE_RELATION HR
+                    , DRCR_CUST_MST            DCM 
+                WHERE HR.CUST_NO = DCM.CUST_NO
+                  AND NVL(HR.MOVE_IN_DATE, SYSDATE) 
+                                      = (SELECT /*+ INDEX(X N1_DRCR_CUST_HOUSE_RELATION) */
+                                                NVL(X.MOVE_IN_DATE, SYSDATE)
+                                           FROM DRCR_CUST_HOUSE_RELATION X
+                                          WHERE X.HOUSE_NO = HR.HOUSE_NO                                                  
+                                          <if test="CUST_NO != null and CUST_NO != '' ">
+                                            AND X.CUST_NO = HR.CUST_NO
+                                          </if> 
+                                            AND ROWNUM     = 1
+                                        )
+             ) DCM
+        WHERE DHM.HOUSE_NO              = DCM.HOUSE_NO(+)
+	      <!-- 센터코드 -->
+	      <if test="CENTER_CD != null and CENTER_CD != '' ">
+	      AND DHM.CENTER_CD             = #{CENTER_CD}                                   /* 센터코드 */
+	      </if>
+
+	      <!-- 고객유형 -->
+	      <if test="CUST_TYPE != null and CUST_TYPE != '' ">
+	      AND DCM.CUST_TYPE             = #{CUST_TYPE}                                   /* 고객유형 */
+	      </if>
+	
+	      <!-- 고객유형..합산고객 제외 -->
+	      <if test="HAPSAN_EXCEPT != null and HAPSAN_EXCEPT != '' ">
+	      AND DCM.CUST_TYPE            != 'H'                                   /* 고객유형..합산고객 제외 */
+	      </if>
+
+	      <!-- 용도 -->
+	      <if test="USE_FLG != null and USE_FLG != '' and USE_FLG eq 'Y'.toString()">                           
+	      AND DHM.USE_GB             IN ('10', '20')                                         /* 용도코드 */
+	      </if>
+	                                
+	      
+	      <!-- 기본검색 -->
+	      <choose>
+	          <when test="SRCH_FLG eq 'L'.toString()">
+	              <if test="CUST_NO != null and CUST_NO != '' ">
+	              AND DCM.CUST_NO               LIKE #{CUST_NO} || '%'                           /* 고객번호 */
+	              </if>
+	          </when>
+	      <otherwise>
+	          <if test="CUST_NO != null and CUST_NO != '' ">
+	          AND DCM.CUST_NO = #{CUST_NO}                          /* 고객번호 */
+	          </if>
+	      </otherwise>
+	      </choose>
+	      
+	      <if test="CUST_NM != null and CUST_NM != '' ">
+	      AND DCM.CUST_NM               LIKE '%' || #{CUST_NM} || '%'                            /* 고객명 */
+	      </if>
+	      <if test="TEL_NO != null and TEL_NO != '' ">
+	      AND DCM.TEL_NO                LIKE REPLACE(#{TEL_NO},'-','') ||'%'             /* 전화번호 */
+	      </if>
+	      <if test="MOBILE_NO != null and MOBILE_NO != '' ">
+	      AND (   DCM.MOBILE_NO1            LIKE REPLACE(#{MOBILE_NO},'-','') ||'%' 
+	           OR DCM.MOBILE_NO2            LIKE REPLACE(#{MOBILE_NO},'-','') ||'%')     /* 핸드폰 */
+	      </if>
+	      
+	      <!-- 도로명주소 / 지번주소 -->
+	      
+	      <if test="SIDO != null and SIDO != ''">
+	      AND DHM.SIDO  LIKE #{SIDO} || '%'                                               /* 시/도 */
+	      </if>
+	      
+	      <if test="GUGUN != null and GUGUN != ''">
+	      AND DHM.GUGUN LIKE #{GUGUN} || '%'                                              /* 구/군 */
+	      </if>
+	      
+	      <if test="NEW_ADDR_ROAD_NM != null and NEW_ADDR_ROAD_NM != '' ">
+	      AND DHM.NEW_ADDR_ROAD_NM LIKE #{NEW_ADDR_ROAD_NM} || '%'                 /* 도로명 */
+	      </if>
+	      
+	      <if test="NEW_ADDR_BUILD_BONBEON != null and NEW_ADDR_BUILD_BONBEON != '' ">
+	      AND DHM.NEW_ADDR_BUILD_BONBEON = #{NEW_ADDR_BUILD_BONBEON}                      /* 건물 본번 */
+	      </if>
+	      
+	      <if test="NEW_ADDR_BUILD_BUBEON != null and NEW_ADDR_BUILD_BUBEON != '' ">
+	      AND DHM.NEW_ADDR_BUILD_BUBEON  = #{NEW_ADDR_BUILD_BUBEON}                       /* 건물 부번 */
+	      </if>
+	      
+	      <if test="OLD_ADDR_BUNJI != null and OLD_ADDR_BUNJI != '' ">
+	      AND DHM.OLD_ADDR_BUNJI        LIKE #{OLD_ADDR_BUNJI} ||'%'                      /* 번지 */
+	      </if>
+	      
+	      <if test="OLD_ADDR_JIBUN != null and OLD_ADDR_JIBUN != '' ">
+	      AND DHM.OLD_ADDR_JIBUN        LIKE #{OLD_ADDR_JIBUN} ||'%'                      /* 지번 */
+	      </if>
+	      
+	      <if test="BUILD_NM != null and BUILD_NM != '' ">                                /* 건물명 */
+	      AND DHM.BUILD_NM LIKE #{BUILD_NM} || '%'
+	      </if>
+	      
+	      <if test="DONG != null and DONG != '' ">                                        /* 동 */
+	      AND DHM.DONG LIKE #{DONG} || '%'
+	      </if>
+	      
+	      <if test="HO != null and HO != '' ">                                            /* 호수 */
+	      AND DHM.HO LIKE #{HO} || '%'
+	      </if>
+	      
+	      <!-- DRNM01700P - 특별중지세대관리팝업 조회조건 -->
+	      <if test="SE_YN eq 'Y'.toString()">
+          AND EXISTS(
+                      SELECT 1
+                        FROM DRNM_SPECIAL_SPLYCLOSE DSS
+                       WHERE 1 = 1
+                         AND DSS.CUST_NO   = DCM.CUST_NO
+                         AND DSS.ACCEPT_GB = 'SE' /* 중지완료 */
+                    )
+	      </if>
+    
+    </sql>
+
+     <!-- 고객번호 조회 -->
+     <select id="selectCustMst" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmbm.dao.CMBM00100Dao.selectCustMst"  */
+           Z.*
+         , DRCR_PKG_COMMON.GET_ROAD_ADDR(Z.HOUSE_NO)                                   AS ADDRESS1              /* 주소(도로명) */
+         , DRCR_PKG_COMMON.GET_LOT_ADDR(Z.HOUSE_NO)                                    AS ADDRESS2              /* 주소(지번) */
+         , DRNP_PKG_COMMON.GET_DATA_FORMAT('TEL',Z.TEL_NO)                             AS TEL_NO                /* 전화번호 */
+         , DRNP_PKG_COMMON.GET_DATA_FORMAT('TEL',Z.MOBILE_NO1)                         AS MOBILE_NO1            /* 휴대폰번호1 */ 
+         , DRNP_PKG_COMMON.GET_DATA_FORMAT('TEL',Z.MOBILE_NO2)                         AS MOBILE_NO2            /* 휴대폰번호2 */
+         , DRNP_PKG_COMMON.GET_CDS_NM('DRCR_HOUSE_GB',Z.HOUSE_GB)                      AS HOUSE_GB_NM           /* 주택구분 */
+         , DRNP_PKG_COMMON.GET_CENTER_NM(Z.CENTER_CD)                                  AS CENTER_NM             /* 고객센터 */
+         , DRNP_PKG_COMMON.GET_CDS_NM('DRCR_HOUSE_STATE',Z.HOUSE_STATUS)               AS HOUSE_STATUS_NM       /* 자원상태명 */
+         , clv.ATTRIBUTE1                                                              AS HOUSE_GB2_NM
+         , clv.ATTRIBUTE2                                                              AS HOUSE_GB2
+	      FROM
+	         (
+	           SELECT Y.*
+	                , ROWNUM RNUM
+ 	                , LAST_VALUE(ROWNUM) OVER (ORDER BY ROWNUM ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS TOTAL_ROWS
+	             FROM
+	                (
+				    SELECT DCM.CUST_NO                                                AS CUST_NO               /* 고객번호 */
+				         , DHM.HOUSE_NO                                               AS HOUSE_NO              /* 자원번호 */     
+<!--                         
+                         , DHM.SIDO||' '||DHM.GUGUN||' '||DHM.NEW_ADDR_ROAD_NM||' '||DHM.NEW_ADDR_BUILD_BONBEON
+                                   ||NVL2(DHM.NEW_ADDR_BUILD_BUBEON, '-'||DHM.NEW_ADDR_BUILD_BUBEON, '') AS ADDRESS1              /* 주소(도로명) */
+                         , DHM.SIDO||' '||DHM.GUGUN||' '||DHM.OLD_ADDR_EUMMYEON||' '||DHM.OLD_ADDR_BUNJI                          
+                                   ||NVL2(DHM.OLD_ADDR_JIBUN, '-'||DHM.OLD_ADDR_JIBUN, '')               AS ADDRESS2              /* 주소(지번) */
+ -->                                   
+                         
+                         , DHM.BUILD_NM                                                                  AS BUILD_NM              /* 단지명 */
+                         , DHM.DONG                                                                      AS DONG                  /* 동 */
+                         , DHM.HO                                                                        AS HO                    /* 호수 */
+				         , NVL(DCM.SRCH_NM,'등록된 이름없음')                                            AS CUST_NM               /* 고객명 */
+				         , DCM.TEL_NO                                                                    AS TEL_NO                /* 전화번호 */  
+				         , DCM.MOBILE_NO1                                                                AS MOBILE_NO1            /* 휴대폰번호1 */
+				         , DCM.MOBILE_NO2                                                                AS MOBILE_NO2            /* 휴대폰번호2 */
+				         , DHM.HOUSE_GB                                                                  AS HOUSE_GB              /* 주택구분 */
+				         , DHM.CENTER_CD                                                                 AS CENTER_CD             /* 고객센터 */
+				         , DHM.HOUSE_NM												                     AS HOUSE_NM              /* 자원명 */
+				         , NVL(DCM.PAPER_BILL_RECEIVE_YN, 'N')                                           AS PAPER_BILL_RECEIVE_YN /* 종이청구서 수령여부 */
+				         , DHM.USE_GB                                                                    AS USE_GB                /* 용도 */
+				         , DRNP_PKG_COMMON.GET_CDS_NM('DRCR_USE_GB',DHM.USE_GB)                          AS USE_GB_NM             /* 용도명 */         
+				         , NVL((SELECT DBM.CENTRAL_HEATING_YN                                                                     
+				                  FROM DRCR_BUILD_MST DBM                                                                         
+				                 WHERE DBM.BUILD_NO = DHM.BUILD_NO), 'N' )                               AS CENTRAL_HEATING_YN    /* 중앙난방여부 */     
+				         , DHM.MANAGE_NO                                                                 AS MANAGE_NO             /* 관리번호 */     
+				         , DHM.HOUSE_STATUS                                                              AS HOUSE_STATUS          /* 자원상태코드 */
+				         , SUBSTR(DHM.DONG_CD, 1, 1)                                                     AS ZONE_GB               /* 지역구분 */
+				         , DRCR_PKG_COMMON.GET_FULL_ROAD_ADDR(DHM.HOUSE_NO)                              AS ADDR                  /* 주소(도로명+자원명) */
+				         , DHM.REGULAR_INSP_DAY                                                          AS REGULAR_INSP_DAY      /* 정례검침일 */
+				         , DHM.DUE_DAY                                                                   AS DUE_DAY               /* 납부일 */
+				         , DCM.ROAD_ADDR || NVL2(DCM.BUILD_NM_DONG_HO,' '||DCM.BUILD_NM_DONG_HO,'')      AS CUST_ADDR             /* 도로명주소(고객) */
+						 <include refid="FROM"/>
+						 
+				          ORDER BY DCM.CUST_NO
+	                ) Y
+	            WHERE 1=1
+	            <if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+		           AND ROWNUM <![CDATA[<=]]> #{PAGE_NUMBER} * #{PAGE_SIZE}
+		        </if>
+	         ) Z
+	         , CMD_LOOKUP_VALUES CLV
+	     WHERE 1=1
+	       AND Z.HOUSE_GB      = CLV.LOOKUP_CODE
+	       AND CLV.LOOKUP_TYPE = 'DRCR_HOUSE_GB'
+	
+	    <if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+           AND Z.RNUM <![CDATA[>]]> ( #{PAGE_NUMBER} - 1 ) * #{PAGE_SIZE}
+        </if>
+    </select>
+    
+    <select id="selectDrcrCustMstConnt" parameterType="map" resultType="Integer">
+        select count(1)
+        <include refid="FROM"/>
+    </select>
+    
+    <!-- 고객센터 combo용 조회 -->
+	<select id="selectCboCenterList" resultType="hashmap">
+		SELECT /* "com.drens.dr.drcr.dao.DRCR00000Dao.selectCboCenterList"  */
+                   center_cd                     /*고객센터코드*/
+                 , center_nm                     /*고객센터명*/
+		FROM       drcr_center_mst
+		WHERE      1=1
+		ORDER BY center_cd
+	</select>
+ 
+    <!-- 행정동 combo용 조회  -->
+	<select id="selectCboHaengjeongDongList" resultType="hashmap">
+		SELECT /* "com.drens.dr.drcr.dao.DRCR00000Dao.selectCboHaengjeongDongList"  */
+                   DISTINCT hd.center_cd
+			     , hd.sido
+			     , hd.gugun
+			     , hd.dong_cd
+			     , hd.dong_nm
+		FROM       drcr_haengjeong_dong  hd
+		WHERE      1=1 
+	    <if test="CENTER_CD != '' and CENTER_CD !=null ">
+	        AND        hd.center_cd = #{CENTER_CD}   /*센터코드*/
+	    </if>		
+		ORDER BY   hd.center_cd, hd.dong_cd 		 
+	</select>   
+	
+    <!-- 화면별 고객정보 이력 속성 정보 조회  -->
+	<select id="selectLookupCodeForPiLog" resultType="hashmap">
+		SELECT /* "com.nbdf.cmd.cm.cmbm.dao.CMBM00100Dao.selectLookupCodeForPiLog"  */
+			LOOKUP_CODE		<!--컨트롤러.메소드-->
+			,MEANING		<!--메뉴경로-->
+			,DESCRIPTION	<!--화면명(화면id)-->
+			,ATTRIBUTE1		<!--버튼명-->
+			,ATTRIBUTE2		<!--WORK_TARGET 컬럼-->
+			,ATTRIBUTE3		<!--INPUT-->
+			from cmd_lookup_values
+		WHERE  LOOKUP_TYPE = 'CMD_PILOG_PROPERTY'
+		AND LOOKUP_CODE = #{LOOKUP_CODE}
+		AND ENABLED_FLAG = 'Y'
+	</select>   
+
+    <!-- 고객정보 겁색 이력 등록 -->
+    <insert id="insertPiLogHistory" parameterType="hashmap">
+        INSERT /* "com.nbdf.cmd.cm.cmbm.dao.CMBM00100Dao.insertPiLogHistory"  */
+          INTO pi_log_history ( 
+             LOG_ID    
+           , LOG_DATE      
+           , PGM_GB           
+           , PGM_NAME      
+           , IP_ADDRESS        
+           , WORK_GB         
+           , WORK_MAN      
+           , WORK_TARGET    
+        )
+        VALUES (
+             pi_sq_log_history.nextval 
+           , sysdate   
+           , #{PGM_GB}        
+           , #{PGM_NAME}   
+           , #{IP_ADDRESS}     
+           , #{WORK_GB}      
+           , #{WORK_MAN}        
+           , #{WORK_TARGET} 
+           	 || decode(#{WORK_TARGET_COL},'CUST_NO',(SELECT '(' || CUST_NM || ')' FROM DRCR_CUST_MST WHERE CUST_NO=#{WORK_TARGET} AND ROWNUM=1)
+           	                            , 'MAIN_CUST_NO', (SELECT '(' || CUST_NM || ')' FROM DRCR_CUST_MST WHERE CUST_NO=#{WORK_TARGET} AND ROWNUM=1))
+        )
+    </insert>	  
+
+    <insert id="insertPiLogHistoryOfExcelDn" parameterType="hashmap">
+        INSERT /* "com.nbdf.cmd.cm.cmbm.dao.CMBM00100Dao.insertPiLogHistoryOfExcelDn"  */
+          INTO pi_log_history ( 
+             LOG_ID    
+           , LOG_DATE      
+           , PGM_GB           
+           , PGM_NAME      
+           , IP_ADDRESS        
+           , WORK_GB         
+           , WORK_MAN      
+           , WORK_TARGET    
+        )
+        VALUES (
+             pi_sq_log_history.nextval 
+           , sysdate   
+           , #{PGM_GB}        
+           , #{PGM_NAME}   
+           , #{IP_ADDRESS}     
+           , #{WORK_GB}      
+           , #{WORK_MAN}        
+           , #{WORK_TARGET}
+        )
+    </insert>	
+</mapper>

@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+ <!--
+    파일명       : DRBM02000DaoMapper.xml
+    설명          : 배치관리 관련 쿼리 정의
+    작성자       : JYYOUN
+    최초작성일 : 2018.04.26 
+<< 개정이력(Modification Information) >>   
+     수정일           	수정자		수정내용
+  2018.04.26	JYYOUN		최초  생성
+-->
+  
+<mapper namespace="com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao">
+<!-- 배치관리 -->
+
+    <!-- 배치프로그램 리스트 조회 -->
+    <select id="selectBatchCtrlsList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.selectBatchCtrlsList"  */
+               DBC.CMD_JOB_GUBUNCD  AS CMD_JOB_GUBUNCD  /* 업무구분코드     */
+             , CL1.MEANING          AS CMD_JOB_GUBUNNM  /* 업무구분         */
+             , DBC.BATCH_CD         AS BATCH_CD         /* 배치코드         */
+             , DBC.BAT_PGM_GUBUN    AS BAT_PGM_GUBUN    /* 프로그램구분코드 */
+             , CL2.MEANING          AS BAT_PGM_GUBUN_NM /* 프로그램구분     */
+             , DBC.BATCH_PROGRAM    AS BATCH_PROGRAM    /* 배치프로그램     */
+             , DBC.DESCRIPTION      AS DESCRIPTION      /* 설명             */
+             , DBC.CREATED_BY       AS CREATED_BY       /* 최초생성자       */
+             , DBC.CREATION_DATE    AS CREATION_DATE    /* 최초생성일       */
+             , DBC.LAST_UPDATED_BY  AS LAST_UPDATED_BY  /* 최종수정자       */
+             , DBC.LAST_UPDATE_DATE AS LAST_UPDATE_DATE /* 최종수정일       */
+             , CMU.USER_NM          AS USER_NM          /* 초초생성자명     */
+             , DBC.ROWID            AS ROW_ID           /* ROWID            */ 
+          FROM CMD_BATCH_CTRLS  DBC /* 배치관리         */
+             , CMD_LOOKUP_VALUES CL1 /* 공통룩업유형상세 */
+             , CMD_LOOKUP_VALUES CL2 /* 공통룩업유형상세 */
+             , CMD_USERS         CMU /* 사용자           */
+         WHERE 1 = 1
+           AND DBC.CMD_JOB_GUBUNCD = CL1.LOOKUP_CODE
+           AND CL1.LOOKUP_TYPE     = 'SystemWorkType'   /* 프로그램구분   */
+           AND DBC.BAT_PGM_GUBUN   = CL2.LOOKUP_CODE
+           AND CL2.LOOKUP_TYPE     = 'CMD_BAT_PGM_GUBUN' /* 프로그램구분  */
+           AND DBC.CREATED_BY      = CMU.USER_ID(+)    /* 사용자 계정명 */
+           
+           <if test="CMD_JOB_GUBUNCD != null and CMD_JOB_GUBUNCD != ''">
+               AND DBC.CMD_JOB_GUBUNCD = #{CMD_JOB_GUBUNCD}       /* 업무구분      */
+           </if>
+           
+           <if test="BATCH_CD != null and BATCH_CD != ''">
+               AND DBC.BATCH_CD LIKE '%' || #{BATCH_CD} || '%' /* 배치코드      */
+           </if>
+           
+           <if test="DESCRIPTION != null and DESCRIPTION != ''">
+               AND DBC.DESCRIPTION LIKE '%' || #{DESCRIPTION} || '%' /* 배치프로그램명  */
+           </if>
+           
+         ORDER BY DBC.BATCH_CD  
+    </select>
+
+    <!-- 배치 파라미터 리스트 조회 -->
+    <select id="selectBatchParamsList" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.selectBatchParamsList"  */
+               DBP.BATCH_CD                                 AS BATCH_CD             /* 배치코드             */
+             , DBP.PARAM_SEQ                                AS PARAM_SEQ            /* 파라미터일련번호     */
+             , DBP.PARAM_PROMPT                             AS PARAM_PROMPT         /* 파라미터프럼프트     */
+             , DBP.PARAM_PROMPT_EN                          AS PARAM_PROMPT_EN      /* 파라미터프럼프트(영문)     */
+             , DBP.REQUIRED_YN                              AS REQUIRED_YN          /* 필수여부코드         */
+             , DECODE(DBP.REQUIRED_YN, 'Y', '필수', '옵션')   AS REQUIRED_YN_NM       /* 필수여부             */
+             , DBP.HIDE_YN                                  AS HIDE_YN              /* 숨김여부코드         */
+             , DECODE(DBP.HIDE_YN, 'Y', '숨김', '표시')       AS HIDE_YN_NM           /* 숨김여부             */
+             , DBP.PARAM_COLUMN_TYPE                        AS PARAM_COLUMN_TYPE    /* 파라미터칼럼유형코드 */
+             , CLV.MEANING                                  AS PARAM_COLUMN_TYPE_NM /* 파라미터칼럼유형     */
+             , DBP.LIST_QUERY                               AS LIST_QUERY           /* 리스트쿼리           */
+             , DBP.DEFAULT_VALUE                            AS DEFAULT_VALUE        /* 디폴트값             */
+             , DBP.CREATED_BY                               AS CREATED_BY           /* 최초생성자           */
+             , DBP.CREATION_DATE                            AS CREATION_DATE        /* 최초생성일           */
+             , DBP.LAST_UPDATED_BY                          AS LAST_UPDATED_BY      /* 최종수정자           */
+             , DBP.LAST_UPDATE_DATE                         AS LAST_UPDATE_DATE     /* 최종수정일           */
+             , DBP.ROWID                                    AS ROW_ID               /* ROWID        */
+          FROM CMD_BATCH_PARAMS DBP /* 배치파라미터     */
+             , CMD_LOOKUP_VALUES CLV /* 공통룩업유형상세 */
+         WHERE 1 = 1
+           AND DBP.BATCH_CD          = #{BATCH_CD}              /* 배치코드          */
+           AND DBP.PARAM_COLUMN_TYPE = CLV.LOOKUP_CODE          /* 파라미터유형      */
+           AND CLV.LOOKUP_TYPE       = 'BatParamColumnType' /* 파라미터유형 타입 */
+         ORDER BY
+               DBP.PARAM_SEQ /* 파라미터일련번호 */
+    </select>
+
+    <!-- 배치관리 추가 -->
+    <insert id="insertBatchCtrls" parameterType="hashmap">
+        INSERT /* "com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.insertBatchCtrls"  */
+          INTO CMD_BATCH_CTRLS ( /* 배치관리 */
+             CMD_JOB_GUBUNCD    /* 업무구분     */
+           , BAT_PGM_GUBUN      /* 프로그램구분 */
+           , BATCH_CD           /* 배치코드     */
+           , BATCH_PROGRAM      /* 배치프로그램 */
+           , DESCRIPTION        /* 설명         */
+           , CREATED_BY         /* 최초생성자   */
+           , CREATION_DATE      /* 최초생성일   */
+           , LAST_UPDATED_BY    /* 최종수정자   */
+           , LAST_UPDATE_DATE   /* 최종수정일   */
+        )
+        VALUES (
+             #{CMD_JOB_GUBUNCD} /* 업무구분     */
+           , #{BAT_PGM_GUBUN}   /* 프로그램구분 */
+           , #{BATCH_CD}        /* 배치코드     */
+           , #{BATCH_PROGRAM}   /* 배치프로그램 */
+           , #{DESCRIPTION}     /* 설명         */
+           , #{CREATED_BY}      /* 최초생성자   */
+           , SYSDATE            /* 최초생성일   */
+           , #{LAST_UPDATED_BY} /* 최종수정자   */
+           , SYSDATE            /* 최종수정일   */
+        )
+    </insert>
+
+    <!-- 배치관리 수정 -->
+    <update id="updateBatchCtrls" parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.updateBatchCtrls"  */
+                CMD_BATCH_CTRLS SET /* 배치관리 */
+                CMD_JOB_GUBUNCD  = #{CMD_JOB_GUBUNCD} /* 업무구분     */
+              , BAT_PGM_GUBUN    = #{BAT_PGM_GUBUN}   /* 프로그램구분 */
+              , BATCH_PROGRAM    = #{BATCH_PROGRAM}   /* 배치프로그램 */
+              , DESCRIPTION      = #{DESCRIPTION}     /* 설명         */
+              , LAST_UPDATED_BY  = #{LAST_UPDATED_BY} /* 최종수정자   */
+              , LAST_UPDATE_DATE = SYSDATE            /* 최종수정일   */
+         WHERE 1 = 1
+           AND ROWID             = #{ROW_ID}
+    </update>  
+    
+    <!-- 배치관리 수정 -->
+    <delete id="deleteBatchCtrls" parameterType="hashmap">
+        /* "com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.deleteBatchCtrls"  */
+        delete CMD_BATCH_CTRLS /* 배치관리 */               
+         WHERE 1 = 1
+           AND ROWID             = #{ROW_ID}
+    </delete>
+
+    <!-- 배치파라미터 추가 -->
+    <insert id="insertBatchParams" parameterType="hashmap">
+        INSERT /* "com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.insertBatchParams"  */
+          INTO CMD_BATCH_PARAMS ( /* 배치파리미터 */
+             BATCH_CD            /* 배치코드         */
+           , PARAM_SEQ           /* 파라미터일련번호 */
+           , PARAM_COLUMN_TYPE   /* 파라미터칼럼유형 */
+           , PARAM_PROMPT        /* 파라미터프람프트(한글) */
+           , PARAM_PROMPT_EN     /* 파라미터프람프트(영문) */
+           , REQUIRED_YN         /* 필수여부         */
+           , DEFAULT_VALUE       /* 디폴트값         */
+           , LIST_QUERY          /* 리스트쿼리       */
+           , HIDE_YN             /* 숨김여부         */
+           , CREATED_BY          /* 최초생성자       */
+           , CREATION_DATE       /* 최초생성일       */
+           , LAST_UPDATED_BY     /* 최종수정자       */
+           , LAST_UPDATE_DATE    /* 최종수정일       */
+        )
+        VALUES (
+             #{BATCH_CD}            /* 배치코드         */
+           , #{PARAM_SEQ}           /* 파라미터일련번호 */
+           , #{PARAM_COLUMN_TYPE}   /* 파라미터칼럼유형 */
+           , #{PARAM_PROMPT}        /* 파라미터프람프트(한글) */
+           , UPPER(#{PARAM_PROMPT_EN})     /* 파라미터프람프트(영문) */
+           , #{REQUIRED_YN}         /* 필수여부         */
+           , #{DEFAULT_VALUE}       /* 디폴트값         */
+           , #{LIST_QUERY}          /* 리스트쿼리       */
+           , #{HIDE_YN}             /* 숨김여부         */
+           , #{CREATED_BY}          /* 최초생성자       */
+           , SYSDATE                /* 최초생성일       */
+           , #{LAST_UPDATED_BY}     /* 최종수정자       */
+           , SYSDATE                /* 최종수정일       */
+        )
+    </insert>
+
+    <!-- 배치파라미터 수정 -->
+    <update id="updateBatchParams" parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.updateBatchParams"  */
+                 CMD_BATCH_PARAMS SET /* 배치파리미터 */
+                 PARAM_COLUMN_TYPE  = #{PARAM_COLUMN_TYPE}   /* 파라미터칼럼유형 */
+               , PARAM_PROMPT       = #{PARAM_PROMPT}        /* 파라미터프람프트(한글) */
+               , PARAM_PROMPT_EN    = UPPER(#{PARAM_PROMPT_EN})     /* 파라미터프람프트(영문) */
+               , REQUIRED_YN        = #{REQUIRED_YN}         /* 필수여부         */
+               , DEFAULT_VALUE      = #{DEFAULT_VALUE}       /* 디폴트값         */
+               , LIST_QUERY         = #{LIST_QUERY}          /* 리스트쿼리       */
+               , HIDE_YN            = #{HIDE_YN}             /* 숨김여부         */
+               , LAST_UPDATED_BY    = #{LAST_UPDATED_BY}     /* 최종수정자       */
+               , LAST_UPDATE_DATE   = SYSDATE                /* 최종수정일       */
+           WHERE 1=1
+             AND ROWID              = #{ROW_ID}
+    </update>  
+
+    <!-- 배치파라미터 삭제 -->
+    <delete id="deleteBatchParams" parameterType="hashmap">
+        DELETE /* "com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.deleteBatchParams"  */
+          FROM CMD_BATCH_PARAMS /* 배치파리미터 */
+         WHERE 1=1
+           AND ROWID               = #{ROW_ID}
+    </delete>
+    
+    <!-- 배치 프로그램 실행 여부 -->
+    <select id="selectBatchProgramRunYn" resultType="hashmap">
+        /* "com.nbdf.cmd.cm.cmbm.dao.CMBM02000Dao.selectBatchProgramRunYn"  */
+        SELECT DECODE(COUNT(*), 0, 'N', 'Y') AS BATCH_RUN_YN
+		  FROM CMD_BATCH_JOBS_V A
+		 WHERE A.BATCH_CD = #{BATCH_CD}
+    </select>
+    
+</mapper>
+

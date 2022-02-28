@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.ben.dao.BEN60210Dao">
+
+	<!-- 자녀학자금 현황 조회 -->
+	<select id="selectSchoolExpenseList" parameterType="map" resultType="hashmap">
+		/* smh.ben.dao.BEN60210Dao.selectSchoolExpenseList */
+		SELECT 0            AS CHECK_YN      	  /*CheckBox*/
+			 , DEF.HJSBEN_SCHOOL_EXPENSES_SEQ     /* PK 일련번호 */   
+		     , DEF.APPROVAL_STATUS                /* 상태코드    */
+		     , DEF.APPROVAL_STATUS_NAME           /* 상태        */
+		     , DEF.REQUEST_DATE                   /* 신청일자    */
+		     , DEF.ATTEND_SCHOOL_YEAR             /* 년도        */
+		     , DEF.QUARTER_NAME                   /* 분기        */
+		     , DEF.SCHOOL_CARRIER                 /* 학력        */
+		     , DEF.SCHOOL_NAME                    /* 학교        */
+		     , DEF.BENEFICAIARY_NAME              /* 수혜자      */
+		     , DEF.RELATIONSHIP_NAME              /* 관계        */
+		     , DEF.REQUEST_PRICE_SUM              /* 신청금액    */
+		     , DEF.APPROVAL_PRICE                 /* 승인금액    */
+		  FROM
+		      ( SELECT XEF.APPROVAL_STATUS_NAME                 AS  APPROVAL_STATUS_NAME
+		             , TO_CHAR(XEF.REQUEST_DATE, 'YYYY-MM-DD')  AS  REQUEST_DATE
+		             , XEF.ATTEND_SCHOOL_YEAR                   AS  ATTEND_SCHOOL_YEAR
+		             , XEF.QUARTER_NAME                         AS  QUARTER_NAME
+		             , XEF.SCHOOL_CARRIER                       AS  SCHOOL_CARRIER
+		             , XEF.SCHOOL_NAME                          AS  SCHOOL_NAME
+		             , XEF.BENEFICAIARY_NAME                    AS  BENEFICAIARY_NAME
+		             , XEF.RELATIONSHIP_NAME                    AS  RELATIONSHIP_NAME
+		             , XEF.REQUEST_PRICE_SUM                    AS  REQUEST_PRICE_SUM
+		             , XEF.APPROVAL_PRICE                       AS  APPROVAL_PRICE
+		             , XEF.APPROVAL_STATUS                      AS  APPROVAL_STATUS
+		             , XEF.OBJECT_VERSION_NUMBER                AS  OBJECT_VERSION_NUMBER
+		             , XEF.HJSBEN_SCHOOL_EXPENSES_SEQ           AS  HJSBEN_SCHOOL_EXPENSES_SEQ
+		             , XEF.PERSON_ID
+		          FROM HJSBEN_SCHOOL_EXPENSES_V1 XEF
+		         WHERE 1=1
+		           AND XEF.PERSON_ID       = #{PERSON_ID}                  -- 로그인 PERSON ID
+		           AND XEF.BASIS_YEAR      = #{BASIS_YEAR}                 -- 년도
+		           AND XEF.APPROVAL_STATUS = NVL(#{APPROVAL_STATUS}, XEF.APPROVAL_STATUS)  -- 상태ID
+		       ) DEF
+		 WHERE 1=1  
+		  ORDER BY DEF.REQUEST_DATE DESC
+	</select>
+	
+	<!-- 자녀 정보 List 조회 -->	
+	<select id="selectChildrenList" parameterType="map" resultType="hashmap">
+		/*smh.ben.dao.BEN60210dao.selectChildrenList*/
+		SELECT PPF.PERSON_ID                    AS  PERSON_ID
+	         , PPF.LAST_NAME || PPF.FIRST_NAME  AS  BENEFICAIARY_NAME
+	         , FLV.LOOKUP_CODE                  AS  RELATIONSHIP
+	         , FLV.MEANING                      AS  RELATIONSHIP_NAME
+	      FROM FND_LOOKUP_VALUES          FLV
+	         , PER_CONTACT_RELATIONSHIPS  PCR
+	         , PER_ALL_PEOPLE_F           PPF
+	     WHERE PPF.PERSON_ID     = PCR.CONTACT_PERSON_ID
+	       AND PCR.CONTACT_TYPE  = FLV.LOOKUP_CODE
+	       AND FLV.LOOKUP_TYPE   = 'CONTACT'
+	       AND FLV.ENABLED_FLAG  = 'Y'
+	       AND FLV.LANGUAGE      = 'US'
+	       AND PCR.PERSON_ID     = #{PERSON_ID}         /* 로그인 _PEROSN_ID */
+	       AND TRUNC(SYSDATE)    BETWEEN PPF.EFFECTIVE_START_DATE
+	                                 AND PPF.EFFECTIVE_END_DATE
+	       AND TRUNC(SYSDATE)    BETWEEN PCR.DATE_START
+	                                 AND NVL(PCR.DATE_END, TO_DATE('4712/12/31', 'YYYY/MM/DD'))
+	       AND FLV.LOOKUP_CODE   = 'E'			
+	</select>
+	
+	<!-- 자녀학자금 현황 상세조회 -->	
+	<select id="selectSchoolExpenseDetail" parameterType="map" resultType="hashmap">
+		/*smh.ben.dao.BEN60210dao.selectSchoolExpenseDetail*/
+		SELECT DEF.REQUEST_DATE                /* 신청일자           */
+			, DEF.PERSON_ID                   /* 로그인 PERSON ID   */
+			, DEF.BASIS_YEAR				  /* 기준년도			*/
+            , DEF.ATTEND_SCHOOL_YEAR          /* 해당년도           */
+            , DEF.BENEFICAIARY                /* 수혜자             */
+            , DEF.BENEFICAIARY_NAME
+            , DEF.RELATIONSHIP                /* 관계               */
+            , DEF.RELATIONSHIP_NAME
+            , DEF.QUARTER                     /* 분기               */
+            , DEF.QUARTER_NAME
+            , DEF.SCHOOL_CARRIER              /* 학력               */
+            , DEF.SCHOOL_NAME                 /* 학교               */
+            , DEF.MAJOR                       /* 전공               */
+            , DEF.OBTAIN_POINT                /* 취득학점           */
+            , DEF.BASIS_PERFECTION            /* 만점기준           */
+            , DEF.GRADE                       /* 학년               */
+            , DEF.ENTERANCE_FEE               /* 입학금             */
+            , DEF.SCHOOL_FEE                  /* 수업료             */
+            , DEF.SCHOOL_SUPPORT_FEE          /* 육성회비           */
+            , DEF.STUDENT_FEE                 /* 학생회비           */
+            , DEF.SCHOOL_OPERATING_FEE        /* 학교운영비         */
+            , DEF.ETC                         /* 기타               */
+            , DEF.REQUEST_PRICE_SUM           /* 신청금합계         */
+            , DEF.APPROVAL_STATUS             /* 승인상태           */
+            , DEF.APPROVAL_STATUS_NAME
+            , DEF.APPROVAL_DATE               /* 승인일자(지급일자) */
+            , DEF.APPROVAL_PRICE              /* 승인금액           */
+            , DEF.RETURN_REASON               /* 불가사유           */
+            , DEF.OBJECT_VERSION_NUMBER       /* OVN                */
+            , DEF.HJSBEN_SCHOOL_EXPENSES_SEQ  /* PK 일련번호        */
+         FROM
+            ( SELECT XEF.HJSBEN_SCHOOL_EXPENSES_SEQ                 AS  HJSBEN_SCHOOL_EXPENSES_SEQ
+                   , XEF.PERSON_ID                                  AS  PERSON_ID
+                   , XEF.BASIS_YEAR                                 AS	BASIS_YEAR
+                   , XEF.ATTEND_SCHOOL_YEAR                         AS  ATTEND_SCHOOL_YEAR
+                   , TO_CHAR(XEF.REQUEST_DATE      , 'YYYY-MM-DD')  AS  REQUEST_DATE
+                   , XEF.BENEFICAIARY                               AS  BENEFICAIARY
+                   , XEF.RELATIONSHIP                               AS  RELATIONSHIP
+                   , XEF.QUARTER                                    AS  QUARTER
+                   , XEF.SCHOOL_CARRIER                             AS  SCHOOL_CARRIER
+                   , XEF.SCHOOL_NAME                                AS  SCHOOL_NAME
+                   , XEF.MAJOR                                      AS  MAJOR
+                   , XEF.OBTAIN_POINT                               AS  OBTAIN_POINT
+                   , XEF.BASIS_PERFECTION                           AS  BASIS_PERFECTION
+                   , XEF.GRADE                                      AS  GRADE
+                   , XEF.ENTERANCE_FEE                              AS  ENTERANCE_FEE
+                   , XEF.SCHOOL_FEE                                 AS  SCHOOL_FEE
+                   , XEF.SCHOOL_SUPPORT_FEE                         AS  SCHOOL_SUPPORT_FEE
+                   , XEF.STUDENT_FEE                                AS  STUDENT_FEE
+                   , XEF.SCHOOL_OPERATING_FEE                       AS  SCHOOL_OPERATING_FEE
+                   , XEF.ETC                                        AS  ETC
+                   , XEF.REQUEST_PRICE_SUM                          AS  REQUEST_PRICE_SUM
+                   , XEF.APPROVAL_STATUS                            AS  APPROVAL_STATUS
+                   , TO_CHAR(XEF.APPROVAL_DATE     , 'YYYY-MM-DD')  AS  APPROVAL_DATE
+                   , XEF.APPROVAL_PRICE                             AS  APPROVAL_PRICE
+                   , XEF.TRANSFER_STATUS                            AS  TRANSFER_STATUS
+                   , TO_CHAR(XEF.TRANSFER_DATE      , 'YYYY-MM-DD') AS  TRANSFER_DATE
+                   , XEF.RETURN_REASON                              AS  RETURN_REASON
+                   , XEF.OBJECT_VERSION_NUMBER                      AS  OBJECT_VERSION_NUMBER
+                   , XEF.BENEFICAIARY_NAME                          AS  BENEFICAIARY_NAME
+                   , XEF.RELATIONSHIP_NAME                          AS  RELATIONSHIP_NAME
+                   , XEF.QUARTER_NAME                               AS  QUARTER_NAME
+                   , XEF.APPROVAL_STATUS_NAME                       AS  APPROVAL_STATUS_NAME
+                FROM HJSBEN_SCHOOL_EXPENSES_V1     XEF
+               WHERE 1=1
+                 AND XEF.HJSBEN_SCHOOL_EXPENSES_SEQ = #{HJSBEN_SCHOOL_EXPENSES_SEQ}  -- 자녀학자금 PK
+            ) DEF
+     WHERE 1=1
+	</select>		
+	
+	<!-- 자녀학자금 신청 정보 등록 -->
+    <insert id="insertSchoolExpense" parameterType="map" >
+        /*smh.ben.dao.BEN60210Dao.insertSchoolExpense*/
+		INSERT INTO HJSBEN_SCHOOL_EXPENSES( 
+           HJSBEN_SCHOOL_EXPENSES_SEQ  
+          ,PERSON_ID
+          ,REQUEST_DATE
+          ,BASIS_YEAR
+          ,ATTEND_SCHOOL_YEAR
+          ,BENEFICAIARY
+          ,RELATIONSHIP
+          ,QUARTER
+          ,SCHOOL_CARRIER
+          ,SCHOOL_NAME
+          ,MAJOR
+          ,OBTAIN_POINT
+          ,BASIS_PERFECTION
+          ,GRADE
+          ,ENTERANCE_FEE
+          ,SCHOOL_FEE
+          ,SCHOOL_SUPPORT_FEE
+          ,STUDENT_FEE
+          ,SCHOOL_OPERATING_FEE
+          ,ETC
+          ,REQUEST_PRICE_SUM
+          ,APPROVAL_STATUS
+          ,TRANSFER_STATUS
+          ,CREATED_BY
+          ,CREATION_DATE  
+          ,LAST_UPDATED_BY  
+          ,LAST_UPDATE_DATE  
+          ,LAST_UPDATE_LOGIN
+          ,OBJECT_VERSION_NUMBER 
+      	)VALUES( 
+           HJSBEN_SCHOOL_EXPENSES_SEQ.NEXTVAL  
+          ,#{PERSON_ID}  
+          ,#{REQUEST_DATE}  
+          ,#{BASIS_YEAR}
+          ,#{ATTEND_SCHOOL_YEAR}  
+          ,#{BENEFICAIARY}  
+          ,#{RELATIONSHIP}
+          ,#{QUARTER}  
+          ,#{SCHOOL_CARRIER}  
+          ,#{SCHOOL_NAME}  
+          ,#{MAJOR}  
+          ,#{OBTAIN_POINT}
+          ,#{BASIS_PERFECTION}  
+          ,#{GRADE}  
+          ,NVL(#{ENTERANCE_FEE}, 0)
+          ,NVL(#{SCHOOL_FEE}, 0)
+          ,NVL(#{SCHOOL_SUPPORT_FEE}, 0)
+          ,NVL(#{STUDENT_FEE}, 0)
+          ,NVL(#{SCHOOL_OPERATING_FEE}, 0)
+          ,NVL(#{ETC}, 0)
+          ,NVL(#{REQUEST_PRICE_SUM}, 0)
+          ,#{APPROVAL_STATUS}  
+          ,'N'  
+          ,#{PERSONID}
+          ,SYSDATE
+          ,#{PERSONID} 
+          ,SYSDATE             
+          ,#{PERSONID}            
+          ,#{OBJECT_VERSION_NUMBER}
+          )    	
+    </insert>
+    
+    <!--자녀학자금 신청내역 변경여부 확인 -->
+    <select id="selectDuplicateChk" parameterType="map" resultType="string">
+       /* smh.ben.dao.BEN60210Dao.selectDuplicateChk */
+       SELECT 'Y'
+         FROM HJSBEN_SCHOOL_EXPENSES XEF
+        WHERE XEF.HJSBEN_SCHOOL_EXPENSES_SEQ   = #{HJSBEN_SCHOOL_EXPENSES_SEQ}    /*PK 일련번호*/
+          AND XEF.OBJECT_VERSION_NUMBER        = #{OBJECT_VERSION_NUMBER}    
+    </select>
+    
+    <update id="updateSchoolExpense" parameterType="map">    
+        /*smh.ben.dao.BEN60210Dao.updateSchoolExpense*/
+        UPDATE HJSBEN_SCHOOL_EXPENSES
+           SET BASIS_YEAR                    = #{BASIS_YEAR}                    /*기준년도             */
+             , ATTEND_SCHOOL_YEAR            = #{ATTEND_SCHOOL_YEAR}            /*재학일자             */
+             , BENEFICAIARY                  = #{BENEFICAIARY}                  /*수혜자               */
+             , RELATIONSHIP                  = #{RELATIONSHIP}                  /*관계                 */
+             , QUARTER                       = #{QUARTER}                       /*분기                 */
+             , SCHOOL_CARRIER                = #{SCHOOL_CARRIER}                /*학력                 */
+             , SCHOOL_NAME                   = #{SCHOOL_NAME}                   /*학교                 */
+             , MAJOR                         = #{MAJOR}                         /*전공                 */
+             , OBTAIN_POINT                  = #{OBTAIN_POINT}                  /*취득학점             */
+             , BASIS_PERFECTION              = #{BASIS_PERFECTION}              /*만점기준             */
+             , GRADE                         = #{GRADE}                         /*학년                 */
+             , ENTERANCE_FEE                 = NVL(#{ENTERANCE_FEE}, 0)         /*입학금               */
+             , SCHOOL_FEE                    = NVL(#{SCHOOL_FEE}, 0)            /*수업료               */
+             , SCHOOL_SUPPORT_FEE            = NVL(#{SCHOOL_SUPPORT_FEE}, 0)    /*육성회비             */
+             , STUDENT_FEE                   = NVL(#{STUDENT_FEE}, 0)           /*학생회비             */
+             , SCHOOL_OPERATING_FEE          = NVL(#{SCHOOL_OPERATING_FEE}, 0)  /*학교운영비           */
+             , ETC                           = NVL(#{ETC}, 0)                   /*기타                 */
+             , REQUEST_PRICE_SUM             = #{REQUEST_PRICE_SUM} , 0)        /*신청금합계           */
+             , LAST_UPDATED_BY               = #{PERSONID}                      /*최종 수정자          */
+             , LAST_UPDATE_DATE              = SYSDATE                          /*최종 수정일          */
+             , LAST_UPDATE_LOGIN             = #{PERSONID}                      /*로그인 유저          */
+             , OBJECT_VERSION_NUMBER         = OBJECT_VERSION_NUMBER+1          /**/
+         WHERE HJSBEN_SCHOOL_EXPENSES_SEQ    = #{HJSBEN_SCHOOL_EXPENSES_SEQ}    /*PK 일련번호          */
+    </update>
+        
+    <!--자녀학자금 신청 정보 수정 -->    
+    <update id="updateSchoolExpense_woo" parameterType="map">    
+        /*smh.ben.dao.BEN60210Dao.updateSchoolExpense*/
+       	UPDATE HJSBEN_SCHOOL_EXPENSES 
+	       SET 
+	           PERSON_ID = #{PERSON_ID}
+	          ,REQUEST_DATE = #{REQUEST_DATE}
+	          ,BASIS_YEAR = #{BASIS_YEAR}
+	          ,ATTEND_SCHOOL_YEAR = #{ATTEND_SCHOOL_YEAR}
+	          ,BENEFICAIARY = #{BENEFICAIARY}
+	          ,RELATIONSHIP = #{RELATIONSHIP}
+	          ,QUARTER = #{QUARTER}
+	          ,SCHOOL_CARRIER = #{SCHOOL_CARRIER}
+	          ,SCHOOL_NAME = #{SCHOOL_NAME}
+	          ,MAJOR = #{MAJOR}
+	          ,OBTAIN_POINT = #{OBTAIN_POINT}
+	          ,BASIS_PERFECTION = #{BASIS_PERFECTION}
+	          ,GRADE = #{GRADE}
+	          ,ENTERANCE_FEE = #{ENTERANCE_FEE}
+	          ,SCHOOL_FEE = #{SCHOOL_FEE}
+	          ,SCHOOL_SUPPORT_FEE = #{SCHOOL_SUPPORT_FEE}
+	          ,STUDENT_FEE = #{STUDENT_FEE}
+	          ,SCHOOL_OPERATING_FEE = #{SCHOOL_OPERATING_FEE}
+	          ,ETC = #{ETC}
+	          ,REQUEST_PRICE_SUM = #{REQUEST_PRICE_SUM}
+	          ,APPROVAL_STATUS = '10'
+	          ,TRANSFER_STATUS = 'N'
+	          ,OBJECT_VERSION_NUMBER = #{OBJECT_VERSION_NUMBER}+1           
+	          ,LAST_UPDATED_BY = #{PERSONID}     
+	          ,LAST_UPDATE_DATE = SYSDATE 
+	          ,LAST_UPDATE_LOGIN = #{PERSONID}   
+	    WHERE HJSBEN_SCHOOL_EXPENSES_SEQ = #{HJSBEN_SCHOOL_EXPENSES_SEQ}
+    </update>
+    
+    <!--자녀학자금 신청 정보 삭제-->
+    <delete id="deleteSchoolExpense" parameterType="map">
+        /*smh.ben.dao.BEN60210Dao.updateSchoolExpense*/
+		DELETE FROM HJSBEN_SCHOOL_EXPENSES 
+      	 WHERE HJSBEN_SCHOOL_EXPENSES_SEQ = #{HJSBEN_SCHOOL_EXPENSES_SEQ}
+	</delete>
+</mapper>

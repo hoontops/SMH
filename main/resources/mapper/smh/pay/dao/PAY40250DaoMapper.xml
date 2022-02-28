@@ -1,0 +1,198 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+  
+<mapper namespace="smh.pay.dao.PAY40250Dao">
+
+    <!-- 팀원출근현황 조회-->
+    <select id="selectHjspayCalendarList" parameterType="map" resultType="hashmap">
+        /* smh.pay.dao.PAY40250Dao.selectHjspayCalendarList */
+	        SELECT DEF.WORK_DATE              /* 출근일자       */
+	             , DEF.WEEK_DAY               /* 요일           */
+	             , DEF.ORG_NAME               /* 부서명         */
+	             , DEF.ORGANIZATION_ID        /* ORG ID        */
+	             , DEF.GRADE_NAME             /* 직급           */
+	             , DEF.EMPLOYEE_NUMBER        /* 사번           */
+	             , DEF.EMP_NAME               /* 성명           */
+	             , DEF.ATTENDANCE_TIME        /* 출근시각       */
+	             , DEF.LATE_YN                /* 지각여부 (x)   */
+	             , CASE WHEN DEF.LATE_YN = 'Y' THEN '510'
+	                    WHEN DEF.CALENDAR_TYPE = '520' THEN '520'
+	                    WHEN DEF.CALENDAR_TYPE = '530' THEN '530'
+	                    ELSE ''
+	               END AS LATE_CODE           /* 지각/결근/조퇴코드(가상)  */
+	             , DEF.LATE_NAME              /* 지각여부명     */                          
+	             , DEF.CALENDAR_TYPE          /* 근태유형 (x)   */
+	             , DEF.CALENDAR_TYPE_NAME     /* 근태유형명     */
+	             , DEF.SHOW_COMMENTS          /* 비고(일부분)   */
+	             , DEF.OBJECT_VERSION_NUMBER  /* OBJECT NUBMER  */
+	             , DEF.ATTENDANCE_DELAY       /* 출근지연       */
+	             , DEF.MGR_PERSON_ID          /* 승인권자       */
+	             , DEF.PERSON_ID              /* PERSON_ID      */
+	             , DEF.HJSPAY_CALENDAR_SEQ    /* PK 일련번호(가상)    */
+	             , DEF.HJSPAY_CALENDAR_SEQ_PK /* PK 일련번호(저장)    */
+	             , DEF.COMMENTS               /* 비고(전체)     */
+	             , NVL(DEF.ATTRIBUTE1, 'E')   AS ATTRIBUTE1            /* E:SSHR, S:CONCURRENT */
+	             , DEF.COMMENTS_SCR           /* 비고(화면)           */
+	             , NVL2(DEF.CALENDAR_TYPE_NAME, 'N', 'Y') AS LATE_CODE_ACTION_YN /* Y: 콤보사용, N:콤보사용불가 */
+	          FROM
+	             ( SELECT NVL(ATT.HJSPAY_CALENDAR_SEQ, 90000000000 + ROWNUM)  AS  HJSPAY_CALENDAR_SEQ    /* PK 일련번호(가상)    */
+	                    , NVL(ATT.HJSPAY_CALENDAR_SEQ, -1)                    AS  HJSPAY_CALENDAR_SEQ_PK /* PK 일련번호(저장)    */
+	                    , ATT.OBJECT_VERSION_NUMBER                           AS  OBJECT_VERSION_NUMBER  /* OBJECT NUBMER        */
+	                    , TO_CHAR(ATT.ATTENDANCE_TIME, 'HH24:MI')             AS  ATTENDANCE_TIME        /* 출근시각             */
+	                    , ATT.ATTENDANCE_DELAY                                AS  ATTENDANCE_DELAY       /* 출근지연             */
+	                    , CASE WHEN SUBSTR(ATT.CALENDAR_TYPE, 1, 1) NOT IN ('1', '7') THEN
+	                                HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ATTENDANCE_TYPE', ATT.CALENDAR_TYPE)
+	                      END                                                 AS  LATE_NAME
+	                    , ATT.LATE_YN                                         AS  LATE_YN                /* 지각여부             */
+	                    , ATT.CALENDAR_TYPE                                   AS  CALENDAR_TYPE          /* 근태유형             */
+	                    , ATT.ATTRIBUTE2                                      AS  COMMENTS               /* 비고                 */
+	                    , ATT.COMMENTS                                        AS  COMMENTS_SCR           /* 비고(화면)           */
+	                    , DECODE(SIGN(LENGTH(ATT.ATTRIBUTE2) - 7), 1, SUBSTR(ATT.ATTRIBUTE2, 1, 7) || ' ..', ATT.ATTRIBUTE2) 
+	                                                                          AS  SHOW_COMMENTS
+	                    , ATT.ATTRIBUTE1                                      AS  ATTRIBUTE1             /* E:SSHR, S:CONCURRENT */
+	                    , CASE WHEN SUBSTR(ATT.CALENDAR_TYPE, 1, 1) IN ('1', '7') THEN
+	                                HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ATTENDANCE_TYPE', ATT.CALENDAR_TYPE)
+	                      END                                                 AS  CALENDAR_TYPE_NAME
+	                    , TO_CHAR(PPF.WORK_DATE, 'YYYY-MM-DD')                AS  WORK_DATE              /* 근태일자             */
+	                    , PPF.WEEK_DAY                                        AS  WEEK_DAY               /* 요일                 */
+	                    , PPF.PERSON_ID                                       AS  PERSON_ID              /* PERSON_ID            */
+	                    , PPF.EMPLOYEE_NUMBER                                 AS  EMPLOYEE_NUMBER        /* 사번                 */
+	                    , PPF.EMP_NAME                                        AS  EMP_NAME               /* 성명                 */
+	                    , PPF.GRADE_NAME                                      AS  GRADE_NAME             /* 직급                 */
+	                    , PPF.ORG_NAME                                        AS  ORG_NAME               /* 부서명               */
+	                    , PPF.ORGANIZATION_ID                                 AS  ORGANIZATION_ID        /* 부서ID               */
+	                    , PPF.GRADE_SEQ                                       AS  GRADE_SEQ              /* 직급순서             */
+	                    , (SELECT XGR.PERSON_ID
+	                         FROM HJSPFM_ORG_MANAGER_V1 XGR
+	                        WHERE PPF.ORGANIZATION_ID   = XGR.ORGANIZATION_ID
+	                          AND TRUNC(SYSDATE) BETWEEN XGR.EFFECTIVE_START_DATE AND XGR.EFFECTIVE_END_DATE)   AS MGR_PERSON_ID  /* 승인권자 ID   */
+	                 FROM
+	                    ( SELECT XPF.PERSON_ID                                AS  PERSON_ID
+	                           , XPF.EMPLOYEE_NUMBER                          AS  EMPLOYEE_NUMBER
+	                           , XPF.KOR_NAME                                 AS  EMP_NAME
+	                           , XPF.KOR_GRADE                                AS  GRADE_NAME
+	                           , XPF.ORG_NAME                                 AS  ORG_NAME
+	                           , XPF.ORGANIZATION_ID                          AS  ORGANIZATION_ID
+	                           , XPF.GRADE_SEQ                                AS  GRADE_SEQ
+	                           , CALENDAR.WORK_DATE                           AS  WORK_DATE
+	                           , CALENDAR.WEEK_DAY                            AS  WEEK_DAY
+	                           , (SELECT TAG   AS  MAN_ORDER
+	                                          FROM FND_LOOKUP_VALUES
+	                                         WHERE LOOKUP_TYPE = 'HJSHR_MANAGER_SORT'
+	                                          AND LOOKUP_CODE = XPF.POSITION ) AS  MAN_ORDER
+	                        FROM
+	                           ( SELECT ZCC.WORK_DATE
+	                                  , ZCC.WEEK_DAY
+	                               FROM
+	                                  ( SELECT XCC.START_DATE + LEVEL - 1                                             AS WORK_DATE
+	                                         , TO_CHAR(XCC.START_DATE + LEVEL - 1, 'DY', 'NLS_DATE_LANGUAGE=KOREAN')  AS WEEK_DAY
+	                                      FROM
+	                                         ( SELECT TO_DATE(#{FROM_DATE}, 'YYYY-MM-DD')                                            AS START_DATE  /* Param1: 시작일자  */
+	                                                , TO_DATE(#{TO_DATE}, 'YYYY-MM-DD') - TO_DATE(#{FROM_DATE}, 'YYYY-MM-DD') + 1    AS DAY_CNT     /* Param2: 종료일자  */
+	                                             FROM DUAL
+	                                         ) XCC
+	                                     WHERE XCC.DAY_CNT > 0
+	                                   CONNECT BY LEVEL <![CDATA[ <= ]]> XCC.DAY_CNT
+	                                  ) ZCC
+	                              WHERE ZCC.WEEK_DAY NOT IN ('토', '일')
+	                                AND NOT EXISTS   (
+	                                                   SELECT 'x'
+	                                                     FROM HXT_HOLIDAY_DAYS HHD
+	                                                    WHERE ZCC.WORK_DATE    = HHD.HOLIDAY_DATE
+	                                                 )
+	                           ) CALENDAR,
+	                           (  SELECT DISTINCT HOH.CHILD_ORGANIZATION_ID
+	                                FROM HJSPFM_ORG_HIERARCHY_V1    HOH
+	                             CONNECT BY HOH.PARENT_ORGANIZATION_ID  = PRIOR HOH.CHILD_ORGANIZATION_ID
+	                             START WITH HOH.CHILD_ORGANIZATION_ID   IN (
+	                                                                         SELECT HOM.ORGANIZATION_ID
+	                                                                           FROM HJSPFM_ORG_MANAGER_V1 HOM
+	                                                                          WHERE 1=1
+	                                                                            AND HOM.PERSON_ID  = #{PERSON_ID}    /* 로그인 PERSON ID 641 */
+	                                                                            AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE
+	                                                                                                   AND HOM.EFFECTIVE_END_DATE
+	                                                                       )
+	                           ) ORG
+	                           , HJS_SSHR_EMPLOYEE_LOV_V   XPF
+	                       WHERE 1=1
+	                         AND XPF.PERSON_TYPE           != 'Vessel'
+	                         AND TRUNC(SYSDATE)            BETWEEN XPF.EFFECTIVE_START_DATE AND XPF.EFFECTIVE_END_DATE
+	                         AND XPF.ORGANIZATION_ID       = ORG.CHILD_ORGANIZATION_ID
+	                         AND
+	                           (
+	                             (XPF.REGISTERED_DISABLED_FLAG = 'H' AND  XPF.EMPLOYMENT_CATEGORY IN ('CONTRACT', 'OUTSOURCING', 'STAFF')) OR
+	                             (XPF.REGISTERED_DISABLED_FLAG = 'R' AND  XPF.EMPLOYEE_CATEGORY = 'GMTP')
+	                           )
+	                    ) PPF
+	                    , HJSPAY_CALENDAR     ATT
+	                WHERE 1=1
+	                  AND PPF.PERSON_ID = ATT.PERSON_ID(+)
+	                  AND PPF.WORK_DATE = ATT.CALENDAR_DAY(+)
+	                ORDER BY PPF.WORK_DATE
+	                    , PPF.ORG_NAME
+	                    , PPF.MAN_ORDER
+	                    , PPF.GRADE_SEQ
+	                    , PPF.EMP_NAME
+	             ) DEF
+	   WHERE 1 = 1  
+	     AND DEF.ORGANIZATION_ID = NVL(#{ORGANIZATION_ID}, DEF.ORGANIZATION_ID)  /* Param2: Org ID */
+	     AND DEF.EMP_NAME        LIKE #{EMP_NAME} || '%'                         /* Param3: 성명   */
+              
+    </select>
+    
+    <insert id="insertHjspayCalendar" parameterType="map">
+    	/* smh.pay.dao.PAY40250Dao.insertHjspayCalendar */
+    	INSERT  INTO HJSPAY_CALENDAR( 
+	           HJSPAY_CALENDAR_SEQ  
+	          ,PERSON_ID
+	          ,CALENDAR_DAY       /* 월력일자 : 근태일자 */
+	          ,ATTENDANCE_TIME    /* 출근시간 */
+	          ,ATTENDANCE_DELAY   /* 출근지연 */
+	          ,LATE_YN
+	          ,CALENDAR_TYPE
+	          ,COMMENTS
+	          ,CLOSING_HOUR      /* 퇴근시간*/
+	          ,ATTRIBUTE1
+	          ,CREATED_BY
+	          ,CREATION_DATE  
+	          ,LAST_UPDATED_BY  
+	          ,LAST_UPDATE_DATE  
+	          ,LAST_UPDATE_LOGIN
+	          ,OBJECT_VERSION_NUMBER) 
+	      VALUES( 
+	           HJSPAY_CALENDAR_SEQ.NEXTVAL  
+	          ,#{PERSON_ID}  
+	          ,#{WORK_DATE}  
+	          ,null  
+	          ,'N'  
+	          ,#{LATE_YN}  
+	          ,#{CALENDAR_TYPE}  
+	          ,#{COMMENTS_SCR}  
+	          ,null 
+	          ,#{ATTRIBUTE1} 
+	          ,#{PERSON_ID}
+	          ,SYSDATE
+	          ,#{PERSON_ID} 
+	          ,SYSDATE             
+	          ,#{PERSON_ID}            
+	          ,1)  
+    </insert>
+    
+    <!-- 팀원출근현황 수정-->
+    <update id="updateHjspayCalendar"  parameterType="map">
+    	UPDATE HJSPAY_CALENDAR 
+           SET ATTRIBUTE1            = #{ATTRIBUTE1}             /* E:SSHR, S:CONCURRENT */
+              ,LATE_YN               = #{LATE_YN}                /* 지각여부   */
+              ,CALENDAR_TYPE         = #{CALENDAR_TYPE}          /* 근태유형   */
+              ,COMMENTS              = #{COMMENTS_SCR}           /* 비고       */
+              ,LAST_UPDATED_BY       = #{PERSON_ID}              /* 수정자     */
+	          ,LAST_UPDATE_DATE      = SYSDATE                   /* 수정일시   */
+	          ,LAST_UPDATE_LOGIN     = #{PERSON_ID}              /* 수정자     */
+              ,OBJECT_VERSION_NUMBER = OBJECT_VERSION_NUMBER + 1 /* 오브젝트버전번호 */
+              
+        WHERE HJSPAY_CALENDAR_SEQ = #{HJSPAY_CALENDAR_SEQ}
+    </update>
+
+</mapper>

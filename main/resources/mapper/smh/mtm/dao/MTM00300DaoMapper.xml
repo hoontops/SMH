@@ -1,0 +1,415 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mtm.dao.MTM00300Dao">
+   
+   
+        <!-- 자재 popup list  조회 사용품목 조회 -->
+    <select id="selectMaterialPopupList" parameterType="map" resultType="hashmap">
+    	/*selectMaterialPopupList*/
+	   SELECT   A.PLANTID
+                 ,   A.ITEMID 				AS CONSUMABLEDEFID
+                 ,   A.ITEMVERSION 			AS CONSUMABLEDEFVERSION
+                 ,   A.ITEMNAME				AS CONSUMABLEDEFNAME
+                 ,   A.LOTCONTROL
+                 ,   MIS.DESCRIPTION
+                 ,   A.UOMDEFID				AS CONSUMABLEUOM
+                 ,   C.UOMDEFNAME	
+                 ,	 A.ITEMID||'|'||A.ITEMVERSION	AS CONSUMABLENUM
+                 ,   A.MASTERDATACLASSID
+                 ,   A.SPEC
+                 ,   A.CONSUMABLETYPE
+                 ,   MIS.MAKER
+             FROM 	 BAS_ITEMMASTER 				  A 
+             INNER JOIN BAS_MASTERDATACLASS        B     ON     A.ENTERPRISEID       = B.ENTERPRISEID 
+                                                    	AND    A.MASTERDATACLASSID  = B.MASTERDATACLASSID
+             LEFT OUTER JOIN BAS_MATERIALITEMSPEC  MIS   ON     MIS.ENTERPRISEID     = A.ENTERPRISEID
+                                           				AND    MIS.ITEMID           = A.ITEMID
+            LEFT OUTER JOIN BAS_UOMDEFINITION      C     ON     A.ENTERPRISEID       = C.ENTERPRISEID
+                                                   		AND    A.UOMDEFID           = C.UOMDEFID 
+             WHERE	1=1 
+             AND B.MESITEMTYPE = 'Consumable'
+             AND A.VALIDSTATE    = #{VALIDSTATE}   
+             AND A.ENTERPRISEID    = 'SMLINES'
+             AND A.PLANTID = 'IFC'
+             AND A.MASTERDATACLASSID IN ('RawMaterial','Subsidiary')
+             <if test="MATERIAL != null and MATERIAL !=''">	
+             	AND (A.ITEMID LIKE UPPER(<![CDATA['%' ||]]> #{MATERIAL} <![CDATA[|| '%']]> )
+             	OR A.ITEMNAME LIKE UPPER(<![CDATA['%' ||]]> #{MATERIAL} <![CDATA[|| '%']]> ))
+             </if>
+             ORDER BY A.ITEMID, A.ITEMVERSION 
+    </select>   
+   
+   <!-- 자재 불출 요청 -->
+   <select id="selectMtmMtrOutFlowRequestList" parameterType="map" resultType="hashmap">
+   		SELECT 
+						CRM.ENTERPRISEID
+					,	CRM.PLANTID
+					,	CRM.REQUESTNO           AS CSMREQUESTNO
+					,	CRM.AREAID
+					,	DIA.DICTIONARYNAME      AS AREANAME 
+					,	CRM.PROCESSSEGMENTID
+					,	CRM.PROCESSSEGMENTVERSION
+					,	DIC.DICTIONARYNAME      AS PROCESSSEGMENTNAME
+					,	CRM.REQUESTDATE
+					,	CRM.REQUESTUSER
+					,	URR.USER_NM             AS CSMREQUESTUSERNAME
+					,	CRM.REQUESTDEPARTMENT   AS CSMREQUESTDEPARTMENT
+					,	CRM.REQUESTTYPE         AS CSMREQUESTID
+					,	DIB.DICTIONARYNAME      AS CSMREQUESTTYPE					
+					,	CRM.DESCRIPTION         AS DESCRIPTIONMAIN
+					,	CRD.REQUESTSEQUENCE     AS CSMREQUESTSEQUENCE
+					,	CRD.CONSUMABLEDEFID
+					,	CRD.CONSUMABLEDEFVERSION
+					,	SCD.CONSUMABLEDEFNAME
+					,	CRD.LOTID
+					,	CRD.REQUESTQTY          
+					,	SCD.UNIT
+					,	CRD.DESCRIPTION         AS MATREMARK
+					,	ARA.ISMODIFY
+					,	CRM.CREATEDTIME         AS CSMREQUESTDATE
+					,	CRM.WAREHOUSEID
+					,	MWH.WAREHOUSENAME
+				FROM MTM_CONSUMABLEREQUEST                 CRM 
+				JOIN MTM_CONSUMABLEREQUESTDETAIL           CRD    ON   CRD.ENTERPRISEID            = CRM.ENTERPRISEID
+				                                                 AND  CRD.PLANTID                 = CRM.PLANTID
+				                                                 AND  CRD.REQUESTNO               = CRM.REQUESTNO
+				                                                 AND  CRD.VALIDSTATE              = 'Valid'
+				INNER     JOIN FN_AREA('admin')      ARA    ON   ARA.PLANTID                 = CRM.PLANTID
+				                                                 AND  ARA.AREAID                  = CRM.AREAID
+				LEFT OUTER JOIN  CMD_DICTIONARY            DIA    ON   DIA.DICTIONARYID            = ARA.AREANAME
+				                                                 AND  DIA.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT         PRO    ON   PRO.PROCESSSEGMENTID        = CRM.PROCESSSEGMENTID  -- 공정
+				LEFT OUTER JOIN CMD_DICTIONARY             DIC    ON   DIC.DICTIONARYID            = PRO.PROCESSSEGMENTNAME
+				                                                 AND  DIC.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+				LEFT OUTER JOIN	BAS_CONSUMABLEDEFINITION   SCD    ON   SCD.CONSUMABLEDEFID         = CRD.CONSUMABLEDEFID 
+				                                                 AND  SCD.CONSUMABLEDEFVERSION    =	CRD.CONSUMABLEDEFVERSION
+				LEFT OUTER JOIN CMD_USERS                  URR    ON   URR.USER_ID                  = CRM.REQUESTUSER  --                                	
+				LEFT OUTER JOIN BAS_WAREHOUSE              MWH    ON   MWH.PLANTID                 = CRM.PLANTID
+				                                                 AND  MWH.WAREHOUSEID             = CRM.WAREHOUSEID
+				LEFT OUTER JOIN CMD_LOOKUP_VALUES          CD     ON CD.LOOKUP_CODE             = CRM.REQUESTTYPE		
+																 AND CD.LOOKUP_TYPE   = 'ConsumableRequestType'
+														   		 AND CD.LOOKUP_CODE  != 'RQ0000' 
+														   		 AND CD.ENABLED_FLAG  = 'Y'
+				LEFT OUTER JOIN CMD_DICTIONARY             DIB    ON DIB.DICTIONARYID            = CD.DICTIONARYID
+				                                                 AND DIB.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}			                                                 
+				WHERE 1=1
+					AND		CRM.REQUESTTYPE           != 'RQ0000'	
+				<![CDATA[
+		        	AND    CRM.CREATEDTIME >= TO_TIMESTAMP(#{REQUESTDATE_S}, 'YYYY-MM-DD HH24:MI:SS')
+		        	AND    CRM.CREATEDTIME <  TO_TIMESTAMP(#{REQUESTDATE_E}, 'YYYY-MM-DD HH24:MI:SS')
+		        ]]>
+				--	AND 	TO_CHAR(CRM.CREATEDTIME,'yyyymmddhh24miss') 			<![CDATA[>=]]> CRM.CREATEDTIME
+				--	AND		TO_CHAR(CRM.CREATEDTIME,'yyyymmddhh24miss') 			<![CDATA[<]]>  CRM.CREATEDTIME									
+				<if test="SITE != null and SITE !=''"> 
+					AND	CRM.PLANTID	= #{SITE}
+				</if>
+				<if test="AREAID != null and AREAID !=''"> 
+					AND	CRM.AREAID	= #{AREAID}
+				</if>
+				<if test="REQUESTTYPE != null and REQUESTTYPE !=''"> 
+					AND	CRM.REQUESTTYPE	= #{REQUESTTYPE}
+				</if>
+				<if test="MATERIALID != null and MATERIALID !=''"> 
+					AND	CRD.CONSUMABLEDEFID	= #{MATERIALID}
+				</if>																
+				ORDER BY CRM.REQUESTNO   DESC ,CRD.REQUESTSEQUENCE ASC
+   </select>   
+   
+   <!-- 자재 불출 요청 -->
+   <select id="selectMtmMtrOutFlowRequest" parameterType="map" resultType="hashmap">
+		SELECT /*selectMtmMtrOutFlowRequestDetail*/
+						NULL	AS CHK
+					,	HD.ENTERPRISEID
+					,	HD.PLANTID
+					,	HD.REQUESTNO
+					,	DT.REQUESTSEQUENCE
+					,	HD.AREAID
+					,	COALESCE(DC1.DICTIONARYNAME,AR.AREANAME) AS AREANAME
+					,	HD.WAREHOUSEID
+					,	WH.WAREHOUSENAME
+					,	HD.CUSTOMERID
+					,	CT.CUSTOMERNAME
+					,	HD.REQUESTTYPE
+					,	DT.CONSUMABLEDEFID
+					,	DT.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	DT.REQUESTSEQUENCE
+					,	DT.REQUESTQTY			
+					,	DT.UNIT
+					,	HD.DESCRIPTION			AS REMARK
+					,	DT.DESCRIPTION			AS MATREMARK
+					,	DT.CREATOR				AS REQUESTUSERID
+					,	US.USER_NM				AS REQUESTUSERNAME
+					,	CASE WHEN TRX.DEMAND_NUM IS NULL THEN 'N' 
+					    ELSE 'Y' END AS DEMAND
+		FROM	MTM_CONSUMABLEREQUESTDETAIL	DT
+		LEFT OUTER JOIN	MTM_CONSUMABLEREQUEST	HD	ON	DT.REQUESTNO = HD.REQUESTNO
+													AND DT.PLANTID = HD.PLANTID
+		LEFT OUTER JOIN BAS_AREA				AR	ON	HD.AREAID = AR.AREAID
+		LEFT OUTER JOIN CMD_DICTIONARY			DC1	ON	AR.AREANAME = DC1.DICTIONARYID
+													AND DC1.LANGUAGETYPE='ko-KR'
+		LEFT OUTER JOIN BAS_WAREHOUSE			WH	ON	HD.WAREHOUSEID = WH.WAREHOUSEID
+													AND HD.PLANTID = WH.PLANTID
+		LEFT OUTER JOIN BAS_CUSTOMER			CT	ON	HD.CUSTOMERID = CT.CUSTOMERID
+													AND HD.PLANTID = CT.PLANTID
+		LEFT OUTER JOIN CMD_USERS				US	ON	HD.CREATOR = US.USER_ID
+		LEFT OUTER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	DT.CONSUMABLEDEFID = CD.CONSUMABLEDEFID
+														AND	DT.CONSUMABLEDEFVERSION = CD.CONSUMABLEDEFVERSION
+		LEFT OUTER JOIN( 
+			SELECT DEMAND_NUM FROM IFC_MES_S_MATERIAL_TRX_V@ERPPROD
+			WHERE DEMAND_NUM = #{CSMREQUESTNO}
+				AND	ISSUE_NUM IS NOT NULL
+			GROUP BY DEMAND_NUM ) TRX ON	HD.REQUESTNO = TRX.DEMAND_NUM
+		WHERE 1=1
+			<if test="CSMREQUESTNO != null and CSMREQUESTNO !=''"> 
+				AND	HD.REQUESTNO	= #{CSMREQUESTNO}
+			</if>
+		ORDER BY HD.REQUESTNO , DT.REQUESTSEQUENCE										  
+   </select> 
+  
+     <!-- RequestNo 가져오기-->
+   <select id="selectRequestNo" parameterType="map" resultType="hashmap">
+		SELECT		/* selectRequestNo */
+			CASE WHEN MAX(REQUESTNO) IS NULL THEN TO_CHAR(SYSDATE,'YYMMDD')||'-6501'
+				ELSE TO_CHAR(SYSDATE,'YYMMDD')||'-65' || LPAD(TO_NUMBER(SUBSTR(MAX(REQUESTNO),10,2))+1,2,0)
+			END AS REQUESTNO
+		FROM MTM_CONSUMABLEREQUEST
+		WHERE 1=1
+			AND TO_TIMESTAMP(REQUESTDATE,'YYYY-MM-DD') = TO_TIMESTAMP(SYSDATE,'YYYY-MM-DD')
+			AND REQUESTTYPE != 'RQ0000' 									  
+   </select> 
+   
+        <!-- insert Data  가져오기-->
+   <select id="selectMaterialRequestDetailtData" parameterType="map" resultType="hashmap">
+		SELECT
+				DT.ENTERPRISEID								AS ENTERPRISEID
+			,	DT.PLANTID									AS ORGANIZATION_CODE
+			,	DT.REQUESTNO								AS DEMAND_NUM
+			,	HD.REQUESTDATE								AS DEMAND_DATE
+			,	HD.REQUESTTYPE							
+			,	LV.MEANING									AS DEMAND_TYPE	
+			,	HD.REQUESTDEPARTMENT						AS DEMAND_DEPT
+			,	HD.WAREHOUSEID								AS REQUEST_SUBINVENTORY_CODE
+			,	HD.REQUESTUSER								AS DEMAND_USER_NAME
+			,	HD.CUSTOMERID								AS CUST_NUMBER
+			,	'N'              							AS SELL_YN	
+			,	DT.REQUESTSEQUENCE							AS DEMAND_NUM_SEQ
+			,	DT.CONSUMABLEDEFID							AS ITEM_CODE
+			,	DT.REQUESTQTY								AS DEMAND_QTY
+			,	DT.DESCRIPTION								AS DEMAND_DESCRIPTION
+			,	'N'											AS ORDER_FLAG	
+			,	DT.MODIFIEDTIME										
+			,	DT.MODIFIER
+			,	DT.CREATEDTIME
+			,	DT.CREATOR
+		FROM MTM_CONSUMABLEREQUESTDETAIL	DT
+		LEFT OUTER JOIN MTM_CONSUMABLEREQUEST	HD	ON	DT.REQUESTNO = HD.REQUESTNO
+													AND	DT.PLANTID = HD.PLANTID
+		LEFT OUTER JOIN CMD_LOOKUP_VALUES		LV	ON	HD.REQUESTTYPE = LV.LOOKUP_CODE
+													AND LV.LOOKUP_TYPE ='ConsumableRequestType'
+		WHERE DT.REQUESTNO=#{REQUESTNO}
+			AND	DT.REQUESTSEQUENCE=#{REQUESTSEQUENCE}										  
+   </select> 		
+   
+           <!-- insert Data  가져오기-->
+   <select id="selectConsumableRequestDetail" parameterType="map" resultType="hashmap">
+		SELECT
+				*
+		FROM MTM_CONSUMABLEREQUESTDETAIL	DT
+		WHERE 1=1
+			AND DT.REQUESTNO = #{REQUESTNO}				  
+   </select> 
+ 
+
+   <!-- MTM_CONSUMABLEREQUEST  테이블  등록 -->
+    <insert id="insertMateralRequestHeaderData" parameterType="map">
+	    INSERT INTO MTM_CONSUMABLEREQUEST( 
+	    		ENTERPRISEID
+	    	,	PLANTID
+	    	,	REQUESTNO
+	    	,	AREAID
+	    	,	PROCESSSEGMENTID
+	    	,	PROCESSSEGMENTVERSION
+	    	,	REQUESTDATE
+	    	,	REQUESTUSER
+	    	,	REQUESTDEPARTMENT
+	    	,	REQUESTTYPE
+	    	,	DESCRIPTION
+	    	,	CREATOR
+	    	,	CREATEDTIME
+	    	,	MODIFIER
+	    	,	MODIFIEDTIME
+	    	,	LASTTXNHISTKEY
+	    	,	LASTTXNID
+	    	,	LASTTXNUSER
+	    	,	LASTTXNTIME
+	    	,	LASTTXNCOMMENT
+	    	,	LASTTXNGROUPHISTKEY
+	    	,	VALIDSTATE
+	    	,	WAREHOUSEID
+	    	,	CUSTOMERID
+	    ) 
+	    VALUES( 
+	    		#{ENTERPRISEID}
+	    	,   #{PLANTID}    
+	    	,	#{REQUESTNO}
+	    	,	#{AREAID}
+	    	,	#{PROCESSSEGMENTID}
+	    	,	#{PROCESSSEGMENTVERSION}
+	    	,	SYSDATE				
+	    	,	#{REQUESTUSER}
+	    	,	#{REQUESTDEPARTMENT}
+	    	,	#{REQUESTTYPE}
+	    	,	#{DESCRIPTION}
+	    	,	#{CREATOR}
+	    	,	SYSDATE
+	    	,	#{MODIFIER}
+	    	,	SYSDATE
+	    	,	#{LASTTXNHISTKEY}
+	    	, 	#{LASTTXNID}
+	    	,	#{LASTTXNUSER}
+	    	,	#{LASTTXNTIME}
+	    	,	#{LASTTXNCOMMENT}
+	    	,	#{LASTTXNGROUPHISTKEY}
+	    	,	'Valid'
+	    	,	#{WAREHOUSEID}
+	    	,	#{CUSTOMERID}
+	    )
+    </insert>
+    
+       <!-- MTM_CONSUMABLEREQUEST  테이블  등록 -->
+    <insert id="insertConsumablerequestDetailData" parameterType="map">
+	    INSERT INTO MTM_CONSUMABLEREQUESTDETAIL( 
+	    		REQUESTNO
+	    	,	ENTERPRISEID
+	    	,	PLANTID
+	    	,	REQUESTSEQUENCE
+	    	,	CONSUMABLEDEFID
+	    	,	CONSUMABLEDEFVERSION
+	    	,	LOTID
+	    	,	REQUESTQTY
+	    	,	UNIT
+	    	,	DESCRIPTION
+	    	,	CREATOR
+	    	,	CREATEDTIME
+	    	,	MODIFIER
+	    	,	MODIFIEDTIME
+	    	,	LASTTXNHISTKEY
+	    	,	LASTTXNID
+	    	,	LASTTXNUSER
+	    	,	LASTTXNTIME
+	    	,	LASTTXNCOMMENT
+	    	,	LASTTXNGROUPHISTKEY
+	    	,	VALIDSTATE
+	    ) 
+	    VALUES( 
+	    		#{REQUESTNO}
+	    	,	#{ENTERPRISEID}
+	    	,	#{PLANTID}
+	    	,	#{REQUESTSEQUENCE}
+	    	,	#{CONSUMABLEDEFID}
+	    	,	#{CONSUMABLEDEFVERSION}
+	    	,	#{LOTID}
+	    	,	#{REQUESTQTY}
+	    	,	#{UNIT}
+	    	,	#{DESCRIPTION}
+	    	,	#{CREATOR}
+	    	,	SYSDATE
+	    	,	#{MODIFIER}
+	    	,	SYSDATE
+	    	,	#{LASTTXNHISTKEY}
+	    	, 	#{LASTTXNID}
+	    	,	#{LASTTXNUSER}
+	    	,	#{LASTTXNTIME}
+	    	,	#{LASTTXNCOMMENT}
+	    	,	#{LASTTXNGROUPHISTKEY}
+	    	,	#{VALIDSTATE}
+	    )
+    </insert>
+    
+          <!-- MTM_CONSUMABLEREQUEST  테이블  등록 -->
+    <insert id="insertMaterialRequestInterface" parameterType="map">
+	    INSERT INTO IFC_MES_R_MATERIAL_REQUEST@ERPPROD( 
+	    		ENTERPRISEID
+	    	,	ORGANIZATION_CODE
+	    	,	DEMAND_NUM
+	    	,	DEMAND_DATE
+	    	,	DEMAND_TYPE
+	    	,	DEMAND_DEPT
+	    	,	REQUEST_SUBINVENTORY_CODE
+	    	,	DEMAND_USER_NAME
+	    	,	CUST_NUMBER
+	    	,	SELL_YN
+	    	,	DEMAND_NUM_SEQ
+	    	,	ITEM_CODE
+	    	,	DEMAND_QTY
+	    	,	DEMAND_DESCRIPTION
+	    	,	ORDER_FLAG
+	    	,	CREATOR
+	    	,	CREATEDTIME
+	    	,	MODIFIER
+	    	,	MODIFIEDTIME
+	    	,	IF_CRUD
+	    	,	IF_DATE
+	    	,	IF_SEQUENCE	
+	    ) 
+	    VALUES( 
+	    		#{ENTERPRISEID}
+	    	,	#{ORGANIZATION_CODE}
+	    	,	#{DEMAND_NUM}
+	    	,	#{DEMAND_DATE}
+	    	,	#{DEMAND_TYPE}
+	    	,	#{DEMAND_DEPT}
+	    	,	#{REQUEST_SUBINVENTORY_CODE}
+	    	,	#{DEMAND_USER_NAME}
+	    	,	#{CUST_NUMBER}
+	    	,	#{SELL_YN}
+	    	,	#{DEMAND_NUM_SEQ}
+	    	,	#{ITEM_CODE}
+	    	,	#{DEMAND_QTY}
+	    	,	#{DEMAND_DESCRIPTION}
+	    	,	#{ORDER_FLAG}
+	    	,	#{CREATOR}
+	    	,	#{CREATEDTIME}
+	    	,	#{MODIFIER}
+	    	,	#{MODIFIEDTIME}
+	    	,	#{IF_CRUD}
+	    	,	SYSDATE
+	    	,	#{IF_SEQUENCE}	
+	    )
+    </insert> 
+   <!-- delete consumableRequestDetail 삭제 -->
+    <delete id="deleteMtrRequestDetailData" parameterType="map">
+    	DELETE 		/* deleteMtrRequestDetailData */
+    	FROM MTM_CONSUMABLEREQUESTDETAIL
+    	 WHERE 1=1		
+		   AND 	REQUESTNO = #{REQUESTNO}
+		   AND REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+    </delete>
+    
+    <!--  -->
+    <update id="updateMtrRequestDetailData" parameterType="map" >
+		UPDATE MTM_CONSUMABLEREQUESTDETAIL SET
+				CONSUMABLEDEFID = #{CONSUMABLEDEFID}
+			,	CONSUMABLEDEFVERSION = #{CONSUMABLEDEFVERSION}
+			,	LOTID = #{LOTID}
+			,	REQUESTQTY = #{REQUESTQTY}
+			,	UNIT = #{UNIT}
+			,	DESCRIPTION = #{MATREMARK}
+			,	MODIFIEDTIME = #{MODIFIEDTIME}
+			,	MODIFIER = #{MODIFIER}
+			,	LASTTXNHISTKEY = #{LASTTXNHISTKEY}
+			,	LASTTXNID = #{LASTTXNID}
+		WHERE 1=1
+			AND REQUESTNO = #{REQUESTNO}
+			AND	REQUESTSEQUENCE = #{REQUESTSEQUENCE}
+    </update>
+    
+    <select id="getERPSeqNextVal" parameterType="map" resultType="hashmap">
+    	SELECT IFC_MES_R_MATERIAL_REQUEST_S.NEXTVAL||'' AS SEQNEXTVAL 
+    	FROM DUAL
+    </select>
+
+</mapper>

@@ -1,0 +1,283 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 배치 프로그램
+    설명          : 배치 프로그램 실행 정보 조회
+    작성자       : 진성하
+    최초작성일 : 2017.07.21
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.07.21    진성하      최초  생성
+-->
+
+<mapper namespace="com.nbdf.batch.dao.BatchDao">
+     <!--  CronTrigger 배치 실행 정보 조회(Quartz 실행시 호출) -->
+     <select id="selectBacthJobInfo" resultType="hashmap">
+      SELECT  /* "com.nbdf.batch.dao.BatchDao.selectBacthJobInfo"  */
+                 B.JOB_GUBUN_CD               /* 업무시스템 코드 */
+                 , A.BAT_WK_ID               /* 배치 ID(PK) */
+                 , A.BAT_CYCLE_KND         /* 배치 종류 */
+                 , A.STRT_DLY_TIMEMS     /* 시작 시간 */
+                 , A.REPTIT_CYCL_TIMEMS /* 반복 시간 */
+                 , A.CRON_INFO                /* CRON 정보 */
+                 , SUBSTR( LOWER(B.EXEC_FN) , 5, LENGTH(B.EXEC_FN)) AS EXEC_FN  /* 수행 함수 명 */
+                 , EXEC_FN AS JAVA_FUNCTION
+                 , B.BAT_PGM_ID                /* 배치 프로그램 ID */
+                 , A.WK_STTUS
+                 , A.USE_YN
+                 , B.DUP_EXEC_ENBL_YN     /* 중복 수행 가능 여부 */
+                 , B.BAT_PGM_TY_CD
+      FROM CMD_BAT_WKS A,   CMD_BAT_PGMS B
+      WHERE
+      A.BAT_PGM_ID = B.BAT_PGM_ID
+      AND B.USE_YN ='Y'
+      AND A.WK_STTUS  <![CDATA[<> ]]> 'D'
+      <if test="BAT_WK_ID != '' and BAT_WK_ID !=null ">
+      AND BAT_WK_ID = #{BAT_WK_ID}
+      </if>
+    </select>
+
+         <!--  배치 실행 정보 조회(수행 정보가 변경되었는지 확인) -->
+     <select id="selectBacthReStartInfo" resultType="hashmap">
+      SELECT  /* "com.nbdf.batch.dao.BatchDao.selectBacthReStartInfo"  */
+                 B.JOB_GUBUN_CD               /* 업무시스템 코드 */
+                 , A.BAT_WK_ID               /* 배치 ID(PK) */
+                 , A.BAT_CYCLE_KND         /* 배치 종류 */
+                 , A.STRT_DLY_TIMEMS     /* 시작 시간 */
+                 , A.REPTIT_CYCL_TIMEMS /* 반복 시간 */
+                 , A.CRON_INFO                /* CRON 정보 */
+                 , B.EXEC_FN                    /* 수행 함수 명 */
+                 , B.BAT_PGM_ID                /* 배치 프로그램 ID */
+                 , A.WK_STTUS
+                 , A.USE_YN
+                 , B.DUP_EXEC_ENBL_YN     /* 중복 수행 가능 여부 */
+      FROM     CMD_BAT_WKS A,   CMD_BAT_PGMS B
+      WHERE   A.BAT_PGM_ID = B.BAT_PGM_ID
+      AND B.USE_YN ='Y'
+      AND A.WK_STTUS  <![CDATA[<> ]]> 'A'
+    </select>
+
+    <!--  CronTrigger 배치 실행 정보 조회(Quartz 실행시 호출) -->
+   <select id="selectBatchExecuteStart" resultType="hashmap">
+     SELECT COUNT(*) AS COUNT
+     FROM CMD_BAT_DUP_EXEC_MNTRNGS
+     WHERE BAT_PGM_ID=(SELECT BAT_PGM_ID FROM CMD_BAT_WKS WHERE BAT_WK_ID=#{BAT_WK_ID})
+    </select>
+
+    <update id="insertBatchExecuteLogStart" parameterType="hashmap">
+     <selectKey keyProperty="BAT_LOG_ID" resultType="Integer" order="BEFORE">
+           SELECT CMD_BAT_LOGS_S.NEXTVAL FROM DUAL
+        </selectKey>
+     INSERT   /* "com.nbdf.batch.dao.BatchDao.insertBatchExecuteLogStart"  */
+         INTO   CMD_BAT_LOGS
+                   (BAT_LOG_ID
+                    , BAT_WK_ID
+                    , BAT_PGM_ID
+                    , BAT_SUCC_YN
+                    , STRT_DTM
+                    , KEEP_START_DATEC
+                    , CREATED_BY
+                    , CREATION_DATE
+                    )
+         VALUES (
+                    #{BAT_LOG_ID}
+                    , #{BAT_WK_ID}
+                    , (SELECT BAT_PGM_ID FROM CMD_BAT_WKS WHERE BAT_WK_ID=#{BAT_WK_ID})
+                    , NULL <!-- 2018.03.08.. 'N' -->
+                    , SYSDATE
+                    , TO_CHAR(SYSDATE, 'YYYYMMDD')
+                    , #{CREATED_BY}
+                    , SYSDATE
+                    )
+   </update>
+
+          <!-- [4] 배치실행 후 정보 갱신 -->
+    <update id="updateBatchExecuteLogEnd" parameterType="hashmap">
+     UPDATE /* "com.nbdf.batch.dao.BatchDao.updateBatchExecuteLogEnd"  */ CMD_BAT_LOGS
+     SET
+                    END_DTM = SYSDATE                     /* 종료 시간 */
+                    , BAT_SUCC_YN = NVL(BAT_SUCC_YN, 'Y') /* 배치 실행 성공 여부 */
+                    , EXECUT_GUBUN_CD = CASE WHEN NVL(BAT_SUCC_YN, 'Y') = 'N' THEN 'ERR_EXEC' ELSE #{EXECUT_GUBUN_CD} END /* 실행 구분 코드 */
+                    , TRGET_CNT = #{P_FET_CNT}       /* 대상 건수 */
+                    , SKIP_CNT = #{P_SKP_CNT}         /* 스킵 건수*/
+                    , ERR_CNT = #{P_ERR_CNT}           /* 오류 건수 */
+                    , ERR_DESC = #{P_ERR_DESC}        /* 오류 내역 */
+      WHERE  BAT_LOG_ID = #{BAT_LOG_ID}
+   </update>
+
+             <!-- [4] 배치실행시 오류 발생  -->
+    <update id="updateBatchExecuteErrorLog" parameterType="hashmap">
+     UPDATE /* "com.nbdf.batch.dao.BatchDao.updateBatchExecuteErrorLog"  */ CMD_BAT_LOGS
+     SET
+                    END_DTM = SYSDATE                 /* 종료 시간 */
+                    , BAT_SUCC_YN = 'N'                    /* 배치 실행 성공 여부 */
+                    , EXECUT_GUBUN_CD = 'ERR_EXEC'    /* 실행 구분 코드 */
+                    , ERR_DESC = #{ERR_DESC}        /* 오류 내역 */
+      WHERE  BAT_LOG_ID = #{BAT_LOG_ID}
+   </update>
+
+       <!--  CronTrigger 배치 실행 파라미터 정보 조회(Quartz 실행시 호출) -->
+   <select id="selectBatchExecuteStartParamInfoTrigger" resultType="hashmap">
+      SELECT /* "com.nbdf.batch.dao.BatchDao.selectBatchExecuteStartParamInfoTrigger"  */
+                 SEQ_NO
+                 , PARAMTR AS KEY
+                 , DEF_VAL AS VALUE
+      FROM CMD_BAT_EXEC_PARAMTRS
+      WHERE BAT_PGM_ID = #{BAT_PGM_ID}
+    </select>
+
+   <select id="deleteBatchExecuteStartParamInfoTrigger" resultType="hashmap">
+      DELETE /* "com.nbdf.batch.dao.BatchDao.deleteBatchExecuteStartParamInfoTrigger"  */
+      FROM CMD_BAT_EXEC_PARAMTRS
+      WHERE BAT_PGM_ID = #{BAT_PGM_ID}
+    </select>
+
+   <select id="selectBatchExecuteStartParamInfo" resultType="hashmap">
+      SELECT /* "com.nbdf.batch.dao.BatchDao.selectBatchExecuteStartParamInfo"  */
+                 SEQ_NO
+                 , PARAMTR AS KEY
+                 , DEF_VAL AS VALUE
+      FROM CMD_BAT_PGMS_PARAMTRS
+      WHERE BAT_PGM_ID = #{BAT_PGM_ID}
+    </select>
+
+       <!--  CronTrigger 배치 실행 파라미터 정보 조회(Quartz 실행시 호출) : 직접실행(DIRECT)인 경우-->
+   <select id="selectCmdBatWksParamtrsList" parameterType="hashmap" resultType="hashmap">
+      SELECT /* "com.nbdf.batch.dao.BatchDao.selectCmdBatWksParamtrsList"  */
+                 SEQ_NO
+                 , PARAMTR AS KEY
+                 , DEF_VAL AS VALUE
+      FROM CMD_BAT_WKS_PARAMTRS
+      WHERE BAT_LOG_ID = #{BAT_LOG_ID}
+    </select>
+
+ <!-- 배치작업 파라미터 등록 -->
+    <update id="insertCmdBatWksParamtrs" parameterType="hashmap">
+    INSERT  /* "com.nbdf.batch.dao.BatchDao.insertCmdBatWksParamtrs"  */ INTO CMD_BAT_WKS_PARAMTRS
+	    (BAT_LOG_ID
+	    ,BAT_WK_ID
+	    ,BAT_PGM_ID
+	    ,SEQ_NO
+	    ,PARAMTR
+	    ,ORDR
+	    ,DEF_VAL
+	    ,RM
+	    ,REQUIRED_FLAG
+	    ,IN_OUT_CODE
+	    ,DEF_VAL_SQL_ID
+	    ,CREATED_BY
+	    ,CREATION_DATE
+	    ,LAST_UPDATED_BY
+	    ,LAST_UPDATE_DATE
+	    )
+	    VALUES(#{BAT_LOG_ID}
+	    ,#{BAT_WK_ID}
+	    ,#{BAT_PGM_ID}
+	    ,#{SEQ_NO}
+	    ,#{PARAMTR}
+	    ,#{ORDR}
+	    ,#{DEF_VAL}
+	    ,#{RM}
+	    ,#{REQUIRED_FLAG}
+	    ,#{IN_OUT_CODE}
+	    ,#{DEF_VAL_SQL_ID}
+	    ,#{CREATED_BY}
+	    ,SYSDATE
+	    ,#{LAST_UPDATED_BY}
+	    ,SYSDATE
+	    )
+   </update>
+
+ <!-- 배치작업 파라미터 등록 -->
+    <update id="insertCmdBatExecParamtrs" parameterType="hashmap">
+    INSERT  /* "com.nbdf.batch.dao.BatchDao.insertCmdBatExecParamtrs"  */ INTO CMD_BAT_EXEC_PARAMTRS
+	    (	BAT_PGM_ID           
+			,SEQ_NO               
+			,PARAMTR              
+			,ORDR                 
+			,DEF_VAL              
+			,RM                   
+			,REQUIRED_FLAG        
+			,IN_OUT_CODE          
+			,DEF_VAL_SQL_ID       
+			,CREATED_BY           
+			,CREATION_DATE        
+			,LAST_UPDATED_BY      
+			,LAST_UPDATE_DATE     
+	    )
+	    values(
+		#{BAT_PGM_ID}           
+		,#{SEQ_NO}               
+		,#{PARAMTR}              
+		,#{ORDR}                 
+		,#{DEF_VAL}              
+		,#{RM}                   
+		,#{REQUIRED_FLAG}        
+		,#{IN_OUT_CODE}          
+		,#{DEF_VAL_SQL_ID}       
+	    ,#{CREATED_BY}
+	    ,SYSDATE
+	    ,#{LAST_UPDATED_BY}
+	    ,SYSDATE
+	    )
+   </update>
+ <!-- 배치작업 목록 삭제 -->
+    <update id="deleteBatchWKS" parameterType="hashmap">
+    DELETE  /* "com.nbdf.batch.dao.BatchDao.deleteBatchWKS"  */
+    FROM    CMD_BAT_WKS
+    WHERE
+    BAT_WK_ID = #{BAT_WK_ID}
+   </update>
+
+    <!-- 배치 실행 상태 업데이트 -->
+    <update id="updateBatchWorkStatusWKS" parameterType="hashmap">
+    UPDATE  /* "com.nbdf.batch.dao.BatchDao.updateBatchWorkStatusWKS"  */ CMD_BAT_WKS
+    SET    WK_STTUS = 'A'
+    WHERE
+    BAT_WK_ID = #{BAT_WK_ID}
+    AND WK_STTUS  <![CDATA[<> ]]> 'D'
+   </update>
+
+   <!--  중복 수행 불가인 JOB에 한해 해당 JOB이 종료 되었는지 확인 -->
+   <select id="selectDupBatchAlived" resultType="int">
+      SELECT /* "com.nbdf.batch.dao.BatchDao.selectDupBatchAlived"  */
+                COUNT(*) AS COUNT
+      FROM CMD_BAT_DUP_EXEC_MNTRNGS
+      WHERE BAT_WK_ID = #{BAT_WK_ID}
+    </select>
+
+    <!-- 중복 수행 불가인 경우 해당 테이블에 작업 전 저장 -->
+    <update id="insertDupCheck" parameterType="hashmap">
+     INSERT   /* "com.nbdf.batch.dao.BatchDao.insertDupCheck"  */
+         INTO   CMD_BAT_DUP_EXEC_MNTRNGS
+                   (BAT_WK_ID
+                    , BAT_STRT_TIME
+                    , CREATED_BY
+                    , CREATION_DATE
+                    )
+         VALUES (
+                    #{BAT_WK_ID}
+                    , SYSDATE
+                    , #{CREATED_BY}
+                    , SYSDATE
+                    )
+   </update>
+
+    <!-- 중복 수행 불가인 경우 해당 테이블에 작업 후 삭제 -->
+    <update id="deleteDupCheck" parameterType="hashmap">
+    DELETE  /* "com.nbdf.batch.dao.BatchDao.deleteDupCheck"  */
+    FROM    CMD_BAT_DUP_EXEC_MNTRNGS
+    WHERE
+    BAT_WK_ID = #{BAT_WK_ID}
+   </update>
+
+       <!--  CronTrigger 배치 실행 파라미터 정보 조회(Quartz 실행시 호출) -->
+   <select id="selectBatLogIdNextval" resultType="Integer">
+      /* "com.nbdf.batch.dao.BatchDao.selectBatLogIdNextval"  */
+      SELECT CMD_BAT_LOGS_S.NEXTVAL FROM DUAL
+   </select>
+
+ </mapper>

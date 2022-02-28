@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.hra.dao.HRA20110Dao">
+	
+	<select id="selectStaffList" parameterType="map" resultType="hashmap">
+		/* smh.hra.dao.HRA20110Dao.selectStaffList */
+       SELECT DEF.ORG_NAME           AS ORG_NAME                            /* 부서명                */
+            , DEF.GRADE_NAME         AS GRADE_NAME                          /* 직급                  */
+            , DEF.PERSON_NAME        AS PERSON_NAME                         /* 성명                  */
+            , DEF.POSITION_NAME      AS POSITION_NAME                       /* 직책                  */
+            , DEF.JOB_NAME           AS JOB_NAME                            /* 직무                  */
+            , DEF.APPRAISAL_RATING   AS APPRAISAL_RATING                    /* 근무평가(최종)          */
+            , DEF.ANN_SAL_RATING     AS ANN_SAL_RATING                      /* 연봉등급              */
+            , TO_CHAR(DEF.DEPT_START_DATE, 'YYYY-MM-DD') AS DEPT_START_DATE /* 부서일                */
+            , TO_CHAR(DEF.JOB_START_DATE,  'YYYY-MM-DD') AS JOB_START_DATE  /* 직무일                */
+            , TO_CHAR(DEF.PROMOTION_DATE,  'YYYY-MM-DD') AS PROMOTION_DATE  /* 승진일                */
+            , TO_CHAR(DEF.ENTER_DATE,      'YYYY-MM-DD') AS ENTER_DATE      /* 입사일                */
+            , PERSON_AGE             AS PERSON_AGE                          /* 나이(만)              */
+            , DEF.ESTABLISH_NAME     AS ESTABLISH_NAME                      /* 최종학력              */
+            , DEF.MAJOR              AS MAJOR                               /* 전공                  */
+            , DEF.LANG_INFO          AS LANG_INFO                           /* 어학자격              */
+            , DEF.PERSON_TYPE        AS PERSON_TYPE                         /* 임원/팀장/팀원 구분   */
+            , DEF.SORT_ORDER         AS SORT_ORDER                          /* SORTTING 정보(ORG)    */
+            , DEF.GRADE_SEQ          AS GRADE_SEQ                           /* SORTTING 정보(GRADE)  */
+            , DEF.ORGANIZATION_ID    AS ORGANIZATION_ID 
+            , DEF.ASSIGNMENT_ID      AS ASSIGNMENT_ID   
+            , DEF.PERSON_ID          AS PERSON_ID              
+     
+        FROM (
+               SELECT DPL.ORG_NAME           AS ORG_NAME           /* 부서명                      */
+                    , DPL.GRADE_NAME         AS GRADE_NAME         /* 직급                        */
+                    , DPL.PERSON_NAME        AS PERSON_NAME        /* 성명                        */
+                    , DPL.POSITION_NAME      AS POSITION_NAME      /* 직책                        */
+                    , DPL.JOB_NAME           AS JOB_NAME           /* 직무                        */
+                    , DPL.ESTABLISH_NAME     AS ESTABLISH_NAME     /* 최종학력                    */
+                    , DPL.LANG_INFO          AS LANG_INFO          /* 어학자격                    */
+                    , DPL.APPRAISAL_RATING   AS APPRAISAL_RATING   /* 근무평가(최종)               */
+                    , DPL.ANN_SAL_RATING     AS ANN_SAL_RATING     /* 연봉등급                    */
+                    , DECODE(UPPER(DPL.ANN_SAL_RATING), 'S', '1', DPL.ANN_SAL_RATING)     
+                                             AS ANN_SAL_ORDER      /* 연봉등급정렬순서            */
+                    , DPL.DATE_OF_BIRTH      AS DATE_OF_BIRTH      /* 생년월일                    */
+                    , DPL.PERSON_AGE         AS PERSON_AGE         /* 나이(만)                    */
+                    , DPL.ENTER_DATE         AS ENTER_DATE         /* 입사일                      */
+                    , DPL.PROMOTION_DATE     AS PROMOTION_DATE     /* 승진일                      */
+                    , DPL.DEPT_START_DATE    AS DEPT_START_DATE    /* 부서일                      */
+                    , DPL.JOB_START_DATE     AS JOB_START_DATE     /* 직무일                      */
+                    , DPL.MAJOR              AS MAJOR              /* 전공                        */
+                    , DPL.PERSON_TYPE        AS PERSON_TYPE        /* 임원/팀장/팀원 구분         */
+                    , DPL.SORT_ORDER         AS SORT_ORDER         /* SORTTING 정보(ORG)          */
+                    , DPL.GRADE_SEQ          AS GRADE_SEQ          /* SORTTING 정보(GRADE)        */
+                    , DPL.POS_SORT           AS POS_SORT           /* SORTING 정보 (POS 보직)     */
+                    , DPL.ORGANIZATION_ID    AS ORGANIZATION_ID 
+                    , DPL.ASSIGNMENT_ID      AS ASSIGNMENT_ID   
+                    , DPL.PERSON_ID          AS PERSON_ID                
+                FROM HJSHR_WEB_DEPT_PERSON_LIST_V DPL
+               WHERE 1=1
+                 
+                 AND DPL.PERSON_TYPE     = NVL(#{PERSON_TYPE}, DPL.PERSON_TYPE)     /* 임원/팀장/팀원 선택 값 : PARAM2 (HJS_HR_POSITION_GRADE_PERSON_TYPE) */
+                 AND DPL.ORGANIZATION_ID IN ( SELECT PA.ORGANIZATION_ID
+                                                FROM PER_ALL_ASSIGNMENTS_F PA
+                                               WHERE 1=1
+                                                 AND PA.PERSON_ID  = 57055   /* 로그인 PERSON_ID : PARAM3 */
+                                                 AND TRUNC(SYSDATE) BETWEEN PA.EFFECTIVE_START_DATE 
+                                                                        AND PA.EFFECTIVE_END_DATE
+                                                 AND EXISTS ( SELECT HOM.ORGANIZATION_ID
+                                                                FROM HJSPFM_ORG_MANAGER_V1 HOM
+                                                               WHERE 1=1
+                                                                 AND HOM.PERSON_ID  = 57055   /* 로그인 PERSON_ID : PARAM3 */
+                                                                 AND PA.ORGANIZATION_ID = HOM.ORGANIZATION_ID
+                                                                 AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE
+                                                                                        AND HOM.EFFECTIVE_END_DATE )
+                                           UNION
+                                              SELECT HPSM.ORGANIZATION_ID 
+                                              FROM   HJSHR_PER_SUB_MANAGERS HPSM
+                                              WHERE 1=1
+                                               AND HPSM.SUB_MANAGER = 57055  /* 로그인 PERSON_ID : PARAM3 */
+                                               AND TRUNC(SYSDATE) BETWEEN HPSM.START_DATE  
+                                                              AND NVL(HPSM.END_DATE, TO_DATE('4712/12/31', 'YYYY/MM/DD'))
+                                           UNION
+                                             SELECT HOH.CHILD_ORGANIZATION_ID
+                                               FROM HJSPFM_ORG_HIERARCHY_V1    HOH
+                                            CONNECT BY HOH.PARENT_ORGANIZATION_ID   = PRIOR HOH.CHILD_ORGANIZATION_ID
+                                              START WITH HOH.PARENT_ORGANIZATION_ID IN (
+                                                                                         SELECT HOM.ORGANIZATION_ID
+                                                                                           FROM HJSPFM_ORG_MANAGER_V1 HOM
+                                                                                          WHERE 1=1
+                                                                                            AND HOM.PERSON_ID  = 57055   /* 로그인 PERSON_ID : PARAM3 */
+                                                                                            AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE
+                                                                                                                   AND HOM.EFFECTIVE_END_DATE
+                                                                                         UNION
+                                                                                         SELECT HPSM.ORGANIZATION_ID 
+                                                                                         FROM HJSHR_PER_SUB_MANAGERS HPSM
+                                                                                         WHERE 1=1
+                                                                                         AND HPSM.SUB_MANAGER = 57055  /* 로그인 PERSON_ID : PARAM3 */
+                                                                                         AND TRUNC(SYSDATE) BETWEEN HPSM.START_DATE  
+                                                                                                            AND NVL(HPSM.END_DATE, TO_DATE('4712/12/31', 'YYYY/MM/DD'))
+                                                                                       )
+                                 )
+                 AND DPL.ORGANIZATION_ID IN ( SELECT TO_NUMBER(#{ORGANIZATION_ID}) AS CHILD_ORGANIZATION_ID  /* 부서 선택 값  : PARAM1 */
+                                FROM DUAL
+                               UNION
+                              SELECT HOH.CHILD_ORGANIZATION_ID
+                                FROM HJSPFM_ORG_HIERARCHY_V1    HOH
+                                CONNECT BY HOH.PARENT_ORGANIZATION_ID   = PRIOR HOH.CHILD_ORGANIZATION_ID
+                               START WITH HOH.PARENT_ORGANIZATION_ID = NVL(#{ORGANIZATION_ID}, HOH.PARENT_ORGANIZATION_ID)) /* 부서 선택 값  : PARAM1 */
+               ORDER BY SORT_ORDER, POS_SORT, GRADE_SEQ, EMPLOYEE_NUMBER
+             ) DEF
+	WHERE 1=1
+       AND DEF.ORG_NAME LIKE '%'||#{ORGANIZATION_NAME}||'%'  /* Param1: 부서명 */             
+
+    </select>
+	
+</mapper>

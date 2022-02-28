@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 로그인 세션/인증
+    설명          : 로그인 세션 및 인증 관련 정의
+    작성자       : 진성하
+    최초작성일 : 2017.03.26
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.03.26     진성하     최초 생성
+     2017.04.21     진성하     표준 적용
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmsm.dao.CMSM02000Dao">
+    <sql id="whoCol" >
+    , CREATED_BY
+    , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD') AS CREATED_DATE
+    , LAST_UPDATED_BY
+    , TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD') AS LAST_UPDATE_DATE
+    </sql>
+
+    <!-- 세션정보 조회(화면에서 사용) -->
+    <select id="selectSessionList" parameterType="map" resultType="map">
+        SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMSM02000Dao.selectSessionList"  */ *
+        FROM (
+            SELECT ROWNUM AS RNUM, T.* FROM (
+		        SELECT
+		                   USER_ID
+		                   , LGN_LOG_ID
+		                   , SESSION_GUID
+		                   , USER_CRTFC_TKN
+		                   , SSO_CRTFC_TKN
+		                   , LGN_IP
+		                   , TO_CHAR(LST_SCRIN_UT_TIME,'yyyy-mm-dd hh24:mi:ss') AS LST_SCRIN_UT_TIME
+		                   , LST_SCRIN_REQ_URI
+		                   , TO_CHAR(DUP_LGN_TIME,'yyyy-mm-dd hh24:mi:ss') AS DUP_LGN_TIME
+		                   , SESSION_VLD_YN
+		                   <include refid="whoCol" />
+		        FROM   CMD_SESSIONS
+		        WHERE 1=1
+		               <if test="LGN_IP != '' and LGN_IP !=null ">
+		                    AND LGN_IP = #{LGN_IP}
+                        </if>
+		                <choose>
+		                    <when test= "DETAIL_TO_DATE != null and DETAIL_TO_DATE != ''">
+		                    AND TO_CHAR(CREATION_DATE,'yyyymmddhh24miss') >= #{DETAIL_PRE_DATE}
+		                    AND #{DETAIL_TO_DATE} >= TO_CHAR(CREATION_DATE,'yyyymmddhh24miss')
+		                    </when>
+		                    <otherwise>
+		                    AND to_char(CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+		                    AND #{TO_DATE} >= to_char(CREATION_DATE,'yyyyMMdd')
+		                     </otherwise>
+		                </choose>
+		                <if test="SESSION_VLD_YN != null and SESSION_VLD_YN != ''">
+		                  AND SESSION_VLD_YN =  #{SESSION_VLD_YN}
+		              </if>
+		        ORDER BY CREATION_DATE
+		               )T WHERE 1=1
+		        <if test= "P_END != null and P_END != ''">
+		         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+		        </if>
+        ) WHERE 1=1
+        <if test= "P_START != null and P_START != ''">
+            AND  RNUM >= #{P_START}
+        </if>
+    </select>
+
+    <!-- 세션정보 Count(Paging 사용) -->
+    <select id="selectSessionCount" parameterType="map" resultType="map">
+        SELECT  /* "com.nbdf.cmd.cm.cmog.dao.CMSM02000Dao.selectSessionCount"  */
+                    COUNT(*) AS COUNT
+        FROM  (
+	                 SELECT
+				                   USER_ID
+				                   , LGN_LOG_ID
+				                   , SESSION_GUID
+				                   , USER_CRTFC_TKN
+				                   , SSO_CRTFC_TKN
+				                   , LGN_IP
+				                   , TO_CHAR(LST_SCRIN_UT_TIME,'yyyymmddhh24miss') AS LST_SCRIN_UT_TIME
+				                   , LST_SCRIN_REQ_URI
+				                   , DUP_LGN_TIME
+				                   , SESSION_VLD_YN
+				                   <include refid="whoCol" />
+			        FROM   CMD_SESSIONS
+			        WHERE 1=1
+			                <choose>
+			                    <when test= "DETAIL_TO_DATE != null and DETAIL_TO_DATE != ''">
+			                    AND TO_CHAR(CREATION_DATE,'yyyymmddhh24miss') >= #{DETAIL_PRE_DATE}
+			                    AND #{DETAIL_TO_DATE} >= TO_CHAR(CREATION_DATE,'yyyymmddhh24miss')
+			                    </when>
+			                    <otherwise>
+			                    AND to_char(CREATION_DATE,'yyyyMMdd') >= #{PRE_DATE}
+			                    AND #{TO_DATE} >= to_char(CREATION_DATE,'yyyyMMdd')
+			                     </otherwise>
+			                </choose>
+			                <if test="SESSION_VLD_YN != null and SESSION_VLD_YN != ''">
+			                  AND SESSION_VLD_YN =  #{SESSION_VLD_YN}
+			              </if>
+	        ORDER BY CREATION_DATE
+	        )
+    </select>
+
+    <!-- 세션정보 조회-->
+    <select id="selectSessionInfo" parameterType="map" resultType="map">
+        SELECT  /* com.nbdf.cmd.cm.cmsm.dao.CMSM02000Dao.selectSessionInfo  */
+                    USER_ID
+                    , LGN_LOG_ID
+                    , SESSION_GUID
+                    , USER_CRTFC_TKN
+                    , SSO_CRTFC_TKN
+                    , LGN_IP as CNCT_IP
+                    , TO_CHAR(LST_SCRIN_UT_TIME,'yyyymmddhh24miss') as LST_SCRIN_UT_TIME
+                    , LST_SCRIN_REQ_URI
+                    , DUP_LGN_TIME
+                    , SESSION_VLD_YN
+        FROM    CMD_SESSIONS
+        WHERE   1=1
+            <if test="USER_ID != null and USER_ID != ''">
+                and USER_ID = #{USER_ID}
+		        and LST_SCRIN_UT_TIME = (select max(LST_SCRIN_UT_TIME) from CMD_SESSIONS where  USER_ID = #{USER_ID})    
+            </if>
+            <if test="SESSION_GUID != null and SESSION_GUID != ''">
+                and SESSION_GUID = #{SESSION_GUID}
+            </if>
+        and rownum=1
+    </select>
+
+    <!-- 세션/인증 유효성여부 체크 -->
+    <select id="checkSessionValid" resultType="String">
+    SELECT  /* com.nbdf.cmd.cm.cmog.dao.CMSM02000Dao.checkSessionValid  */
+                USER_ID
+    FROM     CMD_SESSIONS
+    WHERE   SESSION_GUID = #{SESSION_GUID}
+                AND LGN_IP = #{CNCT_IP}
+                AND SESSION_VLD_YN = 'Y'
+                AND USER_ID = #{USER_ID}
+                AND SYSDATE-(#{CHECK_SESSION_TIME}/60)/24 <![CDATA[<]]>= LST_SCRIN_UT_TIME
+    </select>
+
+    <!-- 세션/인증 저장 -->
+    <insert id="insertSessionInfo" parameterType="hashMap">
+    /* com.nbdf.cmd.cm.cmog.dao.CMSM02000Dao.insertSessionInfo  */
+
+   </insert>
+
+   <!-- 세션/인증 갱신(수정) -->
+    <update id="updateSessionInfo" parameterType="hashMap">
+       UPDATE   /* com.nbdf.cmd.cm.cmog.dao.CMSM02000Dao.updateSessionInfo  */  CMD_SESSIONS
+       SET        LST_SCRIN_REQ_URI = #{LST_SCRIN_REQ_URI},
+                    LST_SCRIN_UT_TIME = SYSDATE,
+                    LAST_UPDATE_DATE = SYSDATE
+       WHERE    1=1
+       and SESSION_GUID = #{SESSION_GUID}
+       <!-- 
+       <if test="USER_ID != null and USER_ID != ''">
+           and USER_ID = #{USER_ID}
+     		and LST_SCRIN_UT_TIME = (select max(LST_SCRIN_UT_TIME) from CMD_SESSIONS where  USER_ID = #{USER_ID})    
+       </if>
+       -->
+   </update>
+
+ </mapper>

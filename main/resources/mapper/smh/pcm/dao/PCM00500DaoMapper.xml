@@ -1,0 +1,466 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM00500Dao">
+
+	<select id="selectNotInputProductDefId" parameterType="map" resultType="hashmap">
+			WITH CREATELOTORDER(   PRODUCTIONORDERID
+			                     , LINENO
+			                     , PRODUCTDEFID
+			                     , PRODUCTDEFVERSION
+			                     , PLANQTY
+			                     , INPUTSEQUENCE
+			                     , CUSTOMERID
+			                     , UNIT
+			                     , PCSPNL
+			                     , JOINTQTY
+			                     , LOTINPUTPNLQTY
+			                     , MATERIALDEFID     
+			                     , MATERIALDEFVERSION  
+			                     , PROCESSDEFID
+			                     , PROCESSDEFVERSION      
+			                     , SEQ 
+			                     , CALDATE
+			                     , PLANTID
+			                     
+			                   )                 
+			   AS (
+			              SELECT PO.PRODUCTIONORDERID
+			                   , PO.LINENO
+			                   , PO.PRODUCTDEFID
+			                   , PO.PRODUCTDEFVERSION
+			                   , PO.PLANQTY
+			                   , PO.INPUTSEQUENCE
+			                   , PO.CUSTOMERID
+			                   , PD.UNIT
+			                   , PD.PCSPNL
+			                   , PD.PCSPNL                                AS JOINTQTY
+			                   , PO.LOTINPUTPNLQTY
+			                   , PO.PRODUCTDEFID                          AS MATERIALDEFID
+			                   , PO.PRODUCTDEFVERSION                     AS MATERIALDEFVERSION
+			                   , PD.PROCESSDEFID
+			                   , PD.PROCESSDEFVERSION      
+			                   , '0'  AS SEQ 
+			                   , TO_CHAR(CC.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS') AS CALDATE
+			                   , PD.PLANTID
+			                FROM MFM_PRODUCTIONORDER  PO
+			          INNER JOIN BAS_PRODUCTDEFINITION  PD ON PO.PRODUCTDEFID = PD.PRODUCTDEFID
+			                                              AND PO.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+			     LEFT OUTER JOIN PCM_CACULATIONINPUTQTY CC  ON PO.PRODUCTIONORDERID = CC.PRODUCTIONORDERID 
+			                                              AND PO.LINENO = CC.LINENO
+			                                              AND PO.PRODUCTDEFID = CC.PRODUCTDEFID
+			                                              AND PO.PRODUCTDEFVERSION = CC.PRODUCTDEFVERSION               
+			                WHERE PO.STATE IN ('Create','LotCreate')
+			   <if test="PERIOD_PERIODFR != null and PERIOD_PERIODFR != '' and PERIOD_PERIODTO != null and PERIOD_PERIODTO !='' ">
+			                  AND AND NVL(CC.CREATEDTIME,PO.CREATEDTIME) BETWEEN TO_DATE(#{PERIOD_PERIODFR}) AND TO_DATE({PERIOD_PERIODTO})
+			   </if>
+			   <if test="LOTPRODUCTTYPESTATUS != null and LOTPRODUCTTYPESTATUS !='' and !(LOTPRODUCTTYPESTATUS eq '*'.toString())">
+			                  AND  PD.PRODUCTIONTYPE = #{P_LOTPRODUCTTYPESTATUS}
+			   </if>  
+			   <if test="PRODUCTIONORDERID != null and PRODUCTIONORDERID !='' ">
+			                  AND PO.PRODUCTIONORDERID IN ( SELECT REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL) AS PRODUCTDEFID
+                                                           FROM (SELECT   #{PRODUCTIONORDERID} AS ORG_DATA FROM DUAL)
+                                                     CONNECT BY  INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+			                                 
+			                                           )
+			   </if> 
+			   <if test="LINENO != null and LINENO !='' ">
+			                 AND  PO.LINENO = #{LINENO}
+			   </if>
+			   <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+			                 AND PO.PRODUCTDEFID IN ( SELECT REGEXP_SUBSTR(ORG_DATA, '[^,]+', 1, LEVEL) AS PRODUCTDEFID
+                                                           FROM (SELECT   #{PRODUCTDEFID} AS ORG_DATA FROM DUAL)
+                                                     CONNECT BY  INSTR(ORG_DATA, ',', 1, LEVEL - 1) > 0
+                                                    )
+			                                 
+			   </if> 
+			   <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !='' ">
+			                 AND  PO.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			   </if>
+			            UNION ALL
+			               SELECT CLO.PRODUCTIONORDERID
+			                    , CLO.LINENO
+			                    , CLO.PRODUCTDEFID
+			                    , CLO.PRODUCTDEFVERSION
+			                    , CLO.PLANQTY
+			                    , CLO.INPUTSEQUENCE
+			                    , CLO.CUSTOMERID
+			                    , PD.UNIT
+			                    , PD.PCSPNL
+			                    , CEIL(BOM.QTY * CLO.JOINTQTY)  AS JOINTQTY
+			                    , CLO.LOTINPUTPNLQTY
+			                    , BOM.MATERIALDEFID
+			                    , BOM.MATERIALDEFVERSION
+			                    , PD.PROCESSDEFID
+			                    , PD.PROCESSDEFVERSION      
+			                    , CLO.SEQ || '/' || BOM."sequence"  AS SEQ 
+			                    , TO_CHAR(CC.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS') CALDATE
+			                    , PD.PLANTID
+			                 FROM CREATELOTORDER    CLO
+			           INNER JOIN BAS_BILLOFMATERIAL  BOM     ON CLO.MATERIALDEFID       = BOM.PRODUCTDEFID
+			                                                  AND CLO.MATERIALDEFVERSION = BOM.PRODUCTDEFVERSION
+			                                                  AND CLO.PROCESSDEFID       = BOM.PROCESSDEFID
+			                                                  AND CLO.PROCESSDEFVERSION  = BOM.PROCESSDEFVERSION
+			                                                  AND BOM.MATERIALTYPE       = 'Product'
+			           INNER JOIN BAS_PRODUCTDEFINITION   PD   ON BOM.MATERIALDEFID      = PD.PRODUCTDEFID
+			                                                  AND BOM.MATERIALDEFVERSION = PD.PRODUCTDEFVERSION
+			     LEFT OUTER JOIN PCM_CACULATIONINPUTQTY CC ON  CLO.PRODUCTIONORDERID      = CC.PRODUCTIONORDERID 
+			                                              AND CLO.LINENO                 = CC.LINENO
+			                                              AND CLO.PRODUCTDEFID           = CC.PRODUCTDEFID
+			                                              AND CLO.PRODUCTDEFVERSION      = CC.PRODUCTDEFVERSION               
+			    )
+			            SELECT DISTINCT T.PRODUCTIONORDERID
+			                 , T.LINENO
+			                 , T.PLANQTY
+			                 , T.INPUTSEQUENCE
+			                 , T.MATERIALDEFID      AS PRODUCTDEFID
+			                 , T.MATERIALDEFVERSION    AS PRODUCTDEFVERSION
+			                 , PD.PRODUCTDEFNAME
+			                 , C.CUSTOMERNAME
+			                 , T.UNIT
+			                 , T.JOINTQTY
+			                 , PD.PRODUCTDEFTYPE
+			                 , PD.RTRSHT
+			                 , LOTINPUTPNLQTY
+			                 , CALDATE
+			                 , T.PLANTID
+			              FROM CREATELOTORDER    T
+			        INNER JOIN BAS_PRODUCTDEFINITION  PD ON T.MATERIALDEFID       = PD.PRODUCTDEFID
+			                                             AND T.MATERIALDEFVERSION = PD.PRODUCTDEFVERSION
+			   LEFT OUTER JOIN BAS_CUSTOMER   C          ON T.CUSTOMERID         = C.CUSTOMERID
+			    WHERE T.PLANTID = #{PLANTID}
+			   <if test="PRODUCTDEFTYPE != null and PRODUCTDEFTYPE !='' ">
+			       AND PD.PRODUCTDEFTYPE=#{PRODUCTDEFTYPE}
+			   </if>
+			       AND EXISTS ( SELECT 1
+			                      FROM PCM_LOT X
+			                     WHERE T.MATERIALDEFID = X.PRODUCTDEFID
+			                       AND T.MATERIALDEFVERSION = X.PRODUCTDEFVERSION
+			                       AND T.PRODUCTIONORDERID = X.PRODUCTIONORDERID
+			                       AND T.LINENO = X.LINENO
+			                       AND X.LOTSTATE = 'Created' 
+			                  )         
+			<!-- ORDER BY PRODUCTIONORDERID,LINENO  --> 
+			  ORDER BY T.MATERIALDEFID, T.MATERIALDEFVERSION
+	</select>
+
+    <select id="getProductionOrderIdListOfLotInput" parameterType="map" resultType="hashmap">
+          SELECT PO.PRODUCTDEFID || '|' || PD.PRODUCTDEFVERSION AS PRODUCTDEF 
+               , PO.PRODUCTIONORDERID || '|' || PO.LINENO   AS PRODUCTIONORDER
+               , PO.PRODUCTIONORDERID
+               , PO.LINENO
+               , PO.PLANQTY
+               , PO.PRODUCTDEFID
+               , PD.PRODUCTDEFNAME
+               , PD.PRODUCTDEFVERSION
+               , D1.DICTIONARYNAME  AS PRODUCTDEFTYPE
+               , PD.UNIT
+              FROM MFM_PRODUCTIONORDER   PO
+        INNER JOIN BAS_PRODUCTDEFINITION PD   ON PO.PLANTID           = PD.PLANTID
+                                             AND PO.PRODUCTDEFID      = PD.PRODUCTDEFID
+                                             AND PO.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+    LEFT OUTER JOIN CMD_LOOKUP_VALUES    C1   ON PD.PRODUCTDEFTYPE    = C1.LOOKUP_CODE
+                                             AND C1.LOOKUP_TYPE       = 'ProductDefType'
+    LEFT OUTER JOIN CMD_DICTIONARY D1         ON C1.DICTIONARYID      = D1.DICTIONARYID
+                                             AND D1.LANGUAGETYPE      = #{LANGUAGETYPE}
+            
+              WHERE PO.PLANTID = #{PLANTID}
+               <!--   AND NVL(PO.ISSPLIT,'N') = 'N' -->
+                AND PO.ISSPECAPPROVE = 'Y'
+        <choose>
+           <when test="REINPUTYN=='0' ">
+                AND PO.STATE IN ('LotInput','LotCreate')
+           </when>
+           <when test="REINPUTYN=='1' ">
+                AND PO.STATE IN ('Create','LotCreate')
+           </when>     
+        </choose>
+                 AND EXISTS (  SELECT 1
+                                FROM PCM_LOT X
+                               WHERE PO.PRODUCTDEFID      = X.PRODUCTDEFID
+                                 AND PO.PRODUCTDEFVERSION = X.PRODUCTDEFVERSION
+                                 AND PO.PRODUCTIONORDERID = X.PRODUCTIONORDERID
+                                 AND PO.LINENO            = X.LINENO
+                          <choose>
+                             <when test="REINPUTYN=='0' ">
+                                 AND X.LOTSTATE = 'InProduction' 
+                             </when>
+                             <when test="REINPUTYN=='1' ">
+                                 AND X.LOTSTATE = 'Created' 
+                             </when> 
+                               
+                          </choose>
+                            
+                           ) 
+     
+     <if test="PRODUCTIONORDERID != null and PRODUCTIONORDERID !='' ">
+              AND
+ 	   <foreach collection="PRODUCTIONORDERID" item="PRODUCTIONORDERID"  open="(" close=")" separator="OR">
+ 	                PO.PRODUCTIONORDERID like <![CDATA['%' ||]]> #{PRODUCTIONORDERID} <![CDATA[|| '%']]>
+ 	   </foreach>              
+     </if> 
+     <if test="LINENO != null and LINENO !='' ">
+  				AND  PO.LINENO = #{LINENO}	
+     </if>
+  
+     <if test="TXTPRODUCTDEFNAME != null and TXTPRODUCTDEFNAME !='' ">
+                AND
+  	  <foreach collection="TXTPRODUCTDEFNAME" item="TXTPRODUCTDEFNAME"  open="(" close=")" separator="OR">
+ 	                  PD.PRODUCTDEFID like <![CDATA['%' ||]]> #{TXTPRODUCTDEFNAME} <![CDATA[|| '%']]>
+ 	               OR PD.PRODUCTDEFNAME like <![CDATA['%' ||]]> #{TXTPRODUCTDEFNAME} <![CDATA[|| '%']]>
+ 	   </foreach>                 
+     </if>   
+     <if test="PRODUCTDIVISION != null and PRODUCTDIVISION !='' ">
+                AND PD.PRODUCTDIVISION = #{PRODUCTDIVISION}
+     </if>  
+     <if test="PRODUCTIONTYPE == 'Sample' ">  
+                AND PD.PRODUCTIONTYPE <![CDATA[<>]]>   'Production'
+     </if>     
+    
+           ORDER BY PO.PRODUCTIONORDERID ASC
+	</select>	
+	<select id="selectNotInputLotListByProductDefId" parameterType="map" resultType="hashmap">
+	       SELECT '0' AS CHK
+	            , L.LOTID
+	            , L.UNIT
+	            , CEIL(L.CREATEDQTY / L.PANELPERQTY) AS CREATEDPANELQTY -- 최초생성 PNL 수량
+	            , L.PANELQTY             -- PNL수량
+	            , L.PANELQTY                            AS INPUTPNLQTY  -- 투입수량(PNL)
+	            , L.QTY              -- 투입수량
+	            , BOR.RESOURCEID
+	            , RC.AREAID                             AS INPUTAREA
+	            , TO_CHAR(L.DUEDATE, 'YYYYMMDD')      AS DUEDATE
+	            , PS.LEADTIME
+	            , PD.PRODUCTDEFID
+	            , PD.PRODUCTDEFVERSION
+	            , L.PRODUCTIONORDERID
+	            , PO.COMPLETETIME
+	            , NVL(SD.DICTIONARYNAME, PS.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+	            , L.PANELPERQTY
+	          FROM PCM_LOT L
+	    INNER JOIN MFM_PRODUCTIONORDER  PO  ON L.PLANTID               = PO.PLANTID
+	                                       AND L.PRODUCTIONORDERID     = PO.PRODUCTIONORDERID
+	                                       AND L.LINENO                = PO.LINENO
+	    INNER JOIN BAS_PRODUCTDEFINITION PD ON L.PLANTID               = PD.PLANTID
+	                                       AND L.PRODUCTDEFID          = PD.PRODUCTDEFID
+	                                       AND L.PRODUCTDEFVERSION     = PD.PRODUCTDEFVERSION
+	    INNER JOIN BAS_PROCESSSEGMENT PS    ON L.PROCESSSEGMENTID      = PS.PROCESSSEGMENTID
+	                                       AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+	    INNER JOIN BAS_BILLOFRESOURCE BOR   ON L.PRODUCTDEFID          = BOR.PRODUCTDEFID
+	                                       AND L.PRODUCTDEFVERSION     = BOR.PRODUCTDEFVERSION
+	                                       AND L.PROCESSSEGMENTID      = BOR.PROCESSSEGMENTID
+	                                       AND L.PROCESSDEFID          = BOR.PROCESSDEFID
+	                                       AND L.PROCESSDEFVERSION     = BOR.PROCESSDEFVERSION
+	                                       AND BOR.RESOURCETYPE        = 'Resource'
+	                                       AND BOR.ISPRIMARYRESOURCE   = 'Y'
+	    INNER JOIN BAS_RESOURCE RC          ON BOR.ENTERPRISEID        = RC.ENTERPRISEID
+	                                       AND BOR.PLANTID             = RC.PLANTID
+	                                       AND BOR.RESOURCEID          = RC.RESOURCEID
+	     LEFT JOIN CMD_DICTIONARY SD        ON PS.PROCESSSEGMENTNAME  = SD.DICTIONARYID
+	                                       AND SD.LANGUAGETYPE         = #{LANGUAGETYPE}           
+	         WHERE L.PLANTID           = #{PLANTID}
+	           AND L.LOTSTATE          = 'Created'
+	           AND L.PRODUCTIONORDERID = #{PRODUCTIONORDERID}
+	           AND L.LINENO            = #{LINENO}
+	           AND L.PRODUCTDEFID      = #{PRODUCTDEFID}
+	           AND L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	      ORDER BY L.LOTID ASC	
+	</select>
+	<select id="getLotInputAreaList" parameterType="map" resultType="hashmap">
+             SELECT BOR.RESOURCEID
+                  , RC.DESCRIPTION   AS RESOURCENAME
+                  , RC.AREAID
+                  , NVL(AN.DICTIONARYNAME, A.AREANAME) AS AREANAME
+                  , RC.EQUIPMENTCLASSID
+               FROM BAS_PRODUCTDEFINITION PD
+         INNER JOIN BAS_BILLOFRESOURCE BOR     ON PD.PRODUCTDEFID           = BOR.PRODUCTDEFID 
+                                              AND PD.PRODUCTDEFVERSION      = BOR.PRODUCTDEFVERSION
+                                              AND PD.PROCESSDEFID           = BOR.PROCESSDEFID
+                                              AND PD.PROCESSDEFVERSION      = BOR.PROCESSDEFVERSION
+         INNER JOIN BAS_PROCESSPATH PP         ON BOR.PLANTID               = PP.PLANTID
+                                              AND PD.PROCESSDEFID           = PP.PROCESSDEFID
+                                              AND PD.PROCESSDEFVERSION      = PP.PROCESSDEFVERSION
+                                              AND BOR.PROCESSSEGMENTID      = PP.PROCESSSEGMENTID
+                                              AND BOR.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+                                              AND NVL(PP.PATHTYPE,'') LIKE 'Start%'
+         INNER JOIN BAS_RESOURCE RC            ON BOR.ENTERPRISEID          = RC.ENTERPRISEID
+                                              AND BOR.PLANTID               = RC.PLANTID
+                                              AND BOR.RESOURCEID            = RC.RESOURCEID
+    LEFT OUTER JOIN BAS_AREA  A                ON RC.ENTERPRISEID           = A.ENTERPRISEID
+                                              AND RC.PLANTID                = A.PLANTID
+                                              AND RC.AREAID                 = A.AREAID
+    LEFT OUTER JOIN CMD_DICTIONARY AN          ON A.AREANAME                = AN.DICTIONARYID
+                                              AND AN.LANGUAGETYPE           = #{LANGUAGETYPE}
+              WHERE BOR.RESOURCETYPE     = 'Resource'
+                AND BOR.PLANTID          = #{PLANTID}
+                AND PD.PRODUCTDEFID      = #{PRODUCTDEFID}
+                AND PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}	
+	</select>
+	<select id="selectExpectedCompleteDate" parameterType="map" resultType="hashmap">
+	          SELECT CASE WHEN SUM(STDLEADTIME/86400) IS NULL THEN NULL 
+					      ELSE TO_CHAR(TO_DATE(TO_CHAR(SYSDATE,'YYYY-MM-DD')) +  NVL(SUM(STDLEADTIME/86400) * 60,0), 'YYYYMMDD')
+                     END EXPCECTDATE
+				FROM PCM_TACKTIMEMANAGE TT
+				WHERE 1=1
+				AND	TT.PRODUCTDEFID      = #{PRODUCTDEFID}
+				AND	TT.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}	
+	</select>
+	<update id="updateLot" parameterType="map">
+			UPDATE PCM_LOT SET RESOURCEID          = #{RESOURCEID}
+			                 , AREAID              = #{AREAID}
+			                 , ISFIRSTCREATELOT    = #{ISFIRSTCREATELOT}
+			                 , ISDEFECTED          = #{ISDEFECTED}
+			                 , ROOTLOTSTARTDATE    = #{ROOTLOTSTARTDATE}
+			                 , STARTEDDATE         = #{STARTEDDATE}
+			                 , LOTSTARTDATE        = #{LOTSTARTDATE}
+			                 , LOTINPUTQTY         = #{LOTINPUTQTY}
+			                 , PNLROOTLOTID        = #{PNLROOTLOTID}
+			                 , PNLCREATEDQTY       = #{PNLCREATEDQTY}
+			                 , WORKCOUNT           = #{WORKCOUNT}
+			                 , DUEDATE             = #{DUEDATE}
+			    <if test="PROCESSDEFID != null and PROCESSDEFID !='' ">        
+			                 , PROCESSDEFID         = #{PROCESSDEFID}
+			    </if>
+			    <if test="EXPECTEDCOMPLETEDATE != null and EXPECTEDCOMPLETEDATE !='' ">        
+			                 , EXPECTEDCOMPLETEDATE         = #{EXPECTEDCOMPLETEDATE}
+			    </if>
+			                 , LOTSTATE            = #{LOTSTATE}
+			                 , STARTEDUSER         = #{STARTEDUSER}
+			                 , MODIFIEDTIME        = #{MODIFIEDTIME}
+			                 , LASTTXNHISTKEY      = #{LASTTXNHISTKEY}
+			                 , LASTTXNGROUPHISTKEY = #{LASTTXNGROUPHISTKEY}
+			             WHERE LOTID               = #{LOTID}	
+	</update>
+	<select id="selectLot" parameterType="map" resultType="hashmap">
+	           SELECT
+						*
+				FROM	PCM_LOT	L
+				WHERE	L.PRODUCTIONORDERID  =  #{PRODUCTIONORDERID}
+				AND		L.LINENO             =  #{LINENO}
+				AND		L.PRODUCTDEFID       =  #{PRODUCTDEFID}
+				AND		L.PRODUCTDEFVERSION  =  #{PRODUCTDEFVERSION}
+				 
+	</select>
+	<insert id="insertLotWorkResult" parameterType="map">
+		INSERT 
+		  INTO PCM_LOTWORKRESULT(  TXNHISTKEY
+		                         , LOTID
+		                         , PROCESSSEGMENTID
+		                         , PROCESSSEGMENTVERSION
+		                         , ENTERPRISEID
+		                         , PLANTID
+		                         , FACTORYID
+		                         , AREAID
+		                         , PRODUCTIONORDERID
+		                         , LINENO
+		                         , PRODUCTDEFID
+		                         , PRODUCTDEFVERSION
+		                         , PROCESSDEFID
+		                         , PROCESSDEFVERSION
+		                         , PROCESSPATHID
+		                         , USERSEQUENCE
+		                         , WORKCOUNT
+		                         , ISPRINTLOTCARD
+		                         , WEEK
+		                         , ISREWORK
+		                         , REWORKTYPE
+		                         , REWORKREASONCODE
+		                         , REWORKCOUNT
+		                         , ROOTLOTSTARTDATE
+		                         , ROOTLOTINPUTPANELQTY
+		                         , ROOTLOTINPUTPCSQTY
+		                         , PROCESSPATHSTACK
+		                         , RESOURCEID
+		                         , PREVSENDLOTHISTKEY
+		                         , CREATOR
+		                         , CREATEDTIME
+		                        ) VALUES(   #{TXNHISTKEY}
+		                                  , #{LOTID}
+		                                  , #{PROCESSSEGMENTID}
+		                                  , #{PROCESSSEGMENTVERSION}
+		                                  , #{ENTERPRISEID}
+		                                  , #{PLANTID}
+		                                  , #{FACTORYID}
+		                                  , #{AREAID}
+		                                  , #{PRODUCTIONORDERID}
+		                                  , #{LINENO}
+		                                  , #{PRODUCTDEFID}
+		                                  , #{PRODUCTDEFVERSION}
+		                                  , #{PROCESSDEFID}
+		                                  , #{PROCESSDEFVERSION}
+		                                  , #{PROCESSPATHID}
+		                                  , #{USERSEQUENCE}
+		                                  , #{WORKCOUNT}
+		                                  , #{ISPRINTLOTCARD}
+		                                  , #{WEEK}
+		                                  , #{ISREWORK}
+		                                  , #{REWORKTYPE}
+		                                  , #{REWORKREASONCODE}
+		                                  , #{REWORKCOUNT}
+		                                  , #{ROOTLOTSTARTDATE}
+		                                  , #{ROOTLOTINPUTPANELQTY}
+		                                  , #{ROOTLOTINPUTPCSQTY}
+		                                  , #{PROCESSPATHSTACK}
+		                                  , #{RESOURCEID}
+		                                  , #{PREVSENDLOTHISTKEY}
+		                                  , #{CREATOR}
+		                                  , SYSDATE
+		                                )	
+	</insert>
+	<update id="updateProductOrder" parameterType="map">
+		UPDATE MFM_PRODUCTIONORDER 
+		   SET STATE             = #{STATE}
+		     , LASTTXNID         = #{LASTTXNID}
+		     , MODIFIEDTIME      = SYSDATE
+		     , MODIFIER          = #{MODIFIER}
+		     , LASTTXNHISTKEY    = #{LASTTXNHISTKEY}
+		     , LASTTXNUSER       = #{MODIFIER}
+		     , LASTTXNTIME       = SYSDATE 
+		 WHERE PRODUCTIONORDERID = #{PRODUCTIONORDERID}
+		   AND LINENO            = #{LINENO}	
+	</update>
+	<insert id="insertLotComment" parameterType="map">>
+		INSERT INTO PCM_LOTCOMMENT (   LOTID
+		                             , TXNHISTKEY
+		                             , ENTERPRISEID
+		                             , PLANTID
+		                             , AREAID
+		                             , PRODUCTDEFID
+		                             , PRODUCTDEFVERSION
+		                             , PROCESSDEFID
+		                             , PROCESSDEFVERSION
+		                             , PROCESSPATHID
+		                             , USERSEQUENCE
+		                             , PROCESSSEGMENTID
+		                             , PROCESSSEGMENTVERSION
+		                             , WORKCOUNT
+		                             , PROCESSSTATE
+		                             , TRANSITIONID
+		                             , COMMENTS
+		                             , TXNGROUPHISTKEY
+		                             , CREATOR
+		                             , CREATEDTIME
+		                           ) VALUES (  #{LOTID}
+		                                     , #{TXNHISTKEY}
+		                                     , #{ENTERPRISEID}
+		                                     , #{PLANTID}
+		                                     , #{AREAID}
+		                                     , #{PRODUCTDEFID}
+		                                     , #{PRODUCTDEFVERSION}
+		                                     , #{PROCESSDEFID}
+		                                     , #{PROCESSDEFVERSION}
+		                                     , #{PROCESSPATHID}
+		                                     , #{USERSEQUENCE}
+		                                     , #{PROCESSSEGMENTID}
+		                                     , #{PROCESSSEGMENTVERSION}
+		                                     , #{WORKCOUNT}
+		                                     , #{PROCESSSTATE}
+		                                     , #{TRANSITIONID}
+		                                     , #{LASTTXNID}
+		                                     , #{TXNGROUPHISTKEY}
+		                                     , #{CREATOR}
+		                                     , SYSDATE
+		                                    )	
+	</insert>
+</mapper>

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.apr.dao.APR10210Dao">
+
+    <!-- 업적평가 본인평가 Master 조회 -->
+	<select id="selectSelfEvaluationListMaster" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR10210Dao.selectEvaluationListMaster */
+    SELECT HJSPFM_APPRAISAL_MASTER_SEQ
+	      ,HJSPFM_PER_OBJECT_MASTER_SEQ
+	      ,CURRENT_JOB_DETAILS
+	      ,#{ASSESSMENT_STATUS}	AS ASSESSMENT_STATUS
+	      ,PARTICIPANT_ACHITED_COMMENT1
+	      ,NVL(APPRAISAL_1ST_APPRAISE_CONTENT, APPRAISAL_1ST_ACHITED_COMMENT) AS APPRAISAL_1ST_ACHITED_COMMENT
+	      ,PARTICIPANT_ACHITED_RATING1
+	      ,PARTICIPANT_ACHITED_COMMENT
+	      ,CONV_MGR_NOTICE1
+	      ,CONV_MGR_SCORE1
+	      ,CONV_MGR_NOTICE2
+	      ,CONV_MGR_SCORE2
+	  FROM HJSPFM_PERSON_OBJECT_MASTER
+	 WHERE 1=1
+	   AND HJSPFM_APPRAISAL_MASTER_SEQ = #{HJSPFM_APPRAISAL_MASTER_SEQ} -- 평가마스터 Key
+    </select> 
+    <!-- 업적평가 본인평가 Detail 조회 -->
+	<select id="selectSelfEvaluationListDetail" parameterType="map" resultType="hashmap">
+    /* smh.apr.dao.APR10210Dao.selectSelfEvaluationListDetail */
+    SELECT HJSPFM_PER_OBJECT_DETAIL_SEQ
+	      ,KPI_ID
+	      ,OBJECTIVES
+	      ,KPI_NAME
+	      ,OBJECTIVE_DETAILS
+	      ,TARGET_STATUS_DATE
+	      ,WEIGHT
+	      ,CASE WHEN KPI_ID IS NULL THEN '20' 
+	      		ELSE '10' END AS EVALUATION_TYPE
+	      ,#{ASSESSMENT_STATUS}	AS ASSESSMENT_STATUS
+	      ,HJSPFM_PER_OBJECT_MASTER_SEQ
+	      ,OBJECT_VERSION_NUMBER 
+	      ,ACHIEVEMENTS_DETAILS
+	      ,ACHIEVEMENT_STATUS_DATE
+	      ,SELF_APPRAISAL_COMMENTS
+	      ,APPRAISAL_COMMENTS1
+	      ,APPRAISAL_COMMENTS2
+	  FROM HJSPFM_PERSON_OBJECT_DETAIL
+	 WHERE 1=1
+	   AND HJSPFM_PER_OBJECT_MASTER_SEQ = #{HJSPFM_PER_OBJECT_MASTER_SEQ} -- 업적평가 목표등록 Master Key
+    </select> 
+    <!-- 업적평가-본인평가 수정 update -->
+	<update id="updateSelfAprDetail" parameterType="map" >
+		/* smh.apr.dao.APR10210Dao.updateSelfAprDetail */
+		UPDATE HJSPFM_PERSON_OBJECT_DETAIL 
+	      SET 
+	           ACHIEVEMENTS_DETAILS = #{ACHIEVEMENTS_DETAILS}     
+	          ,ACHIEVEMENT_STATUS_DATE = #{ACHIEVEMENT_STATUS_DATE}
+	          ,SELF_APPRAISAL_COMMENTS = #{SELF_APPRAISAL_COMMENTS}  
+	          ,OBJECT_VERSION_NUMBER = (
+		      							SELECT OBJECT_VERSION_NUMBER + 1
+		      							FROM HJSPFM_PERSON_OBJECT_DETAIL
+		      							WHERE HJSPFM_PER_OBJECT_DETAIL_SEQ = #{HJSPFM_PER_OBJECT_DETAIL_SEQ}
+		      							)      
+	          ,LAST_UPDATED_BY = #{PERSONID}     
+	          ,LAST_UPDATE_DATE = SYSDATE 
+	     WHERE HJSPFM_PER_OBJECT_DETAIL_SEQ = #{HJSPFM_PER_OBJECT_DETAIL_SEQ}
+	</update>
+    
+</mapper>

@@ -1,0 +1,504 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS02400Dao">
+
+    <select id="selectSaleOrderApprovalSearch" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.BAS02400Dao.selectSaleOrderApprovalSearch */    
+   SELECT  X.ENTERPRISEID
+		      ,X.PLANTID
+		      ,X.PRODUCTIONTYPE
+		      ,X.JOBTYPE
+		      ,X.ITEMKIND
+		      ,X.FORAPPROVAL
+		      ,X.FORFIRSTPRODUCTION
+		      ,X.SPECCHANGEFLAG
+		      ,X.SALESORDERID
+		      ,X.ERPSALESORDERNO
+		      ,X.LINENO
+		      ,X.SALESORDERDATE
+		      ,X.ITEMID
+		      ,X.ITEMVERSION
+		      ,X.ISAPPROVAL
+		      ,X.ORDERQTY
+		      ,X.DELIVERYDATE
+		      ,X.SALESCHARGE
+		      ,X.SPECIFICATIONCHARGE
+		      ,X.DESCRIPTION
+		     -- ,X.COMMENT
+		      ,X.CREATEDTIME
+		      ,X.MODIFIEDTIME
+		      ,X.VALIDSTATE
+		      ,X.INTERFACEACTION
+		      ,X.INTERFACERESULTS
+		      ,X.UNITPRICE
+		      ,X.ETCPRICE
+		      ,X.CURRENCY --단위
+		      ,X.CUSTOMERID
+		      ,X.PROGRESSSTATE
+		      ,X.SALEORDERCATEGORY
+		      ,X.STATE
+		      ,X.GOVERNANCESTATUS
+		      ,X.SALESORDERID || '|' || X.LINENO AS SALESORDER --수주번호 Hidden Value
+		      ,PD.PRODUCTDEFNAME --품목 명
+		      ,PDI.PRODUCTTYPE --품목 타입
+		      ,X.ITEMACCOUNT
+		      ,X.ITEMKIND AS ITEMCLASS --승인용
+		      ,CASE     
+		           WHEN COALESCE(X.FORAPPROVAL, '') = 'Y' THEN
+		            '1'
+		           ELSE
+		            '0'
+		       END AS USAGEAPPROVAL --초도양산
+		      ,CASE
+		           WHEN COALESCE(X.FORFIRSTPRODUCTION, '') = 'Y' THEN
+		            '1'
+		           ELSE
+		            '0'
+		       END AS FIRSTPRODUCTTYPE --사양변경          
+		      ,CASE
+		           WHEN COALESCE(X.SPECCHANGEFLAG, '') = 'Y' THEN
+		            '1'
+		           ELSE
+		            '0'
+		       END AS SPECCHANGEFLAG2
+		      ,X.ITEMID || '|' || X.ITEMVERSION AS PRODUCTVALUE --품목 Hidden Value
+		      ,CASE
+		           WHEN PDO.STATE IN ('LotCreate', 'LotInput') THEN
+		            'Y'
+		           ELSE
+		            'N'
+		       END ISLOTCREATE --LOT 생성여부
+		      ,U1.USERNAME AS SALESCHARGENAME --영업담당자
+		      ,U2.USERNAME AS SPECIFICATIONCHARGENAME --사양담당자
+		      ,CON.CUSTOMERNAME AS CONTRACTOR --수주처
+		      ,NVL(SSD.DICTIONARYNAME,X.SHIPTO ) AS SHIPTO --납품처
+		      ,BIL.CUSTOMERNAME AS BILLTO --매출처
+		      ,PDI.RTRSHT --ROLL / SHEET
+		      ,U3.USERNAME AS CREATOR --생성자
+		      ,U4.USERNAME AS MODIFIER --수정자
+		       --IFC
+		      ,C.CUSTOMERNAME --고객 명 
+		      ,PDI.IMPEDANCE --임피던스
+		      ,X.ETCPRICE AS SMTUNITPRICE -- SMT단가
+		      ,PDI.SEPARATINGPORTION --분리부
+		      ,PDI.LAYER --LAYER
+		      ,PDI.PNLSIZEXAXIS --PNLSIZEXAXIS
+		      ,PDI.PNLSIZEYAXIS --PNLSIZEYAXIS
+		      ,(PDI.PNLSIZEXAXIS * PDI.PNLSIZEYAXIS) AS TOTALPNLSIZE --합수
+		      ,PDI.PCSMM AS CALCULATEQTY --산출수
+		      ,NULL AS CHK
+               ,X.SALESORDERCONFIRM  /* 수주 확정 */
+               ,DECODE(X.RN, 1, X.SALESORDERIF, 0 ) AS SALESORDERIF   /* 수주량 IF */
+               ,X.SALESORDERRESULT  /* 수주량 점검 */
+               ,X.IFEXECUTE  /* Interface 실행여부 */
+               ,X.IFRESULT  /* Interface 결과 */
+               ,X.ORG_LINENO      
+               ,CASE WHEN TRUNC(SYSDATE) <![CDATA[ >= ]]> TRUNC(X.INVALIDDATE) THEN
+               		'Y'
+                ELSE
+                	'N'
+                END AS IS_INVALID
+		FROM   (SELECT SOA.ENTERPRISEID
+		              ,SOA.PLANTID --SITE
+		              ,SOA.PRODUCTIONTYPE --생산구분
+		              ,SOA.JOBTYPE --작업구분
+		              ,PS.ITEMACCOUNT
+		              ,PS.ITEMKIND
+		              ,SOA.FORAPPROVAL
+		              ,SOA.FORFIRSTPRODUCTION
+		              ,SOA.SPECCHANGEFLAG --사양변경
+		              ,SOA.SALESORDERID --수주번호
+		              ,SOA.ERPSALESORDERNO --ERP수주번호
+		              ,SOA.LINENO --LINENO
+		              ,TO_CHAR(SOA.SALESORDERDATE, 'YYYY-MM-DD') AS SALESORDERDATE --수주일
+		              ,SOA.PRODUCTDEFID AS ITEMID --품목 코드
+		               --,   SOA.PRODUCTDEFVERSION         --REV.
+		              ,CASE
+		                   WHEN COALESCE(SOA.PRODUCTDEFVERSION, '') = '' THEN
+		                    MAX(IM.ITEMVERSION)
+		                   ELSE
+		                    SOA.PRODUCTDEFVERSION
+		               END ITEMVERSION
+		              ,COALESCE(SOA.ISAPPROVAL, 'N') AS ISAPPROVAL --승인여부
+		              ,SOA.ORDERQTY --수주량
+		              ,TO_CHAR(SOA.DELIVERYDATE, 'YYYY-MM-DD') AS DELIVERYDATE --납기 요청일
+		              ,SOA.SALESCHARGE --영업담당
+		              ,SOA.SPECIFICATIONCHARGE --사양담당
+		              ,SOA.CONTRACTOR --수주처
+		              ,SOA.SHIPTO --납품처
+		              ,SOA.BILLTO --매출처
+		              ,SOA.DESCRIPTION --내용
+		              ,MAX(SOA."COMMENT") AS "COMMENT" --비고
+		               ,TO_CHAR(SOA.CREATEDTIME, 'YYYY-MM-DD') AS CREATEDTIME --생성일
+		               ,TO_CHAR(SOA.MODIFIEDTIME, 'YYYY-MM-DD') AS MODIFIEDTIME --수정일
+		               ,SOA.VALIDSTATE --유효상태
+		               ,SOA.INTERFACEACTION --인터페이스 실행 여부
+		               ,SOA.INTERFACERESULTS --인터페이스 결과		               
+						,PCM_EXCHANGE_FN(SOA.PLANTID, SYSDATE, UP.CURRENCY_CODE, UP.UNITPRICE) AS  UNITPRICE
+		               ,SOA.ETCPRICE -- SMT 단가
+		               ,MAX(SOA.CURRENCY)  AS CURRENCY-- 단위
+		               ,SOA.CUSTOMERID
+		               ,MAX(SOA.PROGRESSSTATE) AS PROGRESSSTATE --진행상태
+		               ,SOA.INVENTORYCATEGORY AS SALEORDERCATEGORY --판매범주
+		               ,SOA.STATE --상태
+		               ,MAX(SOA.CREATOR) AS CREATOR
+		               ,MAX(SOA.MODIFIER) AS MODIFIER
+	                   ,MAX((SELECT CASE WHEN NVL(SOA.ISAPPROVAL, 'N') = 'Y' THEN 'Input' ELSE MAX(BG.STATUS) END
+	                       FROM   BAS_GOVERNANCE BG
+	                       WHERE  BG.PRODUCTDEFID = IM.ITEMID
+	                       AND    BG.PRODUCTDEFVERSION = IM.ITEMVERSION
+	                      AND    BG.GOVERNANCETYPE ='NewRequest'
+	                      AND    BG.WORKCLASS != 'Same'
+		                   <if test="GOVERNANCESTATUS != null and GOVERNANCESTATUS !='' ">
+		                   		AND	BG.STATUS = #{GOVERNANCESTATUS}
+		                   </if>
+		                   )) AS GOVERNANCESTATUS
+<!-- 		                  ,SUM(ERP.ORDER_QTY) AS SALESORDERIF     
+                     	  ,MAX(REG_CONF_YN) AS SALESORDERCONFIRM -->
+<!-- 	                     ,SUM(OL.ORDERED_QUANTITY) AS SALESORDERIF     
+	                     ,MAX(NVL(OH.ATTRIBUTE4,'N')) AS SALESORDERCONFIRM -->
+                      	,(SELECT SUM(OL.ORDERED_QUANTITY)
+	                            FROM   OE_ORDER_HEADERS_ALL@ERPPROD OH
+	                            LEFT   OUTER JOIN OE_ORDER_LINES_ALL@ERPPROD OL ON     OH.HEADER_ID = OL.HEADER_ID
+	                            WHERE  OH.ORDER_NUMBER = SOA.SALESORDERID) AS SALESORDERIF
+	                   	,(SELECT NVL(OH.ATTRIBUTE4,'N')
+	                            FROM   OE_ORDER_HEADERS_ALL@ERPPROD OH
+	                            WHERE  OH.ORDER_NUMBER = SOA.SALESORDERID) AS SALESORDERCONFIRM
+		                 ,NULL AS SALESORDERRESULT  /* 수주량 점검 */
+		                 ,NULL AS IFEXECUTE  /* Interface 실행여부 */
+		                 ,NULL AS IFRESULT  /* Interface 결과 */		  
+                     	 ,SOA.ORG_LINENO   
+ 						 ,ROW_NUMBER() OVER (PARTITION BY SOA.SALESORDERID ORDER BY LINENO DESC) RN  
+ 						 ,PS.INVALIDDATE -- 무효화일자
+		        FROM   BAS_SALEORDERAPPROVAL SOA
+		        LEFT   JOIN BAS_ITEMMASTER IM								ON     SOA.PRODUCTDEFID = IM.ITEMID
+		        																		AND    SOA.ENTERPRISEID = IM.ENTERPRISEID
+		        --                  AND  SOA.PRODUCTDEFVERSION = IM.ITEMVERSION 		        					
+		        LEFT   JOIN BAS_PRODUCTITEMSPEC PS						ON     SOA.PRODUCTDEFID = PS.ITEMID
+		        																		AND    SOA.PRODUCTDEFVERSION = PS.ITEMVERSION
+		        																		AND    SOA.ENTERPRISEID = PS.ENTERPRISEID
+            	<!-- LEFT   JOIN  IFC_MES_S_BASE_REG_CONF_V@ERPPROD ERP 	ON ERP.ORDER_NUMBER = SOA.SALESORDERID -->
+<!-- 	            LEFT OUTER JOIN  OE_ORDER_HEADERS_ALL@ERPPROD OH ON OH.ORDER_NUMBER = SOA.SALESORDERID
+	            LEFT OUTER JOIN  OE_ORDER_LINES_ALL@ERPPROD   OL ON OH.HEADER_ID = OL.HEADER_ID -->
+				LEFT OUTER JOIN  BAS_UNITPRICEFORMES UP   ON SOA.PRODUCTDEFID         = UP.PRODUCTDEFID 
+							                                            AND SOA.PRODUCTDEFVERSION    = UP.PRODUCTDEFVERSION 
+							                                            AND SYSDATE BETWEEN UP.APPLY_START_DATE AND NVL(UP.APPLY_END_DATE, TO_DATE('9999-12-31 23:59:59','YYYY-MM-DD HH24:MI:SS'))
+		        WHERE  1 = 1
+		        AND    SOA.VALIDSTATE = 'Valid'			    
+		        <![CDATA[
+		        AND    SOA.SALESORDERDATE >= TO_TIMESTAMP(#{P_PERIOD_PERIODFR}, 'YYYY-MM-DD HH24:MI:SS')
+		        AND    SOA.SALESORDERDATE <  TO_TIMESTAMP(#{P_PERIOD_PERIODTO}, 'YYYY-MM-DD HH24:MI:SS')
+		        ]]>
+		        AND    SOA.PLANTID = #{PLANTID}
+		         <if test="CUSTOMER_ID != null and CUSTOMER_ID !='' ">
+		         	     AND     SOA.CUSTOMERID = #{CUSTOMER_ID} --거래처		            
+		         </if>
+		         <if test="ISAPPROVAL != null and ISAPPROVAL !='' ">
+		         	     AND     NVL(SOA.ISAPPROVAL, 'N') = #{ISAPPROVAL}		            
+		         </if>
+		         <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' ">		         	
+		                 AND     SOA.PRODUCTIONTYPE = #{PRODUCTIONTYPE} --생산구분
+		         </if>
+		         <if test="ITEMID != null and ITEMID !='' ">
+		              AND   EXISTS 
+		                     (   SELECT  1
+		                         FROM   ufn_selectStringToSplit(#{ITEMID}, ',')  MA
+		                         WHERE  SOA.PRODUCTDEFID = MA.VALUE)		           		            
+		         </if>
+		         <if test="ITEMVERSION != null and ITEMVERSION !='' ">
+		              AND   EXISTS 
+		                     (   SELECT  1
+		                         FROM   ufn_selectStringToSplit(#{ITEMVERSION}, ',')  MA
+		                         WHERE  SOA.PRODUCTDEFVERSION = MA.VALUE)		           		            
+		         </if>          
+		         <if test="JOBTYPE != null and JOBTYPE !='' ">
+		         	     AND     SOA.JOBTYPE = #{JOBTYPE} --작업구분		            
+		         </if>    
+		         <if test="SPECOWNER != null and SPECOWNER !='' ">
+		         	     AND     SOA.SPECIFICATIONCHARGE = #{SPECOWNER} --사양담당자		            
+		         </if>
+		         <if test="SALESOWNER != null and SALESOWNER !='' ">		        	 
+		                 AND     SOA.SALESCHARGE = #{SALESOWNER} --영업담당자
+		         </if>		         
+		        AND    EXISTS (SELECT 1
+		                FROM   BAS_ITEMMASTER IM
+		                WHERE  IM.ITEMID = SOA.PRODUCTDEFID
+		                      --AND     IM.ITEMVERSION   = SOA.PRODUCTDEFVERSION
+		                AND    IM.VALIDSTATE = 'Valid')
+		        GROUP  BY SOA.ENTERPRISEID
+		                 ,SOA.PLANTID --SITE
+		                 ,SOA.PRODUCTIONTYPE --생산구분
+		                 ,SOA.JOBTYPE --작업구분
+		                 ,PS.ITEMACCOUNT
+		                 ,PS.ITEMKIND
+		                 ,SOA.FORAPPROVAL
+		                 ,SOA.FORFIRSTPRODUCTION
+		                 ,SOA.SPECCHANGEFLAG
+		                 ,SOA.SALESORDERID --수주번호
+		                 ,SOA.ERPSALESORDERNO --ERP수주번호
+		                 ,SOA.LINENO --LINENO
+		                 ,SOA.SALESORDERDATE --수주일
+		                 ,SOA.PRODUCTDEFID --품목 코드
+		                 ,SOA.PRODUCTDEFVERSION --REV.
+		                 ,COALESCE(SOA.ISAPPROVAL, 'N') --승인여부
+		                 ,SOA.ORDERQTY --수주량
+		                 ,SOA.DELIVERYDATE --납기 요청일
+		                 ,SOA.SALESCHARGE --영업담당
+		                 ,SOA.SPECIFICATIONCHARGE --사양담당
+		                 ,SOA.CONTRACTOR --수주처
+		                 ,SOA.SHIPTO --납품처
+		                 ,SOA.BILLTO --매출처
+		                 ,SOA.DESCRIPTION --내용
+		                 ,SOA.CREATEDTIME --생성일
+		                 ,SOA.MODIFIEDTIME --수정일
+		                 ,SOA.VALIDSTATE --유효상태
+		                 ,SOA.INTERFACEACTION --인터페이스 실행 여부
+		                 ,SOA.INTERFACERESULTS --인터페이스 결과
+		                 ,SOA.UNITPRICE --단가
+		                 ,SOA.ETCPRICE --SMT 단가
+		                  --IFC
+		                 ,SOA.CUSTOMERID
+		                 ,SOA.PROGRESSSTATE --진행상태
+		                 ,SOA.INVENTORYCATEGORY --판매범주
+		                 ,SOA.STATE
+                     	 ,SOA.ORG_LINENO         
+                         ,UP.CURRENCY_CODE
+                         ,UP.UNITPRICE
+                         ,PS.INVALIDDATE
+		                 ) X
+		LEFT   JOIN MFM_PRODUCTIONORDER PDO     ON     X.ENTERPRISEID = PDO.ENTERPRISEID
+		                                        AND    X.SALESORDERID = PDO.PRODUCTIONORDERID
+		                                        AND    X.LINENO = PDO.LINENO
+		LEFT   JOIN BAS_PRODUCTDEFINITION PD    ON     X.ITEMID = PD.PRODUCTDEFID
+		                                        AND    X.ITEMVERSION = PD.PRODUCTDEFVERSION
+		                                        AND    PD.VALIDSTATE = 'Valid'
+		LEFT   JOIN BAS_CUSTOMER C              ON     X.CUSTOMERID = C.CUSTOMERID
+		                                        AND    X.ENTERPRISEID = C.ENTERPRISEID
+		                                        AND    X.PLANTID = C.PLANTID
+		                                        AND    C.VALIDSTATE = 'Valid'
+		LEFT   JOIN BAS_CUSTOMER CON            ON     X.CONTRACTOR = CON.CUSTOMERID
+		                                        AND    X.ENTERPRISEID = CON.ENTERPRISEID
+		                                        AND    X.PLANTID = CON.PLANTID
+		                                        AND    CON.VALIDSTATE = 'Valid'
+		LEFT JOIN CMD_LOOKUP_VALUES           SHP    ON SHP.LOOKUP_CODE         = X.SHIPTO 
+		                                                    AND SHP.LOOKUP_TYPE     = 'EndUser'
+		LEFT JOIN CMD_DICTIONARY              SSD    ON SSD.DICTIONARYID      = SHP.DICTIONARYID
+		                                                    AND SSD.LANGUAGETYPE      = #{SESSION_LANGUAGETYPE}
+		LEFT   JOIN BAS_CUSTOMER BIL            ON     X.BILLTO = BIL.CUSTOMERID
+		                                        AND    X.ENTERPRISEID = BIL.ENTERPRISEID
+		                                        AND    X.PLANTID = BIL.PLANTID
+		                                        AND    BIL.VALIDSTATE = 'Valid'
+		LEFT   JOIN BAS_PRODUCTITEMSPEC PDI     ON     X.ITEMID = PDI.ITEMID
+		                                        AND    X.ITEMVERSION = PDI.ITEMVERSION
+		                                        AND    X.ENTERPRISEID = PDI.ENTERPRISEID
+		                                        AND    PDI.VALIDSTATE = 'Valid'
+		LEFT   JOIN CMD_USER_V U1               ON     X.SALESCHARGE = U1.USERID
+		LEFT   JOIN CMD_USER_V U2               ON     X.SPECIFICATIONCHARGE = U2.USERID
+		LEFT   JOIN CMD_USER_V U3               ON     X.CREATOR = U3.USERID
+		LEFT   JOIN CMD_USER_V U4               ON     X.MODIFIER = U4.USERID
+		ORDER  BY X.SALESORDERID, LPAD(X.LINENO, 5, '0') ASC
+   
+    </select>
+    
+        
+	<select id="selectItemVersionList" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.BAS02400Dao.selectItemVersionList */
+    SELECT DISTINCT ITEMVERSION
+		FROM   BAS_ITEMMASTER
+		WHERE  ENTERPRISEID = #{SESSION_ENTERPRISEID}
+		<if test="ITEMID != null and ITEMID !='' ">
+		  AND   EXISTS 
+		                     (   SELECT  1
+		                         FROM   ufn_selectStringToSplit(#{ITEMID}, ',')  MA
+		                         WHERE  ITEMID = MA.VALUE)
+		</if>
+		ORDER BY ITEMVERSION
+		    
+    </select>
+    
+  <update id="saveSalesOrderApproval" parameterType="map">
+ 	 /* smh.bas.dao.BAS02400Dao.saveSalesOrderApproval */
+ 	 	BEGIN
+    	          UPDATE BAS_SALEORDERAPPROVAL 
+    	       		   SET PRODUCTDEFVERSION = #{ITEMVERSION}     
+					        ,DESCRIPTION 			= #{DESCRIPTION}
+					        <if test="FORAPPROVAL != null and FORAPPROVAL !='' ">       
+					        ,FORAPPROVAL			= #{FORAPPROVAL}
+					        ,ISAPPROVAL				= #{FORAPPROVAL}
+					        ,SPECAPPROVALDATE   = DECODE(#{FORAPPROVAL}, 'Y', SYSDATE, NULL)	<!-- 2021-04-21 이창영 이사 요청 (승인일시  Update) -->
+					        </if>
+					        ,MODIFIER 				= #{MODIFIER}     
+					        ,MODIFIEDTIME 			= SYSDATE     
+					        ,LASTTXNHISTKEY 		= #{LASTTXNHISTKEY}     
+					        ,LASTTXNID 				= #{LASTTXNID}     
+					        ,LASTTXNUSER 			= #{MODIFIER}     
+					        ,LASTTXNTIME 			= SYSDATE   
+					        ,LASTTXNCOMMENT 	= #{LASTTXNCOMMENT}
+   				  WHERE 	ENTERPRISEID			= #{SESSION_ENTERPRISEID}
+   				  	 AND	SALESORDERID			= #{SALESORDERID}
+					 AND	LINENO 					= #{LINENO}
+					 AND PLANTID 					= #{PLANTID};
+					 
+			
+			UPDATE BAS_GOVERNANCE G SET 
+			   CAMWORKSTATE = DECODE(#{FORAPPROVAL}, 'Y','Complete','N','Accept',NULL)
+			 	WHERE  G.PRODUCTDEFID = #{ITEMID}
+				AND    G.PRODUCTDEFVERSION = #{ITEMVERSION}				
+		        AND    GOVERNANCETYPE ='NewRequest'
+		        AND    WORKCLASS != 'Same' ;
+					 
+		END;						 
+    </update>
+    
+	<select id="GetCheckInvalidation" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.BAS02400Dao.GetCheckInvalidation */
+    <![CDATA[
+    SELECT CASE
+		           WHEN PI.INVALIDDATE <= SYSDATE THEN
+		            'N'
+		           ELSE
+		            'Y'
+		       END AS INVALIDCHECK
+		FROM   BAS_PRODUCTITEMSPEC PI
+		WHERE  1 = 1
+		AND    PI.ITEMID = #{ITEMID}
+		AND    PI.ITEMVERSION = #{ITEMVERSION}
+	]]>
+    </select>
+    
+	<select id="GetApprovalProductList" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.BAS02400Dao.GetApprovalProductList */
+    <![CDATA[
+    SELECT PI.PRODUCTDEFID
+		FROM   BAS_COVERNANCE PI
+		WHERE  1 = 1
+		AND    PI.PRODUCTDEFID = #{ITEMID}
+		AND    PI.PRODUCTDEFVERSION = #{ITEMVERSION}
+		AND    PI.STATUS = 'Approved'
+	]]>
+    </select>
+    
+	<select id="GetCheckErpQty" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.BAS02400Dao.GetCheckErpQty */
+    <![CDATA[
+    SELECT MAX(NVL(VAL1,0)) AS VAL1
+		      ,MAX(NVL(VAL2,0)) AS VAL2
+		FROM   (SELECT SUM(SOA.ORDERQTY) AS VAL1
+				              ,NULL AS VAL2
+				        FROM   BAS_SALEORDERAPPROVAL SOA
+				        WHERE  1 = 1
+				        AND    SOA.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+				        AND    SOA.SALESORDERID = #{SALESORDERID}
+				        
+				        UNION ALL
+				        
+				        SELECT NULL AS VAL1
+				              ,SUM(ERP.ORDER_QTY) AS VAL2
+				        FROM   IFC_MES_S_BASE_REG_CONF_V@ERPPROD ERP
+				        WHERE  ERP.ORDER_NUMBER = #{SALESORDERID})
+
+	]]>
+    </select>
+    
+	<select id="GetProductionOrderChk" parameterType="map" resultType="hashmap">
+    /* smh.bas.dao.BAS02400Dao.GetProductionOrderChk */
+    <![CDATA[
+    SELECT PRODUCTIONORDERID
+		      ,LINENO
+		FROM   MFM_PRODUCTIONORDER
+		WHERE  ENTERPRISEID = #{SESSION_ENTERPRISEID}
+		AND    PRODUCTIONORDERID = #{SALESORDERID}
+		AND    LINENO = #{LINENO}
+		AND    CASE
+		          WHEN STATE = 'Create' THEN
+		           'N'
+		          ELSE
+		           'Y'
+		      END = 'Y'
+	]]>
+    </select>
+    
+      <insert id="approvalSalesOrder" parameterType="map">
+ 	 /* smh.bas.dao.BAS02400Dao.approvalSalesOrder */
+ 	 	INSERT INTO MFM_PRODUCTIONORDER
+				 	 		(PRODUCTIONORDERID
+							,LINENO
+							,PRODUCTDEFID
+							,PRODUCTDEFVERSION
+							,CUSTOMERID
+							,PRODUCTIONORDERNAME
+							,ENTERPRISEID
+							,PLANSTARTTIME
+							,PLANENDTIME
+							,PLANTID
+							,PLANQTY
+							,OWNER
+							,STATE
+							,ISSPECAPPROVE							
+							,SALESPRICE
+							,SALEORDERDATE
+							,DESCRIPTION
+							,CREATOR
+							,CREATEDTIME
+							,MODIFIER
+							,MODIFIEDTIME
+							,LASTTXNHISTKEY
+							,LASTTXNID
+							,LASTTXNUSER
+							,LASTTXNTIME
+							,LASTTXNCOMMENT
+							,VALIDSTATE
+							,ORG_LINENO)
+				    VALUES( 
+				    	#{SALESORDERID}
+				    	,#{LINENO}
+				    	,#{ITEMID}
+						,#{ITEMVERSION}
+						,#{CUSTOMERID}
+						,#{PRODUCTIONORDERNAME}
+						,#{SESSION_ENTERPRISEID}
+						,TO_DATE(#{SALESORDERDATE}, 'YYYY-MM-DD')
+						,TO_DATE(#{DELIVERYDATE}, 'YYYY-MM-DD')
+						,#{PLANTID}
+						,TO_NUMBER(#{ORDERQTY})
+						,#{SALESCHARGE}
+						,'Create'
+						,'Y'
+						,TO_NUMBER(#{UNITPRICE})
+						,TO_DATE(#{SALESORDERDATE}, 'YYYY-MM-DD')
+						,#{DESCRIPTION}
+						,#{CREATOR}  
+				        ,SYSDATE  
+				        ,#{MODIFIER}  
+				        ,SYSDATE  
+				        ,#{LASTTXNHISTKEY}  
+				        ,#{LASTTXNID}
+				        ,#{CREATOR} 
+				        ,SYSDATE
+				        ,#{LASTTXNCOMMENT}
+				        ,'Valid'		  
+				        ,#{ORG_LINENO}
+						)
+    </insert>
+    
+	<delete id="cancelSalesOrder"  parameterType="map" >
+		  /* smh.bas.dao.BAS02100Dao.cancelSalesOrder */	
+		 		DELETE
+                FROM   MFM_PRODUCTIONORDER
+                WHERE  1=1
+                	AND PRODUCTIONORDERID = #{SALESORDERID}
+				   	AND LINENO		  = #{LINENO}         
+    </delete>
+    
+    <select id="GetRoutingInspectionItemList"  parameterType="map" resultType="hashmap">    	
+		SELECT G.GOVERNANCENO
+		FROM   BAS_GOVERNANCE G
+		WHERE  G.PRODUCTDEFID = #{ITEMID}
+		AND    G.PRODUCTDEFVERSION = #{ITEMVERSION}
+		AND    STATUS = 'Approved'
+        AND    GOVERNANCETYPE ='NewRequest'
+        AND    WORKCLASS != 'Same'
+    </select>
+</mapper>

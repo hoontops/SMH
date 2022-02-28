@@ -1,0 +1,590 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM01300Dao">
+
+<sql id="insertDictionary">
+	BAS_COMMON_PKG.GENERATE_DICTIONARY
+</sql>
+    
+
+	<!--
+		설		명	: 대/중/ 주요공정그룹조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-21 
+		수  정   이  력	:
+	-->
+	<select id="selectWorkDoneSegmentListByTypeList" parameterType="map" resultType="hashmap">
+				/*selectWorkDoneSegmentListByTypeList - 대/중 주요공정그룹조회 (조회 팝업)*/
+				
+				SELECT	WSC.WORKDONESEGMENTCLASSID
+						,	D1.DICTIONARYNAME		    AS WORKDONESEGMENTCLASSNAME
+						,	WSC.WORKDONESEGMENTCLASSID	AS P_WORKDONETOPSEGMENTCLASSID
+						,	WSC.WORKDONESEGMENTCLASSID	AS P_WORKDONEMIDDLESEGMENTCLASSID	
+					
+				FROM	MFM_WORKDONESEGMENTCLASS		WSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	
+				ON	WSC.WORKDONESEGMENTCLASSNAME = D1.DICTIONARYID
+				AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+				WHERE	1 = 1
+				AND		WSC.ENTERPRISEID    						= #{ENTERPRISEID}
+				AND		WSC.PLANTID         						= #{PLANTID}
+				AND		WSC.WORKDONESEGMENTCLASSTYPE 	= #{WORKDONESEGMENTCLASSTYPE}
+				
+				--대공정
+				<if test="TXTWORKDONETOPSEGMENTCLASS != null and TXTWORKDONETOPSEGMENTCLASS !='' and !(TXTWORKDONETOPSEGMENTCLASS eq '*'.toString()) ">
+					AND		(
+					UPPER(WSC.WORKDONESEGMENTCLASSID) 			LIKE  '%' || UPPER(#{TXTWORKDONETOPSEGMENTCLASS})|| '%'
+					OR UPPER(WSC.WORKDONESEGMENTCLASSNAME) 	LIKE  '%' || UPPER(#{TXTWORKDONETOPSEGMENTCLASS})|| '%'
+					OR UPPER(D1.DICTIONARYNAME) 						LIKE  '%' || UPPER(#{TXTWORKDONETOPSEGMENTCLASS})|| '%'
+					)
+				</if>
+				--중공정
+				<if test="TXTWORKDONEMIDDLESEGMENTCLASS != null and TXTWORKDONEMIDDLESEGMENTCLASS !='' and !(TXTWORKDONEMIDDLESEGMENTCLASS eq '*'.toString()) ">
+					AND		(
+					UPPER(WSC.WORKDONESEGMENTCLASSID) 			LIKE  '%' || UPPER(#{TXTWORKDONEMIDDLESEGMENTCLASS})|| '%'
+					OR UPPER(WSC.WORKDONESEGMENTCLASSNAME) 	LIKE  '%' || UPPER(#{TXTWORKDONEMIDDLESEGMENTCLASS})|| '%'
+					OR UPPER(D1.DICTIONARYNAME) 						LIKE  '%' || UPPER(#{TXTWORKDONEMIDDLESEGMENTCLASS})|| '%'	
+					)
+				</if>
+				--AND		WSC.VALIDSTATE = 'Valid'		-- 21.05.06 상관없이 필터/그리드 팝업에서 사용 가능
+				
+				
+				-- [21.05.12] 정렬 추가
+				ORDER BY 	TO_NUMBER(
+		                        SUBSTR( UPPER(TRIM(WSC.WORKDONESEGMENTCLASSID)), INSTR(UPPER(TRIM(WSC.WORKDONESEGMENTCLASSID)), 
+		                        CASE 	WHEN WSC.WORKDONESEGMENTCLASSTYPE = 'TopWorkDoneSegmentClass'
+		                                THEN 	'TOP'
+		                                ELSE 	'MIDDLE'
+		                                END
+		                        ,1,1)+(
+		                                CASE 	WHEN WSC.WORKDONESEGMENTCLASSTYPE = 'TopWorkDoneSegmentClass'
+		                                THEN 	3
+		                                ELSE 	6
+		                                END
+		                        		)
+		                         , LENGTH(TRIM(WSC.WORKDONESEGMENTCLASSID)))
+		                        )       -- [21.04.30 정렬 기준 추가 -> 앞에 붙는 대/중 제외 숫자 기준으로 정렬]  
+				
+				
+							, WSC.CREATEDTIME -- 정렬 추가   
+	</select>
+	
+	<!--
+		설		명	: 대/중 주요공정그룹조회 List
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-15 
+		수  정   이  력	:
+	-->
+	<select id="selectWorkDoneSegmentList" parameterType="map" resultType="hashmap">
+				
+				/* selectWorkDoneSegmentList -  대/중 주요공정그룹조회 List*/
+				SELECT	WSC.WORKDONESEGMENTCLASSID
+					,	D1.DICTIONARYNAME		AS WORKDONESEGMENTCLASSNAME_KO_KR
+					,	D2.DICTIONARYNAME		AS WORKDONESEGMENTCLASSNAME_EN_US
+					,	D3.DICTIONARYNAME		AS WORKDONESEGMENTCLASSNAME_ZH_CN
+					,	D4.DICTIONARYNAME		AS WORKDONESEGMENTCLASSNAME_VI_VN
+					,	WSC.ENTERPRISEID
+					,	WSC.PLANTID
+					,	WSC.WORKDONESEGMENTCLASSTYPE
+					,	WSC.PARENTWORKDONESEGMENTCLASSID
+					,	WSC.DESCRIPTION
+					,	NVL(U1.USER_NM, WSC.CREATOR)	AS CREATOR
+					,	TO_CHAR(WSC.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					,	NVL(U2.USER_NM, WSC.MODIFIER)	AS MODIFIER
+					,	TO_CHAR(WSC.MODIFIEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS MODIFIEDTIME
+					,	WSC.VALIDSTATE
+					,   '0' AS CHK 
+					,   WSC.WORKDONESEGMENTCLASSNAME			-- 다국어id
+					
+					,   SEQDISPLAY    				-- [순서 21.04.23]
+					,	ISLEFTORRIGHTDISPLAY	-- [메인화면 출력 위치 LEFT, RIGHT 21.04.23]
+					
+				FROM	MFM_WORKDONESEGMENTCLASS		WSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	ON	WSC.WORKDONESEGMENTCLASSNAME = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = 'ko-KR'
+				LEFT OUTER JOIN CMD_DICTIONARY	D2	ON	WSC.WORKDONESEGMENTCLASSNAME = D2.DICTIONARYID
+													AND D2.LANGUAGETYPE = 'en-US'
+				LEFT OUTER JOIN CMD_DICTIONARY	D3	ON	WSC.WORKDONESEGMENTCLASSNAME = D3.DICTIONARYID
+													AND D3.LANGUAGETYPE = 'zh-CN'
+				LEFT OUTER JOIN CMD_DICTIONARY	D4	ON	WSC.WORKDONESEGMENTCLASSNAME = D4.DICTIONARYID
+													AND D4.LANGUAGETYPE = 'vi-VN'
+				LEFT OUTER JOIN CMD_USERS			U1	ON	WSC.CREATOR = U1.USER_ID
+				LEFT OUTER JOIN CMD_USERS			U2	ON	WSC.MODIFIER = U2.USER_ID
+				WHERE	1 = 1 
+				AND		WSC.ENTERPRISEID 	= #{ENTERPRISEID}
+				AND		WSC.PLANTID 		= #{PLANTID}
+				
+				
+				<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+					AND		WSC.VALIDSTATE = #{P_VALIDSTATE}
+				</if>
+				
+				--대공정그룹
+				<if test="TYPE != null and TYPE !='' and (TYPE eq 'TOP'.toString()) ">
+					AND		WSC.WORKDONESEGMENTCLASSTYPE = 'TopWorkDoneSegmentClass'
+					<if test="P_WORKDONETOPSEGMENTCLASSID != null and P_WORKDONETOPSEGMENTCLASSID !='' and !(P_WORKDONETOPSEGMENTCLASSID eq '*'.toString()) ">
+						AND EXISTS (
+										SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{P_WORKDONETOPSEGMENTCLASSID}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	WSC.WORKDONESEGMENTCLASSID = LMP.VALUE
+									)
+					</if>
+				</if>
+				
+				--중공정그룹
+				<if test="TYPE != null and TYPE !='' and (TYPE eq 'MIDDLE'.toString()) ">
+					AND		WSC.WORKDONESEGMENTCLASSTYPE = 'MiddleWorkDoneSegmentClass'
+					<if test="P_WORKDONEMIDDLESEGMENTCLASSID != null and P_WORKDONEMIDDLESEGMENTCLASSID !='' and !(P_WORKDONEMIDDLESEGMENTCLASSID eq '*'.toString()) ">
+						AND EXISTS (
+									SELECT	1
+										FROM	(SELECT DATA AS VALUE 
+												  FROM TABLE(CAST(FN_TO_ROWS(#{P_WORKDONEMIDDLESEGMENTCLASSID}) AS TP_SIMPLE_TABLE)) 
+												) LMP
+										WHERE	WSC.WORKDONESEGMENTCLASSID = LMP.VALUE
+									)
+					</if>
+				</if>
+				
+				ORDER BY 	TO_NUMBER(
+		                        SUBSTR( UPPER(TRIM(WSC.WORKDONESEGMENTCLASSID)), INSTR(UPPER(TRIM(WSC.WORKDONESEGMENTCLASSID)), 
+		                        CASE 	WHEN WSC.WORKDONESEGMENTCLASSTYPE = 'TopWorkDoneSegmentClass'
+		                                THEN 	'TOP'
+		                                ELSE 	'MIDDLE'
+		                                END
+		                        ,1,1)+(
+		                                CASE 	WHEN WSC.WORKDONESEGMENTCLASSTYPE = 'TopWorkDoneSegmentClass'
+		                                THEN 	3
+		                                ELSE 	6
+		                                END
+		                        		)
+		                         , LENGTH(TRIM(WSC.WORKDONESEGMENTCLASSID)))
+		                        )       -- [21.04.30 정렬 기준 추가 -> 앞에 붙는 대/중 제외 숫자 기준으로 정렬]  
+				
+				
+							, WSC.CREATEDTIME -- 정렬 추가
+	</select>
+	
+	<!--
+		설		명	: 대/중 저장전 이미 등록된 내역 확인
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-21 
+		수  정   이  력	:
+	-->
+	<select id="selectChkWorkProcGrpList" parameterType="map" resultType="hashmap">
+				
+				/* selectChkWorkProcGrpList -  대/중 저장전 이미 등록된 내역 확인 */
+				SELECT	WSC.WORKDONESEGMENTCLASSID
+					,	D1.DICTIONARYNAME		AS WORKDONESEGMENTCLASSNAME_KO_KR
+					,	D2.DICTIONARYNAME		AS WORKDONESEGMENTCLASSNAME_EN_US
+					,	D3.DICTIONARYNAME		AS WORKDONESEGMENTCLASSNAME_ZH_CN
+					,	D4.DICTIONARYNAME		AS WORKDONESEGMENTCLASSNAME_VI_VN
+					,	WSC.ENTERPRISEID
+					,	WSC.PLANTID
+					,	WSC.WORKDONESEGMENTCLASSTYPE
+					,	WSC.PARENTWORKDONESEGMENTCLASSID
+					,	WSC.DESCRIPTION
+					,	NVL(U1.USER_NM, WSC.CREATOR)	AS CREATOR
+					,	TO_CHAR(WSC.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					,	NVL(U2.USER_NM, WSC.MODIFIER)	AS MODIFIER
+					,	TO_CHAR(WSC.MODIFIEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS MODIFIEDTIME
+					,	WSC.VALIDSTATE
+					,   '0' AS CHK 
+					,   WSC.WORKDONESEGMENTCLASSNAME			-- 다국어id
+					,   SEQDISPLAY    				-- [순서 21.04.23]
+					,	ISLEFTORRIGHTDISPLAY	-- [메인화면 출력 위치 LEFT, RIGHT 21.04.23]
+				FROM	MFM_WORKDONESEGMENTCLASS		WSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	ON	WSC.WORKDONESEGMENTCLASSNAME = D1.DICTIONARYID
+													AND D1.LANGUAGETYPE = 'ko-KR'
+				LEFT OUTER JOIN CMD_DICTIONARY	D2	ON	WSC.WORKDONESEGMENTCLASSNAME = D2.DICTIONARYID
+													AND D2.LANGUAGETYPE = 'en-US'
+				LEFT OUTER JOIN CMD_DICTIONARY	D3	ON	WSC.WORKDONESEGMENTCLASSNAME = D3.DICTIONARYID
+													AND D3.LANGUAGETYPE = 'zh-CN'
+				LEFT OUTER JOIN CMD_DICTIONARY	D4	ON	WSC.WORKDONESEGMENTCLASSNAME = D4.DICTIONARYID
+													AND D4.LANGUAGETYPE = 'vi-VN'
+				LEFT OUTER JOIN CMD_USERS			U1	ON	WSC.CREATOR = U1.USER_ID
+				LEFT OUTER JOIN CMD_USERS			U2	ON	WSC.MODIFIER = U2.USER_ID
+				WHERE	1 = 1 
+				AND		WSC.ENTERPRISEID 				= #{ENTERPRISEID}
+				AND		WSC.PLANTID 					= #{PLANTID}
+				AND 	WSC.WORKDONESEGMENTCLASSID  	= #{WORKDONESEGMENTCLASSID}
+	</select>
+	
+	<!--
+		설		명	: 대/중 등록
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-21 
+		수  정   이  력	:
+	-->
+	  <insert id="insertWorkProcGrp" parameterType="map">
+	  DECLARE
+	  BEGIN
+		INSERT /* smh.mfm.dao.MFM01300Dao.insertWorkProcGrp */	
+		INTO MFM_WORKDONESEGMENTCLASS
+			(WORKDONESEGMENTCLASSID
+			, WORKDONESEGMENTCLASSNAME
+			, ENTERPRISEID
+			, PLANTID
+			, WORKDONESEGMENTCLASSTYPE
+			, PARENTWORKDONESEGMENTCLASSID
+			, DESCRIPTION
+			, CREATOR
+			, CREATEDTIME
+			, MODIFIER
+			, MODIFIEDTIME
+			, LASTTXNHISTKEY
+			, VALIDSTATE
+			,   SEQDISPLAY    				-- [순서 21.04.23]
+			,	ISLEFTORRIGHTDISPLAY	-- [메인화면 출력 위치 LEFT, RIGHT 21.04.23]
+			)
+			VALUES
+			(
+			 #{WORKDONESEGMENTCLASSID}
+			,#{WORKDONESEGMENTCLASSNAME}
+			,#{ENTERPRISEID}
+			,#{PLANTID}
+			,#{WORKDONESEGMENTCLASSTYPE}
+			,#{PARENTWORKDONESEGMENTCLASSID}		-- 사용안함.. 주석처리..
+			,#{DESCRIPTION}
+			,#{CREATOR}
+			,SYSDATE
+			,#{MODIFIER}
+			,SYSDATE
+			,#{LASTTXNHISTKEY}
+			,#{VALIDSTATE}	
+			,   #{SEQDISPLAY}    					-- [순서 21.04.23]
+			,	#{ISLEFTORRIGHTDISPLAY}		-- [메인화면 출력 위치 LEFT, RIGHT 21.04.23]		
+			);
+					
+			<!-- 다국어 테이블 저장용 -->							
+					IF #{WORKDONESEGMENTCLASSNAME_KO_KR} IS NOT NULL THEN <include refid="insertDictionary" />('MFM_WORKDONESEGMENTCLASS','ko-KR',#{WORKDONESEGMENTCLASSNAME}, #{CREATOR}, #{WORKDONESEGMENTCLASSNAME_KO_KR}); END IF;
+					IF #{WORKDONESEGMENTCLASSNAME_EN_US} IS NOT NULL THEN <include refid="insertDictionary" />('MFM_WORKDONESEGMENTCLASS','en-US',#{WORKDONESEGMENTCLASSNAME}, #{CREATOR}, #{WORKDONESEGMENTCLASSNAME_EN_US}); END IF;
+					IF #{WORKDONESEGMENTCLASSNAME_ZH_CN} IS NOT NULL THEN <include refid="insertDictionary" />('MFM_WORKDONESEGMENTCLASS','zh-CN',#{WORKDONESEGMENTCLASSNAME}, #{CREATOR}, #{WORKDONESEGMENTCLASSNAME_ZH_CN}); END IF;
+					IF #{WORKDONESEGMENTCLASSNAME_VI_VN} IS NOT NULL THEN <include refid="insertDictionary" />('MFM_WORKDONESEGMENTCLASS','vi-VN',#{WORKDONESEGMENTCLASSNAME}, #{CREATOR}, #{WORKDONESEGMENTCLASSNAME_VI_VN}); END IF;
+				<!-- 다국어 테이블 저장용 -->
+			END;
+    </insert>
+    
+    <!--
+		설		명	: 대/중 수정
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-21 
+		수  정   이  력	:
+	-->
+    <update id="updateWorkProcGrp" parameterType="map">
+		  DECLARE
+		  BEGIN
+			 /* smh.mfm.dao.MFM01300Dao.updateWorkProcGrp */	
+			 UPDATE  MFM_WORKDONESEGMENTCLASS SET  
+						 DESCRIPTION		=#{DESCRIPTION}
+						,VALIDSTATE			=#{VALIDSTATE}
+						,MODIFIER			=#{MODIFIER}
+						,MODIFIEDTIME		=SYSDATE
+						,LASTTXNHISTKEY		=#{LASTTXNHISTKEY}
+						,   SEQDISPLAY    				=#{SEQDISPLAY}					-- [순서 21.04.23]
+						,	ISLEFTORRIGHTDISPLAY	=#{ISLEFTORRIGHTDISPLAY}		-- [메인화면 출력 위치 LEFT, RIGHT 21.04.23]
+						
+			WHERE 	WORKDONESEGMENTCLASSID 		= #{WORKDONESEGMENTCLASSID};
+						
+				<!-- 다국어 테이블 저장용 -->							
+						IF #{WORKDONESEGMENTCLASSNAME_KO_KR} IS NOT NULL THEN <include refid="insertDictionary" />('MFM_WORKDONESEGMENTCLASS','ko-KR',#{WORKDONESEGMENTCLASSNAME}, #{MODIFIER}, #{WORKDONESEGMENTCLASSNAME_KO_KR}); END IF;
+						IF #{WORKDONESEGMENTCLASSNAME_EN_US} IS NOT NULL THEN <include refid="insertDictionary" />('MFM_WORKDONESEGMENTCLASS','en-US',#{WORKDONESEGMENTCLASSNAME}, #{MODIFIER}, #{WORKDONESEGMENTCLASSNAME_EN_US}); END IF;
+						IF #{WORKDONESEGMENTCLASSNAME_ZH_CN} IS NOT NULL THEN <include refid="insertDictionary" />('MFM_WORKDONESEGMENTCLASS','zh-CN',#{WORKDONESEGMENTCLASSNAME}, #{MODIFIER}, #{WORKDONESEGMENTCLASSNAME_ZH_CN}); END IF;
+						IF #{WORKDONESEGMENTCLASSNAME_VI_VN} IS NOT NULL THEN <include refid="insertDictionary" />('MFM_WORKDONESEGMENTCLASS','vi-VN',#{WORKDONESEGMENTCLASSNAME}, #{MODIFIER}, #{WORKDONESEGMENTCLASSNAME_VI_VN}); END IF;
+				<!-- 다국어 테이블 저장용 -->
+				END;
+    </update>
+    
+    <!--
+		설		명	: 주요 공정 그룹 대/중 삭제
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-21 
+		수  정   이  력	:
+	-->
+    <delete id="deleteWorkProcGrp" parameterType="map" >
+     /* smh.mfm.dao.MFM01300Dao.deleteWorkProcGrp */
+    	DELETE  
+    	 FROM 	MFM_WORKDONESEGMENTCLASS	
+    	WHERE 	WORKDONESEGMENTCLASSID 	= #{WORKDONESEGMENTCLASSID}
+    	   AND 	ENTERPRISEID			= #{ENTERPRISEID}
+		   AND	PLANTID					= #{PLANTID} 	
+    </delete>
+    
+    
+    <!--
+		설		명	: 주요 공정 실적 현황판 - [표준공정 맵핑] - 표준공정List 조회
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-22 
+		수  정   이  력	:  
+	-->
+	<select id="selectWorkDoneSegmentRelMainList" parameterType="map" resultType="hashmap">
+			/*selectWorkDoneSegmentRelMainList - 주요 공정 실적 현황판 - [표준공정 맵핑] - 표준공정List 조회*/
+				
+				
+				
+				SELECT	PS.PROCESSSEGMENTID
+					,	D.DICTIONARYNAME			AS PROCESSSEGMENTNAME
+					,	WSR.WORKDONETOPSEGMENTCLASSID
+					,	D1.DICTIONARYNAME			AS WORKDONETOPSEGMENTCLASSNAME
+					,	WSR.WORKDONEMIDDLESEGMENTCLASSID
+					,	D2.DICTIONARYNAME			AS WORKDONEMIDDLESEGMENTCLASSNAME
+					
+					,	WSR.DESCRIPTION
+					,	U1.USER_NM					AS CREATOR
+					,	TO_CHAR(WSR.CREATEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS CREATEDTIME
+					,	U2.USER_NM					AS MODIFIER
+					,	TO_CHAR(WSR.MODIFIEDTIME, 'YYYY-MM-DD  HH24:MI:SS') AS MODIFIEDTIME
+					
+					,	WSR.VALIDSTATE
+					,   '' AS X_T_BTN
+                    ,   '' AS X_M_BTN
+                    ,   TO_CHAR(WSR.SDATE,'YYYYMMDD') AS SDATE
+                    ,   TO_CHAR(WSR.EDATE, 'YYYYMMDD') AS EDATE
+                    ,   '0' AS CHK
+                    , '' AS ENTERPRISEID
+                    , '' AS PLANTID
+                    
+				FROM BAS_PROCESSSEGMENT				PS
+				LEFT OUTER JOIN CMD_DICTIONARY		D	ON	PS.PROCESSSEGMENTNAME = D.DICTIONARYID
+														AND D.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN MFM_WORKDONESEGMENTREL	WSR ON	PS.PROCESSSEGMENTID = WSR.PROCESSSEGMENTID
+														<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+														AND		WSR.VALIDSTATE = #{P_VALIDSTATE}
+														</if>
+				LEFT OUTER JOIN MFM_WORKDONESEGMENTCLASS	L1	ON	WSR.WORKDONETOPSEGMENTCLASSID = L1.WORKDONESEGMENTCLASSID
+				LEFT OUTER JOIN CMD_DICTIONARY		D1	ON	L1.WORKDONESEGMENTCLASSNAME = D1.DICTIONARYID
+														AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				LEFT OUTER JOIN MFM_WORKDONESEGMENTCLASS L2	ON	WSR.WORKDONEMIDDLESEGMENTCLASSID = L2.WORKDONESEGMENTCLASSID
+				LEFT OUTER JOIN CMD_DICTIONARY		D2	ON	L2.WORKDONESEGMENTCLASSNAME = D2.DICTIONARYID
+														AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}        -- 다국어 코드
+				
+				LEFT OUTER JOIN CMD_USERS				U1	ON	WSR.CREATOR = U1.USER_ID
+				LEFT OUTER JOIN CMD_USERS				U2  ON	WSR.MODIFIER = U2.USER_ID
+				WHERE	1 = 1
+                <if test="P_PROCESSSEGMENTID != null and P_PROCESSSEGMENTID !='' and !(P_PROCESSSEGMENTID eq '*'.toString()) ">
+					AND EXISTS (
+								SELECT	1
+								FROM	(SELECT DATA AS VALUE 
+										  FROM TABLE(CAST(FN_TO_ROWS(#{P_PROCESSSEGMENTID}) AS TP_SIMPLE_TABLE)) 
+										) LMP
+								WHERE	PS.PROCESSSEGMENTID = LMP.VALUE
+								
+								)
+				</if>
+				<if test="P_NOINPUT != null and P_NOINPUT !='' and !(P_NOINPUT eq '*'.toString()) ">
+					
+					<if test="(P_NOINPUT eq 'Y'.toString()) ">
+						AND 	(NVL(WSR.WORKDONETOPSEGMENTCLASSID, ' ') = ' '
+						OR		 NVL(WSR.WORKDONEMIDDLESEGMENTCLASSID, ' ') = ' ')
+					</if>	
+					<if test="(P_NOINPUT eq 'N'.toString()) ">
+						AND 	 NVL(WSR.WORKDONETOPSEGMENTCLASSID, ' ') != ' '
+						AND		 NVL(WSR.WORKDONEMIDDLESEGMENTCLASSID, ' ') != ' '
+						
+					</if>
+				</if>
+				<if test="P_WORKDONETOPCLASS != null and P_WORKDONETOPCLASS !='' and !(P_WORKDONETOPCLASS eq '*'.toString()) ">
+					AND WSR.WORKDONETOPSEGMENTCLASSID      = #{P_WORKDONETOPCLASS}        	-- 대공정(21.05.06)
+				</if>
+				<if test="P_WORKDONEMIDCLASS != null and P_WORKDONEMIDCLASS !='' and !(P_WORKDONEMIDCLASS eq '*'.toString()) ">
+					AND WSR.WORKDONEMIDDLESEGMENTCLASSID   = #{P_WORKDONEMIDCLASS}        	-- 중공정(21.05.06)
+				</if>
+				
+				
+				<if test="P_VALIDSTATE != null and P_VALIDSTATE !='' and !(P_VALIDSTATE eq '*'.toString()) ">
+					AND		WSR.VALIDSTATE = 	#{P_VALIDSTATE}	-- 21.05.07 필터의 유효 여부 설정
+                </if>
+				
+				ORDER BY PS.PROCESSSEGMENTID ASC
+				
+	</select>
+	
+	
+	<!--
+		설		명	: 공주요 공정 실적 현황판 - [표준공정 맵핑] - 표준공정 (기존 내역 조회)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-22
+		수  정   이  력	:  
+	-->
+	<select id="selectWorkDoneSegmentRelList" parameterType="map" resultType="hashmap">
+			/*selectWorkDoneSegmentRelList - 공주요 공정 실적 현황판 - [표준공정 맵핑] - 표준공정 (기존 내역 조회)*/
+				SELECT 
+					  PROCESSSEGMENTID
+					, WORKDONETOPSEGMENTCLASSID
+					, WORKDONEMIDDLESEGMENTCLASSID
+					, WORKDONESMALLSEGMENTCLASSID
+					, ENTERPRISEID
+					, PLANTID
+					, DESCRIPTION
+					, CREATOR
+					, CREATEDTIME
+					, MODIFIER
+					, MODIFIEDTIME
+					, LASTTXNHISTKEY
+					, LASTTXNID
+					, LASTTXNUSER
+					, LASTTXNTIME
+					, LASTTXNCOMMENT
+					, VALIDSTATE
+					, SDATE
+					, EDATE
+				  FROM MFM_WORKDONESEGMENTREL   --표준공정 공정부하공정 그룹 매핑
+				 WHERE 1 = 1
+				   AND 	PROCESSSEGMENTID		= #{PROCESSSEGMENTID}
+	</select>
+	
+	<!--
+		설		명	: 공주요 공정 실적 현황판 - [표준공정 맵핑] - 표준공정 신규등록
+		생	성	자	: 김진현 
+		생	성	일	: 2020-04-20 
+		수  정   이  력	: 
+	-->
+	<insert id="insertWorkDoneSegmentRel" parameterType="map">
+	    /*insertWorkDoneSegmentRel - 공주요 공정 실적 현황판 - [표준공정 맵핑] - 표준공정 신규등록*/
+		INSERT INTO MFM_WORKDONESEGMENTREL( 
+			  PROCESSSEGMENTID
+			, WORKDONETOPSEGMENTCLASSID
+			, WORKDONEMIDDLESEGMENTCLASSID
+			, WORKDONESMALLSEGMENTCLASSID
+			, ENTERPRISEID
+			, PLANTID
+			, DESCRIPTION
+			, CREATOR
+			, CREATEDTIME
+			, MODIFIER
+			, MODIFIEDTIME
+			, LASTTXNHISTKEY
+			, LASTTXNID
+			, LASTTXNUSER
+			, LASTTXNTIME
+			, LASTTXNCOMMENT
+			, VALIDSTATE
+			, SDATE
+			, EDATE
+			) 
+	    VALUES( 
+	         #{PROCESSSEGMENTID}  
+	        ,#{WORKDONETOPSEGMENTCLASSID}  
+	        ,#{WORKDONEMIDDLESEGMENTCLASSID}  
+	        ,'' 			
+	        ,#{ENTERPRISEID}
+	        ,#{PLANTID}
+	        ,#{DESCRIPTION} 
+			,#{CREATOR}
+            ,SYSDATE
+            ,#{MODIFIER}
+            ,SYSDATE
+			,#{LASTTXNHISTKEY}
+			,#{TXNID}
+            ,#{CREATOR}
+            ,SYSDATE
+            ,NULL
+			,#{VALIDSTATE}
+			,CASE WHEN #{SDATE} IS NOT NULL 
+			      THEN TO_DATE(#{SDATE})
+				  ELSE NULL
+				  END
+			,CASE WHEN #{EDATE} IS NOT NULL 
+			      THEN TO_DATE(#{EDATE})
+				  ELSE NULL
+				  END
+			)
+    </insert>
+    
+    <!--
+		설		명	: 공주요 공정 실적 현황판 - [표준공정 맵핑] - 표준공정 수정
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-22 
+		수  정   이  력	:
+	-->
+    <update id="updateWorkDoneSegmentRel" parameterType="map">
+			
+			 UPDATE MFM_WORKDONESEGMENTREL  /*updateWorkDoneSegmentRel - 공주요 공정 실적 현황판 - [표준공정 맵핑] - 표준공정 수정*/
+			SET   WORKDONETOPSEGMENTCLASSID		= #{WORKDONETOPSEGMENTCLASSID} 
+				, WORKDONEMIDDLESEGMENTCLASSID	= #{WORKDONEMIDDLESEGMENTCLASSID} 
+				, SDATE							= CASE WHEN #{SDATE} IS NOT NULL 
+													   THEN TO_DATE(#{SDATE})
+													   ELSE NULL
+													   END
+				, EDATE							= CASE WHEN #{EDATE} IS NOT NULL 
+													   THEN TO_DATE(#{EDATE})
+													   ELSE NULL
+													   END									   
+				, DESCRIPTION					= #{DESCRIPTION} 
+			    , VALIDSTATE					= #{VALIDSTATE} 
+				, MODIFIER						= #{MODIFIER} 
+				, MODIFIEDTIME					= SYSDATE
+				, LASTTXNHISTKEY 				= #{LASTTXNHISTKEY}
+			WHERE PROCESSSEGMENTID 				= #{PROCESSSEGMENTID}
+    </update>
+    
+    <!--
+		설		명	: 대/중/ 주요공정그룹조회(복사 붙여넣기시 코드 찾기 위한 용도)
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-23 
+		수  정   이  력	:
+	-->
+	<select id="selectSegmentGroupList" parameterType="map" resultType="hashmap">
+				/*selectSegmentGroupList - 대/중/ 주요공정그룹조회(복사 붙여넣기시 코드 찾기 위한 용도)*/
+				
+				SELECT	WSC.WORKDONESEGMENTCLASSID
+						,	D1.DICTIONARYNAME		    AS WORKDONESEGMENTCLASSNAME
+						, 	WSC.WORKDONESEGMENTCLASSTYPE
+				FROM	MFM_WORKDONESEGMENTCLASS		WSC
+				LEFT OUTER JOIN CMD_DICTIONARY	D1	
+				ON	WSC.WORKDONESEGMENTCLASSNAME = D1.DICTIONARYID
+				AND D1.LANGUAGETYPE 								= #{SESSION_LANGUAGETYPE}        -- 다국어 코드 
+				WHERE	1 = 1
+				AND		WSC.ENTERPRISEID    						= #{ENTERPRISEID}
+				AND		WSC.PLANTID         						= #{PLANTID}
+				
+				
+	</select>
+	
+	<!--
+		설		명	: 주요공정실적 현황판 기준정보 대/중 ID 구분자 이외의 값 숫자인지 판단
+		생	성	자	: 김진현
+		생	성	일	: 2021-04-30 
+		수  정   이  력	:
+	-->
+    <select id="selectChkProdGrpr" parameterType="map" resultType="hashmap">
+			/* selectChkProdGrpr - 주요공정실적 현황판 기준정보 대/중 ID 구분자 이외의 값 숫자인지 판단 */
+			
+			SELECT  
+				CASE WHEN		-- [대/중/소 앞에 필수 입력되어야 하는 값이 존재 하는지 체크]
+	                    (
+	                        INSTR(UPPER(TRIM(#{WORKDONESEGMENTCLASSID})), 
+	                        CASE 	WHEN #{WORKDONESEGMENTCLASSTYPE} = 'TopWorkDoneSegmentClass'
+	                                THEN 	'TOP'
+	                                ELSE 	'MIDDLE'
+	                                END
+	                        ,1,1)
+	                    ) = 0
+                    THEN 
+                    	-1
+                    ELSE			-- [대/중/소 앞 필수 입력값 이외에 숫자만 있는지 판단]
+						to_number(  
+						REGEXP_INSTR(SUBSTR( UPPER(TRIM(#{WORKDONESEGMENTCLASSID})), INSTR(UPPER(TRIM(#{WORKDONESEGMENTCLASSID})), 
+		                CASE 	WHEN #{WORKDONESEGMENTCLASSTYPE} = 'TopWorkDoneSegmentClass'
+		                     	THEN 	'TOP'
+		                     	ELSE 	'MIDDLE'
+		                     	END
+		                ,1,1)+(
+                                CASE 	WHEN 	#{WORKDONESEGMENTCLASSTYPE} = 'TopWorkDoneSegmentClass'
+		                                	THEN 		3
+		                                	ELSE 		6
+		                                END
+                        		)
+		                 , LENGTH(TRIM(#{WORKDONESEGMENTCLASSID}))),'[^0-9]') 
+		                ) 
+	                END
+	                AS CHK
+                         FROM DUAL
+    </select>
+    
+	 
+
+</mapper>

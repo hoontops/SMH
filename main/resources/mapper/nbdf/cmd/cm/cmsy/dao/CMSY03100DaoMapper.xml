@@ -1,0 +1,135 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.nbdf.cmd.cm.cmsy.dao.CMSY03100Dao">
+<!-- 다국어 사전 정보-->
+
+    <!-- 다국어 사전 정보 등록 -->
+    <insert id="insertCmdDictionary" parameterType="map">
+    /* com.nbdf.cmd.cm.cmsy.dao.CMSY03100Dao.insertCmdDictionary */
+    INSERT INTO CMD_DICTIONARY( 
+        DICTIONARYID  
+        ,LANGUAGETYPE  
+        ,DICTIONARYNAME  
+        ,DESCRIPTION  
+        ,USE_YN  
+        ,CREATED_BY  
+        ,CREATION_DATE  
+        ,LAST_UPDATED_BY  
+        ,LAST_UPDATE_DATE
+        ,DICTIONARYCLASSID  
+        ) 
+    VALUES( 
+        #{DICTIONARYID}  
+        ,#{LANGUAGETYPE}  
+        ,#{DICTIONARYNAME}  
+        ,#{DESCRIPTION}  
+        ,#{USE_YN}  
+        ,#{CREATED_BY}  
+        ,SYSDATE  
+        ,#{LAST_UPDATED_BY}  
+        ,SYSDATE
+        ,#{DICTIONARYCLASSID}  
+            )
+    </insert>
+
+    <!-- 다국어 사전 정보 변경 -->
+    <update id="updateCmdDictionary" parameterType="map" >
+    /* com.nbdf.cmd.cm.cmsy.dao.CMSY03100Dao.updateCmdDictionary */
+    UPDATE CMD_DICTIONARY 
+    SET 
+        DICTIONARYNAME = #{DICTIONARYNAME}     
+        ,DICTIONARYCLASSID = #{DICTIONARYCLASSID}     
+        ,DESCRIPTION = #{DESCRIPTION}     
+        ,USE_YN = #{USE_YN}     
+        ,CREATED_BY = #{CREATED_BY}     
+        ,CREATION_DATE = sysdate   
+        ,LAST_UPDATED_BY = #{LAST_UPDATED_BY}     
+        ,LAST_UPDATE_DATE = sysdate
+    WHERE DICTIONARYID = #{DICTIONARYID}
+    AND LANGUAGETYPE = #{LANGUAGETYPE}
+    </update>
+
+    <!-- 다국어 사전 정보 삭제 -->
+    <update id="deleteCmdDictionary" parameterType="map" > 
+    /* com.nbdf.cmd.cm.cmsy.dao.CMSY03100Dao.deleteCmdDictionary */
+    DELETE FROM CMD_DICTIONARY 
+    WHERE DICTIONARYID = #{DICTIONARYID}
+    /*AND LANGUAGETYPE = #{LANGUAGETYPE}*/
+    </update>
+
+    <!-- 다국어 사전 정보 조회-->
+    
+    <select id="selectCmdDictionaryList" parameterType="map" resultType="hashmap">
+    /* com.nbdf.cmd.cm.cmsy.dao.CMSY03100Dao.selectCmdDictionaryList */
+       SELECT 
+           Z.*
+	      FROM
+	         (
+	           SELECT Y.*
+	                , ROWNUM RNUM
+	             FROM
+	                (
+				    SELECT 
+				        A.DICTIONARYID	
+						,(select x.dictionaryname from cmd_dictionary x where x.dictionaryid = a.dictionaryid and x.languagetype='ko-KR') as NM_K
+						,(select x.dictionaryname from cmd_dictionary x where x.dictionaryid = a.dictionaryid and x.languagetype='en-US') as NM_E
+						,(select x.dictionaryname from cmd_dictionary x where x.dictionaryid = a.dictionaryid and x.languagetype='zh-CN') as NM_C
+						,(select x.dictionaryname from cmd_dictionary x where x.dictionaryid = a.dictionaryid and x.languagetype='vi-VN') as NM_V
+						,(select x.dictionaryname from cmd_dictionary x where x.dictionaryid = a.dictionaryid and x.languagetype=#{SESSION_LANGUAGETYPE}) as DICTIONARYNAME
+				        ,max(A.DESCRIPTION) as DESCRIPTION	
+				        ,max(A.USE_YN) as USE_YN	
+				        ,max(A.CREATED_BY)	as CREATED_BY
+				        ,max(A.CREATION_DATE) as CREATION_DATE	
+				        ,max(A.LAST_UPDATED_BY)	as LAST_UPDATED_BY
+				        ,max(A.LAST_UPDATE_DATE) as	LAST_UPDATE_DATE
+				        ,count(*) over() AS TOTAL_ROWS
+				        ,max(DICTIONARYCLASSID) as DICTIONARYCLASSID
+				    FROM	CMD_DICTIONARY A 
+				    WHERE 1=1 
+				    <if test="DICTIONARYID != null and DICTIONARYID !='' "> 
+				        AND upper(A.DICTIONARYID) like '%'||upper(#{DICTIONARYID})||'%'
+				    </if>
+				    <if test="DICTIONARYNAME != null and DICTIONARYNAME !='' "> 
+				        AND upper(A.DICTIONARYNAME) like '%'||upper(#{DICTIONARYNAME})||'%'
+				    </if>
+				    <if test="DICTIONARYCLASSID != null and DICTIONARYCLASSID !='' "> 
+				        AND DICTIONARYCLASSID = #{DICTIONARYCLASSID}
+				    </if>
+				    <if test="USE_YN != null and USE_YN !='' "> 
+				        AND A.USE_YN = #{USE_YN}
+				    </if>
+				    group by A.DICTIONARYID
+				    ) Y
+	            WHERE 1=1
+			    <if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+			       AND ROWNUM <![CDATA[<=]]> #{PAGE_NUMBER} * #{PAGE_SIZE}
+			    </if>
+	         ) Z
+	     WHERE 1=1
+		<if test="PAGE_NUMBER != null and PAGE_NUMBER !='' ">
+	       AND Z.RNUM <![CDATA[>]]> ( #{PAGE_NUMBER} - 1 ) * #{PAGE_SIZE}
+	    </if>
+    
+    </select>
+
+    <!-- 다국어 사전 정보 상세조회-->
+    <select id="selectCmdDictionary" parameterType="map" resultType="Integer">
+    /* com.nbdf.cmd.cm.cmsy.dao.CMSY03100Dao.selectCmdDictionary */
+    SELECT count(*)
+    FROM	CMD_DICTIONARY A 
+    WHERE A.DICTIONARYID = #{DICTIONARYID}
+    AND	A.LANGUAGETYPE = #{LANGUAGETYPE}
+    </select>
+
+    <!-- 다국어 사전 정보 상세조회-->
+    <select id="selectCmdDictionaryName" parameterType="map" resultType="String">
+    /* com.nbdf.cmd.cm.cmsy.dao.CMSY03100Dao.selectCmdDictionary */
+    SELECT DICTIONARYNAME
+    FROM	CMD_DICTIONARY A 
+    WHERE A.DICTIONARYID = #{DICTIONARYID}
+    AND	A.LANGUAGETYPE = #{LANGUAGETYPE}
+    </select>
+
+</mapper>

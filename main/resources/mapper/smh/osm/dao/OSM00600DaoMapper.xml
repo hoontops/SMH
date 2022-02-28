@@ -1,0 +1,794 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : Claim 비용 마감 전송
+    설명          : Claim 비용 마감 전송
+    작성자       : 진성하
+    최초작성일 : 2021.04.10
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.04.10      진성하     최초  생성
+     2021.06.22		김진현	 수정
+-->
+
+<mapper namespace="smh.osm.dao.OSM00600Dao">
+    <select id="GetOutsourcedClaimClosureStatusIf" parameterType="map"  resultType="hashmap">
+	/* "smh.osm.dao.OSM00600Dao.GetOutsourcedClaimClosureStatusIf"  */
+	/* Claim 비용 마감 전송 - Cclaim 비용 마감 I/F 그리드 조회 (21.06.22) */
+		
+		
+		SELECT  CLOSEYM 		
+		      ,  INTERFACE_YM  						
+		      ,  AREAID
+		      ,  AREANAME
+		      ,  VENDORID
+		      ,  OSPVENDORNAME
+		      ,  PRODEFECTAMOUNT
+		      ,  SELAMOUNT
+		      ,  MATERLOSTAMOUNT
+		      ,  ETCAMOUNT
+		      ,  TOTAMOUNT     						      
+		      ,  CLAIMAMOUNT      
+		      ,  TOTAL_CLAIMAMOUNT         		
+		      ,  TOTAL_REDUCEAMOUNT
+		      ,  REMAIN_QTY      
+		      ,  SPLIT_CNT                
+		      ,  IF_CNT   
+		      ,   ENTERPRISEID
+	          ,   PLANTID
+	          ,   PERIODID      
+	          ,  OCCUR_YM              
+	FROM  (
+		
+		SELECT	-- 마감년월 
+				A.PERIODNAME      AS CLOSEYM 		
+		      ,  B.INTERFACE_YM  								-- I/F 년월
+		      ,  A.AREAID
+		      ,  A.AREANAME
+		      ,  A.VENDORID
+		      ,  A.OSPVENDORNAME
+		      ,  A.PRODEFECTAMOUNT
+		      ,  A.SELAMOUNT
+		      ,  A.MATERLOSTAMOUNT
+		      ,  A.ETCAMOUNT
+		      ,  A.TOTAMOUNT     							-- 발생 금액      
+		      ,  CASE WHEN INTERFACENO IS NULL 
+		             THEN 0
+		             ELSE B.CLAIMAMOUNT   
+		             END
+		             AS CLAIMAMOUNT-- 당월 처리      
+		      ,  B.TOTAL_CLAIMAMOUNT         			-- 기처리 금액
+		      ,  B.TOTAL_REDUCEAMOUNT        			-- 총감면금액      
+		      -- 잔여금액
+		      , (  A.TOTAMOUNT 
+		      					/*  (당월처리는 I/F전송되었으면 기처리 금액에 이미포함됨)
+		      					- ( CASE WHEN INTERFACENO IS NULL 
+		                             THEN 0
+		                             ELSE B.CLAIMAMOUNT   
+		                             END)
+		                             
+		                       */      
+		                       -  B.TOTAL_CLAIMAMOUNT
+		                       -  B.TOTAL_REDUCEAMOUNT
+		        ) 											AS REMAIN_QTY      
+		      ,  B.SPLIT_CNT                 -- 분할 수
+		      ,  B.IF_CNT                    -- I/F 횟수  
+		      
+		      ,   A.ENTERPRISEID
+	          ,   A.PLANTID
+	          ,   A.PERIODID   
+	          ,   A.OCCUR_YM 
+		  FROM (
+		
+						
+						SELECT  CSM.OCCUR_YM
+							,	CSM.PERIODNAME
+							,	CSM.ENTERPRISEID
+							,	CSM.PLANTID
+							,	CSM.PERIODID
+							,	CSM.AREAID
+							,	CSM.AREANAME               			AS AREANAME
+							,	CSM.VENDORID               			AS VENDORID 
+							,	CSM.OSPVENDORNAME          		AS OSPVENDORNAME
+							,	SUM(CSM.CLAIMAMOUNT)       	AS PRODEFECTAMOUNT
+							,	SUM(CSM.SELAMOUNT)         		AS SELAMOUNT
+							,	SUM(CSM.MATERLOSTAMOUNT)   AS MATERLOSTAMOUNT
+							,	SUM(CSM.ETCAMOUNT)         		AS ETCAMOUNT
+							,	SUM(CSM.CLAIMAMOUNT)         +  SUM(CSM.SELAMOUNT) 
+								+ SUM(CSM.MATERLOSTAMOUNT)	 +  SUM(CSM.ETCAMOUNT) 		AS  TOTAMOUNT
+							
+						FROM 
+						(
+							SELECT  
+									TO_CHAR(OCL.OCCURTIME,'YYYY-MM') AS OCCUR_YM
+								,   BP.PERIODNAME
+								,	OCL.ENTERPRISEID
+								,	OCL.PLANTID
+								,	OCL.PERIODID
+								,	OCL.REASONAREAID     		AS AREAID
+								,	DAC.DICTIONARYNAME   	AS AREANAME             
+								,	SAR.VENDORID         			AS VENDORID 
+								,	MVD.VENDORNAME       		AS OSPVENDORNAME
+								,	SUM(OCL.CLAIMAMOUNT) 	AS CLAIMAMOUNT
+								,	0  AS SELAMOUNT
+								,	0  AS MATERLOSTAMOUNT
+								,	0  AS ETCAMOUNT
+								,	0  AS TOTAMOUNT
+								,   SUM(OCL.REDUCEQTYAMOUNT) AS REDUCEQTYAMOUNT		-- (수량 할인 금액 -> 이미 감면된 금액으로 들어 간다.)
+							FROM            OSM_OSPCLAIM                 		OCL
+							INNER      JOIN FN_AREA(#{SESSION_USER_ID})      SAR     
+							ON  SAR.AREAID             								= OCL.REASONAREAID  
+							LEFT OUTER JOIN BAS_VENDOR	                		MVD     
+							ON  MVD.VENDORID           							= SAR.VENDORID
+							AND MVD.PLANTID            							= SAR.PLANTID
+							LEFT OUTER JOIN CMD_DICTIONARY	           		DAC    
+							ON  DAC.DICTIONARYID       							= SAR.AREANAME
+						    AND DAC.LANGUAGETYPE       							=#{SESSION_LANGUAGETYPE}  
+						    INNER JOIN BAS_PERIOD 									BP 
+						    ON BP.PERIODID 											= OCL.PERIODID                                                    
+						                                                                                                          
+							WHERE	1 = 1
+						<if test="PERIODID != null and PERIODID !=''"> 
+							-- 마감년월이 필수값이 아닐 수도 있다.
+							AND OCL.PERIODID    										= #{PERIODID}	
+						</if>			
+							AND		OCL.PLANTID     								= #{PLANTID}
+						<if test="AREAID != null and AREAID !=''"> 
+							AND 	 OCL.REASONAREAID  = #{AREAID}
+						</if>
+						<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+							AND 	 SAR.VENDORID   = #{OSPVENDORID}
+						</if>
+						<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+							AND 	 MVD.VENDORNAME    LIKE '%'||#{OSPVENDORNAME}||'%'
+						</if>
+							AND		OCL.VALIDSTATE  = 'Valid'
+							GROUP BY  
+									TO_CHAR(OCL.OCCURTIME,'YYYY-MM')
+								,   BP.PERIODNAME
+								,	OCL.ENTERPRISEID
+								, 	OCL.PLANTID
+								, 	OCL.PERIODID 
+								, 	OCL.REASONAREAID
+								,	DAC.DICTIONARYNAME
+								, 	SAR.VENDORID 
+								,	MVD.VENDORNAME
+							UNION ALL
+							SELECT 
+									TO_CHAR(OEA.CLAIMDATE,'YYYY-MM') 	AS OCCUR_YM
+								,   	BP.PERIODNAME
+								,	OEA.ENTERPRISEID
+								,	OEA.PLANTID
+								,	OEA.PERIODID
+								,	OEA.AREAID
+								,	DAC.DICTIONARYNAME   					AS AREANAME             
+								,	OEA.VENDORID 
+								,	MVD.VENDORNAME      						AS OSPVENDORNAME
+								,	0                                 					AS CLAIMAMOUNT
+								,	SUM(CASE 	WHEN OEA.CLAIMTYPE  ='Selection' 
+													THEN AMOUNT 
+									         		ELSE 0 END)              		AS SELAMOUNT
+								,	SUM(CASE 	WHEN OEA.CLAIMTYPE  ='MaterialLoss' 
+													THEN AMOUNT 
+									         		ELSE 0 END)              		AS MATERLOSTAMOUNT
+								,	SUM(CASE 	WHEN OEA.CLAIMTYPE  ='Etc' 
+													THEN AMOUNT 
+									         		ELSE 0 END)              		AS ETCAMOUNT
+								,	0                               					AS TOTAMOUNT
+								,   0													AS REDUCEQTYAMOUNT
+							FROM            OSM_OSPETCCLAIMAMOUNT    		OEA 	
+							INNER      	JOIN FN_AREA(#{SESSION_USER_ID})  	SAR    
+											ON  SAR.AREAID             			= OEA.AREAID  
+							LEFT OUTER JOIN BAS_VENDOR	                		MVD    
+											ON  MVD.VENDORID           		= OEA.VENDORID
+							                AND MVD.PLANTID            		= OEA.PLANTID
+							LEFT OUTER JOIN CMD_DICTIONARY	            	DAC    
+											ON  DAC.DICTIONARYID       		= SAR.AREANAME
+						                    AND DAC.LANGUAGETYPE       		= #{SESSION_LANGUAGETYPE}   
+						    INNER 		JOIN BAS_PERIOD BP 
+						    				ON BP.PERIODID 						= OEA.PERIODID                                                                                                          
+							WHERE      1 = 1
+							<if test="PERIODID != null and PERIODID !=''"> 
+							-- 마감년월이 필수값이 아닐 수도 있다.
+							AND 		OEA.PERIODID     		= #{PERIODID}	
+							</if>				
+							
+							AND		OEA.PLANTID     		= #{PLANTID}
+							AND		OEA.VALIDSTATE  		= 'Valid'
+						
+						<if test="AREAID != null and AREAID !=''"> 
+							AND 	 OEA.AREAID  				= #{AREAID}
+						</if>
+						<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+							AND 	 OEA.VENDORID   			= #{OSPVENDORID}
+						</if>
+						<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+							AND 	 MVD.VENDORNAME    	LIKE '%'||#{OSPVENDORNAME}||'%'
+						</if>
+							GROUP BY	
+										TO_CHAR(OEA.CLAIMDATE,'YYYY-MM')
+									,   BP.PERIODNAME
+									,	OEA.ENTERPRISEID
+									,	OEA.PLANTID
+									,	OEA.PERIODID
+									,	OEA.AREAID
+									,	DAC.DICTIONARYNAME
+									,	OEA.VENDORID 
+									,	MVD.VENDORNAME
+						)  CSM
+						GROUP BY	CSM.OCCUR_YM
+									,	CSM.PERIODNAME
+									,	CSM.ENTERPRISEID
+									,	CSM.PLANTID
+									,	CSM.PERIODID
+									,	CSM.AREAID
+									,	CSM.AREANAME  
+									,	CSM.VENDORID 
+									,	CSM.OSPVENDORNAME
+		)  A
+		  INNER JOIN 
+		  (
+		        
+		        SELECT  
+		            OSM.ENTERPRISEID
+		            , OSM.PLANTID
+		            , OSM.OCCUR_YM
+		            , OSM.PERIODID
+		            , OSM.INTERFACE_YM      -- i/f 년월
+		            , OSM.AREAID
+		            , OSM.VENDORID
+		            -----------------------[key]
+		            , CLAIMAMOUNT
+		            , INTERFACENO      -- 인터페이스 번호
+		            , INTERFACEDATE    -- 인터페이스 일시
+		            
+		            , MAX(SUM.SPLIT_CNT)            			AS SPLIT_CNT
+		            , MAX(SUM.IF_CNT)               				AS IF_CNT
+		            , MAX(SUM.TOTAL_REDUCEAMOUNT)   	AS TOTAL_REDUCEAMOUNT
+		            , MAX(SUM.TOTAL_CLAIMAMOUNT)    	AS TOTAL_CLAIMAMOUNT
+		            
+		          FROM OSM_OSPCLOSE OSM
+		          INNER JOIN (
+		                SELECT 
+		                        OSM.ENTERPRISEID
+		                        , OSM.PLANTID
+		                        , OSM.OCCUR_YM
+		                        , OSM.PERIODID
+		                        --, OSM.INTERFACE_YM      -- i/f 년월
+		                        , OSM.AREAID
+		                        , OSM.VENDORID
+		                        , COUNT(*) 																										AS SPLIT_CNT -- 분할 수
+		                        , COUNT(CASE WHEN INTERFACENO IS NOT NULL THEN 1 END) 									AS IF_CNT    -- I/F 횟수
+		                        , NVL(SUM(CASE WHEN REDUCEAMOUNT IS NOT NULL THEN REDUCEAMOUNT END), 0)    	AS TOTAL_REDUCEAMOUNT        -- 총 감면 금액
+		                        , NVL(SUM(CASE WHEN INTERFACENO IS NOT NULL THEN CLAIMAMOUNT END), 0)    		AS TOTAL_CLAIMAMOUNT           -- 기처리 금액
+		                      FROM OSM_OSPCLOSE OSM
+		                      GROUP BY OSM.ENTERPRISEID
+		                                , OSM.PLANTID
+		                                , OSM.OCCUR_YM
+		                                , OSM.PERIODID
+		                                --, OSM.INTERFACE_YM      -- i/f 년월
+		                                , OSM.AREAID
+		                                , OSM.VENDORID
+		          ) SUM
+		          ON OSM.ENTERPRISEID           	= SUM.ENTERPRISEID
+		          AND OSM.PLANTID               	= SUM.PLANTID
+		          AND OSM.OCCUR_YM              	= SUM.OCCUR_YM
+		          AND OSM.PERIODID              	= SUM.PERIODID
+		          --AND OSM.INTERFACE_YM          	= SUM.INTERFACE_YM
+		          AND OSM.AREAID               	 	= SUM.AREAID
+		          AND OSM.VENDORID              	= SUM.VENDORID
+		          
+		          LEFT OUTER JOIN BAS_VENDOR	MVD    
+                  ON  MVD.VENDORID          		= OSM.VENDORID
+                  AND MVD.PLANTID           		= OSM.PLANTID
+		          
+		           WHERE 1 = 1
+		           
+		           
+		           
+							<if test="PERIODID != null and PERIODID !=''"> 
+								-- 마감년월이 필수값이 아닐 수도 있다.
+								AND OSM.PERIODID     		= #{PERIODID}	
+							</if>
+		                        AND OSM.ENTERPRISEID    	= #{SESSION_ENTERPRISEID}
+		                        AND OSM.PLANTID         	= #{PLANTID}
+		                        
+		                        
+							<if test="AREAID != null and AREAID !=''"> 
+								AND 	 OSM.AREAID  = #{AREAID}
+							</if>
+							<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+								AND 	 OSM.VENDORID   = #{OSPVENDORID}
+							</if>
+							<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+								AND 	 MVD.VENDORNAME    LIKE '%'||#{OSPVENDORNAME}||'%'
+							</if>
+		          
+		          GROUP BY OSM.ENTERPRISEID
+		                    , OSM.PLANTID
+		                    , OSM.OCCUR_YM
+		                    , OSM.PERIODID
+		                    , OSM.INTERFACE_YM      -- i/f 년월
+		                    , OSM.AREAID
+		                    , OSM.VENDORID
+		                    , OSM.CLAIMAMOUNT       -- 처리
+		                    , OSM.INTERFACENO      -- 인터페이스 번호
+		                    , OSM.INTERFACEDATE    -- 인터페이스 일시
+		  
+		  
+		  ) B
+		  
+		  ON A.ENTERPRISEID  		=   B.ENTERPRISEID
+		  AND A.PLANTID      			= B.PLANTID
+		  AND A.OCCUR_YM      		= B.OCCUR_YM
+		  AND A.PERIODID     		 	= B.PERIODID
+		  AND A.AREAID          		= B.AREAID
+		  AND A.VENDORID        	= B.VENDORID
+		  
+		  WHERE 1 = 1
+		    --AND B.INTERFACE_YM   = PERIODNAME		-- I/F 년월	
+		    AND B.INTERFACE_YM   = #{CLOSEYM}		-- I/F 년월 (필수값)						
+		)
+		
+		WHERE 1 = 1
+			-- [잔여금액이 Y이면 0보다 큰것] 
+		  	<if test="REMAIN_AMOUNT_YN != null and REMAIN_AMOUNT_YN !='' and (REMAIN_AMOUNT_YN eq 'Y'.toString()) ">
+				AND 	REMAIN_QTY  <![CDATA[>]]> 0
+			</if>
+			<if test="REMAIN_AMOUNT_YN != null and REMAIN_AMOUNT_YN !='' and (REMAIN_AMOUNT_YN eq 'N'.toString()) ">
+				AND 	REMAIN_QTY  = 0
+			</if>	
+			
+			-- [분할 감면 여부] 
+		  	<if test="ISDIVISION_REDUCTION_YN != null and ISDIVISION_REDUCTION_YN !='' and (ISDIVISION_REDUCTION_YN eq 'Y'.toString()) ">
+				AND 	SPLIT_CNT  <![CDATA[>=]]> 1
+			</if>
+			<if test="ISDIVISION_REDUCTION_YN != null and ISDIVISION_REDUCTION_YN !='' and (ISDIVISION_REDUCTION_YN eq 'N'.toString()) ">
+				AND 	SPLIT_CNT  = 0
+			</if>				
+				
+								
+								
+								
+    </select>   
+    
+    
+    
+    <!--
+		설		명	: Claim 비용 마감 전송 - Claim 비용 분할 / 감면 Detail 조회 (21.06.24)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-24 
+		수  정   이  력	:
+	-->
+	<select id="GetOutsourcedClaimClosureStatusIfSandDetail" parameterType="map" resultType="hashmap">
+			/* GetOutsourcedClaimClosureStatusIfSandDetail -  Claim 비용 마감 전송 - Claim 비용 분할 / 감면 Detail 조회 (21.06.24) */
+			    SELECT 
+					OSM.ENTERPRISEID
+					, OSM.PLANTID
+					, OSM.OCCUR_YM
+					, OSM.PERIODID
+					, OSM.INTERFACE_YM      -- i/f 년월
+					, OSM.AREAID
+					, OSM.VENDORID
+					, OSM.CLAIMAMOUNT       -- 처리금액
+					, NVL(OSM.REDUCEAMOUNT,0) AS REDUCEAMOUNT      -- 감면금액
+					, OSM.REASONREDUCE          -- 감면사유
+					 , CASE WHEN OSM.INTERFACENO IS NOT NULL
+					   THEN  'Y'
+					   ELSE  'N'
+					   END
+					   AS  IF_YN
+					 , TO_CHAR(OSM.INTERFACEDATE , 'YYYY-MM-DD HH24:MI') AS INTERFACEDATE
+					 , NVL(ERP.INTERFACE_FLAG, 'N')  AS INTERFACE_FLAG
+					 
+					 , BP.PERIODNAME  AS CLOSEYM        -- 마감년월
+					 
+					 , OSM.INTERFACENO
+				  FROM OSM_OSPCLOSE OSM
+				  INNER JOIN BAS_PERIOD 								BP 
+                  ON BP.PERIODID 											= OSM.PERIODID
+				  LEFT JOIN ifc_wip_osp_etc_summary@ERPPROD   ERP
+				  ON ERP.OSP_ETC_SUMMARY_ID 						= OSM.INTERFACENO
+				  
+				  WHERE 1 = 1
+				  
+					AND OSM.ENTERPRISEID    = #{ENTERPRISEID}
+					AND OSM.PLANTID         = #{PLANTID}
+					AND OSM.OCCUR_YM        = #{OCCUR_YM}
+					AND OSM.PERIODID        = #{PERIODID}
+					AND OSM.AREAID          = #{AREAID}
+					AND OSM.VENDORID        = #{VENDORID}
+					
+					
+					ORDER BY OSM.INTERFACE_YM
+	</select>
+	
+	
+	<!--
+		설		명	: Claim 마감 전송 - Detail 저장(신규)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-25 
+		수  정   이  력	:
+	-->
+	<insert id="insertOsmOspClose" parameterType="map">
+    <!-- insertOsmOspClose - Claim 확정 -->
+    INSERT INTO OSM_OSPCLOSE( 
+        ENTERPRISEID
+		, PLANTID
+		, OCCUR_YM
+		, PERIODID
+		, INTERFACE_YM			-- Interface년월
+		, AREAID
+		, VENDORID
+		, CLAIMAMOUNT
+		, REDUCEAMOUNT          -- 감면금액
+		, REASONREDUCE
+		, CREATOR
+		, CREATEDTIME
+		, MODIFIER
+		, MODIFIEDTIME
+		, LASTTXNHISTKEY
+		, LASTTXNID
+		, LASTTXNUSER
+		, LASTTXNTIME
+		, LASTTXNCOMMENT
+		, VALIDSTATE        ) 
+    VALUES 
+        ( 
+			#{ENTERPRISEID}
+		, #{PLANTID}
+		, #{OCCUR_YM}
+		, #{PERIODID}
+		, #{INTERFACE_YM}
+		, #{AREAID}
+		, #{VENDORID}
+		, TO_NUMBER(#{CLAIMAMOUNT})		
+		, TO_NUMBER(#{REDUCEAMOUNT})		
+		, #{REASONREDUCE}
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{MODIFIER}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{LASTTXNUSER}  
+        ,SYSDATE  
+        ,#{LASTTXNCOMMENT}  
+        ,'Valid'    )
+    </insert>
+    
+    
+    <!--
+		설		명	: Claim 마감 전송 - Detail 저장(수정)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-25 
+		수  정   이  력	:
+	-->
+	<update id="updateOsmOspClose" parameterType="map" >
+	<!-- updateOsmOspClose - 확정 후 기간정보 상태 변경 -->
+    UPDATE OSM_OSPCLOSE 
+    SET 
+			CLAIMAMOUNT		= TO_NUMBER(#{CLAIMAMOUNT})		
+		, REDUCEAMOUNT     = TO_NUMBER(#{REDUCEAMOUNT})		
+		, REASONREDUCE		= #{REASONREDUCE}
+        ,MODIFIER 				= #{MODIFIER}     
+        ,MODIFIEDTIME 			= SYSDATE     
+        ,LASTTXNHISTKEY 		= #{LASTTXNHISTKEY}     
+        ,LASTTXNID 				= #{LASTTXNID}     
+        ,LASTTXNUSER 			= #{LASTTXNUSER}     
+        ,LASTTXNTIME 			= SYSDATE     
+        ,LASTTXNCOMMENT 	= #{LASTTXNCOMMENT}
+    WHERE ENTERPRISEID		= #{ENTERPRISEID}
+		AND PLANTID 			= #{PLANTID}
+		AND OCCUR_YM 		= #{OCCUR_YM}
+		AND PERIODID 			= #{PERIODID}
+		AND INTERFACE_YM 	= #{INTERFACE_YM}
+		AND AREAID				= #{AREAID}
+		AND VENDORID 		= #{VENDORID}
+    </update>
+    
+    <!--
+		설		명	: Claim 마감 전송 - Detail 저장(삭제)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-25 
+		수  정   이  력	:
+	-->
+	<delete id="deleteOsmOspClose" parameterType="map" > 
+		DELETE FROM OSM_OSPCLOSE  /*deleteOsmOspClose - Claim 마감 전송 - Detail 저장(삭제)*/
+			 WHERE ENTERPRISEID		= #{ENTERPRISEID}
+				AND PLANTID 			= #{PLANTID}
+				AND OCCUR_YM 		= #{OCCUR_YM}
+				AND PERIODID 			= #{PERIODID}
+				AND INTERFACE_YM 	= #{INTERFACE_YM}
+				AND AREAID				= #{AREAID}
+				AND VENDORID 		= #{VENDORID}
+	</delete>
+	
+	
+	<!--
+		설		명	: Claim 비용 마감 전송 - ERP 전송건 조회 (I/F 년월에 따른)
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-25 
+		수  정   이  력	:
+	-->
+	<select id="GetOsmOspCloseErpSend" parameterType="map" resultType="hashmap">
+			/* GetOsmOspCloseErpSend -  Claim 비용 마감 전송 - ERP 전송건 조회 (I/F 년월에 따른) */
+			    SELECT  OSM.ENTERPRISEID
+					, OSM.PLANTID
+					, OSM.OCCUR_YM
+					, OSM.PERIODID
+					, OSM.INTERFACE_YM
+					, OSM.AREAID
+					, OSM.VENDORID
+					, OSM.CLAIMAMOUNT
+					, OSM.REDUCEAMOUNT
+					, OSM.REASONREDUCE
+					, OSM.INTERFACEDATE
+					, OSM.INTERFACEUSER
+					, OSM.INTERFACENO
+					, OSM.DESCRIPTION
+				  FROM OSM_OSPCLOSE OSM
+				 WHERE 1 = 1
+				   AND OSM.PLANTID      	= #{PLANTID}
+				   AND OSM.INTERFACE_YM 	= #{INTERFACE_YM}
+				   AND OSM.INTERFACEDATE 	IS NULL
+				   AND OSM.INTERFACENO 		IS NULL
+	</select>
+	
+	<!--
+		설		명	: Claim 비용 마감 전송 - ERP seq 채번
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-25 
+		수  정   이  력	:
+	-->
+	<select id="getERPSeqNextVal" parameterType="map" resultType="hashmap">
+    	SELECT  IFC_WIP_OSP_ETC_SUMMARY_S.NEXTVAL@ERPPROD||'' AS SEQNEXTVAL 		-- erp에 존재 하는것 사용
+    	 FROM  DUAL
+    </select>
+    
+    <!--
+		설		명	: Claim 비용 마감 전송 - ERP 전송
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-25 
+		수  정   이  력	:
+	-->
+	<update id="insertOspEtcSummary" parameterType="map" >
+		/* insertOspEtcSummary -  Claim 비용 마감 전송 - ERP 전송 */
+		INSERT INTO ifc_wip_osp_etc_summary@ERPPROD (
+						OSP_ETC_SUMMARY_ID
+						,   OSP_ETC_DATE
+						,   VENDOR_ID
+						,   VENDOR_SITE_ID
+						,   WC_CODE
+						,   ETC_QTY
+						,   ETC_COST
+						,   ETC_CODE
+						,   DESCRIPTION
+						,   ACCOUNT_CODE
+						,   ETC_COST_DESC
+						,   ATTRIBUTE1 
+						,   CLOSE_FLAG
+						,   INTERFACE_FLAG
+						,   CREATION_DATE
+						,   CREATED_BY
+						,   DEPT_CLOSE_FLAG
+						,   DEPT_CLOSE_DATE
+						,   CLOSE_DATE
+						,   APPLY_USER_NUM
+						,   PERIOD_NAME
+						,   ETC_AMOUNT
+				)
+				VALUES (
+                #{P_INTERFACENO}
+				, LAST_DAY(TO_DATE( REPLACE(#{INTERFACE_YM}, '-', '')||'01'))
+				, (
+						SELECT PV.VENDOR_ID
+							  FROM PO.PO_VENDOR_SITES_ALL@ERPPROD PV
+							 WHERE PV.VENDOR_SITE_ID = #{VENDORID}
+				   )
+				, #{VENDORID}
+				, #{AREAID}
+				, -1
+				, #{CLAIMAMOUNT}
+				, 29
+				, #{DESCRIPTION}
+				, '5142001'
+				, 'Interface'
+				, #{P_INTERFACENO}
+				, 'Y'
+				, 'N'
+				, SYSDATE
+				, -1
+				, 'Y'
+				, SYSDATE
+				, SYSDATE
+				, -1
+				, #{INTERFACE_YM}
+				, (-1 * #{CLAIMAMOUNT})
+				)
+	</update>
+	
+	<!--
+		설		명	: Claim 마감 전송 - Detail 저장(수정) - ERP전송 후
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-25 
+		수  정   이  력	:
+	-->
+	<update id="updateOsmOspCloseErp" parameterType="map" >
+	<!-- updateOsmOspCloseErp - Claim 마감 전송 - Detail 저장(수정) - ERP전송 후 -->
+    UPDATE OSM_OSPCLOSE 
+    SET 
+		  INTERFACEDATE		= SYSDATE
+		, INTERFACEUSER		= #{MODIFIER}
+		, INTERFACENO		= #{P_INTERFACENO}
+        , MODIFIER 			= #{MODIFIER}     
+        , MODIFIEDTIME 		= SYSDATE     
+        , LASTTXNHISTKEY 	= #{LASTTXNHISTKEY}     
+        , LASTTXNID 		= #{LASTTXNID}     
+        , LASTTXNUSER 		= #{LASTTXNUSER}     
+        , LASTTXNTIME 		= SYSDATE     
+        , LASTTXNCOMMENT 	= #{LASTTXNCOMMENT}
+    WHERE ENTERPRISEID		= #{ENTERPRISEID}
+		AND PLANTID 		= #{PLANTID}
+		AND OCCUR_YM 		= #{OCCUR_YM}
+		AND PERIODID 		= #{PERIODID}
+		AND INTERFACE_YM 	= #{INTERFACE_YM}
+		AND AREAID			= #{AREAID}
+		AND VENDORID 		= #{VENDORID}
+    </update>
+    
+    
+    <!--
+		설		명	: Claim 비용 마감 전송 - Detail 삭제시 ERP 내용 있는지 조회
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-25 
+		수  정   이  력	:
+	-->
+	<select id="GetOsmOspCloseErp" parameterType="map" resultType="hashmap">
+			/* GetOsmOspCloseErp -  Claim 비용 마감 전송 - Detail 삭제시 ERP 내용 있는지 조회 */
+			    SELECT  ERP.OSP_ETC_SUMMARY_ID
+				  FROM ifc_wip_osp_etc_summary@ERPPROD   ERP
+				 WHERE 1 = 1
+				   AND ERP.OSP_ETC_SUMMARY_ID   = #{INTERFACENO}
+				   AND ERP.INTERFACE_FLAG 			= 'N'
+				   AND ERP.ETC_CODE 					= '29'
+				   AND ERP.ACCOUNT_CODE 			= '5142001'
+	</select>
+    
+    
+    <!--
+		설		명	: Claim 마감 전송 - Detail 저장(삭제)- ERP 내용
+		생	성	자	: 김진현 
+		생	성	일	: 2021-06-25 
+		수  정   이  력	:
+	-->
+	<delete id="deleteOsmOspCloseErp" parameterType="map" > 
+		DELETE FROM ifc_wip_osp_etc_summary@ERPPROD   ERP  /*deleteOsmOspCloseErp - Claim 마감 전송 - Detail 저장(삭제)*/
+			 WHERE OSP_ETC_SUMMARY_ID   = #{INTERFACENO}
+				   AND INTERFACE_FLAG 		= 'N'
+				   AND ETC_CODE 			= '29'
+				   AND ACCOUNT_CODE 		= '5142001'
+	</delete>
+    
+    
+	
+	
+	
+	
+    
+    
+    
+
+    <!-- 외주Claim 상세조회-->
+    <select id="selectGetOutsourcedClaimClosureStatusIfDetail" parameterType="map" resultType="hashmap">
+        /* "smh.osm.dao.OSM00600Dao.selectGetOutsourcedClaimClosureStatusIfDetail"  */
+		SELECT 
+				CSM.ENTERPRISEID
+			,	CSM.PLANTID
+			,	CSM.PERIODID
+			,	CSM.AREAID
+			,	CSM.AREANAME               AS AREANAME
+			,	CSM.VENDORID               AS VENDORID 
+			,	CSM.OSPVENDORNAME          AS OSPVENDORNAME
+			,	SUM(CSM.CLAIMAMOUNT)       AS PRODEFECTAMOUNT
+			,	SUM(CSM.SELAMOUNT)         AS SELAMOUNT
+			,	SUM(CSM.MATERLOSTAMOUNT)   AS MATERLOSTAMOUNT
+			,	SUM(CSM.ETCAMOUNT)         AS ETCAMOUNT
+			,	SUM(CSM.CLAIMAMOUNT)         +  SUM(CSM.SELAMOUNT) 
+				+ SUM(CSM.MATERLOSTAMOUNT)	 +  SUM(CSM.ETCAMOUNT) AS  TOTAMOUNT
+		FROM 
+		(
+			SELECT 
+					OCL.ENTERPRISEID
+				,	OCL.PLANTID
+				,	OCL.PERIODID
+				,	OCL.REASONAREAID     AS AREAID
+				,	DAC.DICTIONARYNAME   AS AREANAME            -- 
+				,	SAR.VENDORID         AS VENDORID 
+				,	MVD.VENDORNAME       AS OSPVENDORNAME
+				,	SUM(OCL.CLAIMAMOUNT) AS CLAIMAMOUNT
+				,	0  AS SELAMOUNT
+				,	0  AS MATERLOSTAMOUNT
+				,	0  AS ETCAMOUNT
+				,	0  AS TOTAMOUNT
+			FROM            OSM_OSPCLAIM                 OCL
+			INNER      JOIN FN_AREA(#{SESSION_USER_ID})       SAR     ON  SAR.AREAID             = OCL.REASONAREAID  
+			LEFT OUTER JOIN BAS_VENDOR	                MVD     ON  MVD.VENDORID           = SAR.VENDORID
+			                                                    AND MVD.PLANTID            = SAR.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY	            DAC     ON  DAC.DICTIONARYID       = SAR.AREANAME
+		                                                        AND DAC.LANGUAGETYPE       =#{SESSION_LANGUAGETYPE}  
+		                                                                                                          
+			WHERE	OCL.PERIODID    = #{PERIODID}
+			AND		OCL.PLANTID     = #{PLANTID}
+		<if test="AREAID != null and AREAID !=''"> 
+			AND 	 OCL.REASONAREAID  = #{AREAID}
+		</if>
+		<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+			AND 	 SAR.VENDORID   = #{OSPVENDORID}
+		</if>
+		<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+			AND 	 MVD.VENDORNAME    ILIKE '%'||#{OSPVENDORNAME}||'%'
+		</if>
+			AND		OCL.VALIDSTATE  = 'Valid'
+			GROUP BY    OCL.ENTERPRISEID
+				, OCL.PLANTID
+				, OCL.PERIODID 
+				, OCL.REASONAREAID,	DAC.DICTIONARYNAME
+				, SAR.VENDORID ,MVD.VENDORNAME
+			UNION ALL 
+			SELECT 
+					OEA.ENTERPRISEID
+				,	OEA.PLANTID
+				,	OEA.PERIODID
+				,	OEA.AREAID
+				,	DAC.DICTIONARYNAME   AS AREANAME            -- 
+				,	OEA.VENDORID 
+				,	MVD.VENDORNAME      AS OSPVENDORNAME
+				,	0                                 AS CLAIMAMOUNT
+				,	SUM(CASE WHEN OEA.CLAIMTYPE  ='Selection' THEN AMOUNT 
+					         ELSE 0 END)              AS SELAMOUNT
+				,	SUM(CASE WHEN OEA.CLAIMTYPE  ='MaterialLoss' THEN AMOUNT 
+					         ELSE 0 END)              AS MATERLOSTAMOUNT
+				,	SUM(CASE WHEN OEA.CLAIMTYPE  ='Etc' THEN AMOUNT 
+					         ELSE 0 END)              AS ETCAMOUNT
+				,	0                               AS TOTAMOUNT
+			FROM            OSM_OSPETCCLAIMAMOUNT        OEA 	
+			INNER      JOIN FN_AREA(#{SESSION_USER_ID})       SAR    ON  SAR.AREAID             = OEA.AREAID  
+			LEFT OUTER JOIN BAS_VENDOR	                MVD    ON  MVD.VENDORID           = OEA.VENDORID
+			                                                   AND MVD.PLANTID            = OEA.PLANTID
+			LEFT OUTER JOIN CMD_DICTIONARY	            DAC    ON  DAC.DICTIONARYID       = SAR.AREANAME
+		                                                       AND DAC.LANGUAGETYPE       =#{SESSION_LANGUAGETYPE}                                                          
+			WHERE	OEA.PERIODID    = #{PERIODID}
+			AND		OEA.PLANTID     = #{PLANTID}
+			
+			AND		OEA.VALIDSTATE  ='Valid'
+		<if test="AREAID != null and AREAID !=''"> 
+			AND 	 OEA.AREAID  = #{AREAID}
+		</if>
+		<if test="OSPVENDORID != null and OSPVENDORID !=''"> 
+			AND 	 OEA.VENDORID   = #{OSPVENDORID}
+		</if>
+		<if test="OSPVENDORNAME != null and OSPVENDORNAME !=''"> 
+			AND 	 MVD.VENDORNAME    LIKE '%'||#{OSPVENDORNAME}||'%'
+		</if>
+			GROUP BY	OEA.ENTERPRISEID
+					,	OEA.PLANTID
+					,	OEA.PERIODID
+					,	OEA.AREAID
+					,	DAC.DICTIONARYNAME
+					,	OEA.VENDORID 
+					,	MVD.VENDORNAME
+		)  CSM
+		GROUP BY	CSM.ENTERPRISEID
+				,	CSM.PLANTID
+				,	CSM.PERIODID
+				,	CSM.AREAID
+				,	CSM.AREANAME  
+				,	CSM.VENDORID 
+				,	CSM.OSPVENDORNAME
+    </select>
+
+</mapper>

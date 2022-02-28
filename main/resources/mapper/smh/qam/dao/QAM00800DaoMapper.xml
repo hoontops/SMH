@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.qam.dao.QAM00800Dao">
+
+    <!--
+         desc    : 자주검사 결과조회를  조회한다.
+    -->
+    <select id="selectIndependentInspResultList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM00800Dao.selectIndependentInspResultList*/
+        --GetIndependentInspectionResultInquiry
+        SELECT DISTINCT
+               TO_CHAR(IR.INSPECTIONDATE, 'YYYYMMDDHH24MISS')         AS INSPECTIONPROCESSDATE
+             , PSC.PARENTPROCESSSEGMENTCLASSID
+             , D2.DICTIONARYNAME                                      AS TOPPROCESSSEGMENTCLASSNAME
+             , PS.PROCESSSEGMENTCLASSID
+             , D1.DICTIONARYNAME                                      AS MIDDLEPROCESSSEGMENTCLASSNAME
+             , IR.PROCESSSEGMENTID
+             , IR.PROCESSSEGMENTVERSION
+             , D3.DICTIONARYNAME                                      AS PROCESSSEGMENTNAME
+             , LR.USERSEQUENCE
+             , IR.AREAID
+             , IR."degree"                                            AS DEGREE
+             , D4.DICTIONARYNAME                                      AS AREANAME
+             , IR.INSPECTIONUSER
+             , UR.USER_NM                                             AS INSPECTIONUSERNAME
+             , IP.INSPECTORNAME
+             , IR.PRODUCTDEFID
+             , IR.PRODUCTDEFVERSION
+             , PD.PRODUCTDEFNAME
+             , LT.PARENTLOTID
+             , LR.LOTID
+             , LR.WORKENDPCSQTY                                                                           /*작업완료 PCS 수량*/
+             , LR.WORKENDPANELQTY                                                                         /*작업완료 PANEL 수량*/
+             , IR.INSPECTIONQTY                                       AS INSPECTIONPCSQTY                 /*검사수(PSC)*/
+             , CASE WHEN NVL(LT.PANELPERQTY, 0) = 0 THEN 0
+               ELSE CEIL(IR.INSPECTIONQTY / LT.PANELPERQTY)
+               END                                                    AS INSPECTIONPNLQTY                 /*검사수(PANEL)*/
+             , IR.SPECOUTQTY                                          AS SPECOUTPCSQTY                    /*불량수(PCS)*/
+             , CASE WHEN NVL(LT.PANELPERQTY, 0) = 0 THEN 0
+               ELSE CEIL(IR.SPECOUTQTY / LT.PANELPERQTY)
+               END                                                    AS SPECOUTPNLQTY                    /*불량수(PANEL)*/
+             , CASE WHEN NVL(IR.INSPECTIONQTY, 0) = 0 THEN 0
+               ELSE ROUND((IR.SPECOUTQTY / IR.INSPECTIONQTY) * 100, 2)
+               END                                                    AS SPECOUTPERCENTAGE                /*불량율(%)*/
+             , NVL2(AB.LOTID, 'Y', 'N')                               AS ISNCRPUBLISH
+             , IR.INSPECTIONDEFID
+             , D5.DICTIONARYNAME                                      AS INSPECTIONDEFNAME
+             , IR.TXNGROUPHISTKEY
+             , IR.PLANTID
+             , IR.PROCESSRELNO
+             , IR.TXNCOMMENT                                          AS REWORKCOMMENT
+          FROM            QAM_INSPECTIONRESULT            IR
+          INNER JOIN      PCM_LOTWORKRESULT               LR   ON   LR.LOTID                    =  IR.RESOURCEID
+                                                               AND  LR.PROCESSSEGMENTID         =  IR.PROCESSSEGMENTID
+                                                               AND  LR.PROCESSSEGMENTVERSION    =  IR.PROCESSSEGMENTVERSION
+                                                               AND  LR.WORKCOUNT                =  IR.WORKCOUNT
+          INNER JOIN      FN_AREA(#{USERID})              FA   ON   FA.AREAID                   =  LR.AREAID
+          INNER JOIN      PCM_LOT                         LT   ON   LT.LOTID                    =  LR.LOTID
+          INNER JOIN      BAS_PROCESSSEGMENT              PS   ON   PS.PROCESSSEGMENTID         =  IR.PROCESSSEGMENTID
+                                                               AND  PS.PROCESSSEGMENTVERSION    =  IR.PROCESSSEGMENTVERSION
+          INNER JOIN      BAS_PROCESSSEGMENTCLASS         PSC  ON   PSC.PROCESSSEGMENTCLASSID   =  PS.PROCESSSEGMENTCLASSID
+          INNER JOIN      BAS_PROCESSSEGMENTCLASS         PSC1 ON   PSC1.PROCESSSEGMENTCLASSID  =  PSC.PARENTPROCESSSEGMENTCLASSID
+          INNER JOIN      BAS_PLANT                       SPL  ON   IR.PLANTID                  =  SPL.PLANTID
+          LEFT OUTER JOIN CMD_DICTIONARY                  D1   ON   D1.DICTIONARYID             =  PSC.PROCESSSEGMENTCLASSNAME
+                                                               AND  D1.LANGUAGETYPE             =  #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY                  D2   ON   D2.DICTIONARYID             =  PSC1.PROCESSSEGMENTCLASSNAME
+                                                               AND  D2.LANGUAGETYPE             =  #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_DICTIONARY                  D3   ON   D3.DICTIONARYID             =  PS.PROCESSSEGMENTNAME
+                                                               AND  D3.LANGUAGETYPE             =  #{LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_AREA                        AR   ON   AR.AREAID                   =  IR.AREAID
+          LEFT OUTER JOIN CMD_DICTIONARY                  D4   ON   D4.DICTIONARYID             =  AR.AREANAME
+                                                               AND  D4.LANGUAGETYPE             =  #{LANGUAGETYPE}
+          LEFT OUTER JOIN QAM_QCINSPECTOR                 IP   ON   IP.INSPECTORID              =  IR.INSPECTIONUSER
+          LEFT OUTER JOIN BAS_PRODUCTDEFINITION           PD   ON   PD.PRODUCTDEFID             =  IR.PRODUCTDEFID
+                                                               AND  PD.PRODUCTDEFVERSION        =  IR.PRODUCTDEFVERSION
+          LEFT OUTER JOIN BAS_INSPECTIONDEFINITION        ID   ON   ID.INSPECTIONDEFID          =  IR.INSPECTIONDEFID
+          LEFT OUTER JOIN CMD_DICTIONARY                  D5   ON   D5.DICTIONARYID             =  ID.INSPECTIONDEFNAME
+                                                               AND  D5.LANGUAGETYPE             =  #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_USERS                       UR   ON   IR.INSPECTIONUSER           =  UR.USER_ID
+          LEFT OUTER JOIN QAM_ABNORMALOCCURRENCE          AB   ON   AB.LOTID                    =  IR.RESOURCEID
+                                                               AND  AB.ABNOCRTYPE               =  IR.INSPECTIONDEFID
+                                                               AND  AB.PROCESSSEGMENTID         =  IR.PROCESSSEGMENTID
+                                                               AND  AB.PROCESSSEGMENTVERSION    =  IR.PROCESSSEGMENTVERSION
+                                                               AND  AB.PROCESSDEFID             =  IR.PROCESSDEFID
+                                                               AND  AB.PROCESSDEFVERSION        =  IR.PROCESSDEFVERSION
+                                                               AND  AB.PRODUCTDEFID             =  IR.PRODUCTDEFID
+                                                               AND  AB.PRODUCTDEFVERSION        =  IR.PRODUCTDEFVERSION
+                                                               <!--2021.06.10 TOBE Modify 차수별 관리-->
+                                                               AND  AB.DEGREE                   =  IR."degree"
+         WHERE    1=1
+        <choose>
+        <when test="FINISHINSPECTIONTYPE != null and FINISHINSPECTIONTYPE !='' and !(FINISHINSPECTIONTYPE eq '*'.toString()) ">
+           AND IR.INSPECTIONDEFID = #{FINISHINSPECTIONTYPE}
+        </when>
+        <otherwise>
+           AND IR.INSPECTIONDEFID IN ('SelfInspectionTake', 'SelfInspectionShip')
+        </otherwise>
+        </choose>
+        <if test="PERIODFR != null and PERIODFR !='' ">
+           AND IR.INSPECTIONDATE >= TO_DATE( #{PERIODFR}  || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS')
+        </if>
+        <if test="PERIODTO != null and PERIODTO !='' ">
+           AND IR.INSPECTIONDATE <![CDATA[<]]>  TO_DATE( #{PERIODTO} || ' '|| SPL.WORKTIME,'YYYY-MM-DD HH24:MI:SS')
+        </if>
+        <if test="PRODUCTDEFID != null and PRODUCTDEFID !='' and !(PRODUCTDEFID eq '*'.toString()) ">
+           AND EXISTS
+                    (
+                        SELECT 1
+                          FROM ufn_selectstringtosplitdouble(#{PRODUCTDEFID}, ',', '|')    MAP
+                         WHERE IR.PRODUCTDEFID = MAP.VALUE1
+                           AND (IR.PRODUCTDEFVERSION = MAP.VALUE2 OR MAP.VALUE2 IS NULL)
+                    )
+        </if>
+        <if test="PARENTLOTID != null and PARENTLOTID !='' and !(PARENTLOTID eq '*'.toString()) ">
+           AND LT.PARENTLOTID     = #{PARENTLOTID}
+        </if>
+        <if test="LOTID != null and LOTID !='' and !(LOTID eq '*'.toString()) ">
+           AND LR.LOTID     = #{LOTID}
+        </if>
+        <if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' and !(PROCESSSEGMENTID eq '*'.toString()) ">
+           AND IR.PROCESSSEGMENTID     = #{PROCESSSEGMENTID}
+        </if>
+        <if test="AREAID != null and AREAID !='' and !(AREAID eq '*'.toString()) ">
+           AND IR.AREAID     = #{AREAID}
+        </if>
+        <if test="FINISHINSPECTIONTYPE eq 'Finish'.toString() ">
+           AND IR."degree" = 1  /*최종검사*/
+        </if>
+        <if test="FINISHINSPECTIONTYPE eq 'ReFinish'.toString() ">
+           AND IR."degree" > 1   /*최종검사(재)*/
+        </if>
+        <if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+           AND IR.PLANTID = #{PLANTID}
+        </if>
+        ORDER BY TO_CHAR(IR.INSPECTIONDATE, 'YYYYMMDDHH24MISS')
+    </select>
+
+    <!--
+         desc    : 자주검사 결과의 상세정보를  조회한다.
+    -->
+    <select id="selectIndependentInspResultDetailList" parameterType="map" resultType="hashmap">
+        /* smh.qam.dao.QAM00800Dao.selectIndependentInspResultDetailList*/
+        --GetIndependentInspectionResultDetailInquiry
+        SELECT IR.INSPECTIONDATE                                    AS INSPECTIONPROCESSDATE
+             , DR.DECISIONDEGREE
+             , ID.DEFECTCODE
+             , DC.DEFECTCODENAME
+             , CASE WHEN NVL(LT.PANELPERQTY, 0) = 0 THEN 0
+               ELSE CEIL(IR.INSPECTIONQTY / LT.PANELPERQTY)
+               END                                                   AS INSPECTIONPNLQTY       /*검사수(PANEL)*/
+             , IR.INSPECTIONQTY                                      AS INSPECTIONPCSQTY       /*검사수(PCS)*/
+             , CASE WHEN NVL(LT.PANELPERQTY, 0) = 0 THEN 0
+               ELSE CEIL(ID.DEFECTQTY / LT.PANELPERQTY)
+               END                                                   AS SPECOUTPNLQTY          /*불량수(PANEL)*/
+             , ID.DEFECTQTY                                          AS SPECOUTPCSQTY          /*불량수(PCS)*/
+             , CASE WHEN NVL(ID.INSPECTIONQTY, 0) = 0 THEN 0
+               ELSE ROUND((ID.DEFECTQTY / ID.INSPECTIONQTY) * 100, 2)
+               END                                                   AS SPECOUTPERCENTAGE      /*불량율*/
+             , ID.REASONSEGMENTID
+             , ID.REASONCONSUMABLELOTID
+             , ID.REASONAREAID
+             , ID.REASONCONSUMABLEDEFID
+             , ID.REASONCONSUMABLEDEFVERSION
+             , D3.DICTIONARYNAME AS REASONSEGMENTNAME
+             , PD.PRODUCTDEFNAME AS REASONPRODUCTDEFNAME
+             , D4.DICTIONARYNAME AS REASONAREANAME
+             , ID.QCSEGMENTID                                                                  /*품질공정ID*/
+             , D2.DICTIONARYNAME                                     AS QCSEGMENTNAME          /*품질공정명*/
+             , IR.INSPECTIONDEFID
+             , ID.FILERESOURCEID
+             , NVL(AF.ATCH_SRC_KEY, ID.TXNHISTKEY||'|'||
+                                    IR.INSPECTIONDEFID||'|'||
+                                    IR.RESOURCEID||'|'||
+                                    ID.DEFECTCODE||'|'||
+                                    IR.PROCESSSEGMENTID)             AS ATCH_SRC_KEY
+          FROM            QAM_INSPECTIONRESULT     IR
+          INNER JOIN      QAM_INSPECTIONDEFECT     ID   ON    ID.RESOURCEID         =  IR.RESOURCEID
+                                                        AND   ID.RESOURCETYPE       =  IR.RESOURCETYPE
+                                                        AND   ID.TXNGROUPHISTKEY    =  IR.TXNGROUPHISTKEY
+          INNER JOIN      BAS_DEFECTCODE           DC   ON    DC.DEFECTCODE         =  ID.DEFECTCODE
+          INNER JOIN      BAS_DEFECTCODEREL        DR   ON    DR.DEFECTCODE         =  ID.DEFECTCODE
+                                                        AND   DR.QCSEGMENTID        =  ID.QCSEGMENTID
+          INNER JOIN      PCM_LOT                  LT   ON    LT.LOTID              =  IR.RESOURCEID
+          LEFT OUTER JOIN PCM_LOTDEFECT            LD   ON    LD.LOTID              =  IR.RESOURCEID
+                                                        AND   LD.DEFECTCODE         =  ID.DEFECTCODE
+          LEFT OUTER JOIN QAM_QCSEGMENTDEFINITION  QD   ON    QD.QCSEGMENTID        =  ID.QCSEGMENTID
+          LEFT OUTER JOIN CMD_DICTIONARY           D2   ON    QD.QCSEGMENTNAME      =  D2.DICTIONARYID
+                                                        AND   D2.LANGUAGETYPE       =  #{LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_PRODUCTDEFINITION    PD   ON    PD.PRODUCTDEFID       =  ID.REASONCONSUMABLEDEFID
+                                                        AND   PD.PRODUCTDEFVERSION  =  ID.REASONCONSUMABLEDEFVERSION
+          LEFT OUTER JOIN BAS_PROCESSSEGMENT       PS   ON    PS.PROCESSSEGMENTID   =  ID.REASONSEGMENTID
+          LEFT OUTER JOIN CMD_DICTIONARY           D3   ON    D3.DICTIONARYID       =  PS.PROCESSSEGMENTNAME
+                                                        AND   D3.LANGUAGETYPE       =  #{LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_AREA                 AR   ON    AR.AREAID             =  ID.REASONAREAID
+          LEFT OUTER JOIN CMD_DICTIONARY           D4   ON    D4.DICTIONARYID       =  AR.AREANAME
+                                                        AND   D4.LANGUAGETYPE       =  #{LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_ATCH_FILES_V         AF   ON   AF.ATCH_FILE_ID        = ID.FILERESOURCEID
+         WHERE IR.RESOURCEID      = #{RESOURCEID}
+           AND IR.TXNGROUPHISTKEY = #{TXNGROUPHISTKEY}
+    </select>
+</mapper>

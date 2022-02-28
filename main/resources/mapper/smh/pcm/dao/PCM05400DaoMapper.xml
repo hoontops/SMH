@@ -1,0 +1,1623 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : LEAD TIME
+    설명          : 
+    작성자       : 김애리
+    최초작성일 : 2021.05.28
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2021.05.28      김애리     최초  생성
+-->
+
+<mapper namespace="smh.pcm.dao.PCM05400Dao">
+
+	<!-- category 조회 -->
+	<select id="selectCategory" parameterType="map" resultType="hashmap">
+			SELECT C.CATEGORYID 
+				, NVL(NVL(D1.DICTIONARYNAME, C.DICTIONARYID), REPLACE(C.CATEGORYID ,'.','_')) AS CATEGORYNAME
+			 FROM   BAS_CATEGORY C
+			 LEFT   OUTER JOIN CMD_DICTIONARY D1  ON     C.DICTIONARYID = D1.DICTIONARYID
+			                                      AND    D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			 WHERE  1 = 1
+			 AND    C.ENTERPRISEID = 'SMLINES'
+			 AND    C.PARENTCATEGORYID = 'Production'
+			 AND    C.VALIDSTATE = 'Valid'
+			 ORDER  BY ORDERBY 
+	</select>
+
+
+	<!-- APP 탭 조회 -->
+	<select id="selectLeadTimeByApp" parameterType="map" resultType="hashmap">
+			WITH LTDATA AS
+            (
+            SELECT  LT.LOTID
+                ,   LT.ROOTLOTID
+                ,   LT.ACCUMLEADTIME
+                ,   WR.PRODUCTDEFID
+                ,   WR.PRODUCTDEFVERSION
+                ,   PD.PRODUCTIONTYPE
+                --, PD.PRODUCTSHAPE
+                ,   PS.PRODUCTTYPE                          AS PRODUCTSHAPE
+                ,   PD.PRODUCTDEFNAME
+                ,   PD.CUSTOMERID
+                ,   LT.PLANTID
+                ,   LT.PROCESSSEGMENTID
+                ,   LT.USERSEQUENCE
+                ,   LT.WORKCOUNT
+                ,   LT.AREAID
+                ,   TO_CHAR(WR.RECEIVETIME, 'YYYY-MM-DD') AS SENDTIME
+                ,   LT.LEADTIME
+                ,   LT.RECEIVELEADTIME
+                ,   LT.WORKSTARTLEADTIME
+                ,   LT.WORKENDLEADTIME
+                ,   LT.SENDLEADTIME
+                ,	REPLACE(PS.MFG_CATEGORY ,'.','_') 	AS MFG_CATEGORY
+                FROM
+                (
+                	SELECT  WR.LOTID
+                        ,   WR.PRODUCTDEFID
+                        ,   WR.PRODUCTDEFVERSION
+                        ,   WR.PROCESSSEGMENTID
+                        ,   WR.USERSEQUENCE
+                        ,   WR.PLANTID
+                        ,   WR.RECEIVETIME
+                    FROM PCM_LOTWORKRESULT   WR
+                    WHERE RECEIVETIME   BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+                    AND PROCESSSEGMENTID IN (
+                                                    SELECT PROCESSSEGMENTID 
+                                                    FROM BAS_PROCESSSEGMENT 
+                                                    WHERE PROCESSSEGMENTCLASSID IN ('8012','8014')
+                                            )
+                    <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+	                 AND	 WR.PRODUCTDEFID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID},',') )
+	                </if>
+	                <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+	                 AND     WR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	                </if>
+	                <if test="LOTID != null and LOTID !=''"> 
+                	 AND	 WR.LOTID IN  (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') ) 
+               		</if>
+                )   WR
+                INNER JOIN PCM_WIPLEADTIMEPERTYPE        LT  ON  WR.LOTID = LT.LOTID
+                                                            AND LT.LTSUMTYPE = 'FINISHINSP'
+                INNER JOIN PCM_LOT                       L   ON  LT.LOTID = L.LOTID
+                INNER JOIN BAS_PRODUCTITEMSPEC           PS  ON  L.PRODUCTDEFID = PS.ITEMID
+                                                            AND L.PRODUCTDEFVERSION = PS.ITEMVERSION
+                INNER JOIN BAS_PRODUCTDEFINITION         PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                            AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                WHERE   1=1
+               <if test="PLANTID != null and PLANTID !=''"> 
+                AND 	LT.PLANTID = #{PLANTID}
+               </if>
+               <if test="CUSTOMERID != null and CUSTOMERID !=''"> 
+                AND 	PD.CUSTOMERID = #{CUSTOMERID}
+               </if>
+               <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">  
+                AND 	PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+               </if>
+               <if test="AREAID != null and AREAID !=''"> 
+                AND 	L.AREAID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{AREAID},',') )
+               </if>
+               <if test="ISHOLD eq 'N'.toString()"> 
+                AND 	NVL(L.ISHOLD ,'N') = #{ISHOLD}
+               </if>
+               <if test="MFG_CATEGORY != null and MFG_CATEGORY !=''"> 
+                AND 	PS.MFG_CATEGORY = #{MFG_CATEGORY}
+               </if>
+                )
+                , LEADTIME_DATA AS
+                (
+                    SELECT  Z.*
+                        ,   LT.FINISHLEADTIME               AS ACCUMLEADTIME
+                    FROM
+                    (
+                        SELECT  LD.LOTID
+                            ,   LD.ROOTLOTID
+                            ,   LD.PRODUCTDEFID
+                            ,   LD.PRODUCTDEFVERSION
+                            ,   LD.PRODUCTDEFNAME
+                            ,   LD.PRODUCTSHAPE
+                            ,   LD.PROCESSSEGMENTID
+                            ,   LD.USERSEQUENCE
+                            ,   LD.CUSTOMERID
+                            ,   LD.PLANTID
+                            ,   LD.AREAID
+                            ,   LD.PRODUCTIONTYPE
+                            ,   LD.SENDTIME
+                            ,	LD.MFG_CATEGORY
+                        FROM LTDATA         LD
+                        GROUP BY LD.LOTID
+                            ,   LD.ROOTLOTID
+                            ,   LD.PRODUCTDEFID
+                            ,   LD.PRODUCTDEFVERSION
+                            ,   LD.PRODUCTDEFNAME
+                            ,   LD.PRODUCTSHAPE
+                            ,   LD.PROCESSSEGMENTID
+                            ,   LD.USERSEQUENCE
+                            ,   LD.CUSTOMERID
+                            ,   LD.PLANTID
+                            ,   LD.AREAID
+                            ,   LD.PRODUCTIONTYPE
+                            ,   LD.SENDTIME
+                            ,	LD.MFG_CATEGORY
+                    ) Z
+                    INNER JOIN  PCM_WIPLEADTIME      LT  ON  Z.LOTID = LT.LOTID
+                )
+                SELECT SENDTIME
+                	, AVG(TOTAL)      		AS TOTAL_AVG
+                	, SUM(TOTAL)			AS TOTAL_SUM
+                	, COUNT(*) 				AS TOTAL_CNT
+                	${CATEGORY_SELECT}   
+                	/* EX - , AVG(DIGITIZER)      	AS DIGITIZER */
+                	, SUM(NA_CATEGORY)				AS NA_CATEGORY_SUM
+                	, SUM(NA_CATEGORY_CNT)			AS NA_CATEGORY_CNT
+                	, CASE WHEN SUM(NA_CATEGORY_CNT) = 0 THEN 0 ELSE SUM(NA_CATEGORY) / SUM(NA_CATEGORY_CNT) END AS NA_CATEGORY_AVG
+                FROM (
+                		SELECT  LD.SENDTIME
+                			,   LD.ACCUMLEADTIME	AS TOTAL
+                			${CATEGORY_DECODE}   
+                            /* EX -   ,   DECODE(LD.MFG_CATEGORY,'DIGITIZER', ACCUMLEADTIME,0)      AS DIGITIZER  */
+                            , 	CASE WHEN LD.MFG_CATEGORY NOT IN (${CATEGORY_NOTIN}   ) /* 'DIGITIZER','DISPLAY4L','ETC','TEST' */
+                            		THEN ACCUMLEADTIME ELSE 0 END									 AS NA_CATEGORY
+                            , 	CASE WHEN LD.MFG_CATEGORY NOT IN (${CATEGORY_NOTIN}   ) /* 'DIGITIZER','DISPLAY4L','ETC','TEST' */
+                            		THEN 1 ELSE 0 END									 			AS NA_CATEGORY_CNT
+                        FROM    LEADTIME_DATA           LD
+                        WHERE   1=1
+                      )
+                GROUP BY SENDTIME
+                ORDER BY SENDTIME
+	</select>
+
+	<!-- TYPE 탭 조회 -->
+	<select id="selectLeadTimeByType" parameterType="map" resultType="hashmap">
+	
+		/* usp_wip_leadtimebytype */
+						WITH LTDATA AS
+            (
+            SELECT  LT.LOTID
+                ,   LT.ROOTLOTID
+                ,   LT.ACCUMLEADTIME
+                ,   WR.PRODUCTDEFID
+                ,   WR.PRODUCTDEFVERSION
+                ,   PD.PRODUCTIONTYPE
+                --, PD.PRODUCTSHAPE
+                ,   PS.PRODUCTTYPE                          AS PRODUCTSHAPE
+                ,   PD.PRODUCTDEFNAME
+                ,   PD.CUSTOMERID
+                ,   LT.PLANTID
+                ,   LT.PROCESSSEGMENTID
+                ,   LT.USERSEQUENCE
+                ,   LT.WORKCOUNT
+                ,   LT.AREAID
+                ,   TO_CHAR(WR.RECEIVETIME, 'YYYY-MM-DD') AS SENDTIME
+                ,   LT.LEADTIME
+                ,   LT.RECEIVELEADTIME
+                ,   LT.WORKSTARTLEADTIME
+                ,   LT.WORKENDLEADTIME
+                ,   LT.SENDLEADTIME
+                FROM
+                (
+                	SELECT  WR.LOTID
+                        ,   WR.PRODUCTDEFID
+                        ,   WR.PRODUCTDEFVERSION
+                        ,   WR.PROCESSSEGMENTID
+                        ,   WR.USERSEQUENCE
+                        ,   WR.PLANTID
+                        ,   WR.RECEIVETIME
+                    FROM PCM_LOTWORKRESULT   WR
+                    WHERE RECEIVETIME   BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+                    AND PROCESSSEGMENTID IN (
+                                                    SELECT PROCESSSEGMENTID 
+                                                    FROM BAS_PROCESSSEGMENT 
+                                                    WHERE PROCESSSEGMENTCLASSID IN ('8012','8014')
+                                            )
+                    <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+	                 AND	 WR.PRODUCTDEFID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID},',') )
+	                </if>
+	                <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+	                 AND     WR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	                </if>
+	                <if test="LOTID != null and LOTID !=''"> 
+                	 AND	 WR.LOTID IN  (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') ) 
+               		</if>
+                )   WR
+                INNER JOIN PCM_WIPLEADTIMEPERTYPE        LT  ON  WR.LOTID = LT.LOTID
+                                                            AND LT.LTSUMTYPE = 'FINISHINSP'
+                INNER JOIN PCM_LOT                       L   ON  LT.LOTID = L.LOTID
+                INNER JOIN BAS_PRODUCTITEMSPEC           PS  ON  L.PRODUCTDEFID = PS.ITEMID
+                                                            AND L.PRODUCTDEFVERSION = PS.ITEMVERSION
+                INNER JOIN BAS_PRODUCTDEFINITION         PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                            AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                WHERE   1=1
+               <if test="PLANTID != null and PLANTID !=''"> 
+                AND 	LT.PLANTID = #{PLANTID}
+               </if>
+               <if test="CUSTOMERID != null and CUSTOMERID !=''"> 
+                AND 	PD.CUSTOMERID = #{CUSTOMERID}
+               </if>
+               <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+                AND 	PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+               </if>
+               <if test="AREAID != null and AREAID !=''"> 
+                AND 	L.AREAID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{AREAID},',') )
+               </if>
+               <if test="ISHOLD eq 'N'.toString()"> 
+                AND 	NVL(L.ISHOLD ,'N') = #{ISHOLD}
+               </if>
+               <if test="MFG_CATEGORY != null and MFG_CATEGORY !=''"> 
+                AND 	PS.MFG_CATEGORY = #{MFG_CATEGORY}
+               </if>
+                )
+                , LEADTIME_DATA AS
+                (
+                    SELECT  Z.*
+                        ,   LT.FINISHLEADTIME               AS ACCUMLEADTIME
+                    FROM
+                    (
+                        SELECT  LD.LOTID
+                            ,   LD.ROOTLOTID
+                            ,   LD.PRODUCTDEFID
+                            ,   LD.PRODUCTDEFVERSION
+                            ,   LD.PRODUCTDEFNAME
+                            ,   LD.PRODUCTSHAPE
+                            ,   LD.PROCESSSEGMENTID
+                            ,   LD.USERSEQUENCE
+                            ,   LD.CUSTOMERID
+                            ,   LD.PLANTID
+                            ,   LD.AREAID
+                            ,   LD.PRODUCTIONTYPE
+                            ,   LD.SENDTIME
+                            ,   CASE WHEN LD.PLANTID IN ('IFC', 'YPE') AND PP.CNT = 1 THEN 'DOMESTIC' 
+                                ELSE 'FOREIGN' END    AS PRODUCTPLANTTYPE
+                        FROM LTDATA         LD
+                        LEFT JOIN
+                        (
+                            SELECT  LOTID
+                                ,   COUNT(PLANTID)  AS CNT
+                            FROM
+                            (
+                                SELECT  DISTINCT
+                                        LD.LOTID
+                                    ,   LT.PLANTID
+                                FROM    LTDATA                          LD
+                                INNER JOIN PCM_WIPLEADTIMEPERTYPE        LT  ON  LD.LOTID = LT.LOTID
+                                AND LT.LTSUMTYPE = 'FINISHINSP'
+                            ) Z
+                            GROUP BY LOTID
+                        ) PP    ON  LD.LOTID = PP.LOTID
+                        GROUP BY LD.LOTID
+                            ,   LD.ROOTLOTID
+                            ,   LD.PRODUCTDEFID
+                            ,   LD.PRODUCTDEFVERSION
+                            ,   LD.PRODUCTDEFNAME
+                            ,   LD.PRODUCTSHAPE
+                            ,   LD.PROCESSSEGMENTID
+                            ,   LD.USERSEQUENCE
+                            ,   LD.CUSTOMERID
+                            ,   LD.PLANTID
+                            ,   LD.AREAID
+                            ,   LD.PRODUCTIONTYPE
+                            ,   LD.SENDTIME
+                            ,   PP.CNT
+                    ) Z
+                    INNER JOIN  PCM_WIPLEADTIME      LT  ON  Z.LOTID = LT.LOTID
+                ),
+                SHAPEPERLEADTIME AS
+                (
+                    SELECT  SENDTIME
+                        ,   PRODUCTPLANTTYPE
+                        ,   PLANTID
+                        ,   AVG(SHAPE_TOTAL)    AS SHAPE_TOTAL
+                        ,	SUM(SHAPE_TOTAL_CNT) AS SHAPE_TOTAL_CNT
+                        ,   AVG(SHAPE_SS)       AS SHAPE_SS
+                        ,	SUM(SHAPE_SS_CNT)   AS SHAPE_SS_CNT
+                        ,   AVG(SHAPE_DS)       AS SHAPE_DS
+                        ,	SUM(SHAPE_DS_CNT)   AS SHAPE_DS_CNT
+                        ,   AVG(SHAPE_MT)       AS SHAPE_MT
+                        ,	SUM(SHAPE_MT_CNT)   AS SHAPE_MT_CNT
+                    FROM
+                    (
+                        SELECT  LD.SENDTIME
+                            ,   LD.PRODUCTPLANTTYPE
+                            ,   LD.PLANTID
+                            ,   AVG(ACCUMLEADTIME)      AS SHAPE_TOTAL
+                            ,	COUNT(ACCUMLEADTIME)    AS SHAPE_TOTAL_CNT
+                            ,   0                       AS SHAPE_SS
+                            ,   0                       AS SHAPE_SS_CNT
+                            ,   0                       AS SHAPE_DS
+                            ,   0                       AS SHAPE_DS_CNT
+                            ,   0                       AS SHAPE_MT
+                            ,   0                       AS SHAPE_MT_CNT
+                        FROM    LEADTIME_DATA           LD
+                        GROUP BY LD.SENDTIME
+                            ,   LD.PRODUCTPLANTTYPE
+                            ,   LD.PLANTID
+                        UNION ALL
+                        SELECT  LD.SENDTIME
+                            ,   LD.PRODUCTPLANTTYPE
+                            ,   LD.PLANTID
+                            ,   0                       AS SHAPE_TOTAL
+                            ,   0                       AS SHAPE_TOTAL_CNT
+                            ,   AVG(ACCUMLEADTIME)      AS SHAPE_SS
+                            ,   COUNT(ACCUMLEADTIME)    AS SHAPE_SS_CNT
+                            ,   0                       AS SHAPE_DS
+                            ,   0                       AS SHAPE_DS_CNT
+                            ,   0                       AS SHAPE_MT
+                            ,   0                       AS SHAPE_MT_CNT
+                        FROM    LEADTIME_DATA           LD
+                        WHERE   LD.PRODUCTSHAPE = 'SS'
+                        GROUP BY LD.SENDTIME
+                            ,   LD.PRODUCTPLANTTYPE
+                            ,   LD.PLANTID
+                        UNION ALL
+                        SELECT  LD.SENDTIME
+                            ,   LD.PRODUCTPLANTTYPE
+                            ,   LD.PLANTID
+                            ,   0                       AS SHAPE_TOTAL
+                            ,   0                       AS SHAPE_TOTAL_CNT
+                            ,   0                       AS SHAPE_SS
+                            ,   0                       AS SHAPE_SS_CNT
+                            ,   AVG(ACCUMLEADTIME)      AS SHAPE_DS
+                            ,   COUNT(ACCUMLEADTIME)    AS SHAPE_DS_CNT
+                            ,   0                       AS SHAPE_MT
+                            ,   0                       AS SHAPE_MT_CNT
+                        FROM    LEADTIME_DATA           LD
+                        WHERE   LD.PRODUCTSHAPE = 'DS'
+                        GROUP BY LD.SENDTIME
+                            ,   LD.PRODUCTPLANTTYPE
+                            ,   LD.PLANTID
+                        UNION ALL
+                        SELECT  LD.SENDTIME
+                            ,   LD.PRODUCTPLANTTYPE
+                            ,   LD.PLANTID
+                            ,   0                       AS SHAPE_TOTAL
+                            ,   0                       AS SHAPE_TOTAL_CNT
+                            ,   0                       AS SHAPE_SS
+                            ,   0                       AS SHAPE_SS_CNT
+                            ,   0                       AS SHAPE_DS
+                            ,   0                       AS SHAPE_DS_CNT
+                            ,   AVG(ACCUMLEADTIME)      AS SHAPE_MT
+                            ,   COUNT(ACCUMLEADTIME)    AS SHAPE_MT_CNT
+                        FROM    LEADTIME_DATA           LD
+                        WHERE   LD.PRODUCTSHAPE = 'MT'
+                        GROUP BY LD.SENDTIME
+                            ,   LD.PRODUCTPLANTTYPE
+                            ,   LD.PLANTID
+                    ) Z
+                    GROUP BY SENDTIME
+                        ,   PRODUCTPLANTTYPE
+                        ,   PLANTID
+                ),
+                TOTAL_SHAPE AS
+                (
+                    SELECT  SENDTIME
+                        ,   AVG(SHAPE_TOTAL)    AS SHAPE_TOTAL
+                        ,	SUM(SHAPE_TOTAL_CNT) AS SHAPE_TOTAL_CNT
+                        ,   AVG(SHAPE_SS)       AS SHAPE_SS
+                        ,   SUM(SHAPE_SS_CNT)       AS SHAPE_SS_CNT
+                        ,   AVG(SHAPE_DS)       AS SHAPE_DS
+                        ,   SUM(SHAPE_DS_CNT)	AS SHAPE_DS_CNT
+                        ,   AVG(SHAPE_MT)       AS SHAPE_MT
+                        ,   SUM(SHAPE_MT_CNT)	AS SHAPE_MT_CNT
+                    FROM    SHAPEPERLEADTIME
+                    GROUP BY SENDTIME
+                ),
+                DOMESTIC_SHAPE AS
+                (
+                    SELECT  SENDTIME
+                        ,   AVG(SHAPE_TOTAL)    	AS SHAPE_TOTAL
+                        ,	SUM(SHAPE_TOTAL_CNT) 	AS SHAPE_TOTAL_CNT
+                        ,   AVG(SHAPE_SS)       	AS SHAPE_SS
+                        ,   SUM(SHAPE_SS_CNT)       AS SHAPE_SS_CNT
+                        ,   AVG(SHAPE_DS)       	AS SHAPE_DS
+                        ,   SUM(SHAPE_DS_CNT)		AS SHAPE_DS_CNT
+                        ,   AVG(SHAPE_MT)       	AS SHAPE_MT
+                        ,   SUM(SHAPE_MT_CNT)		AS SHAPE_MT_CNT
+                    FROM    SHAPEPERLEADTIME
+                    WHERE   PRODUCTPLANTTYPE = 'DOMESTIC'
+                    GROUP BY SENDTIME
+                ),
+                FOREIGN_SHAPE AS
+                (
+                    SELECT  SENDTIME
+                        ,   AVG(SHAPE_TOTAL)    	AS SHAPE_TOTAL
+                        ,	SUM(SHAPE_TOTAL_CNT) 	AS SHAPE_TOTAL_CNT
+                        ,   AVG(SHAPE_SS)       	AS SHAPE_SS
+                        ,   SUM(SHAPE_SS_CNT)       AS SHAPE_SS_CNT
+                        ,   AVG(SHAPE_DS)       	AS SHAPE_DS
+                        ,   SUM(SHAPE_DS_CNT)		AS SHAPE_DS_CNT
+                        ,   AVG(SHAPE_MT)       	AS SHAPE_MT
+                        ,   SUM(SHAPE_MT_CNT)		AS SHAPE_MT_CNT
+                    FROM    SHAPEPERLEADTIME
+                    WHERE   PRODUCTPLANTTYPE = 'FOREIGN'
+                    GROUP BY SENDTIME
+                )
+                , IFC_SHAPE AS
+                (
+                    SELECT  SENDTIME
+                        ,   AVG(SHAPE_TOTAL)    	AS SHAPE_TOTAL
+                        ,	SUM(SHAPE_TOTAL_CNT) 	AS SHAPE_TOTAL_CNT
+                        ,   AVG(SHAPE_SS)       	AS SHAPE_SS
+                        ,   SUM(SHAPE_SS_CNT)       AS SHAPE_SS_CNT
+                        ,   AVG(SHAPE_DS)       	AS SHAPE_DS
+                        ,   SUM(SHAPE_DS_CNT)		AS SHAPE_DS_CNT
+                        ,   AVG(SHAPE_MT)       	AS SHAPE_MT
+                        ,   SUM(SHAPE_MT_CNT)		AS SHAPE_MT_CNT
+                    FROM    SHAPEPERLEADTIME
+                    WHERE   PLANTID = 'IFC'
+                    GROUP BY SENDTIME
+                )
+              SELECT  TS.SENDTIME             
+                        ,   TS.SHAPE_TOTAL
+                        ,	TS.SHAPE_TOTAL_CNT
+                        ,   TS.SHAPE_SS
+                        ,   TS.SHAPE_SS_CNT
+                        ,   TS.SHAPE_DS
+                        ,	TS.SHAPE_DS_CNT
+                        ,   TS.SHAPE_MT
+                        ,	TS.SHAPE_MT_CNT
+                        ,   DS.SHAPE_TOTAL          AS DS_TOTAL
+                        ,   DS.SHAPE_SS             AS DS_SS
+                        ,   DS.SHAPE_DS             AS DS_DS
+                        ,   DS.SHAPE_MT             AS DS_MT
+                        ,   DS.SHAPE_TOTAL_CNT      AS DS_TOTAL_CNT
+                        ,   DS.SHAPE_SS_CNT         AS DS_SS_CNT
+                        ,   DS.SHAPE_DS_CNT         AS DS_DS_CNT
+                        ,   DS.SHAPE_MT_CNT         AS DS_MT_CNT
+                        ,   FRS.SHAPE_TOTAL         AS FS_TOTAL
+                        ,   FRS.SHAPE_SS            AS FS_SS
+                        ,   FRS.SHAPE_DS            AS FS_DS
+                        ,   FRS.SHAPE_MT            AS FS_MT
+                        ,   FRS.SHAPE_TOTAL_CNT     AS FS_TOTAL_CNT
+                        ,   FRS.SHAPE_SS_CNT        AS FS_SS_CNT
+                        ,   FRS.SHAPE_DS_CNT        AS FS_DS_CNT
+                        ,   FRS.SHAPE_MT_CNT        AS FS_MT_CNT
+                        ,   IFC.SHAPE_TOTAL         AS IFC_TOTAL
+                        ,   IFC.SHAPE_SS            AS IFC_SS
+                        ,   IFC.SHAPE_DS            AS IFC_DS
+                        ,   IFC.SHAPE_MT            AS IFC_MT
+                        ,   IFC.SHAPE_TOTAL_CNT     AS IFC_TOTAL_CNT
+                        ,   IFC.SHAPE_SS_CNT        AS IFC_SS_CNT
+                        ,   IFC.SHAPE_DS_CNT        AS IFC_DS_CNT
+                        ,   IFC.SHAPE_MT_CNT        AS IFC_MT_CNT
+                FROM    TOTAL_SHAPE         TS
+            	LEFT JOIN DOMESTIC_SHAPE    DS  ON  TS.SENDTIME = DS.SENDTIME
+            	LEFT JOIN FOREIGN_SHAPE     FRS ON  TS.SENDTIME = FRS.SENDTIME
+            	LEFT JOIN IFC_SHAPE          IFC  ON  TS.SENDTIME = IFC.SENDTIME
+            	ORDER BY TS.SENDTIME
+	</select>
+
+	<!-- 품목 탭 조회 -->
+	<select id="selectLeadTimeByProduct" parameterType="map" resultType="hashmap">
+		/* SelectLeadTimeByProduct 10001 */
+		WITH LTDATA AS
+                (
+                    SELECT *
+                    FROM
+                    (
+	                    SELECT 	LT.LOTID
+	                        ,	LT.ROOTLOTID
+	                        ,   LT.ACCUMLEADTIME
+	                        ,	(LT.LEADTIME / 60 / 24)          AS LEADTIME
+	                        ,	WR.PRODUCTDEFID
+	                        ,	WR.PRODUCTDEFVERSION
+	                        ,	PD.PRODUCTIONTYPE
+	                        ,   PS.PRODUCTTYPE                   AS PRODUCTSHAPE
+	                        ,	PD.PRODUCTDEFNAME
+	                        ,	PD.CUSTOMERID
+	                        ,	L.PLANTID
+	                        ,	LT.PROCESSSEGMENTID
+	                        ,	LT.USERSEQUENCE
+	                        ,	LT.AREAID
+	                        ,   CASE WHEN LT.ISREWORK = 'IsRework' THEN LT.ACCUMLEADTIME 
+	                        	ELSE 0 END 						AS ACCUMLEADTIME_REWORK
+	                        ,   LT.ISREWORK  PROCESSCLASSID_R
+	                    FROM
+	                    (
+	                        SELECT 	WR.LOTID
+	                            ,	WR.PRODUCTDEFID
+	                            ,	WR.PRODUCTDEFVERSION
+	                            ,	WR.PROCESSSEGMENTID
+	                            ,	WR.USERSEQUENCE
+	                        FROM 	PCM_LOTWORKRESULT	WR
+	                        WHERE 	RECEIVETIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+	                        AND 	PROCESSSEGMENTID IN (
+	                                                        SELECT PROCESSSEGMENTID 
+	                                                        FROM BAS_PROCESSSEGMENT 
+	                                                        WHERE PROCESSSEGMENTCLASSID IN ('8012','8014')
+	                                                    )
+	                        <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			                 AND	 WR.PRODUCTDEFID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID},',') )
+			                </if>
+			                <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+			                 AND     WR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			                </if>
+			                <if test="LOTID != null and LOTID !=''"> 
+		                	 AND	 WR.LOTID IN  (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') ) 
+		               		</if>
+	                    )	WR
+	                    INNER JOIN (SELECT A.* FROM PCM_WIPLEADTIMEPERTYPE A
+										JOIN (
+										SELECT LOTID, FMLOTID, ROOTLOTID , MAX(ROWNO) ROWNO FROM PCM_WIPLEADTIMEPERTYPE 
+										GROUP BY LOTID, FMLOTID, ROOTLOTID 
+										) B ON  A.LOTID = B.LOTID
+											AND A.FMLOTID = B.FMLOTID
+											AND A.ROOTLOTID = B.ROOTLOTID
+											AND A.ROWNO = B.ROWNO	
+	                    			)							LT	ON  WR.LOTID = LT.LOTID
+	                                                                --AND WR.PROCESSSEGMENTID = LT.PROCESSSEGMENTID
+	                    INNER JOIN PCM_LOT						L	ON 	LT.LOTID = L.LOTID
+	                    INNER JOIN BAS_PRODUCTDEFINITION			PD 	ON 	L.PRODUCTDEFID = PD.PRODUCTDEFID
+	                                                                AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+	                    INNER JOIN BAS_PRODUCTITEMSPEC           PS  ON  L.PRODUCTDEFID = PS.ITEMID
+	                                                                AND L.PRODUCTDEFVERSION = PS.ITEMVERSION
+	                    LEFT  JOIN BAS_PROCESSSEGMENT            SG  ON  LT.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+	                    WHERE 1=1
+	                   <if test="PLANTID != null and PLANTID !=''"> 
+		                AND 	LT.PLANTID = #{PLANTID}
+		               </if>
+		               <if test="CUSTOMERID != null and CUSTOMERID !=''"> 
+		                AND 	PD.CUSTOMERID = #{CUSTOMERID}
+		               </if>
+		               <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+		                AND 	PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+		               </if>
+		               <if test="AREAID != null and AREAID !=''"> 
+		                AND 	L.AREAID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{AREAID},',') )
+		               </if>
+		               <if test="ISHOLD eq 'N'.toString()"> 
+		                AND 	NVL(L.ISHOLD ,'N') = #{ISHOLD}
+		               </if>
+		               <if test="MFG_CATEGORY != null and MFG_CATEGORY !=''"> 
+		                AND 	PS.MFG_CATEGORY = #{MFG_CATEGORY}
+		               </if>
+	                ) X
+                ),
+                HOLD_LT AS
+                (
+                    SELECT  LOTID
+                        ,   ROUND(RELEASEDATE - HOLDTIME,2) AS HDLT
+                    FROM
+                    (
+                        SELECT  LT.LOTID
+                            ,   HD.HOLDTIME
+                            ,   NVL(HD.RELEASEDATE, SYSDATE)         AS RELEASEDATE
+                        FROM        LTDATA          LT
+                        INNER JOIN  PCM_LOT          L   ON  LT.LOTID    = L.LOTID 
+                        INNER JOIN  PCM_LOTHOLD      HD  ON  LT.LOTID    = HD.LOTID
+                        WHERE   1=1
+                        AND     HD.HOLDTIME IS NOT NULL
+                        AND     HD.HOLDTIME > TO_DATE('2020-03-01','YYYY-MM-DD')
+                    )   HDD
+                ),
+                LEADTIME_DATA AS
+                (
+                    SELECT  Z.*
+                    FROM
+                    (
+                        SELECT 	LD.LOTID
+                            ,	LD.ROOTLOTID
+                            ,	LD.PRODUCTDEFID
+                            ,	LD.PRODUCTDEFVERSION
+                            ,	LD.PRODUCTDEFNAME
+                            ,	LD.PRODUCTSHAPE
+                            ,	LD.CUSTOMERID
+                            ,	LD.PLANTID
+                            ,	LD.PRODUCTIONTYPE
+                      <choose>
+		          		<when test="ISHOLD eq 'N'.toString()">  
+		          			,   SUM(LD.ACCUMLEADTIME - COALESCE(HD.HDLT, 0))    AS ACCUMLEADTIME
+		          			,   SUM(LD.ACCUMLEADTIME_REWORK - COALESCE(HD.HDLT, 0))    AS ACCUMLEADTIME_REWORK
+		          		</when>
+		          		<otherwise>
+		          			,   SUM(LD.ACCUMLEADTIME)                           AS ACCUMLEADTIME
+		          			,	SUM(LD.ACCUMLEADTIME_REWORK)					AS ACCUMLEADTIME_REWORK
+		          		</otherwise>
+		          	  </choose>
+                            ,	CASE WHEN LD.PLANTID IN ('IFC', 'YPE') AND PP.CNT = 1 THEN 'DOMESTIC' 
+                                ELSE 'FOREIGN' END	AS PRODUCTPLANTTYPE
+                        FROM    LTDATA			LD
+                        LEFT  JOIN  HOLD_LT     HD  ON  LD.LOTID    = HD.LOTID
+                        LEFT JOIN
+                        (
+                            SELECT	LOTID
+                                ,	COUNT(PLANTID)	AS CNT
+                            FROM
+                            (
+                                SELECT 	DISTINCT
+                                        LD.LOTID
+                                    ,	LT.PLANTID
+                                FROM 	LTDATA							LD
+                                INNER JOIN PCM_WIPLEADTIMEPERTYPE		LT	ON  LD.LOTID = LT.LOTID
+                            ) Z
+                            GROUP BY LOTID
+                        ) PP	ON 	LD.LOTID = PP.LOTID
+                        WHERE   1=1
+                        GROUP BY LD.LOTID
+                            ,	LD.ROOTLOTID
+                            ,	LD.PRODUCTDEFID
+                            ,	LD.PRODUCTDEFVERSION
+                            ,	LD.PRODUCTDEFNAME
+                            ,	LD.PRODUCTSHAPE
+                            ,	LD.CUSTOMERID
+                            ,	LD.PLANTID
+                            ,	LD.PRODUCTIONTYPE
+                            ,	PP.CNT
+                    ) Z
+                )
+                , REWORK_LT AS 
+                (
+                	SELECT  LT.LOTID
+                    		,	DECODE(LT.PROCESSCLASSID_R,'IsRework',1,0) 	 AS ISREWORK
+                    	FROM        LTDATA          LT
+                        INNER JOIN  PCM_LOT          L   ON  LT.LOTID    = L.LOTID
+                ) 
+                , LOTCNT AS
+                (
+                    SELECT  LD.PRODUCTDEFID
+                        ,	LD.PRODUCTDEFVERSION
+                        ,	LD.PRODUCTDEFNAME
+                        ,	COUNT(LD.LOTID)		AS LOTCNT
+                        ,	SUM(RL.ISREWORK)	AS REWORK_CNT
+                    FROM LEADTIME_DATA LD
+                    JOIN REWORK_LT RL ON RL.LOTID = LD.LOTID
+                    GROUP BY PRODUCTDEFID
+                        ,	PRODUCTDEFVERSION
+                        ,	PRODUCTDEFNAME
+                ),
+                SEGMENT_LT AS
+                (
+                    SELECT  PRODUCTDEFID
+                        ,	PRODUCTDEFVERSION
+                        ,	PRODUCTDEFNAME
+                        ,	PRODUCTPLANTTYPE
+                        ,   PRODUCTSHAPE
+                        ,   SUM(ACCUMLEADTIME)                      AS SUM_LEADTIME
+                        ,	ROUND(AVG(ACCUMLEADTIME), 2)			AS AVG_LEADTIME
+                        ,   SUM(ACCUMLEADTIME_REWORK)               AS SUM_LEADTIME_REWORK
+                        ,	ROUND(AVG(ACCUMLEADTIME_REWORK), 2)		AS AVG_LEADTIME_REWORK
+                    FROM	LEADTIME_DATA
+                    GROUP BY PRODUCTDEFID
+                        ,	PRODUCTDEFVERSION
+                        ,	PRODUCTDEFNAME
+                        ,	PRODUCTPLANTTYPE
+                        ,   PRODUCTSHAPE
+                ), 
+                PACKINGDATA AS
+                (
+                    SELECT	PRODUCTDEFID
+                        ,	PRODUCTDEFVERSION
+                        ,	SUM(BXQTY)				AS BXQTY
+                    FROM 
+                    (
+                        SELECT 	LD.PRODUCTDEFID
+                            ,	LD.PRODUCTDEFVERSION
+                            ,	SUM(BX.QTY)				AS BXQTY
+                        FROM 	LEADTIME_DATA			LD
+                        INNER JOIN PCM_LOT				L	ON 	LD.LOTID = L.LOTID
+                        INNER JOIN PCM_BOXPACKING		BX	ON 	LD.LOTID = BX.LOTID
+                        WHERE 	L.LOTSTATE = 'Finished'
+                        GROUP BY LD.PRODUCTDEFID
+                            ,	LD.PRODUCTDEFVERSION
+                        UNION ALL 
+                        SELECT 	LD.PRODUCTDEFID
+                            ,	LD.PRODUCTDEFVERSION
+                            ,	SUM(BX.QTY)				AS BXQTY
+                        FROM 	LEADTIME_DATA			LD
+                        INNER JOIN PCM_LOT				L 	ON  LD.LOTID = L.PARENTLOTID
+                        INNER JOIN PCM_BOXPACKING		BX	ON 	L.LOTID = BX.LOTID
+                        WHERE 	L.LOTSTATE = 'Finished'
+                            GROUP BY LD.PRODUCTDEFID
+                            ,	LD.PRODUCTDEFVERSION
+                    ) Z
+                    GROUP BY PRODUCTDEFID
+                    ,	PRODUCTDEFVERSION
+                )
+                SELECT 	NVL(DC1.DICTIONARYNAME, CD1.MEANING)	AS LOTTYPE
+                    ,	SL.PRODUCTSHAPE
+                    ,	SL.PRODUCTDEFID
+                    ,	SL.PRODUCTDEFVERSION
+                    ,	SL.PRODUCTDEFNAME
+                    ,	PS.MFG_CATEGORY
+                    ,	CU.CUSTOMERNAME
+                    ,	NVL(DC2.DICTIONARYNAME, CD2.MEANING)	AS PRODUCTPLANTTYPE
+                    ,   SL.SUM_LEADTIME
+                    ,	SL.AVG_LEADTIME
+                    ,	SL.SUM_LEADTIME_REWORK
+                    ,	SL.AVG_LEADTIME_REWORK
+                    ,	CNT.LOTCNT
+                    ,	CNT.REWORK_CNT
+                    ,	PKD.BXQTY						AS BOXIMPORTQTY
+                FROM 	SEGMENT_LT					SL
+                LEFT JOIN LOTCNT					CNT ON  SL.PRODUCTDEFID = CNT.PRODUCTDEFID
+                                                        AND SL.PRODUCTDEFVERSION = CNT.PRODUCTDEFVERSION
+                LEFT JOIN PACKINGDATA				PKD	ON 	SL.PRODUCTDEFID = PKD.PRODUCTDEFID
+                                                        AND SL.PRODUCTDEFVERSION = PKD.PRODUCTDEFVERSION
+                LEFT JOIN BAS_PRODUCTDEFINITION		PD 	ON 	SL.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        AND SL.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                LEFT JOIN BAS_PRODUCTITEMSPEC       PS  ON  PD.PRODUCTDEFID = PS.ITEMID
+                            							AND PD.PRODUCTDEFVERSION = PS.ITEMVERSION
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD1	ON 	PD.PRODUCTIONTYPE = CD1.LOOKUP_CODE
+                                                        AND CD1.LOOKUP_TYPE = 'ProductionType'
+                LEFT  JOIN CMD_DICTIONARY			DC1 ON  CD1.DICTIONARYID = DC1.DICTIONARYID
+                                                        AND DC1.LANGUAGETYPE = 'ko-KR'
+                LEFT  JOIN BAS_CUSTOMER				CU	ON 	PD.CUSTOMERID = CU.CUSTOMERID
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD2 ON  SL.PRODUCTPLANTTYPE = CD2.LOOKUP_CODE
+                                                        AND CD2.LOOKUP_TYPE = 'ProductPlantType'
+                LEFT  JOIN CMD_DICTIONARY			DC2 ON  CD2.DICTIONARYID = DC2.DICTIONARYID
+                                                        AND DC2.LANGUAGETYPE = 'ko-KR'
+                ORDER BY SL.PRODUCTDEFID
+                    ,	SL.PRODUCTDEFVERSION
+	</select>
+
+<!-- LOT 탭 조회 -->
+	<select id="selectLeadTimeByLot" parameterType="map" resultType="hashmap">
+		/* SelectLeadTimeByLot  10001*/
+                WITH LTDATA AS
+                (
+                    SELECT *
+                    FROM
+                    ( 
+	                    SELECT 	LT.FMLOTID				          AS LOTID
+	                        ,	LT.ROOTLOTID
+	                        ,	(LT.LEADTIME / 60 / 24)           AS LEADTIME
+	                        ,	LT.ACCUMLEADTIME
+	                        ,	WR.PRODUCTDEFID
+	                        ,	WR.PRODUCTDEFVERSION
+	                        ,	PD.PRODUCTIONTYPE
+	                        ,   PS.PRODUCTTYPE                          AS PRODUCTSHAPE
+	                        ,	PD.PRODUCTDEFNAME
+	                        ,	PD.CUSTOMERID
+	                        ,	WR.PLANTID
+	                        ,	LT.PROCESSSEGMENTID
+	                        ,	LT.USERSEQUENCE
+	                        ,	PD.RTRSHT 
+	                        ,   LT.REWORKACCUMLEADTIME
+	                        ,   LT.ISREWORK  PROCESSCLASSID_R
+	                    FROM
+	                    (
+	                        SELECT 	WR.LOTID
+	                            ,	WR.PRODUCTDEFID
+	                            ,	WR.PRODUCTDEFVERSION
+	                            ,	WR.PLANTID
+	                            ,   WR.PROCESSSEGMENTID
+	                        FROM 	PCM_LOTWORKRESULT	WR
+	                        WHERE 	RECEIVETIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+	                        AND 	PROCESSSEGMENTID IN (
+	                                                        SELECT PROCESSSEGMENTID 
+	                                                        FROM BAS_PROCESSSEGMENT 
+	                                                        WHERE PROCESSSEGMENTCLASSID IN ('8012','8014')
+	                                                        --AND PROCESSSEGMENTTYPE = 'Inspection'
+	                                                    )
+	                        <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			                 AND	 WR.PRODUCTDEFID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID},',') )
+			                </if>
+			                <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+			                 AND     WR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			                </if>
+	                    )	WR
+	                    INNER JOIN (SELECT A.* FROM PCM_WIPLEADTIMEPERTYPE A
+										JOIN (
+										SELECT LOTID, FMLOTID, ROOTLOTID , MAX(ROWNO) ROWNO FROM PCM_WIPLEADTIMEPERTYPE 
+										GROUP BY LOTID, FMLOTID, ROOTLOTID 
+										) B ON  A.LOTID = B.LOTID
+											AND A.FMLOTID = B.FMLOTID
+											AND A.ROOTLOTID = B.ROOTLOTID
+											AND A.ROWNO = B.ROWNO	
+	                    			)							LT	ON  WR.LOTID = LT.LOTID
+	                                                                --AND WR.PROCESSSEGMENTID = LT.PROCESSSEGMENTID
+	                    INNER JOIN PCM_LOT						L	ON 	LT.LOTID = L.LOTID
+	                    INNER JOIN BAS_PRODUCTDEFINITION			PD 	ON 	L.PRODUCTDEFID = PD.PRODUCTDEFID
+	                                                                AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+	                    INNER JOIN BAS_PRODUCTITEMSPEC           PS  ON  L.PRODUCTDEFID = PS.ITEMID
+	                                                                AND L.PRODUCTDEFVERSION = PS.ITEMVERSION
+	                    LEFT  JOIN BAS_PROCESSSEGMENT            SG  ON  LT.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+	                    WHERE 1=1
+	                   <if test="PLANTID != null and PLANTID !=''"> 
+		                AND 	LT.PLANTID = #{PLANTID}
+		               </if>
+		               <if test="CUSTOMERID != null and CUSTOMERID !=''"> 
+		                AND 	PD.CUSTOMERID = #{CUSTOMERID}
+		               </if>
+		               <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+		                AND 	PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+		               </if>
+		               <if test="AREAID != null and AREAID !=''"> 
+		                AND 	L.AREAID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{AREAID},',') )
+		               </if>
+		               <if test="MFG_CATEGORY != null and MFG_CATEGORY !=''"> 
+		                AND 	PS.MFG_CATEGORY = #{MFG_CATEGORY}
+		               </if>
+	            	) X
+                ) 
+                /*, REWORK_LT AS 
+                (
+                	SELECT  LT.LOTID
+                    		,	COUNT(*) 	 				AS REWORK_CNT
+                    	FROM        LTDATA          LT
+                        INNER JOIN  PCM_LOT          L   ON  LT.LOTID    = L.LOTID
+                        WHERE LT.PROCESSCLASSID_R = 'IsRework'
+                        GROUP BY LT.LOTID
+                ) 
+                
+                , HOLD_LT AS
+                (
+                    SELECT  LOTID
+                        , 	ROUND(RELEASEDATE - HOLDTIME,2) AS HDLT
+                    FROM
+                    (
+                        SELECT  LT.LOTID
+                            ,   HD.HOLDTIME
+                            ,   NVL(HD.RELEASEDATE, SYSDATE)         AS RELEASEDATE
+                        FROM        LTDATA          LT
+                        INNER JOIN  PCM_LOT          L   ON  LT.LOTID    = L.LOTID
+                        INNER JOIN  PCM_LOTHOLD      HD  ON  LT.LOTID    = HD.LOTID
+                        WHERE   1=1
+                        AND     NVL(HD.HOLDTIME,SYSDATE) > TO_DATE('2020-03-01','YYYY-MM-DD')
+                    )   HDD
+                )
+                */
+                , LEADTIME_DATA AS
+                (
+                	SELECT  Z.*
+                	FROM
+                	(
+		                SELECT 	LD.LOTID
+		                    ,	LD.ROOTLOTID
+		                    ,	LD.PRODUCTDEFID
+		                    ,	LD.PRODUCTDEFVERSION
+		                    ,	LD.PRODUCTDEFNAME
+		                    ,	LD.PRODUCTSHAPE
+		                    ,	LD.CUSTOMERID
+		                    ,	LD.PLANTID
+		                    ,	LD.PRODUCTIONTYPE
+		                    ,   LD.RTRSHT 
+		                    --,	MAX(RL.REWORK_CNT) AS REWORK_CNT
+		             		,   MAX(LD.ACCUMLEADTIME)                           AS ACCUMLEADTIME
+		          			,   MAX(LD.REWORKACCUMLEADTIME)					AS ACCUMLEADTIME_REWORK
+		                    ,	CASE WHEN PP.CNT = 1 THEN 'DOMESTIC' 
+								ELSE 'FOREIGN' END	AS PRODUCTPLANTTYPE
+		                FROM    LTDATA			LD
+                        --LEFT  JOIN  REWORK_LT   RL  ON  LD.LOTID	= RL.LOTID
+	                	LEFT JOIN
+						(
+							SELECT	LOTID
+								,	COUNT(PLANTID)	AS CNT
+							FROM
+							(
+								SELECT 	DISTINCT
+										LD.LOTID
+									,	LT.PLANTID
+								FROM 	LTDATA							LD
+								INNER JOIN PCM_WIPLEADTIMEPERTYPE		LT	ON  LD.LOTID = LT.LOTID
+																			AND LT.LTSUMTYPE = 'FINISHINSP'
+							) Z
+							GROUP BY LOTID
+						) PP	ON 	LD.LOTID = PP.LOTID
+						WHERE   1=1
+					<if test="ISHOLD eq 'N'.toString()"> 
+                		AND LD.LOTID NOT IN (SELECT LOTID FROM PCM_LOTHOLD )
+               		</if>
+		                GROUP BY LD.LOTID
+		                    ,	LD.ROOTLOTID
+		                    ,	LD.PRODUCTDEFID
+		                    ,	LD.PRODUCTDEFVERSION
+		                    ,	LD.PRODUCTDEFNAME
+		                    ,	LD.PRODUCTSHAPE
+		                    ,	LD.CUSTOMERID
+		                    ,	LD.PLANTID
+		                    ,	LD.PRODUCTIONTYPE
+		                    ,	LD.RTRSHT 
+		                    ,	PP.CNT
+	                ) Z
+                ) 
+                , LOTLOCKING AS
+                (
+                	SELECT DISTINCT LO.LOTID 
+                	FROM PCM_LOTLOCKING LO
+                	JOIN LEADTIME_DATA LD ON LO.LOTID = LD.LOTID
+                )
+                , LOTDEFECT AS 
+                (	
+                	/*SELECT LT.LOTID , SUM(L.DEFECTQTY ) AS DEFECTQTY
+					FROM PCM_WIPLEADTIMEPERTYPE LT
+					JOIN PCM_LOT L  ON  L.PARENTLOTID = LT.FMLOTID 
+									AND L.PROCESSSEGMENTID = LT.PROCESSSEGMENTID
+					WHERE 1=1
+					--AND LT.LOTID = '10028988-1501-FG00000-003-1-S0'
+					GROUP BY LT.LOTID
+					*/
+					SELECT L.PARENTLOTID AS LOTID , SUM(L.DEFECTQTY) AS DEFECTQTY  
+					FROM PCM_LOT L 
+					--WHERE L.PARENTLOTID = '10028988-1501-FG00000-003-1-S0'
+					GROUP BY L.PARENTLOTID 
+                )
+                , SPLITLOT AS 
+                (
+                	SELECT LOTID, MIN(QTY) AS QTY  FROM PCM_LOTGENEAL LG 
+					WHERE DESTINATIONLOTID NOT IN (SELECT LOTID  FROM PCM_LOTDEFECT  GROUP BY LOTID ) 
+					AND LOTID NOT IN (SELECT LOTID  FROM PCM_LOTDEFECT  GROUP BY LOTID ) 
+					GROUP BY LOTID 	
+                )
+                SELECT 	LD.LOTID
+                    ,	LD.ROOTLOTID
+                    ,	LD.ACCUMLEADTIME							AS TOTALLEADTIME
+                    ,	LD.ACCUMLEADTIME_REWORK						AS TOTALLEADTIME_REWORK
+                    --,	LD.REWORK_CNT
+                    ,	LD.PRODUCTDEFID
+                    ,	LD.PRODUCTDEFVERSION
+                    ,	LD.PRODUCTDEFNAME
+                    ,	COALESCE(DC1.DICTIONARYNAME, CD1.MEANING)	AS LOTTYPE
+                    ,	LD.PRODUCTSHAPE
+                    ,	NVL(DC3.DICTIONARYNAME, CD3.MEANING)	AS PRODUCTSHAPENAME
+                    ,	CU.CUSTOMERNAME
+                    ,	LD.PLANTID
+                    ,	COALESCE(DC2.DICTIONARYNAME, CD2.MEANING)	AS PRODUCTPLANTTYPE
+                    ,	L.CREATEDQTY
+		            <choose>
+		          		<when test="ISHOLD eq 'N'.toString()"> 
+		          		 ,   'N' AS ISHOLD
+		          		</when>
+			          	<otherwise>
+			          	,   CASE WHEN H.LOTID IS NULL THEN 'N' ELSE 'Y' END AS ISHOLD
+			          	</otherwise>
+	          		</choose>
+                    ,   CASE WHEN LO.LOTID IS NULL THEN 'N' ELSE 'Y' END AS ISLOCKING
+                    ,	PS.MFG_CATEGORY
+                    --,   CASE WHEN LD.RTRSHT = 'RTR' THEN L.CREATEDQTY ELSE 0 END AS ROLL_QTY -- ROLL 분할 수 
+                    , 	NVL(SL.QTY,L.CREATEDQTY) AS ROLL_QTY
+                    ,   CASE WHEN LD.RTRSHT = 'RTR' THEN TO_CHAR(L.CREATEDTIME ,'YYYY-MM-DD HH24:MI:SS')
+                    			ELSE '' END AS ROLL_CREATEDTIME -- ROLL 분할 일시
+                    ,   CASE WHEN L.LOTSTATE ='Finished' THEN L.QTY ELSE 0 END  AS PACKING_QTY
+                    ,   CASE WHEN L.LOTSTATE ='Finished' THEN TO_CHAR(L.SENDTIME,'YYYY-MM-DD HH24:MI:SS')
+                    			ELSE '' END PACKING_INPUTDATE
+                    ,   TO_CHAR(L2.STARTEDDATE,'YYYY-MM-DD HH24:MI:SS') AS ROOT_STARTEDDATE 
+                    , 	NVL(DE.DEFECTQTY,0 ) AS DEFECTQTY
+                FROM 	LEADTIME_DATA				LD
+                LEFT  JOIN PCM_LOT					L	ON 	LD.LOTID = L.LOTID 
+              <if test="ISHOLD eq 'Y'.toString()"> 
+                LEFT  JOIN (SELECT DISTINCT LOTID FROM PCM_LOTHOLD)	H   ON  L.LOTID = H.LOTID
+              </if>
+                LEFT  JOIN SPLITLOT					SL  ON  L.LOTID = SL.LOTID
+                LEFT  JOIN LOTLOCKING				LO  ON  L.LOTID = LO.LOTID
+                LEFT  JOIN LOTDEFECT				DE  ON  L.LOTID = DE.LOTID 
+                LEFT  JOIN PCM_LOT					L2  ON  LD.ROOTLOTID = L2.LOTID 
+                LEFT JOIN BAS_PRODUCTITEMSPEC       PS  ON  LD.PRODUCTDEFID = PS.ITEMID
+                            							AND LD.PRODUCTDEFVERSION = PS.ITEMVERSION 
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD1	ON 	LD.PRODUCTIONTYPE = CD1.LOOKUP_CODE
+                                                        AND CD1.LOOKUP_TYPE = 'ProductionType'
+                LEFT  JOIN CMD_DICTIONARY			DC1 ON  CD1.DICTIONARYID = DC1.DICTIONARYID
+                                                        AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_CUSTOMER				CU	ON 	LD.CUSTOMERID = CU.CUSTOMERID
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD2 ON  LD.PRODUCTPLANTTYPE = CD2.LOOKUP_CODE
+                                                        AND CD2.LOOKUP_TYPE = 'ProductPlantType'
+                LEFT  JOIN CMD_DICTIONARY			DC2 ON  CD2.DICTIONARYID = DC2.DICTIONARYID
+                                                        AND DC2.LANGUAGETYPE = #{LANGUAGETYPE} 
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD3	ON 	LD.PRODUCTSHAPE = CD3.LOOKUP_CODE
+                                                        AND CD3.LOOKUP_TYPE = 'ProductType'
+                LEFT  JOIN CMD_DICTIONARY			DC3 ON  CD3.DICTIONARYID = DC3.DICTIONARYID
+                										AND DC3.LANGUAGETYPE = #{LANGUAGETYPE} 
+                WHERE 1=1
+                <if test="LOTID != null and LOTID !=''"> 
+		        AND	 L.LOTID IN  (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') ) 
+		        </if>
+	</select>
+	
+	<!-- Segment 탭 조회 -->
+	<select id="selectLeadTimeBySegment" parameterType="map" resultType="hashmap">
+		-- Id : SelectLeadTimeBySegment
+                -- Version : 10001
+                WITH LTDATA AS
+                (
+                    SELECT *
+                    FROM
+                    (
+	                    SELECT 	LT.LOTID
+	                        ,	LT.ROOTLOTID
+	                        ,	LT.ACCUMLEADTIME
+	                        ,	WR.PRODUCTDEFID
+	                        ,	WR.PRODUCTDEFVERSION
+	                        ,	PD.PRODUCTIONTYPE
+	                        ,   PS.PRODUCTTYPE                   AS PRODUCTSHAPE
+	                        ,	PD.PRODUCTDEFNAME
+	                        ,	PD.CUSTOMERID
+	                        ,	LT.PLANTID
+	                        ,	LT.PROCESSSEGMENTID
+	                        ,	LT.USERSEQUENCE
+	                        ,	LT.WORKCOUNT
+	                        ,	(LT.LEADTIME / 24)           AS LEADTIME
+	                        ,	(LT.RECEIVELEADTIME / 24)    AS RECEIVELEADTIME
+	                        ,	(LT.WORKSTARTLEADTIME / 24)  AS WORKSTARTLEADTIME
+	                        ,	(LT.WORKENDLEADTIME / 24)    AS WORKENDLEADTIME
+	                        ,	(LT.SENDLEADTIME / 24)       AS SENDLEADTIME
+	                        ,	LT.LEADTIME           		 AS LEADTIME_H
+	                        ,	LT.RECEIVELEADTIME    		 AS RECEIVELEADTIME_H
+	                        ,	LT.WORKSTARTLEADTIME  		 AS WORKSTARTLEADTIME_H
+	                        ,	LT.WORKENDLEADTIME    		 AS WORKENDLEADTIME_H
+	                        ,	LT.SENDLEADTIME       		 AS SENDLEADTIME_H
+	                        ,   CASE WHEN L.ISREWORK = 'Y' OR L.WORKCOUNT > 0 THEN 'REWORK'
+                                      ELSE CASE WHEN L.LOTCREATEDTYPE = 'Claim'  THEN 'CLAIM'
+                                      ELSE 'NORMAL'
+                                      END 
+                                  END PROCESSCLASSID_R
+	                    FROM
+	                    (
+	                        SELECT 	DISTINCT
+	                        		WR.LOTID
+	                            ,	WR.PRODUCTDEFID
+	                            ,	WR.PRODUCTDEFVERSION
+	                        FROM    PCM_LOTWORKRESULT	WR
+	                        WHERE   RECEIVETIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+	                        AND     PROCESSSEGMENTID IN (
+	                                                        SELECT PROCESSSEGMENTID 
+	                                                        FROM BAS_PROCESSSEGMENT 
+	                                                        WHERE PROCESSSEGMENTCLASSID IN ('8012','8014')
+	                                                    )
+	                        <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			                 AND	 WR.PRODUCTDEFID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID},',') )
+			                </if>
+			                <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+			                 AND     WR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			                </if>
+			                <if test="LOTID != null and LOTID !=''"> 
+		                	 AND	 WR.LOTID IN  (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') ) 
+		               		</if>
+	                    )	WR
+	                    INNER JOIN PCM_WIPLEADTIMEPERTYPE		LT	ON  WR.LOTID = LT.LOTID
+	                                                                AND LT.LTSUMTYPE = 'FINISHINSP'
+	                    INNER JOIN PCM_LOT						L	ON 	LT.LOTID = L.LOTID
+	                    INNER JOIN BAS_PRODUCTDEFINITION			PD 	ON 	L.PRODUCTDEFID = PD.PRODUCTDEFID
+	                                                                AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+	                    INNER JOIN BAS_PRODUCTITEMSPEC           PS  ON  L.PRODUCTDEFID = PS.ITEMID
+	                                                                AND L.PRODUCTDEFVERSION = PS.ITEMVERSION
+	                    LEFT  JOIN BAS_PROCESSSEGMENT            SG  ON  LT.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+	                    WHERE   1=1
+	                   <if test="PLANTID != null and PLANTID !=''"> 
+		                AND 	LT.PLANTID = #{PLANTID}
+		               </if>
+		               <if test="CUSTOMERID != null and CUSTOMERID !=''"> 
+		                AND 	PD.CUSTOMERID = #{CUSTOMERID}
+		               </if>
+		               <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+		                AND 	PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+		               </if>
+		               <if test="AREAID != null and AREAID !=''"> 
+		                AND 	L.AREAID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{AREAID},',') )
+		               </if>
+		               <if test="ISHOLD eq 'N'.toString()"> 
+		                AND 	NVL(L.ISHOLD ,'N') = #{ISHOLD}
+		               </if>
+		               <if test="MFG_CATEGORY != null and MFG_CATEGORY !=''"> 
+		                AND 	PS.MFG_CATEGORY = #{MFG_CATEGORY}
+		               </if>
+	                ) X
+                ),
+                HOLD_LT AS
+                (
+                    SELECT  LOTID
+                        ,   PROCESSSEGMENTID
+                        ,   ROUND(RELEASEDATE - HOLDTIME,2) AS HDLT
+                    FROM
+                    (
+                        SELECT  LT.LOTID
+                            ,   LT.PROCESSSEGMENTID
+                            ,   HD.HOLDTIME
+                            ,   NVL(HD.RELEASEDATE, SYSDATE)         AS RELEASEDATE
+                        FROM        LTDATA          LT
+                        INNER JOIN  PCM_LOT          L   ON  LT.LOTID                = L.LOTID 
+                        INNER JOIN  PCM_LOTHOLD      HD  ON  LT.LOTID                = HD.LOTID
+                                                        AND LT.PROCESSSEGMENTID     = HD.PROCESSSEGMENTID
+                        WHERE   1=1
+                        AND     HD.HOLDTIME IS NOT NULL
+                        AND     HD.HOLDTIME > TO_DATE('2020-03-01','YYYY-MM-DD')
+                    )   HDD
+                ),
+                LOTCNT AS
+                (
+                    SELECT 	PRODUCTDEFID
+                        ,	PRODUCTDEFVERSION
+                        ,	PROCESSSEGMENTID
+                        ,	USERSEQUENCE
+                        ,	COUNT(LOTID)		AS LOTCNT
+                    FROM    LTDATA
+                    GROUP BY PRODUCTDEFID
+                        ,	PRODUCTDEFVERSION
+                        ,	PROCESSSEGMENTID
+                        ,	USERSEQUENCE
+                ),
+                SEGMENT_LT AS
+                (
+                    SELECT 	LD.PRODUCTDEFID
+                        ,	LD.PRODUCTDEFVERSION
+                        ,	LD.PRODUCTDEFNAME
+                        ,	LD.PROCESSSEGMENTID
+                        ,	LD.USERSEQUENCE
+                        ,	LD.WORKCOUNT
+                        ,	LD.PLANTID
+                        ,   LD.PRODUCTSHAPE
+                        ,	LD.PROCESSCLASSID_R
+                	<choose>
+		          		<when test="ISHOLD eq 'N'.toString()">  
+		          		,   ROUND(SUM(LD.LEADTIME - COALESCE(HD.HDLT, 0)), 2)              AS LEADTIME
+                        ,   ROUND(AVG(LD.LEADTIME - COALESCE(HD.HDLT, 0)), 2)              AS AVG_LEADTIME
+                        ,   ROUND(MIN(LD.LEADTIME - COALESCE(HD.HDLT, 0)), 2)              AS MIN_LEADTIME
+                        ,   ROUND(MAX(LD.LEADTIME - COALESCE(HD.HDLT, 0)), 2)              AS MAX_LEADTIME
+                        ,   ROUND(SUM(LD.LEADTIME_H - COALESCE(HD.HDLT, 0)), 2)            AS LEADTIME_H
+                        ,   ROUND(AVG(LD.LEADTIME_H - COALESCE(HD.HDLT, 0)), 2)            AS AVG_LEADTIME_H
+                        ,   ROUND(MIN(LD.LEADTIME_H - COALESCE(HD.HDLT, 0)), 2)            AS MIN_LEADTIME_H
+                        ,   ROUND(MAX(LD.LEADTIME_H - COALESCE(HD.HDLT, 0)), 2)            AS MAX_LEADTIME_H
+		          		</when>
+			          	<otherwise>
+			          	,   ROUND(SUM(LD.LEADTIME), 2)              AS LEADTIME
+                        ,	ROUND(AVG(LD.LEADTIME), 2)				AS AVG_LEADTIME
+                        ,	ROUND(MIN(LD.LEADTIME), 2)				AS MIN_LEADTIME
+                        ,	ROUND(MAX(LD.LEADTIME), 2)				AS MAX_LEADTIME
+                        ,   ROUND(SUM(LD.LEADTIME_H), 2)            AS LEADTIME_H
+                        ,	ROUND(AVG(LD.LEADTIME_H), 2)			AS AVG_LEADTIME_H
+                        ,	ROUND(MIN(LD.LEADTIME_H), 2)			AS MIN_LEADTIME_H
+                        ,	ROUND(MAX(LD.LEADTIME_H), 2)			AS MAX_LEADTIME_H
+			          	</otherwise>
+	          		</choose>
+                        ,	ROUND(SUM(LD.RECEIVELEADTIME), 2)		AS RECEIVELEADTIME
+                        ,	ROUND(SUM(LD.WORKSTARTLEADTIME), 2)		AS WORKSTARTLEADTIME
+                        ,	ROUND(SUM(LD.WORKENDLEADTIME), 2)		AS WORKENDLEADTIME
+                        ,	ROUND(SUM(LD.SENDLEADTIME), 2)			AS SENDLEADTIME
+                        ,	ROUND(SUM(LD.RECEIVELEADTIME_H), 2)			AS RECEIVELEADTIME_H
+                        ,	ROUND(SUM(LD.WORKSTARTLEADTIME_H), 2)		AS WORKSTARTLEADTIME_H
+                        ,	ROUND(SUM(LD.WORKENDLEADTIME_H), 2)			AS WORKENDLEADTIME_H
+                        ,	ROUND(SUM(LD.SENDLEADTIME_H), 2)			AS SENDLEADTIME_H
+                        , 	NVL(SUM(RECEIVEPCSQTY),0)	 	AS RECEIVEPCSQTY_SUM
+                        ,	NVL(SUM(SENDPCSQTY),0)			AS SENDPCSQTY_SUM
+                        ,	NVL(SUM(DE.DEFECTQTY),0)		AS DEFECTQTY_SUM
+                    FROM 	LTDATA	   	    LD
+                    LEFT  JOIN  HOLD_LT     HD  ON  LD.LOTID            = HD.LOTID
+                                                AND LD.PROCESSSEGMENTID = HD.PROCESSSEGMENTID
+                    LEFT JOIN PCM_LOTWORKRESULT		LO  ON  LO.PRODUCTDEFID = LD.PRODUCTDEFID
+                										AND LO.PRODUCTDEFVERSION = LD.PRODUCTDEFVERSION
+                										AND LO.PROCESSSEGMENTID = LD.PROCESSSEGMENTID
+                	LEFT JOIN PCM_LOTDEFECT			DE  ON  DE.PRODUCTDEFID = LD.PRODUCTDEFID
+                										AND DE.PRODUCTDEFVERSION = LD.PRODUCTDEFVERSION
+                										AND DE.PROCESSSEGMENTID = LD.PROCESSSEGMENTID
+                    GROUP BY LD.PRODUCTDEFID
+                        ,	LD.PRODUCTDEFVERSION
+                        ,	LD.PRODUCTDEFNAME
+                        ,	LD.PROCESSSEGMENTID
+                        ,	LD.USERSEQUENCE
+                        ,	LD.WORKCOUNT
+                        ,	LD.PLANTID
+                        ,   LD.PRODUCTSHAPE
+                        ,	LD.PROCESSCLASSID_R
+                ),
+                PRODUCTPLANT AS
+                (
+                    SELECT	DISTINCT 
+                            LD.PRODUCTDEFID
+                        ,	LD.PRODUCTDEFVERSION
+                        ,	LD.PLANTID
+                        ,	LD.PROCESSSEGMENTID
+                        ,	LD.USERSEQUENCE
+                        ,	CASE WHEN LD.PLANTID IN ('IFC', 'YPE') AND PP.CNT = 1 THEN 'DOMESTIC' 
+                            ELSE 'FOREIGN' END	AS PRODUCTPLANTTYPE
+                    FROM	LTDATA		LD
+                    LEFT JOIN
+                    (
+                        SELECT	LOTID
+                            ,	COUNT(PLANTID)	AS CNT
+                        FROM
+                        (
+                            SELECT 	DISTINCT
+                                    LD.LOTID
+                                ,	LT.PLANTID
+                            FROM 	LTDATA							LD
+                            INNER JOIN PCM_WIPLEADTIMEPERTYPE		LT	ON  LD.LOTID = LT.LOTID
+                            AND LT.LTSUMTYPE = 'FINISHINSP'
+                        ) Z
+                        GROUP BY LOTID
+                    ) PP	ON 	LD.LOTID = PP.LOTID
+                )
+                SELECT 	NVL(DC1.DICTIONARYNAME, CD1.MEANING)			AS LOTTYPE
+                    ,	SL.PRODUCTSHAPE
+                    ,	NVL(DC4.DICTIONARYNAME, CD4.MEANING)	AS PRODUCTSHAPENAME
+                    ,	SL.PRODUCTDEFID
+                    ,	SL.PRODUCTDEFVERSION
+                    ,	SL.PRODUCTDEFNAME
+                    ,	FN_QAM_GET_DICTIONARYNAME(SL.PROCESSCLASSID_R,#{LANGUAGETYPE}) AS PROCESSCLASSID_R
+                    ,	CU.CUSTOMERNAME
+                    ,	NVL(DC2.DICTIONARYNAME, CD2.MEANING)			AS PRODUCTPLANTTYPE
+                    ,	SL.PLANTID
+                    ,	SL.USERSEQUENCE
+                    ,	SL.PROCESSSEGMENTID
+                    ,	NVL(DC3.DICTIONARYNAME, SG.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+                    ,	SL.AVG_LEADTIME
+                    ,	SL.MIN_LEADTIME
+                    ,	SL.MAX_LEADTIME
+                    ,	SL.AVG_LEADTIME_H
+                    ,	SL.MIN_LEADTIME_H
+                    ,	SL.MAX_LEADTIME_H
+                    ,	SL.RECEIVELEADTIME
+                    ,	SL.WORKSTARTLEADTIME
+                    ,	SL.WORKENDLEADTIME
+                    ,	SL.SENDLEADTIME
+                    ,   CASE WHEN SL.AVG_LEADTIME_H IS NULL THEN '' 
+                    	ELSE  TRUNC(SL.AVG_LEADTIME_H,0)  || ':' ||  ROUND((SL.AVG_LEADTIME_H-TRUNC(SL.AVG_LEADTIME_H,0)) * 60 ,0 )
+                    	END AS AVG_LEADTIME_HM
+                    ,   CASE WHEN SL.MIN_LEADTIME_H IS NULL THEN '' 
+                    	ELSE  TRUNC(SL.MIN_LEADTIME_H,0)  || ':' ||  ROUND((SL.MIN_LEADTIME_H-TRUNC(SL.MIN_LEADTIME_H,0)) * 60 ,0 )
+                    	END AS MIN_LEADTIME_HM
+                    ,   CASE WHEN SL.MAX_LEADTIME_H IS NULL THEN '' 
+                    	ELSE  TRUNC(SL.MAX_LEADTIME_H,0)  || ':' ||  ROUND((SL.MAX_LEADTIME_H-TRUNC(SL.MAX_LEADTIME_H,0)) * 60 ,0 )
+                    	END AS MAX_LEADTIME_HM
+                    ,   CASE WHEN SL.RECEIVELEADTIME_H IS NULL THEN '0:0' 
+                    	ELSE  TRUNC(SL.RECEIVELEADTIME_H,0)  || ':' ||  ROUND((SL.RECEIVELEADTIME_H-TRUNC(SL.RECEIVELEADTIME_H,0)) * 60 ,0 )
+                    	END AS RECEIVELEADTIME_HM
+                    ,   CASE WHEN SL.WORKSTARTLEADTIME_H IS NULL THEN '0:0' 
+                    	ELSE  TRUNC(SL.WORKSTARTLEADTIME_H,0)  || ':' ||  ROUND((SL.WORKSTARTLEADTIME_H-TRUNC(SL.WORKSTARTLEADTIME_H,0)) * 60 ,0 )
+                    	END AS WORKSTARTLEADTIME_HM
+                    ,   CASE WHEN SL.WORKENDLEADTIME_H IS NULL THEN '0:0' 
+                    	ELSE  TRUNC(SL.WORKENDLEADTIME_H,0)  || ':' ||  ROUND((SL.WORKENDLEADTIME_H-TRUNC(SL.WORKENDLEADTIME_H,0)) * 60 ,0 )
+                    	END AS WORKENDLEADTIME_HM
+                    ,   CASE WHEN SL.SENDLEADTIME_H IS NULL THEN '0:0' 
+                    	ELSE  TRUNC(SL.SENDLEADTIME_H,0)  || ':' ||  ROUND((SL.SENDLEADTIME_H-TRUNC(SL.SENDLEADTIME_H,0)) * 60 ,0 )
+                    	END AS SENDLEADTIME_HM
+                    ,   SL.LEADTIME
+                    ,	CNT.LOTCNT
+                    ,	PS.MFG_CATEGORY
+                    ,	SL.RECEIVEPCSQTY_SUM
+                    ,   SL.SENDPCSQTY_SUM
+                    ,	SL.DEFECTQTY_SUM
+                FROM 	SEGMENT_LT					SL
+                LEFT JOIN LOTCNT					CNT ON  SL.PRODUCTDEFID = CNT.PRODUCTDEFID
+                                                        AND SL.PRODUCTDEFVERSION = CNT.PRODUCTDEFVERSION
+                                                        AND SL.PROCESSSEGMENTID = CNT.PROCESSSEGMENTID
+                                                        AND SL.USERSEQUENCE = CNT.USERSEQUENCE
+                LEFT JOIN BAS_PRODUCTDEFINITION		PD 	ON 	SL.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        AND SL.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                LEFT JOIN BAS_PRODUCTITEMSPEC       PS  ON  PD.PRODUCTDEFID = PS.ITEMID
+                            							AND PD.PRODUCTDEFVERSION = PS.ITEMVERSION
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD1	ON 	PD.PRODUCTIONTYPE = CD1.LOOKUP_CODE
+                                                        AND CD1.LOOKUP_TYPE = 'ProductionType'
+                LEFT  JOIN CMD_DICTIONARY			DC1 ON  CD1.DICTIONARYID = DC1.DICTIONARYID
+                                                        AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_CUSTOMER				CU	ON 	PD.CUSTOMERID = CU.CUSTOMERID
+                LEFT  JOIN PRODUCTPLANT				PNT ON	SL.PRODUCTDEFID = PNT.PRODUCTDEFID
+                                                        AND SL.PRODUCTDEFVERSION = PNT.PRODUCTDEFVERSION
+                                                        AND SL.PROCESSSEGMENTID = PNT.PROCESSSEGMENTID
+                                                        AND SL.USERSEQUENCE = PNT.USERSEQUENCE
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD2 ON  PNT.PRODUCTPLANTTYPE = CD2.LOOKUP_CODE
+                                                        AND CD2.LOOKUP_TYPE = 'ProductPlantType'
+                LEFT  JOIN CMD_DICTIONARY			DC2 ON  CD2.DICTIONARYID = DC2.DICTIONARYID
+                                                        AND DC2.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_PROCESSSEGMENT		SG	ON 	SL.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+                LEFT  JOIN CMD_DICTIONARY			DC3	ON 	SG.PROCESSSEGMENTNAME = DC3.DICTIONARYID
+                                                        AND DC3.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD4	ON 	SL.PRODUCTSHAPE = CD4.LOOKUP_CODE
+                                                        AND CD4.LOOKUP_TYPE = 'ProductType'
+                LEFT  JOIN CMD_DICTIONARY			DC4 ON  CD4.DICTIONARYID = DC4.DICTIONARYID
+                                                        AND DC4.LANGUAGETYPE = #{LANGUAGETYPE}
+                ORDER BY SL.PRODUCTDEFID
+                    ,	SL.PRODUCTDEFVERSION
+                    ,	TO_NUMBER(SL.USERSEQUENCE)
+	</select>
+	
+	<!-- Area 탭 조회 -->
+	<select id="selectLeadTimeByArea" parameterType="map" resultType="hashmap">
+		/* SelectLeadTimeByArea 10001 */ 
+                WITH LTDATA AS
+                (
+                    SELECT *
+                    FROM
+                    (
+	                    SELECT 	LT.LOTID
+	                        ,	LT.ROOTLOTID
+	                        ,	LT.ACCUMLEADTIME
+	                        ,	WR.PRODUCTDEFID
+	                        ,	WR.PRODUCTDEFVERSION
+	                        --,	PD.PRODUCTIONTYPE
+	                        ,   PS.PRODUCTTYPE                          AS PRODUCTSHAPE
+	                        ,	PD.PRODUCTDEFNAME
+	                        ,	PD.CUSTOMERID
+	                        ,	LT.PLANTID
+	                        ,	LT.PROCESSSEGMENTID
+	                        ,	LT.USERSEQUENCE
+	                        ,	LT.WORKCOUNT
+	                        ,	LT.AREAID
+	                        ,	(LT.LEADTIME / 24)           AS LEADTIME			-- 공정 리드타임
+	                        ,	(LT.RECEIVELEADTIME / 24)    AS RECEIVELEADTIME 	-- 인수 리드타임
+	                        ,	(LT.WORKSTARTLEADTIME  / 24) AS WORKSTARTLEADTIME	-- 작업시작 리드타임
+	                        ,	(LT.WORKENDLEADTIME / 24)    AS WORKENDLEADTIME		-- 작업완료 리드타임
+	                        ,	(LT.SENDLEADTIME / 24)       AS SENDLEADTIME		-- 인계 리드타임
+	                        ,	LT.LEADTIME           		 AS LEADTIME_H
+	                        ,	LT.RECEIVELEADTIME    		 AS RECEIVELEADTIME_H
+	                        ,	LT.WORKSTARTLEADTIME  		 AS WORKSTARTLEADTIME_H
+	                        ,	LT.WORKENDLEADTIME    		 AS WORKENDLEADTIME_H
+	                        ,	LT.SENDLEADTIME       		 AS SENDLEADTIME_H
+	                        ,	R.RESOURCEID 
+	                        ,	R.DESCRIPTION 				 AS RESOURCENAME
+	                        ,   CASE WHEN L.ISREWORK = 'Y' OR L.WORKCOUNT > 0 THEN 'REWORK'
+                                      ELSE CASE WHEN L.LOTCREATEDTYPE = 'Claim'  THEN 'CLAIM'
+                                      ELSE 'NORMAL'
+                                      END 
+                                  END PROCESSCLASSID_R
+	                    FROM
+	                    (
+	                        SELECT 	WR.LOTID
+	                            ,	WR.PRODUCTDEFID
+	                            ,	WR.PRODUCTDEFVERSION
+	                        FROM    PCM_LOTWORKRESULT	WR
+	                        WHERE   RECEIVETIME BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+										AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+	                        AND     PROCESSSEGMENTID IN (
+	                                                        SELECT PROCESSSEGMENTID 
+	                                                        FROM BAS_PROCESSSEGMENT 
+	                                                        WHERE PROCESSSEGMENTCLASSID IN ('8012','8014')
+	                                                    )
+	                        <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+			                 AND	 WR.PRODUCTDEFID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID},',') )
+			                </if>
+			                <if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+			                 AND     WR.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+			                </if>
+			                <if test="LOTID != null and LOTID !=''"> 
+		                	 AND	 WR.LOTID IN  (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') ) 
+		               		</if>
+	                    )	WR
+	                    INNER JOIN PCM_WIPLEADTIMEPERTYPE		 LT ON  WR.LOTID = LT.LOTID
+	                                                                AND LT.LTSUMTYPE = 'FINISHINSP'
+	                    INNER JOIN PCM_LOT						  L ON 	LT.LOTID = L.LOTID
+	                    INNER JOIN BAS_PRODUCTDEFINITION			PD 	ON 	L.PRODUCTDEFID = PD.PRODUCTDEFID
+	                                                                AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+	                    INNER JOIN BAS_PRODUCTITEMSPEC           PS ON  L.PRODUCTDEFID = PS.ITEMID
+	                                                                AND L.PRODUCTDEFVERSION = PS.ITEMVERSION
+	                    LEFT  JOIN BAS_PROCESSSEGMENT            SG ON  LT.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+	                    LEFT  JOIN BAS_BILLOFRESOURCE  			 BR ON  BR.PROCESSDEFID = LT.PROCESSDEFID		
+																	AND BR.PROCESSDEFVERSION = LT.PROCESSDEFVERSION
+																	AND BR.PROCESSSEGMENTID = LT.PROCESSSEGMENTID
+						INNER JOIN BAS_RESOURCE 				  R ON  BR.RESOURCEID = R.RESOURCEID 
+																	AND LT.AREAID = R.AREAID 
+	                    WHERE   1=1
+	                   <if test="PLANTID != null and PLANTID !=''"> 
+		                AND 	LT.PLANTID = #{PLANTID}
+		               </if>
+		               <if test="CUSTOMERID != null and CUSTOMERID !=''"> 
+		                AND 	PD.CUSTOMERID = #{CUSTOMERID}
+		               </if>
+		               <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+		                AND 	PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+		               </if>
+		               <if test="AREAID != null and AREAID !=''"> 
+		                AND 	L.AREAID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{AREAID},',') )
+		               </if>
+		               <if test="ISHOLD eq 'N'.toString()"> 
+		                AND 	NVL(L.ISHOLD ,'N') = #{ISHOLD}
+		               </if>
+		               <if test="MFG_CATEGORY != null and MFG_CATEGORY !=''"> 
+		                AND 	PS.MFG_CATEGORY = #{MFG_CATEGORY}
+		               </if>
+	                ) X
+                ),
+                HOLD_LT AS
+                (
+                    SELECT  LOTID
+                        ,   PROCESSSEGMENTID
+                        ,   AREAID
+                        ,   ROUND(RELEASEDATE - HOLDTIME,2) AS HDLT
+                    FROM
+                    (
+                        SELECT  LT.LOTID
+                            ,   LT.PROCESSSEGMENTID
+                            ,   LT.AREAID
+                            ,   HD.HOLDTIME
+                            ,   NVL(HD.RELEASEDATE, SYSDATE)         AS RELEASEDATE
+                        FROM        LTDATA          LT
+                        INNER JOIN  PCM_LOTHOLD      HD  ON  LT.LOTID            = HD.LOTID
+                                                        AND LT.PROCESSSEGMENTID = HD.PROCESSSEGMENTID
+                        WHERE   1=1
+                        AND     HD.HOLDTIME IS NOT NULL
+                        AND     HD.HOLDTIME > TO_DATE('2020-03-01','YYYY-MM-DD')
+                    )   HDD
+                ),
+                LOTCNT AS
+                (
+                    SELECT 	PRODUCTDEFID
+                        ,	PRODUCTDEFVERSION
+                        ,	PROCESSSEGMENTID
+                        ,	USERSEQUENCE
+                        ,	AREAID
+                        ,	RESOURCEID
+                        ,	COUNT(LOTID)		AS LOTCNT
+                    FROM LTDATA
+                    GROUP BY PRODUCTDEFID
+                        ,	PRODUCTDEFVERSION
+                        ,	PROCESSSEGMENTID
+                        ,	USERSEQUENCE
+                        ,	AREAID
+                        ,	RESOURCEID
+                )
+                ,SEGMENT_LT AS
+                (
+                    SELECT 	LD.PRODUCTDEFID
+                        ,	LD.PRODUCTDEFVERSION
+                        ,	LD.PRODUCTDEFNAME
+                        ,	LD.PROCESSSEGMENTID
+                        ,	LD.USERSEQUENCE
+                        ,	LD.PLANTID
+                        ,	LD.AREAID
+                        ,   LD.PRODUCTSHAPE
+                        ,	LD.RESOURCEID
+                        ,	LD.RESOURCENAME
+                        ,	LD.PROCESSCLASSID_R
+                   <choose>
+	          		<when test="ISHOLD eq 'N'.toString()">  
+	          			,   ROUND(SUM(LD.LEADTIME - COALESCE(HD.HDLT, 0)), 2)              AS LEADTIME
+                        ,   ROUND(AVG(LD.LEADTIME - COALESCE(HD.HDLT, 0)), 2)              AS AVG_LEADTIME
+                        ,   ROUND(MIN(LD.LEADTIME - COALESCE(HD.HDLT, 0)), 2)              AS MIN_LEADTIME
+                        ,   ROUND(MAX(LD.LEADTIME - COALESCE(HD.HDLT, 0)), 2)              AS MAX_LEADTIME
+	          		</when>
+	          		<otherwise>
+		          		,   ROUND(SUM(LD.LEADTIME), 2)              AS LEADTIME
+		          		,	ROUND(AVG(LD.LEADTIME), 2)				AS AVG_LEADTIME
+                        ,	ROUND(MIN(LD.LEADTIME), 2)				AS MIN_LEADTIME
+                        ,	ROUND(MAX(LD.LEADTIME), 2)				AS MAX_LEADTIME
+	          		</otherwise>
+	          	   </choose>
+                        ,	ROUND(SUM(LD.RECEIVELEADTIME), 2)		AS RECEIVELEADTIME
+                        ,	ROUND(SUM(LD.WORKSTARTLEADTIME), 2)		AS WORKSTARTLEADTIME
+                        ,	ROUND(SUM(LD.WORKENDLEADTIME), 2)		AS WORKENDLEADTIME
+                        ,	ROUND(SUM(LD.SENDLEADTIME), 2)			AS SENDLEADTIME
+                        ------------------------------------
+                        ,   ROUND(SUM(LD.LEADTIME_H), 2)                AS LEADTIME_H
+		          		,	ROUND(AVG(LD.LEADTIME_H), 2)				AS AVG_LEADTIME_H
+                        ,	ROUND(MIN(LD.LEADTIME_H), 2)				AS MIN_LEADTIME_H
+                        ,	ROUND(MAX(LD.LEADTIME_H), 2)				AS MAX_LEADTIME_H
+                        ,	ROUND(AVG(LD.RECEIVELEADTIME_H), 2)			AS RECEIVELEADTIME_H
+                        ,	ROUND(AVG(LD.WORKSTARTLEADTIME_H), 2)		AS WORKSTARTLEADTIME_H
+                        ,	ROUND(AVG(LD.WORKENDLEADTIME_H), 2)			AS WORKENDLEADTIME_H
+                        ,	ROUND(AVG(LD.SENDLEADTIME_H), 2)			AS SENDLEADTIME_H
+                        ------------------------------------
+                        , 	NVL(SUM(RECEIVEPCSQTY),0) 		AS RECEIVEPCSQTY_SUM
+                        ,	NVL(SUM(SENDPCSQTY),0)			AS SENDPCSQTY_SUM
+                        ,	NVL(SUM(DE.DEFECTQTY),0)		AS DEFECTQTY_SUM
+                    FROM 	LTDATA			LD
+                    LEFT  JOIN  HOLD_LT     HD  ON  LD.LOTID            = HD.LOTID
+                                                AND LD.PROCESSSEGMENTID = HD.PROCESSSEGMENTID
+                                                AND LD.AREAID           = HD.AREAID
+                    LEFT JOIN PCM_LOTWORKRESULT		LO  ON  LO.PRODUCTDEFID = LD.PRODUCTDEFID
+                										AND LO.PRODUCTDEFVERSION = LD.PRODUCTDEFVERSION
+                										AND LO.PROCESSSEGMENTID = LD.PROCESSSEGMENTID
+                	LEFT JOIN PCM_LOTDEFECT			DE  ON  DE.PRODUCTDEFID = LD.PRODUCTDEFID
+                										AND DE.PRODUCTDEFVERSION = LD.PRODUCTDEFVERSION
+                										AND DE.PROCESSSEGMENTID = LD.PROCESSSEGMENTID
+                    GROUP BY LD.PRODUCTDEFID
+                        ,	LD.PRODUCTDEFVERSION
+                        ,	LD.PRODUCTDEFNAME
+                        ,	LD.PROCESSSEGMENTID
+                        ,	LD.USERSEQUENCE
+                        ,	LD.PLANTID
+                        ,	LD.AREAID
+                        ,   LD.PRODUCTSHAPE
+                        ,	LD.RESOURCEID
+                        ,	LD.RESOURCENAME
+                        ,	LD.PROCESSCLASSID_R
+                ),
+                PRODUCTPLANT AS
+                (
+                    SELECT	DISTINCT 
+                            LD.PRODUCTDEFID
+                        ,	LD.PRODUCTDEFVERSION
+                        ,	LD.PLANTID
+                        ,	LD.PROCESSSEGMENTID
+                        ,	LD.USERSEQUENCE
+                        ,	LD.AREAID
+                        ,	CASE WHEN LD.PLANTID IN ('IFC', 'YPE') AND PP.CNT = 1 THEN 'DOMESTIC' 
+                            ELSE 'FOREIGN' END	AS PRODUCTPLANTTYPE
+                    FROM	LTDATA		LD
+                    LEFT JOIN
+                    (
+                        SELECT	LOTID
+                            ,	COUNT(PLANTID)	AS CNT
+                        FROM
+                        (
+                            SELECT 	DISTINCT
+                                    LD.LOTID
+                                ,	LT.PLANTID
+                            FROM 	LTDATA							LD
+                            INNER JOIN PCM_WIPLEADTIMEPERTYPE		LT	ON  LD.LOTID = LT.LOTID
+                                                                        AND LT.LTSUMTYPE = 'FINISHINSP'
+                        ) Z
+                        GROUP BY LOTID
+                    ) PP	ON 	LD.LOTID = PP.LOTID
+                )
+                SELECT 	SL.PLANTID
+                    ,	NVL(DC3.DICTIONARYNAME, AR.AREANAME)			AS AREANAME
+                    ,	SL.RESOURCEID
+                    ,	SL.RESOURCENAME
+                    ,	SL.PRODUCTDEFID
+                    ,	SL.PRODUCTDEFVERSION
+                    ,	SL.PRODUCTDEFNAME
+                    ,	FN_QAM_GET_DICTIONARYNAME(SL.PROCESSCLASSID_R,#{LANGUAGETYPE}) AS PROCESSCLASSID_R
+                    ,	NVL(DC2.DICTIONARYNAME, CD2.MEANING)	        AS PRODUCTPLANTTYPE
+                    ,	TO_NUMBER(SL.USERSEQUENCE)						AS USERSEQUENCE
+                    ,	SL.PROCESSSEGMENTID
+                    ,	NVL(DC4.DICTIONARYNAME, SG.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+                    ,	SL.AVG_LEADTIME
+                    ,	SL.MIN_LEADTIME
+                    ,	SL.MAX_LEADTIME
+                    ,	SL.RECEIVELEADTIME
+                    ,	SL.WORKSTARTLEADTIME
+                    ,	SL.WORKENDLEADTIME
+                    ,	SL.SENDLEADTIME
+                    ,   SL.LEADTIME
+                    ,   CASE WHEN SL.AVG_LEADTIME_H IS NULL THEN '' 
+                    	ELSE  TRUNC(SL.AVG_LEADTIME_H,0)  || ':' ||  ROUND((SL.AVG_LEADTIME_H-TRUNC(SL.AVG_LEADTIME_H,0)) * 60 ,0 )
+                    	END AS AVG_LEADTIME_HM
+                    ,   CASE WHEN SL.MIN_LEADTIME_H IS NULL THEN '' 
+                    	ELSE  TRUNC(SL.MIN_LEADTIME_H,0)  || ':' ||  ROUND((SL.MIN_LEADTIME_H-TRUNC(SL.MIN_LEADTIME_H,0)) * 60 ,0 )
+                    	END AS MIN_LEADTIME_HM
+                    ,   CASE WHEN SL.MAX_LEADTIME_H IS NULL THEN '' 
+                    	ELSE  TRUNC(SL.MAX_LEADTIME_H,0)  || ':' ||  ROUND((SL.MAX_LEADTIME_H-TRUNC(SL.MAX_LEADTIME_H,0)) * 60 ,0 )
+                    	END AS MAX_LEADTIME_HM
+                    ,   CASE WHEN SL.RECEIVELEADTIME_H IS NULL THEN '0:0' 
+                    	ELSE  TRUNC(SL.RECEIVELEADTIME_H,0)  || ':' ||  ROUND((SL.RECEIVELEADTIME_H-TRUNC(SL.RECEIVELEADTIME_H,0)) * 60 ,0 )
+                    	END AS RECEIVELEADTIME_HM
+                    ,   CASE WHEN SL.WORKSTARTLEADTIME_H IS NULL THEN '0:0' 
+                    	ELSE  TRUNC(SL.WORKSTARTLEADTIME_H,0)  || ':' ||  ROUND((SL.WORKSTARTLEADTIME_H-TRUNC(SL.WORKSTARTLEADTIME_H,0)) * 60 ,0 )
+                    	END AS WORKSTARTLEADTIME_HM
+                    ,   CASE WHEN SL.WORKENDLEADTIME_H IS NULL THEN '0:0' 
+                    	ELSE  TRUNC(SL.WORKENDLEADTIME_H,0)  || ':' ||  ROUND((SL.WORKENDLEADTIME_H-TRUNC(SL.WORKENDLEADTIME_H,0)) * 60 ,0 )
+                    	END AS WORKENDLEADTIME_HM
+                    ,   CASE WHEN SL.SENDLEADTIME_H IS NULL THEN '0:0' 
+                    	ELSE  TRUNC(SL.SENDLEADTIME_H,0)  || ':' ||  ROUND((SL.SENDLEADTIME_H-TRUNC(SL.SENDLEADTIME_H,0)) * 60 ,0 )
+                    	END AS SENDLEADTIME_HM
+                    ,	CNT.LOTCNT
+                    ,	PS.MFG_CATEGORY
+                    ,	SL.RECEIVEPCSQTY_SUM
+                    ,	SL.SENDPCSQTY_SUM
+                    ,   SL.DEFECTQTY_SUM
+                FROM 	SEGMENT_LT					SL
+                LEFT JOIN LOTCNT					CNT ON  SL.PRODUCTDEFID = CNT.PRODUCTDEFID
+                                                        AND SL.PRODUCTDEFVERSION = CNT.PRODUCTDEFVERSION
+                                                        AND SL.PROCESSSEGMENTID = CNT.PROCESSSEGMENTID
+                                                        AND SL.USERSEQUENCE = CNT.USERSEQUENCE
+                                                        AND SL.AREAID = CNT.AREAID
+                                                        AND SL.RESOURCEID = CNT.RESOURCEID
+                LEFT JOIN BAS_PRODUCTDEFINITION		PD 	ON 	SL.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                        AND SL.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                LEFT JOIN BAS_PRODUCTITEMSPEC       PS  ON  PD.PRODUCTDEFID = PS.ITEMID
+                            							AND PD.PRODUCTDEFVERSION = PS.ITEMVERSION
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD1	ON 	PD.PRODUCTIONTYPE = CD1.LOOKUP_CODE
+                                                        AND CD1.LOOKUP_TYPE = 'ProductionType'
+                LEFT  JOIN CMD_DICTIONARY			DC1 ON  CD1.DICTIONARYID = DC1.DICTIONARYID
+                                                        AND DC1.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_CUSTOMER				CU	ON 	PD.CUSTOMERID = CU.CUSTOMERID
+                LEFT  JOIN PRODUCTPLANT				PNT ON	SL.PRODUCTDEFID = PNT.PRODUCTDEFID
+                                                        AND SL.PRODUCTDEFVERSION = PNT.PRODUCTDEFVERSION
+                                                        AND SL.PROCESSSEGMENTID = PNT.PROCESSSEGMENTID
+                                                        AND SL.USERSEQUENCE = PNT.USERSEQUENCE
+                                                        AND SL.AREAID = PNT.AREAID
+                LEFT  JOIN CMD_LOOKUP_VALUES		CD2 ON  PNT.PRODUCTPLANTTYPE = CD2.LOOKUP_CODE
+                                                        AND CD2.LOOKUP_TYPE = 'ProductPlantType'
+                LEFT  JOIN CMD_DICTIONARY			DC2 ON  CD2.DICTIONARYID = DC2.DICTIONARYID
+                                                        AND DC2.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_AREA					AR	ON 	SL.AREAID = AR.AREAID
+                LEFT  JOIN CMD_DICTIONARY			DC3 ON  AR.AREANAME = DC3.DICTIONARYID
+                                                        AND DC3.LANGUAGETYPE = #{LANGUAGETYPE}
+                LEFT  JOIN BAS_PROCESSSEGMENT		SG	ON 	SL.PROCESSSEGMENTID = SG.PROCESSSEGMENTID
+                LEFT  JOIN CMD_DICTIONARY			DC4	ON 	SG.PROCESSSEGMENTNAME = DC4.DICTIONARYID
+                                                        AND DC4.LANGUAGETYPE = #{LANGUAGETYPE}
+                ORDER BY SL.AREAID
+                    ,	SL.RESOURCEID
+                    ,	SL.PRODUCTDEFID
+                    ,	SL.PRODUCTDEFVERSION
+                    ,	TO_NUMBER(SL.USERSEQUENCE) 
+	</select>
+	
+</mapper>

@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS04700Dao">
+
+    <!-- 탭1.계측검사 - 제품정보 조회 -->
+    <select id="selectQcOperationInspectionItemList" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS004700.selectQcOperationInspectionItemList */
+        SELECT SREL.RESOURCEID          AS PRODUCTDEFID
+             , SREL.RESOURCEVERSION     AS PRODUCTDEFVERSION
+             , SP.PRODUCTDEFNAME        AS PRODUCTDEFNAME
+             , SREL.PLANTID
+             , SREL.ENTERPRISEID
+          FROM       BAS_INSPECTIONITEMREL     SREL
+          INNER JOIN BAS_PRODUCTDEFINITION     SP    ON  SP.ENTERPRISEID          = SREL.ENTERPRISEID
+                                                     AND SP.PRODUCTDEFID          = SREL.RESOURCEID
+                                                     AND SP.PRODUCTDEFVERSION     = SREL.RESOURCEVERSION
+          INNER JOIN BAS_INSPECTIONDEFINITION  IDF   ON  IDF.INSPECTIONDEFID      = SREL.INSPECTIONDEFID
+                                                     AND IDF.INSPECTIONDEFVERSION = SREL.INSPECTIONDEFVERSION
+          INNER JOIN BAS_INSPECTIONCLASS       VCL   ON  VCL.INSPECTIONCLASSID    = IDF.INSPECTIONCLASSID
+         WHERE 'OperationInspection' = DECODE(INSTR(VCL.INSPECTIONCLASSID, '.')
+                                                    , 0, VCL.INSPECTIONCLASSID
+                                                       , SUBSTR(VCL.INSPECTIONCLASSID, 1, INSTR(VCL.INSPECTIONCLASSID, '.')-1)) -- 조회조건의 검사정의
+        <if test="ITEMID != null and ITEMID !=''">
+           AND SREL.RESOURCEID   = #{ITEMID}
+        </if>
+        <if test="ITEMVERSION != null and ITEMVERSION !=''">
+           AND SREL.RESOURCEVERSION =#{ITEMVERSION}
+        </if>
+        <if test="VALIDSTATE != null and VALIDSTATE !=''">
+           AND SP.VALIDSTATE  = #{VALIDSTATE}
+        </if>
+        GROUP BY SREL.RESOURCEID,SP.PRODUCTDEFNAME,SREL.RESOURCEVERSION, SREL.PLANTID , SREL.ENTERPRISEID
+        ORDER BY SREL.RESOURCEID,SREL.RESOURCEVERSION
+    </select>
+
+    <!-- 탭1.계측검사 - 검사정보 조회 -->
+    <select id="selectQcOperationInspectionList" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS004700.selectQcOperationInspectionList */
+                SELECT REL.INSPECTIONDEFID
+                     , REL.INSPECTIONDEFVERSION
+                     , REL.INSPITEMID
+                     , DIC.DICTIONARYNAME          AS INSPITEMNAME
+                     , REL.INSPITEMVERSION
+                     , REL.RESOURCETYPE
+                     , REL.RESOURCEID              AS ITEMID
+                     , IM.PRODUCTDEFNAME           AS ITEMNAME
+                     , REL.RESOURCEVERSION         AS ITEMVERSION
+                     , REL.PROCESSSEGID
+                     , DIC2.DICTIONARYNAME         AS PROCESSSEGNAME
+                     , REL.PROCESSEGVERSION
+                     , REL.ENTERPRISEID
+                     , REL.PLANTID
+                     , REL.VALIDTYPE
+                     , REL.UNIT
+                     , REL.SEQUENCE
+                     , REL.TANKSIZE
+                     , REL.CALCULATIONTYPE
+                     , REL.ANALYSISCONST
+                     , REL.FOMULATYPE
+                     , REL.QTYCONST
+                     , REL.SPECCLASSID
+                     , REL.SPECSEQUENCE
+                     , REL.ISINSPECTIONREQUIRED
+                     , REL.INSPECTORDEGREE
+                     , REL.ISAQL
+                     , REL.AQLINSPECTIONLEVEL
+                     , REL.AQLDEFECTLEVEL
+                     , REL.AQLDECISIONDEGREE
+                     , REL.AQLCYCLE
+                     , REL.ISNCR
+                     , REL.NCRINSPECTIONQTY
+                     , REL.NCRCYCLE
+                     , REL.NCRDECISIONDEGREE
+                     , REL.NCRDEFECTRATE
+                     , REL.NCRLOTSIZE
+                     , REL.QTYUNIT
+                     , REL.INSPECTIONUNIT
+                     , REL.DESCRIPTION
+                     , REL.VALIDSTATE
+                     , CASE WHEN SD.SPECSEQUENCE IS NULL THEN 'N' ELSE 'Y' END AS ISSPEC
+                     , CIM.INSPITEMTYPE
+                     , TO_CHAR(REL.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+		             , TO_CHAR(REL.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+		             , CU.USER_NM                 AS CREATOR
+		             , MU.USER_NM                 AS MODIFIER
+                  FROM            BAS_INSPECTIONITEMREL     REL
+                  INNER JOIN      BAS_INSPECTIONDEFINITION  IDF  ON  IDF.INSPECTIONDEFID        = REL.INSPECTIONDEFID
+                                                                 AND IDF.INSPECTIONDEFVERSION   = REL.INSPECTIONDEFVERSION
+                  INNER JOIN      BAS_INSPECTIONCLASS       VCL  ON  VCL.INSPECTIONCLASSID      = IDF.INSPECTIONCLASSID
+                  LEFT OUTER JOIN BAS_INSPECTIONMETHODITEM  CIM  ON  CIM.INSPITEMID             = REL.INSPITEMID
+                                                                 AND CIM.INSPITEMVERSION        = REL.INSPITEMVERSION
+                                                                 AND CIM.INSPECTIONCLASSID      = IDF.INSPECTIONCLASSID
+                  LEFT OUTER JOIN BAS_INSPITEM              IIT  ON  REL.INSPITEMID             = IIT.INSPITEMID
+                                                                 AND REL.INSPITEMVERSION        = IIT.INSPITEMVERSION
+                  LEFT OUTER JOIN CMD_DICTIONARY            DIC  ON  DIC.DICTIONARYID           = IIT.INSPITEMNAME
+                                                                 AND DIC.LANGUAGETYPE           = #{LANGUAGETYPE}
+                  LEFT OUTER JOIN BAS_PROCESSSEGMENT        SPS  ON  SPS.PROCESSSEGMENTID       = REL.PROCESSSEGID
+                                                                 AND SPS.PROCESSSEGMENTVERSION  = REL.PROCESSEGVERSION
+                  LEFT OUTER JOIN CMD_DICTIONARY            DIC2 ON  DIC2.DICTIONARYID          = SPS.PROCESSSEGMENTNAME
+                                                                 AND DIC2.LANGUAGETYPE          = #{LANGUAGETYPE}
+                  LEFT JOIN       BAS_PRODUCTDEFINITION     IM   ON  REL.RESOURCEID             = IM.PRODUCTDEFID
+                                                                 AND REL.RESOURCEVERSION        = IM.PRODUCTDEFVERSION
+                  LEFT OUTER JOIN BAS_SPECDETAIL            SD   ON  REL.SPECSEQUENCE           = SD.SPECSEQUENCE
+                                                                 AND REL.SPECCLASSID            = SD.SPECCLASSID
+			      LEFT OUTER JOIN CMD_USERS                 CU   ON  REL.CREATOR                = CU.USER_ID
+			      LEFT OUTER JOIN CMD_USERS                 MU   ON  REL.MODIFIER               = MU.USER_ID                                                                 
+                 WHERE VCL.INSPECTIONCLASSID  = #{INSPECTIONCLASSID}
+                <if test="INSPECTIONCLASSID eq 'OperationInspection'.toString()">
+                    AND REL.RESOURCEID       = #{PRODUCTDEFID}
+                    AND REL.RESOURCEVERSION  = #{PRODUCTDEFVERSION}
+                </if>
+                <if test="INSPECTIONCLASSID eq 'OSPInspection'.toString()">
+                    AND REL.PROCESSSEGID IN
+                        (
+                            SELECT DISTINCT CQD.QCSEGMENTID
+                              FROM            BAS_PROCESSPATH          SPH
+                                 ,            BAS_PROCESSSEGMENT       SP
+                                 ,            QAM_QCSEGMENTCLASSREL    CQSC
+                                 ,            QAM_QCSEGMENTDEFINITION  CQD
+                              LEFT OUTER JOIN CMD_DICTIONARY           DIC  ON DIC.DICTIONARYID   = CQD.QCSEGMENTNAME
+                                                                            AND DIC.LANGUAGETYPE   = #{LANGUAGETYPE}
+                             WHERE SP.PROCESSSEGMENTID        = SPH.PROCESSSEGMENTID
+                               AND SP.PROCESSSEGMENTVERSION   = SPH.PROCESSSEGMENTVERSION
+                               AND CQSC.PROCESSSEGMENTCLASSID = SP.PROCESSSEGMENTCLASSID
+                               AND CQD.QCSEGMENTID            = CQSC.QCSEGMENTID
+                               AND SPH.PROCESSDEFID           = #{PRODUCTDEFID}
+                               AND SPH.PROCESSDEFVERSION      = #{PRODUCTDEFVERSION}
+                            ORDER BY CQD.QCSEGMENTID
+                        )
+                </if>
+                <if test="VALIDSTATE != null and VALIDSTATE !=''">
+                  AND IM.VALIDSTATE  = #{VALIDSTATE}
+                </if>
+                ORDER BY REL.RESOURCEID, REL.RESOURCEVERSION, REL.PROCESSSEGID, REL.INSPITEMID
+    </select>
+
+    <!-- 탭2.공정수입검사 - 검사정보 조회 -->
+    <select id="selectQcOSPInspectionList" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS004700.selectQcOSPInspectionList */
+        SELECT QDF.QCSEGMENTID            AS PROCESSSEGID
+             , '*'                        AS PROCESSEGVERSION
+             , DIC2.DICTIONARYNAME        AS PROCESSSEGNAME
+             , 'QCSegmentID'              AS PROCESSSEGMENTTYPE
+             , 'OSPInspection'            AS INSPECTIONDEFID
+             , '*'                        AS RESOURCEID
+             , '*'                        AS RESOURCEVERSION
+             , '*'                        AS INSPITEMID
+             , 'QCSegmentID'              AS RESOURCETYPE
+             , QDF.ENTERPRISEID
+             , '*'                        AS PLANTID
+             , IIR.ISAQL
+             , IIR.AQLINSPECTIONLEVEL
+             , IIR.AQLDEFECTLEVEL
+             , IIR.AQLDECISIONDEGREE
+             , IIR.ISNCR
+             , IIR.NCRINSPECTIONQTY
+             , IIR.NCRCYCLE
+             , IIR.NCRLOTSIZE
+             , IIR.VALIDSTATE
+             , TO_CHAR(IIR.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+             , TO_CHAR(IIR.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+             , CU.USER_NM                 AS CREATOR
+             , MU.USER_NM                 AS MODIFIER
+      FROM            QAM_QCSEGMENTDEFINITION   QDF
+      INNER      JOIN BAS_INSPECTIONCLASS       ICL   ON  ICL.INSPECTIONCLASSID    = 'OSPInspection'
+      INNER      JOIN BAS_INSPECTIONDEFINITION  IDF   ON  IDF.INSPECTIONCLASSID    = ICL.INSPECTIONCLASSID
+      LEFT OUTER JOIN BAS_INSPECTIONITEMREL     IIR   ON  IIR.INSPECTIONDEFID      = IDF.INSPECTIONDEFID
+                                                      AND IIR.INSPECTIONDEFVERSION = IDF.INSPECTIONDEFVERSION
+                                                      AND IIR.PROCESSSEGID         = QDF.QCSEGMENTID
+      LEFT OUTER JOIN CMD_DICTIONARY            DIC2  ON  DIC2.DICTIONARYID        = QDF.QCSEGMENTNAME
+                                                      AND DIC2.LANGUAGETYPE        = #{LANGUAGETYPE}
+      LEFT OUTER JOIN CMD_USERS                 CU    ON  IIR.CREATOR              = CU.USER_ID
+      LEFT OUTER JOIN CMD_USERS                 MU    ON  IIR.MODIFIER             = MU.USER_ID
+     WHERE 1=1
+     <if test="VALIDSTATE != null and VALIDSTATE !=''">
+         AND QDF.VALIDSTATE  = #{VALIDSTATE}
+     </if>
+    ORDER BY QDF.QCSEGMENTID
+    </select>
+
+    <!-- 규격 조회(팝업) -->
+    <select id="selectSpecDetailPopUp" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS004700.selectSpecDetailPopUp */
+        SELECT #{SPECCLASSID} AS  SPECCLASSID
+             , #{INSPECTIONDEFID} AS INSPECTIONDEFID
+             , MSF.ENTERPRISEID
+             , MSF.PLANTID
+             , MSF.PROCESSSEGMENTCLASSID
+             , MSF.PROCESSSEGMENTID
+             , MSF.EQUIPMENTID
+             , MSF.CHILDEQUIPMENTID
+             , MSF.PRODUCTDEFID
+             , MSF.CONSUMABLEDEFID
+             , MSF.VENDORID
+             , MSF.INSPITEMID
+             , MSF.WORKTYPE
+             , MSF.WORKCONDITION
+             , MSF.SPECVERSION
+             , MSF.UOMDEFID
+             , CASE WHEN MSF.DEFAULTCHARTTYPE = MSD.CONTROLTYPE THEN 'Y'
+               ELSE 'N' END AS ISCHARTTYPE
+             , MSF.DEFAULTCHARTTYPE
+             , MSF.RESOURCEID
+             , MSF.RESOURCEVERSION
+             , MSF.SPECSEQUENCE AS SPECSEQUENCE
+             , MSD.CONTROLTYPE
+             , MSD.SL
+             , MSD.USL
+             , MSD.LSL
+             , MSD.CL
+             , MSD.LCL
+             , MSD.UCL
+             , MSD.LOL
+             , MSD.UOL
+        FROM       BAS_SPECDEFINITION MSF
+        INNER JOIN BAS_SPECDETAIL     MSD  ON  MSD.SPECSEQUENCE = MSF.SPECSEQUENCE
+                                           AND MSD.VALIDSTATE   = 'Valid'
+        WHERE    1 = 1 
+        AND MSF.SPECSEQUENCE = #{SPECSEQUENCE}
+        ORDER BY ISCHARTTYPE DESC,  MSD.CONTROLTYPE
+    </select>
+
+    <!-- 계측검사 검사 항목 정의 수정 -->
+    <update id="updateOperationInspectionitemrel" parameterType="map">
+		UPDATE /* smh.bas.dao.BAS04700Dao.updateOperationInspectionitemrel */ BAS_INSPECTIONITEMREL
+		   SET ISNCR                         = #{ISNCR}                      /*NCR여부*/
+             , NCRCYCLE                      = #{NCRCYCLE}                   /*NCR주기*/
+             , NCRDECISIONDEGREE             = #{NCRDECISIONDEGREE}          /*NCR판정등급*/
+             , NCRDEFECTRATE                 = #{NCRDEFECTRATE}              /*불량율*/
+        <if test="NCRLOTSIZE != null and NCRLOTSIZE !=''">
+             , NCRLOTSIZE                    = #{NCRLOTSIZE}                 /*Lot Size*/
+        </if>
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+         WHERE INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+           AND INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+           AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*자원 ID*/
+           AND RESOURCEVERSION               = #{RESOURCEVERSION}            /*자원 Version*/
+           AND PROCESSSEGID                  = #{PROCESSSEGID}               /*공정ID*/
+           AND PROCESSEGVERSION              = #{PROCESSEGVERSION}           /*공정Version*/
+    </update> 
+    
+    <!-- 공정수입검사 검사 항목 정의 수정 -->
+    <update id="updateOSPInspectionitemrel" parameterType="map">
+		UPDATE /* smh.bas.dao.BAS04700Dao.updateOSPInspectionitemrel */ BAS_INSPECTIONITEMREL
+		   SET ISAQL                         = #{ISAQL}                      /*AQL여부*/
+        <if test="AQLINSPECTIONLEVEL != null and AQLINSPECTIONLEVEL !=''">
+             , AQLINSPECTIONLEVEL            = #{AQLINSPECTIONLEVEL}         /*검사수준*/
+        </if>
+        <if test="AQLDEFECTLEVEL != null and AQLDEFECTLEVEL !=''">
+             , AQLDEFECTLEVEL                = #{AQLDEFECTLEVEL}             /*불량수준*/
+        </if>
+             , AQLDECISIONDEGREE             = #{AQLDECISIONDEGREE}          /*AQL판정등급*/
+             , ISNCR                         = #{ISNCR}                        /*NCR여부*/
+        <if test="NCRINSPECTIONQTY != null and NCRINSPECTIONQTY !=''">
+             , NCRINSPECTIONQTY              = #{NCRINSPECTIONQTY}           /*검사수량*/
+        </if>
+             , NCRCYCLE                      = #{NCRCYCLE}                   /*NCR주기*/
+        <if test="NCRLOTSIZE != null and NCRLOTSIZE !=''">
+             , NCRLOTSIZE                    = #{NCRLOTSIZE}                 /*Lot Size*/
+        </if>
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+         WHERE INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+           AND INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+           AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*자원 ID*/
+           AND RESOURCEVERSION               = #{RESOURCEVERSION}            /*자원 Version*/
+           AND PROCESSSEGID                  = #{PROCESSSEGID}               /*공정ID*/
+           AND PROCESSEGVERSION              = #{PROCESSEGVERSION}           /*공정Version*/
+    </update>
+</mapper>

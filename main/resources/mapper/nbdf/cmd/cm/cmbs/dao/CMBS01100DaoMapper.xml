@@ -1,0 +1,941 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 배치 프로그램 관리
+    설명          : 배치 프로그램 관련 CUD
+    작성자       : 진성하
+    최초작성일 : 2017.06.23
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.06.23    진성하     최초  생성
+-->
+
+
+<mapper namespace="com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao">
+
+    <resultMap type="hashmap" id="fileMap">
+        <result property="FILE_DATA" column="FILE_DATA" jdbcType="BLOB" javaType="[B"/>
+        <result property="FILE_CONTENT_TYPE" column="FILE_CONTENT_TYPE"/>
+        <result property="FILE_NAME" column="FILE_NAME"/>
+        <result property="FILE_FORMAT" column="FILE_FORMAT"/>
+    </resultMap>
+
+    <!-- WHO 컬럼  -->
+	 <sql id="whoCol" >
+		 , CREATED_BY
+		 , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD hh24:mi') as CREATION_DATE
+		 , LAST_UPDATED_BY, TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD hh24:mi') as LAST_UPDATE_DATE
+	 </sql>
+
+	  <sql id="deTail_whoCol" >
+         , CREATED_BY
+         , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD hh24:mi:ss') as CREATION_DATE
+         , LAST_UPDATED_BY, TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD hh24:mi:ss') as LAST_UPDATE_DATE
+     </sql>
+
+	     <!-- 배치프로그램 관리 조회 -->
+     <select id="selectBatchList" resultType="hashmap">
+      SELECT  /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchList"  */ *
+      FROM (
+                SELECT ROWNUM AS RNUM
+                           , T.*
+                FROM (
+			                SELECT  *
+			                FROM  (
+						                  SELECT
+									                    BAT_PGM_ID
+									                    ,EXEC_FN
+									                    ,BAT_PGM_DESC
+									                    ,BAT_PGM_TY_CD
+									                    ,GET_CODE_F('CMD_BAT_PGM_GUBUN', BAT_PGM_TY_CD)  as BAT_PGM_TY_NM        /* 배치 프로그램 구분 */
+									                    ,JOB_GUBUN_CD
+									                    ,GET_CODE_F('CMD_JOB_GUBUNCD', JOB_GUBUN_CD)  as JOB_GUBUN_NM                 /* 업무시스템 */
+									                    ,RM
+									                    ,DUP_EXEC_ENBL_YN
+									                    ,DECODE (USE_YN,'Y',1,'N',0) AS USE_YN
+									                    ,DECODE (DUP_EXEC_ENBL_YN,'Y','중복 수행 가능','N','중복 수행 불가') AS DUP_EXEC_ENBL_YN_KOR
+									                     <include refid="deTail_whoCol" />
+                                            FROM CMD_BAT_PGMS
+                                            WHERE 1=1
+            <if test="USE_YN != '' and USE_YN !=null ">
+                                            AND USE_YN = #{USE_YN}
+            </if>
+            <if test="BAT_PGM_TY_CD != '' and BAT_PGM_TY_CD !=null ">
+                                            AND BAT_PGM_TY_CD = #{BAT_PGM_TY_CD}
+            </if>
+            <if test="JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+                                            AND JOB_GUBUN_CD = #{JOB_GUBUN_CD}   /* 업무시스템코드 */
+            </if>
+                                            ORDER BY  DECODE(LAST_UPDATE_DATE ,NULL ,CREATION_DATE , LAST_UPDATE_DATE ) DESC, CREATION_DATE DESC
+                                            ) AA
+                            WHERE
+                            CREATED_BY IS NOT NULL
+            <if test="EXEC_FN != null and EXEC_FN != ''">
+                <if test="EXEC_FN.equals('BAT_PGM_DESC') and TEXT != null ">
+                            AND BAT_PGM_DESC LIKE UPPER('%' ||  #{TEXT} || '%')
+                </if>
+                 <if test="EXEC_FN.equals('EXEC_FN') and TEXT != null ">
+                             AND EXEC_FN LIKE UPPER('%' ||  #{TEXT} || '%')
+                </if>
+                <if test="EXEC_FN.equals('RM') and TEXT != null ">
+                             AND RM LIKE UPPER('%' ||  #{TEXT} || '%')
+                </if>
+                <if test="EXEC_FN.equals('BAT_PGM_ID') and TEXT != null ">
+                             AND BAT_PGM_ID = #{TEXT}
+                </if>
+            </if>
+            <if test="BAT_PGM_ID != '' and BAT_PGM_ID !=null ">
+                            AND BAT_PGM_ID = #{BAT_PGM_ID}
+            </if>
+          )T WHERE 1=1
+            <if test= "P_END != null and P_END != ''">
+         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+            </if>
+    ) WHERE 1=1
+            <if test= "P_START != null and P_START != ''">
+    AND  RNUM >= #{P_START}
+           </if>
+    </select>
+
+    <!-- 배치프로그램 관리 조회 -->
+	 <select id="selectBatchCount" resultType="hashmap">
+		 SELECT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchCount"  */
+		            COUNT(*) AS COUNT
+         FROM CMD_BAT_PGMS
+		 WHERE
+		 CREATED_BY IS NOT NULL
+		 <if test="USE_YN != '' and USE_YN !=null ">
+		  AND USE_YN = #{USE_YN}
+		 </if>
+		 <if test="BAT_PGM_TY_CD != '' and BAT_PGM_TY_CD !=null ">
+          AND BAT_PGM_TY_CD = #{BAT_PGM_TY_CD}
+         </if>
+         <if test="JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+          AND JOB_GUBUN_CD = #{JOB_GUBUN_CD}   /* 업무시스템코드 */
+         </if>
+         <if test="EXEC_FN != null and EXEC_FN != ''">
+              <if test="EXEC_FN.equals('BAT_PGM_DESC') and TEXT != null ">
+          AND BAT_PGM_DESC LIKE UPPER('%' ||  #{TEXT} || '%')
+              </if>
+              <if test="EXEC_FN.equals('EXEC_FN') and TEXT != null ">
+          AND EXEC_FN LIKE UPPER('%' ||  #{TEXT} || '%')
+              </if>
+              <if test="EXEC_FN.equals('RM') and TEXT != null ">
+          AND RM LIKE UPPER('%' ||  #{TEXT} || '%')
+             </if>
+             <if test="EXEC_FN.equals('BAT_PGM_ID') and TEXT != null ">
+         AND BAT_PGM_ID = #{TEXT}
+            </if>
+         </if>
+         <if test="BAT_PGM_ID != '' and BAT_PGM_ID !=null ">
+          AND BAT_PGM_ID = #{BAT_PGM_ID}
+         </if>
+     </select>
+
+	  <!-- 작업 프로그램 코드 중복 검사 -->
+     <select id="selectBatchCdCheck" resultType="hashmap">
+         SELECT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchCdCheck"  */
+                   COUNT(*) AS RESULT
+            FROM CMD_BAT_PGMS
+            WHERE 1=1
+          <if test="BAT_PGM_ID != null and BAT_PGM_ID != ''">
+            AND BAT_PGM_ID != #{BAT_PGM_ID}   /* 업무시스템코드 */
+          </if>
+     </select>
+
+	 <!-- 배치프로그램 저장 -->
+     <update id="insertBatch" parameterType="hashmap">
+          INSERT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.insertBatch"  */
+         INTO    CMD_BAT_PGMS
+                    (BAT_PGM_ID
+                        ,EXEC_FN
+                        ,BAT_PGM_DESC
+                        ,BAT_PGM_TY_CD
+                        ,JOB_GUBUN_CD
+                        ,RM
+                        ,DUP_EXEC_ENBL_YN
+                        ,USE_YN
+                        ,CREATED_BY
+                        ,CREATION_DATE
+                    )
+         VALUES (
+                    CMD_BAT_PGMS_S.NEXTVAL             <!-- 배치 프로그램 ID (BAT_PGM_ID)  -->
+                    ,#{EXEC_FN}                                 <!--  수행 함수명 (EXEC_FN)  -->
+                    ,#{BAT_PGM_DESC}                         <!-- 배치 프로그램 설명 (BAT_PGM_DESC) -->
+                    ,#{BAT_PGM_TY_CD}                       <!-- 배치 프로그램 유형 코드 (BAT_PGM_TY_CD) -->
+                    ,#{JOB_GUBUN_CD}                                            <!--- 업무시스템코드 (JOB_GUBUN_CD) -->
+                    ,#{RM}                     <!--  비고 (RM)  -->
+                    ,#{DUP_EXEC_ENBL_YN}                         <!-- 중복 수행 가능 여부 (DUP_EXEC_ENBL_YN) -->
+        <if test="USE_YN == 0 || USE_YN == null">
+                    , 'N'
+        </if>
+        <if test="USE_YN == 1">
+                    , 'Y'
+        </if>
+                    ,#{CREATED_BY}                    <!-- 최초 생성자 (CREATED_BY) -->
+                    ,SYSDATE               <!-- 최초 생서일 (CREATION_DATE) -->
+                    )
+     </update>
+
+     <!-- 배치프로그램 삭제 -->
+    <update id="deleteBatch" parameterType="hashmap">
+    DELETE  /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.deleteBatch"  */
+    FROM    CMD_BAT_PGMS
+    WHERE
+	BAT_PGM_ID = #{BAT_PGM_ID}
+	 </update>
+
+     <!-- 배치프로그램 수정 -->
+     <update id="updateBatch" parameterType="hashmap">
+         UPDATE /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.updateBatch"  */ CMD_BAT_PGMS
+         SET      EXEC_FN = #{EXEC_FN}                                         /* 함수 명 */
+                    , BAT_PGM_DESC = #{BAT_PGM_DESC}                       /* 배치 프로그램 설명  */
+                    , BAT_PGM_TY_CD = #{BAT_PGM_TY_CD}                   /* 배치 프로그램 유형코드  */
+                    , DUP_EXEC_ENBL_YN = #{DUP_EXEC_ENBL_YN}                       /* 중복 수행 가능 여부  */
+                    , JOB_GUBUN_CD = #{JOB_GUBUN_CD}                       /* 중복 수행 가능 여부  */
+                    <if test="USE_YN == 0">
+                       , USE_YN = 'N'
+                    </if>
+                    <if test="USE_YN == 1">
+                       , USE_YN = 'Y'
+                    </if>
+                     <if test="RM != null and RM != ''">
+                    , RM = #{RM}
+                    </if>
+                    , LAST_UPDATED_BY = #{LAST_UPDATED_BY}          /* 최종수정자ID */
+                    , LAST_UPDATE_DATE = SYSDATE                            /* 최종수정자ID */
+        WHERE  BAT_PGM_ID = #{BAT_PGM_ID}
+     </update>
+
+      <!-- 배치프로그램 관리 조회 -->
+     <select id="selectBatchParamList" resultType="hashmap">
+         SELECT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchParamList"  */
+                     A.BAT_PGM_ID
+                    , A.SEQ_NO
+                    , A.PARAMTR
+                    , A.ORDR
+                    , A.DEF_VAL
+                    , A.RM
+                    , B.DUP_EXEC_ENBL_YN
+                    , B.BAT_PGM_TY_CD
+                    , DECODE(A.REQUIRED_FLAG,'Y','1','0') AS REQUIRED_FLAG
+                    , A.IN_OUT_CODE
+                    , A.DEF_VAL_SQL_ID
+            FROM CMD_BAT_PGMS_PARAMTRS A , CMD_BAT_PGMS B
+            WHERE
+            A.BAT_PGM_ID = B.BAT_PGM_ID
+            AND A.BAT_PGM_ID = #{BAT_PGM_ID}
+            AND  A.SEQ_NO <![CDATA[<]]>  20
+            ORDER BY A.SEQ_NO
+     </select>
+
+         <!-- 배치프로그램  파라미터 저장 -->
+     <update id="insertParam" parameterType="hashmap">
+          INSERT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.insertParam"  */
+         INTO    CMD_BAT_PGMS_PARAMTRS
+                    (
+                    BAT_PGM_ID
+					, SEQ_NO
+					, PARAMTR
+					, RM
+					, ORDR
+					, REQUIRED_FLAG
+                    , IN_OUT_CODE
+					, DEF_VAL
+					, CREATED_BY
+					, CREATION_DATE
+					, DEF_VAL_SQL_ID
+			        )
+         VALUES (
+                    #{BAT_PGM_ID}
+                    , (SELECT NVL(MAX(SEQ_NO),0)+1 FROM CMD_BAT_PGMS_PARAMTRS WHERE BAT_PGM_ID = #{BAT_PGM_ID} )
+                    , #{PARAMTR}
+                    , #{RM}
+                    , (SELECT NVL(MAX(SEQ_NO),0)+1 FROM CMD_BAT_PGMS_PARAMTRS WHERE BAT_PGM_ID = #{BAT_PGM_ID} )
+                    <if test="REQUIRED_FLAG == 0 || REQUIRED_FLAG == null">
+                    , 'N'
+			        </if>
+			        <if test="REQUIRED_FLAG == 1">
+			        , 'Y'
+			        </if>
+                    , #{IN_OUT_CODE}
+                    , #{DEF_VAL}
+                    , #{CREATED_BY}
+                    , SYSDATE
+                    , #{DEF_VAL_SQL_ID}
+                    )
+     </update>
+
+      <!-- 배치 파라미터 수정 -->
+     <update id="updateParam" parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.updateParam"  */ CMD_BAT_PGMS_PARAMTRS
+         SET      RM = #{RM}                               /* 배치 프로그램 코드 */
+                    <if test="REQUIRED_FLAG == 0">
+                    , REQUIRED_FLAG = 'N'
+                    </if>
+                    <if test="REQUIRED_FLAG == 1">
+                    , REQUIRED_FLAG = 'Y'
+                    </if>
+                    ,IN_OUT_CODE = #{IN_OUT_CODE}
+                    , LAST_UPDATED_BY = #{LAST_UPDATED_BY}          /* 최종수정자ID */
+                    , LAST_UPDATE_DATE = SYSDATE                            /* 최종수정자ID */
+        WHERE  BAT_PGM_ID = #{BAT_PGM_ID}
+     </update>
+
+    <!-- 배치프로그램 파라미터 삭제 -->
+    <update id="deleteParam" parameterType="hashmap">
+    DELETE  /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.deleteParam"  */
+    FROM    CMD_BAT_PGMS_PARAMTRS
+    WHERE
+    BAT_PGM_ID = #{BAT_PGM_ID}
+   </update>
+
+      <!-- 배치 파라미터 최근 수정일시 변경 -->
+     <update id="updateParamToLastUpdate" parameterType="hashmap">
+        UPDATE /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.updateParamToLastUpdate"  */ CMD_BAT_PGMS
+         SET     LAST_UPDATE_DATE = SYSDATE                            /* 최종수정일 */
+        WHERE  BAT_PGM_ID = #{BAT_PGM_ID}
+     </update>
+
+   <!-- 배치프로그램 작업 목록 -->
+     <select id="selectBatchWKSList" resultType="hashmap">
+      SELECT  /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchWKSList"  */ *
+      FROM (
+                SELECT ROWNUM AS RNUM, T.* FROM (
+                           SELECT   *
+			               FROM (
+							         SELECT
+							                    B.JOB_GUBUN_CD
+										        , GET_CODE_F('CMD_JOB_GUBUNCD', B.JOB_GUBUN_CD)  AS JOB_GUBUN_NM
+										        , A.BAT_WK_NAME
+										        , A.BAT_CYCL_DESC
+										        , DECODE (A.USE_YN, 'Y' ,'1' ,'N' , '0' ) AS USE_YN_GRID
+										        , A.USE_YN                        -- 배치작업 사용여부
+										        , B.USE_YN as PGM_USE_YN  -- 배치프로그램 사용여부
+										        , DECODE (B.USE_YN,'Y',1,'N',0) AS USE_YN_PGM
+                                                , A.BAT_WK_ID
+										        , A.BAT_CYCLE_KND
+										        , GET_CODE_F('CMD_BAT_CYCLE_KND', A.BAT_CYCLE_KND)  as BAT_CYCLE_KND_NM
+										        , A.STRT_DLY_TIMEMS
+										        , A.REPTIT_CYCL_TIMEMS
+										        , A.CRON_INFO
+										        ,  A.CREATED_BY
+							                    , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD hh24:mi') as CREATION_DATE
+							                    , A.LAST_UPDATED_BY
+							                    , TO_CHAR(A.LAST_UPDATE_DATE, 'YYYY-MM-DD hh24:mi') as LAST_UPDATE_DATE
+							                    , DECODE (A.USE_YN,'Y','사용','N','미 사용') AS USE_YN_WKS_KOR
+                                                , DECODE (B.DUP_EXEC_ENBL_YN,'Y','가능','N','불가') AS DUP_EXEC_ENBL_YN_KOR
+                                                , B.DUP_EXEC_ENBL_YN
+                                                , GET_CODE_F('CMD_BAT_PGM_GUBUN', B.BAT_PGM_TY_CD)  as BAT_PGM_TY_NM        /* 배치 프로그램 구분 */
+                                                , B.BAT_PGM_TY_CD
+                                                , B.EXEC_FN
+                                                , B.BAT_PGM_ID
+                                                , B.RM
+                                                , CASE WHEN (SELECT COUNT(BAT_WK_ID) FROM CMD_BAT_DUP_EXEC_MNTRNGS WHERE BAT_WK_ID=A.BAT_WK_ID) > 0 THEN '실행중'
+                                                  ELSE ''
+                                                  END as DUP_EXEC    -- 중복실행중 여부
+                                                , A.WK_STTUS
+                                                ,#{CREATED_BY} AS BAT_CREATED_BY
+                                         	FROM CMD_BAT_WKS A,   CMD_BAT_PGMS B
+											WHERE
+											A.BAT_PGM_ID = B.BAT_PGM_ID
+											AND A.WK_STTUS  <![CDATA[<> ]]> 'D'
+											<if test="BAT_WK_ID != '' and BAT_WK_ID !=null ">
+                                            AND A.BAT_WK_ID = #{BAT_WK_ID}
+                                            </if>
+											<if test="USE_YN != '' and USE_YN !=null ">
+											AND A.USE_YN = #{USE_YN}
+											</if>
+											<if test="JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+									        AND JOB_GUBUN_CD = #{JOB_GUBUN_CD}   /* 업무시스템코드 */
+									        </if>
+									         ORDER BY A.CREATION_DATE DESC
+									          ) AA
+									          WHERE 1=1
+                               <if test="TEXT != '' and TEXT !=null ">
+                                   <if test="TYPE.equals('BAT_WK_NAME') and TEXT != null and TEXT != ''">
+                                  AND AA.BAT_WK_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+                                   </if>
+                                  <if test="TYPE.equals('BAT_WK_ID') ">
+                                  AND AA.BAT_WK_ID = #{TEXT}
+                                  </if>
+                                  <if test="TYPE.equals('EXEC_FN') ">
+                                   AND AA.EXEC_FN LIKE UPPER('%' ||  #{TEXT} || '%')
+                                  </if>
+                                   <if test="TYPE.equals('EXEC_FN') ">
+                                   AND AA.EXEC_FN LIKE UPPER('%' ||  #{TEXT} || '%')
+                                  </if>
+                                  <if test="TYPE.equals('BAT_PGM_ID') ">
+                                   AND AA.BAT_PGM_ID = #{TEXT}
+                                   </if>
+                            </if>
+                         ORDER BY  DECODE(LAST_UPDATE_DATE ,NULL ,CREATION_DATE , LAST_UPDATE_DATE ) DESC, CREATION_DATE DESC
+			            )T WHERE 1=1
+		        <if test= "P_END != null and P_END != ''">
+		         AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+		        </if>
+		    ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+    AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+       <!-- 배치프로그램 작업 Count -->
+     <select id="selectBatchWKSCount" resultType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchWKSCount"  */
+                  COUNT(*) AS COUNT
+        FROM (
+                SELECT
+                            AA.BAT_WK_ID
+                            , AA.BAT_PGM_ID
+                            , AA.BAT_WK_NAME
+                            , AA.EXEC_FN
+                            FROM  (
+                                       SELECT
+                                                A.BAT_WK_ID
+                                                , B.BAT_PGM_ID
+                                                , A.BAT_WK_NAME
+                                                , B.EXEC_FN
+                                            FROM CMD_BAT_WKS A,   CMD_BAT_PGMS B
+                                            WHERE 1=1
+                                            AND A.BAT_PGM_ID = B.BAT_PGM_ID
+                                            AND A.WK_STTUS  <![CDATA[<> ]]> 'D'
+                                            <if test="BAT_WK_ID != '' and BAT_WK_ID !=null ">
+                                            AND A.BAT_WK_ID = #{BAT_WK_ID}
+                                            </if>
+                                            <if test="USE_YN != '' and USE_YN !=null ">
+                                            AND A.USE_YN = #{USE_YN}
+                                            </if>
+                                            <if test="JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+                                            AND JOB_GUBUN_CD = #{JOB_GUBUN_CD}   /* 업무구분코드 */
+                                            </if>
+                                             ORDER BY A.BAT_WK_ID
+                                              ) AA
+                                              WHERE 1=1
+                              <if test="TEXT != null and TEXT != ''">
+	                               <if test="TYPE.equals('BAT_WK_NAME') ">
+	                              AND AA.BAT_WK_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+	                               </if>
+	                               <if test="TYPE.equals('BAT_WK_ID')   ">
+	                              AND AA.BAT_WK_ID = #{TEXT}
+	                               </if>
+	                               <if test="TYPE.equals('EXEC_FN') ">
+	                               AND AA.EXEC_FN LIKE UPPER('%' ||  #{TEXT} || '%')
+	                              </if>
+	                              <if test="TYPE.equals('BAT_PGM_ID') ">
+	                              AND AA.BAT_PGM_ID = #{TEXT}
+                                 </if>
+	                        </if>
+                      )
+    </select>
+
+     <!-- 배치작업 목록 삭제 -->
+    <update id="deleteBatchWKS" parameterType="hashmap">
+    UPDATE   /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.deleteBatchWKS"  */ CMD_BAT_WKS
+    SET    WK_STTUS = 'D'
+    WHERE
+    BAT_WK_ID = #{BAT_WK_ID}
+   </update>
+
+    <!-- 배치작업 중 중복실행에 걸려서 실행이 안되는거 강제 삭제 -->
+    <update id="deleteBatchDupWKS" parameterType="hashmap">
+    DELETE   /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.deleteBatchDupWKS"  */
+    FROM CMD_BAT_DUP_EXEC_MNTRNGS
+    WHERE
+    BAT_WK_ID = #{BAT_WK_ID}
+   </update>
+
+    <!-- 배치작업 등록 -->
+    <update id="insertBatchWKS" parameterType="hashmap">
+    <selectKey keyProperty="CMD_BAT_WKS" resultType="Integer" order="BEFORE">
+           SELECT  CMD_BAT_WKS_S.NEXTVAL FROM DUAL
+    </selectKey>
+     INSERT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.insertBatchWKS"  */
+         INTO    CMD_BAT_WKS
+                    ( BAT_WK_ID
+                      , BAT_PGM_ID
+                      , BAT_WK_NAME
+                      , BAT_CYCLE_KND
+                      , CRON_INFO
+                      , STRT_DLY_TIMEMS
+                      , REPTIT_CYCL_TIMEMS
+                      , BAT_CYCL_DESC
+                      , USE_YN
+                      , WK_STTUS
+                      , CREATED_BY
+                      , CREATION_DATE
+                    )
+         VALUES (
+                    #{CMD_BAT_WKS}
+                    , #{BAT_PGM_ID}    /*  CMD_BAT_PGMS의 PK값 */
+                    , #{BAT_WK_NAME}      /* 배치 작업 명 */
+                    , #{BAT_CYCLE_KND}      /* 배치 주기 종류구분 */
+                    , #{CRON_INFO}      /* 크론 정보 */
+                    , #{STRT_DLY_TIMEMS}      /* 시작 지연 시간MS */
+                    , #{REPTIT_CYCL_TIMEMS}      /* 반복 주기 시간MS */
+                    , #{BAT_CYCL_DESC}      /* 배치 주기 설명 */
+                    , #{USE_YN}
+                    , 'C'
+                    ,#{CREATED_BY}
+                    ,SYSDATE
+                    )
+   </update>
+
+    <!-- 배치 프로그램 관리의 데이터가 배치 작업 목록에서 사용되고 있는지 여부 체크 -->
+     <select id="selectBatchWksDupCheck" resultType="int">
+         SELECT  /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchWksDupCheck"  */
+                    COUNT(*) AS COUNT
+        FROM CMD_BAT_WKS
+        WHERE BAT_PGM_ID = #{BAT_PGM_ID}
+     </select>
+
+       <!-- 배치작업 수정 -->
+    <update id="updateBatchWKS" parameterType="hashmap">
+     UPDATE /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.updateBatchWKS"  */ CMD_BAT_WKS
+     SET
+                    BAT_CYCLE_KND = #{BAT_CYCLE_KND}      /* 배치 주기 종류구분 */
+                    , CRON_INFO = #{CRON_INFO}      /* 크론 정보 */
+                    , STRT_DLY_TIMEMS = #{STRT_DLY_TIMEMS}      /* 시작 지연 시간MS */
+                    , REPTIT_CYCL_TIMEMS = #{REPTIT_CYCL_TIMEMS}      /* 반복 주기 시간MS */
+                    , BAT_CYCL_DESC = #{BAT_CYCL_DESC}      /* 배치 주기 설명 */
+                    , USE_YN = #{USE_YN}
+                    , WK_STTUS = 'U'
+                    , BAT_WK_NAME = #{BAT_WK_NAME}         /* 배치 작업 명 */
+                    , LAST_UPDATED_BY = #{LAST_UPDATED_BY}          /* 최종수정자ID */
+                    , LAST_UPDATE_DATE = SYSDATE                            /* 최종수정자ID */
+      WHERE  BAT_WK_ID = #{BAT_WK_ID}
+   </update>
+
+       <!-- 배치 프로그램 실행시 오류가 발생하여 실행 중에 멈춘 테이터가 있는지 여부 체크 -->
+     <select id="selectBatchExcuteYN" resultType="int">
+         SELECT  /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchExcuteYN"  */
+                    COUNT(*) AS COUNT
+        FROM CMD_BAT_DUP_EXEC_MNTRNGS
+        WHERE BAT_PGM_ID = #{BAT_PGM_ID}
+     </select>
+
+
+       <!-- 배치 프로시져 Call을 위한 파라미터 설정 샘플  -->
+    <parameterMap id="batchParamMap"  type="hashmap">
+        <parameter property="P_FET_CNT" javaType="java.lang.Integer" jdbcType="INTEGER" mode="OUT" />  <!-- 필수1(처리대상 건수)  -->
+        <parameter property="P_SKP_CNT" javaType="java.lang.Integer" jdbcType="INTEGER" mode="OUT" />  <!-- 필수2(스킵 건수)  -->
+        <parameter property="P_ERR_CNT" javaType="java.lang.Integer" jdbcType="INTEGER" mode="OUT" />  <!-- 필수3(오류 건수)  -->
+        <parameter property="P_ERR_DESC" javaType="java.lang.String" jdbcType="VARCHAR" mode="OUT" />  <!-- 필수4(오류메시지)  -->
+        <parameter property="v_grp_cd" javaType="java.lang.String" jdbcType="VARCHAR" mode="IN" />        <!-- 옵션:파라미터 변수1 -->
+        <parameter property="v_cm_cd" javaType="java.lang.String" jdbcType="VARCHAR" mode="IN" />        <!-- 옵션:파라미터 변수2 -->
+    </parameterMap>
+
+   <!-- 배치 프로시져 Call 샘플  -->
+   <select id="sampleBatchSp" statementType="CALLABLE"  parameterMap="batchParamMap">
+        {call CMD_SAMPLE_BATCH_P(?, ? ,? ,? ,? ,?)}
+   </select>
+
+    <!-- [1] 배치 실행시 insert 실행 종료가 되면 삭제함 -->
+    <update id="insertBatchExecuteDirectStart" parameterType="hashmap">
+     INSERT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.insertBatchExecuteDirectStart"  */
+         INTO    CMD_BAT_DUP_EXEC_MNTRNGS
+                    (BAT_PGM_ID
+                    ,BAT_STRT_TIME
+                    ,CREATED_BY
+                    ,CREATION_DATE
+                    )
+         VALUES (
+                    #{BAT_PGM_ID}                /* CMD_BAT_PGMS의 PK값 */
+                    , SYSDATE                        /* 배치 실행 시간 */
+                    , #{CREATED_BY}
+                    , SYSDATE
+                    )
+   </update>
+
+    <!-- [2] 배치가 정상적으로 실행 되면 정보 삭제 -->
+    <update id="deleteBatchExecuteDirectEnd" parameterType="hashmap">
+    DELETE  /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.deleteBatchExecuteDirectEnd"  */
+    FROM    CMD_BAT_DUP_EXEC_MNTRNGS
+    WHERE
+                BAT_PGM_ID = #{BAT_PGM_ID}
+   </update>
+
+       <!-- [3] 배치 실행전(LOG) 저장 -->
+    <update id="insertBatchExecuteDirectLogStart" parameterType="hashmap">
+     <selectKey keyProperty="BAT_LOG_ID" resultType="Integer" order="BEFORE">
+           SELECT CMD_BAT_LOGS_S.NEXTVAL FROM DUAL
+        </selectKey>
+     INSERT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.insertBatchExecuteDirectLogStart"  */
+         INTO   CMD_BAT_LOGS
+                   (BAT_LOG_ID
+					,BAT_PGM_ID
+					,STRT_DTM
+					,CREATED_BY
+					,CREATION_DATE
+					)
+         VALUES (
+                    #{BAT_LOG_ID}
+                    , #{BAT_PGM_ID}
+                    , SYSDATE
+                    , #{CREATED_BY}
+                    , SYSDATE
+                    )
+   </update>
+
+       <!-- [4] 배치실행 후 정보 갱신 -->
+    <update id="updateBatchExecuteDirectLogEnd" parameterType="hashmap">
+     UPDATE /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.updateBatchExecuteDirectLogEnd"  */ CMD_BAT_LOGS
+     SET
+                    END_DTM = SYSDATE                 /* 종료 시간 */
+                    , BAT_SUCC_YN = 'Y'                    /* 배치 실행 성공 여부 */
+                    , EXECUT_GUBUN_CD = #{EXECUT_GUBUN_CD}    /* 실행 구분 코드 */
+                    , TRGET_CNT = #{P_FET_CNT}       /* 대상 건수 */
+                    , SKIP_CNT = #{P_SKP_CNT}         /* 스킵 건수*/
+                    , ERR_CNT = #{P_ERR_CNT}           /* 오류 건수 */
+                    , ERR_DESC = #{P_ERR_DESC}        /* 오류 내역 */
+      WHERE  BAT_LOG_ID = #{BAT_LOG_ID}
+   </update>
+
+   <!-- 배치프로그램 결과 조회 -->
+     <select id="selectBatchResultList" resultType="hashmap">
+      SELECT  /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchResultList"  */ *
+      FROM (
+                SELECT ROWNUM AS RNUM, T.* FROM (
+                      SELECT
+                                TO_CHAR(A.STRT_DTM, 'YYYY/MM/DD hh24:mi:ss') AS STRT_DTM /* 시작 일시 */
+                                , TO_CHAR(A.END_DTM, 'YYYY/MM/DD hh24:mi:ss') AS END_DTM /* 종료 일시 */
+                                , TRUNC(( A.END_DTM - A.STRT_DTM ) * 60 *60 *24 , 1) AS DTIME /* 소요시간 */
+                                /*, DECODE (A.BAT_SUCC_YN,'Y','성공','N','실패') AS BAT_SUCC_YN*/ /* 배치 성공 여부 */
+                                , CASE WHEN A.BAT_SUCC_YN = 'Y' THEN '성공'
+                                    WHEN A.BAT_SUCC_YN = 'N' AND END_DTM IS NOT NULL THEN '실패'
+                                    ELSE '진행중' END AS BAT_SUCC_YN
+                                , GET_CODE_F('CMD_BAT_EXEC_GUBUN', A.EXECUT_GUBUN_CD)  as EXECUT_GUBUN_NM     /* 배치 실행 구분 */
+                                , A.TRGET_CNT /*대상 건수 */
+                                , A.SKIP_CNT    /* 스킵 건수 */
+                                , A.ERR_CNT     /* 오류 건수 */
+                                , A.ERR_DESC    /* 결과 메시지 */
+                                , B.EXEC_FN      /* 수행 함수명 */
+                                , GET_CODE_F('CMD_BAT_PGM_GUBUN', B.BAT_PGM_TY_CD)  as BAT_PGM_TY_NM        /* 배치 프로그램 구분 */
+                                , B.BAT_PGM_DESC /* 배치 프로그램 설명 */
+                                , B.BAT_PGM_TY_CD /* 배치 프로그램 유형 코드 */
+                                , B.JOB_GUBUN_CD /* 업무시스템 코드 */
+                                , GET_CODE_F('CMD_JOB_GUBUNCD', B.JOB_GUBUN_CD)  as JOB_GUBUN_NM                 /* 업무시스템 */
+                                , DECODE (B.DUP_EXEC_ENBL_YN,'Y','중복 수행 가능','N','중복 수행 불가') AS DUP_EXEC_ENBL_YN_KOR
+                                , A.CREATED_BY
+                                 , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD') as CREATION_DATE
+                                 , A.LAST_UPDATED_BY
+                                 , TO_CHAR(A.LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DATE
+                                 , A.BAT_WK_ID
+                                 , B.BAT_PGM_ID
+                                 ,decode(c.bat_wk_id,0,B.BAT_PGM_DESC,C.BAT_WK_NAME) BAT_WK_NAME
+                                ,CMD_PKG_BATCH.GET_PARAMETER(A.BAT_LOG_ID) PARAMETER
+                                /*
+                                ,NVL((SELECT SUBSTR(F.FILE_NAME, INSTR(F.FILE_NAME,'/',-1,1)+1) AS FILE_NAME
+                                      FROM FND_LOBS F
+                                     WHERE F.FILE_ID = A.FILE_ID),'')  AS  FILE_NAME
+                                */     
+                                ,A.FILE_ID
+                                ,A.BAT_LOG_ID
+                                 FROM CMD_BAT_LOGS A, CMD_BAT_PGMS B , CMD_BAT_WKS C 
+                                 WHERE 1=1
+                                    AND A.BAT_PGM_ID = B.BAT_PGM_ID
+                                    AND A.BAT_WK_ID = C.BAT_WK_ID
+                                    <if test="EXCEPT_EMAIL.equals('true') ">
+                                      AND B.BAT_PGM_TY_CD != 'JAVA'     /* eMAIL배치(Java) 제외 */
+                                    </if>
+                                    <if test="TIME.equals('STRT_DTM') ">
+                                      AND STRT_DTM between TO_DATE(#{STRT_DTM}, 'yyyymmdd') AND TO_DATE(#{END_DTM}, 'yyyymmdd')+0.99999
+                                    </if>
+                                    <if test="TIME.equals('END_DTM') ">
+                                      AND END_DTM between TO_DATE(#{STRT_DTM}, 'yyyymmdd') AND TO_DATE(#{END_DTM}, 'yyyymmdd')+0.99999
+                                    </if>
+                                    <if test="BAT_PGM_ID != '' and BAT_PGM_ID !=null ">
+                                        AND B.BAT_PGM_ID = #{BAT_PGM_ID}
+                                    </if>
+                                     <if test="JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+                                        AND B.JOB_GUBUN_CD = #{JOB_GUBUN_CD}   /* 업무시스템코드 */
+                                     </if>
+                                     <if test="BAT_SUCC_YN != null and BAT_SUCC_YN != ''">
+                                             AND A.BAT_SUCC_YN = #{BAT_SUCC_YN}   /* 성공여부 */
+                                     </if>
+                                     <if test="TYPE != null and TYPE != ''">
+                                          <if test="TYPE.equals('BAT_WK_NAME') and TEXT != null ">
+                                              AND C.BAT_WK_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+                                          </if>
+                                            <if test="TYPE.equals('EXEC_FN') and TEXT != null ">
+                                                AND B.EXEC_FN LIKE UPPER('%' ||  #{TEXT} || '%')
+                                            </if>
+                                            <if test="TYPE.equals('BAT_PGM_DESC') and TEXT != null ">
+                                                AND B.BAT_PGM_DESC LIKE UPPER('%' ||  #{TEXT} || '%')
+                                            </if>
+                                           <if test="TYPE.equals('BAT_WK_ID') and TEXT != null ">
+                                            AND A.BAT_WK_ID LIKE UPPER('%' ||  #{TEXT} || '%')
+                                           </if>
+                                           <if test="TYPE.equals('BAT_PGM_ID') and TEXT != null ">
+                                            AND  B.BAT_PGM_ID = #{TEXT}
+                                           </if>
+                                   </if>
+                        ORDER BY A.STRT_DTM DESC
+                   )T WHERE 1=1
+                    <if test= "P_END != null and P_END != ''">
+                     AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+                    </if>
+        ) WHERE 1=1
+        <if test= "P_START != null and P_START != ''">
+        AND  RNUM >= #{P_START}
+        </if>
+    </select>
+
+    <!-- 배치프로그램 결과 Count -->
+     <select id="selectBatchResultCount" resultType="hashmap">
+           SELECT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchResultCount"  */
+                     COUNT(A.BAT_LOG_ID) as COUNT
+            FROM CMD_BAT_LOGS A, CMD_BAT_PGMS B, CMD_BAT_WKS C 
+            WHERE 1=1
+            AND A.BAT_PGM_ID = B.BAT_PGM_ID
+            AND A.BAT_WK_ID = C.BAT_WK_ID
+            <if test="EXCEPT_EMAIL.equals('true') ">
+              AND B.BAT_PGM_TY_CD != 'JAVA'     /* eMAIL배치(Java) 제외 */
+            </if>
+            <if test="BAT_PGM_ID != '' and BAT_PGM_ID !=null ">
+            AND B.BAT_PGM_ID = #{BAT_PGM_ID}
+           </if>
+           <if test="TIME.equals('STRT_DTM') ">
+                    AND STRT_DTM between TO_DATE(#{STRT_DTM}, 'yyyymmdd') AND TO_DATE(#{END_DTM}, 'yyyymmdd')+0.99999
+            </if>
+             <if test="TIME.equals('END_DTM') ">
+                    AND END_DTM between TO_DATE(#{STRT_DTM}, 'yyyymmdd') AND TO_DATE(#{END_DTM}, 'yyyymmdd')+0.99999
+            </if>
+          <if test="BAT_SUCC_YN != null and BAT_SUCC_YN != ''">
+                       AND A.BAT_SUCC_YN = #{BAT_SUCC_YN}   /* 성공여부 */
+          </if>
+          <if test="JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+                       AND B.JOB_GUBUN_CD = #{JOB_GUBUN_CD}   /* 업무시스템코드 */
+          </if>
+          <if test="TYPE != null and TYPE != ''">
+                <if test="TYPE.equals('BAT_WK_NAME') and TEXT != null ">
+                           AND C.BAT_WK_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+               </if>
+              <if test="TYPE.equals('EXEC_FN') and TEXT != null ">
+                          AND B.EXEC_FN LIKE UPPER('%' ||  #{TEXT} || '%')
+              </if>
+              <if test="TYPE.equals('BAT_PGM_DESC') and TEXT != null ">
+                        AND B.BAT_PGM_DESC LIKE UPPER('%' ||  #{TEXT} || '%')
+              </if>
+             <if test="TYPE.equals('BAT_WK_ID') and TEXT != null ">
+                        AND A.BAT_WK_ID LIKE UPPER('%' ||  #{TEXT} || '%')
+             </if>
+             <if test="TYPE.equals('BAT_PGM_ID') and TEXT != null ">
+                          AND  B.BAT_PGM_ID = #{TEXT}
+             </if>
+         </if>
+     </select>
+
+     <select id="selectBatchResultListExcel" resultType="hashmap">
+      SELECT  /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchResultListExcel"  */ 
+      	RNUM,JOB_GUBUN_NM,BAT_WK_ID,BAT_SUCC_YN,JOB_GUBUN_CD,BAT_WK_NAME,EXEC_FN,BAT_PGM_ID,BAT_PGM_DESC,STRT_DTM
+      	,END_DTM,DTIME,EXECUT_GUBUN_NM,TRGET_CNT,SKIP_CNT,ERR_CNT,ERR_DESC
+      	
+      FROM (
+                SELECT ROWNUM AS RNUM, T.* FROM (
+                      SELECT
+                                TO_CHAR(A.STRT_DTM, 'YYYY/MM/DD hh24:mi:ss') AS STRT_DTM /* 시작 일시 */
+                                , TO_CHAR(A.END_DTM, 'YYYY/MM/DD hh24:mi:ss') AS END_DTM /* 종료 일시 */
+                                , TRUNC(( A.END_DTM - A.STRT_DTM ) * 60 *60 *24 , 1) AS DTIME /* 소요시간 */
+                                /*, DECODE (A.BAT_SUCC_YN,'Y','성공','N','실패') AS BAT_SUCC_YN*/ /* 배치 성공 여부 */
+                                , CASE WHEN A.BAT_SUCC_YN = 'Y' THEN '성공'
+                                    WHEN A.BAT_SUCC_YN = 'N' AND END_DTM IS NOT NULL THEN '실패'
+                                    ELSE '진행중' END AS BAT_SUCC_YN
+                                , GET_CODE_F('CMD_BAT_EXEC_GUBUN', A.EXECUT_GUBUN_CD)  as EXECUT_GUBUN_NM     /* 배치 실행 구분 */
+                                , A.TRGET_CNT /*대상 건수 */
+                                , A.SKIP_CNT    /* 스킵 건수 */
+                                , A.ERR_CNT     /* 오류 건수 */
+                                , A.ERR_DESC    /* 결과 메시지 */
+                                , B.EXEC_FN      /* 수행 함수명 */
+                                , GET_CODE_F('CMD_BAT_PGM_GUBUN', B.BAT_PGM_TY_CD)  as BAT_PGM_TY_NM        /* 배치 프로그램 구분 */
+                                , B.BAT_PGM_DESC /* 배치 프로그램 설명 */
+                                , B.BAT_PGM_TY_CD /* 배치 프로그램 유형 코드 */
+                                , B.JOB_GUBUN_CD /* 업무시스템 코드 */
+                                , GET_CODE_F('CMD_JOB_GUBUNCD', B.JOB_GUBUN_CD)  as JOB_GUBUN_NM                 /* 업무시스템 */
+                                , DECODE (B.DUP_EXEC_ENBL_YN,'Y','중복 수행 가능','N','중복 수행 불가') AS DUP_EXEC_ENBL_YN_KOR
+                                , A.CREATED_BY
+                                 , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD') as CREATION_DATE
+                                 , A.LAST_UPDATED_BY
+                                 , TO_CHAR(A.LAST_UPDATE_DATE, 'YYYY-MM-DD') as LAST_UPDATE_DATE
+                                 , A.BAT_WK_ID
+                                 , B.BAT_PGM_ID
+                                 ,decode(c.bat_wk_id,0,B.BAT_PGM_DESC,C.BAT_WK_NAME) BAT_WK_NAME
+                                ,CMD_PKG_BATCH.GET_PARAMETER(A.BAT_LOG_ID) PARAMETER
+                                /*
+                                ,NVL((SELECT SUBSTR(F.FILE_NAME, INSTR(F.FILE_NAME,'/',-1,1)+1) AS FILE_NAME
+                                      FROM FND_LOBS F
+                                     WHERE F.FILE_ID = A.FILE_ID),'')  AS  FILE_NAME
+                                */     
+                                ,A.FILE_ID
+                                ,A.BAT_LOG_ID
+                                 FROM CMD_BAT_LOGS A, CMD_BAT_PGMS B , CMD_BAT_WKS C 
+                                 WHERE 1=1
+                                    AND A.BAT_PGM_ID = B.BAT_PGM_ID
+                                    AND A.BAT_WK_ID = C.BAT_WK_ID
+                                    <if test="EXCEPT_EMAIL.equals('true') ">
+                                      AND B.BAT_PGM_TY_CD != 'JAVA'     /* eMAIL배치(Java) 제외 */
+                                    </if>
+                                    <if test="TIME.equals('STRT_DTM') ">
+                                      AND STRT_DTM between TO_DATE(#{STRT_DTM}, 'yyyymmdd') AND TO_DATE(#{END_DTM}, 'yyyymmdd')+0.99999
+                                    </if>
+                                    <if test="TIME.equals('END_DTM') ">
+                                      AND END_DTM between TO_DATE(#{STRT_DTM}, 'yyyymmdd') AND TO_DATE(#{END_DTM}, 'yyyymmdd')+0.99999
+                                    </if>
+                                    <if test="BAT_PGM_ID != '' and BAT_PGM_ID !=null ">
+                                        AND B.BAT_PGM_ID = #{BAT_PGM_ID}
+                                    </if>
+                                     <if test="JOB_GUBUN_CD != null and JOB_GUBUN_CD != ''">
+                                        AND B.JOB_GUBUN_CD = #{JOB_GUBUN_CD}   /* 업무시스템코드 */
+                                     </if>
+                                     <if test="BAT_SUCC_YN != null and BAT_SUCC_YN != ''">
+                                             AND A.BAT_SUCC_YN = #{BAT_SUCC_YN}   /* 성공여부 */
+                                     </if>
+                                     <if test="TYPE != null and TYPE != ''">
+                                          <if test="TYPE.equals('BAT_WK_NAME') and TEXT != null ">
+                                              AND C.BAT_WK_NAME LIKE UPPER('%' ||  #{TEXT} || '%')
+                                          </if>
+                                            <if test="TYPE.equals('EXEC_FN') and TEXT != null ">
+                                                AND B.EXEC_FN LIKE UPPER('%' ||  #{TEXT} || '%')
+                                            </if>
+                                            <if test="TYPE.equals('BAT_PGM_DESC') and TEXT != null ">
+                                                AND B.BAT_PGM_DESC LIKE UPPER('%' ||  #{TEXT} || '%')
+                                            </if>
+                                           <if test="TYPE.equals('BAT_WK_ID') and TEXT != null ">
+                                            AND A.BAT_WK_ID LIKE UPPER('%' ||  #{TEXT} || '%')
+                                           </if>
+                                           <if test="TYPE.equals('BAT_PGM_ID') and TEXT != null ">
+                                            AND  B.BAT_PGM_ID = #{TEXT}
+                                           </if>
+                                   </if>
+                        ORDER BY A.STRT_DTM DESC
+                   )T WHERE 1=1
+                    <if test= "P_END != null and P_END != ''">
+                     AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+                    </if>
+        ) WHERE 1=1
+        <if test= "P_START != null and P_START != ''">
+        AND  RNUM >= #{P_START}
+        </if>
+    </select>
+    
+     <!-- 배치프로그램 결과 조회 -->
+     <select id="selectBatchResultDetailsList" resultType="hashmap">
+     SELECT /* com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectBatchResultDetailsList */
+            cbld.DETAIL_ID        AS DETAIL_ID         /* 일련번호   */
+          , cbld.BATCH_LOG_ID     AS BATCH_LOG_ID      /* 배치JOB_ID */
+          , cbld.START_TIME       AS START_TIME        /* 시작시간   */
+          , cbld.END_TIME         AS END_TIME          /* 종료시간   */
+          , CASE WHEN SUBSTR(NUMTODSINTERVAL(cbld.END_TIME - cbld.START_TIME, 'DAY'), 12, 2) != '00' THEN
+                      SUBSTR(NUMTODSINTERVAL(cbld.END_TIME - cbld.START_TIME, 'DAY'), 12, 2) || '시간 '
+                 END           
+          || SUBSTR(NUMTODSINTERVAL(cbld.END_TIME - cbld.START_TIME, 'DAY'), 15, 2) || '분 '
+          || SUBSTR(NUMTODSINTERVAL(cbld.END_TIME - cbld.START_TIME, 'DAY'), 18, 2) || '초' AS TERM_TIME 
+          , cbld.DESCRIPTION      AS DESCRIPTION       /* 설명       */
+          , cbld.TABLE_NAME       AS TABLE_NAME        /* 테이블명   */
+          , cbld.CRUD_TYPE        AS CRUD_TYPE         /* 처리유형   */
+          , cbld.PROCESS_CNT      AS PROCESS_CNT       /* 처리건수   */
+          , cbld.SUCCESS_CNT      AS SUCCESS_CNT       /* 성공건수   */
+          , cbld.ERROR_CNT        AS ERROR_CNT         /* 에러건수   */
+          , cbld.ERR_CONTENTS     AS ERR_CONTENTS      /* 에러내용   */
+          , cbld.CREATED_BY       AS CREATED_BY        /* 최초생성자 */
+          , cbld.CREATION_DATE    AS CREATION_DATE     /* 최초생성일 */
+          , cbld.LAST_UPDATED_BY  AS LAST_UPDATED_BY   /* 최종수정자 */
+          , cbld.LAST_UPDATE_DATE AS LAST_UPDATE_DATE  /* 최종수정일 */
+          , ROW_NUMBER() OVER(ORDER BY cbld.DETAIL_ID DESC) AS ROW_NO
+       FROM CMD_BAT_LOG_DETAILS cbld
+      WHERE 1=1
+        AND cbld.BATCH_LOG_ID = #{BAT_LOG_ID}
+    </select>    
+
+      <!-- 배치프로그램 결과 Count -->
+     <select id="selectStoredProcedures" resultType="hashmap">
+     SELECT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectStoredProcedures"  */ 
+        OWNER
+        ,OBJECT_NAME||'.'||PROCEDURE_NAME AS PROCEDURE_NAME
+     FROM DBA_PROCEDURES
+	 where owner='DRRATE'
+	 and procedure_name is not null
+	 ORDER BY OBJECT_NAME||'.'||PROCEDURE_NAME
+     </select>
+
+
+    <!-- 배치프로그램 SMS설정 조회-->
+    <select id="selectCmdBatPgmSmsList" parameterType="map" resultType="hashmap">
+     SELECT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectCmdBatPgmSmsList"  */
+        BAT_PGMS_SMS_ID
+        ,BAT_PGM_ID
+        ,OFCR_NM
+        ,TEL_NO
+        ,SMS_RCV_YN
+        ,CREATED_BY
+        ,CREATION_DATE
+        ,LAST_UPDATED_BY
+        ,LAST_UPDATE_DATE
+    FROM CMD_BAT_PGMS_SMS
+    WHERE   BAT_DBMS_NM = #{BAT_DBMS_NM}
+    AND BAT_PGM_ID = #{BAT_PGM_ID}
+    </select>
+
+    <!-- 배치프로그램 SMS설정 등록-->
+    <update id="insertCmdBatPgmSms" parameterType="map">
+    /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.insertCmdBatPgmSms"  */
+     INSERT INTO CMD_BAT_PGMS_SMS
+       (BAT_PGMS_SMS_ID
+        ,BAT_DBMS_NM
+        ,BAT_PGM_ID
+        ,OFCR_NM
+        ,TEL_NO
+        ,SMS_RCV_YN
+        ,CREATED_BY
+        ,CREATION_DATE
+        ,LAST_UPDATED_BY
+        ,LAST_UPDATE_DATE
+        )
+      VALUES (CMD_BAT_PGMS_SMS_S.NEXTVAL
+        ,#{BAT_DBMS_NM}
+        ,#{BAT_PGM_ID}
+        ,#{OFCR_NM}
+        ,#{TEL_NO}
+        ,#{SMS_RCV_YN}
+        ,#{CREATED_BY}
+        ,SYSDATE
+        ,#{LAST_UPDATED_BY}
+        ,SYSDATE
+         )
+    </update>
+
+    <!-- 배치프로그램 SMS설정 수정-->
+    <update id="updateCmdBatPgmSms" parameterType="map">
+      /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.insertCmdBatPgmSms"  */
+     UPDATE CMD_BAT_PGMS_SMS
+        SET OFCR_NM = #{OFCR_NM}
+        ,TEL_NO = #{TEL_NO}
+        ,SMS_RCV_YN = #{SMS_RCV_YN}
+        ,LAST_UPDATED_BY = #{LAST_UPDATED_BY}
+        ,LAST_UPDATE_DATE = SYSDATE
+      WHERE BAT_PGMS_SMS_ID = #{BAT_PGMS_SMS_ID}
+    </update>
+
+    <!-- 배치프로그램 SMS설정 삭제-->
+    <update id="deleteCmdBatPgmSms" parameterType="map" >
+      /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.deleteCmdBatPgmSms"  */
+     DELETE FROM CMD_BAT_PGMS_SMS
+      WHERE BAT_PGMS_SMS_ID = #{BAT_PGMS_SMS_ID}
+    </update>
+
+     <!-- 파일 다운로드 조회-->
+    <select id="selectFndLobsFile" parameterType="map"  resultMap="fileMap">
+     SELECT /* "com.nbdf.cmd.cm.cmbs.dao.CMBS01100Dao.selectFndLobsFile"  */
+        FILE_DATA
+        ,FILE_CONTENT_TYPE
+        ,SUBSTR(FILE_NAME, INSTR(FILE_NAME,'/',-1,1)+1) AS FILE_NAME
+        ,FILE_FORMAT
+    FROM fnd_lobs
+    WHERE   FILE_ID = #{FILE_ID}
+    </select>
+
+
+</mapper>

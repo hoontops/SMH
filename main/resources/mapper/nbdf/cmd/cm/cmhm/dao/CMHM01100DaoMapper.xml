@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 도움말 관리
+    설명          : 도움말 CRUD
+    작성자       : 진성하
+    최초작성일 : 2017.03.16
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.04.24     진성하     최초  생성
+     2017.04.30     진성하     저장 로직 변경
+     2017.11.xx     진성하     메뉴테이블의 USE_YN 조건 변경
+-->
+<mapper namespace="com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao">
+    <!-- 도움말 Count 조회 -->
+    <select id="selectHlpCount"  resultType="hashmap"  >
+          SELECT  /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.selectHlpCount"  */
+                COUNT(T.HLP_ID) AS COUNT
+                  FROM (
+                     SELECT  A.HLP_ID
+                           , A.JOB_GUBUN_CD
+                           , GET_CODE_F('CMD_JOB_GUBUNCD', A.JOB_GUBUN_CD)  as JOB_GUBUN_NM                 /* 업무구분*/
+                           , HLP_KND_CD
+                           , GET_CODE_F('CMD_HLP_KND', A.HLP_KND_CD)  as HLP_KND_NM                    /* 도움말종류 */
+                           , HLP_SUBJECT_TEXT as HLP_SJ                                                             /* 도움말 제목 */
+                           , B.HLP_COURS_ID                                                                              /* 도움말경로ID */
+                           , ATCH_FILE_CNT                                                                                /* 첨부파일 카운트 */
+                           , A.USE_YN
+                           , A.CREATED_BY
+                           , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_DATE
+                           , C.HLP_COURS AS HLP_COURS_NM
+                           , A.LAST_UPDATE_DATE
+                     FROM CMD_HLPS A
+                             LEFT OUTER JOIN CMD_HLPS_COURS_MPNGS B
+                             ON A.HLP_ID = B.HLP_ID
+                             LEFT OUTER JOIN
+                             (  SELECT LTRIM (SYS_CONNECT_BY_PATH (MENU_NM, ' > '), ' > ') AS HLP_COURS
+                               , JOB_MENU_ID
+                                FROM CMD_JOB_MENU_MNG C
+                                WHERE 1=1
+                                START WITH MENU_LVS='0' CONNECT BY PRIOR JOB_MENU_ID = UPPER_MENU
+                             ) C
+                             ON C.JOB_MENU_ID = B.HLP_COURS_ID
+                    ) T
+              WHERE 1=1
+              <if test="HLP_ID != '' and HLP_ID !=null ">
+               AND T.HLP_ID = #{HLP_ID}
+               </if>
+               <if test="USE_YN != '' and USE_YN !=null ">
+                      AND  T.USE_YN = #{USE_YN}
+               </if>
+               <if test="HLP_KND_CD != '' and HLP_KND_CD !=null ">
+                      AND T.HLP_KND_CD = #{HLP_KND_CD}
+               </if>
+               <if test="JOB_GUBUN_CD != '' and JOB_GUBUN_CD !=null ">
+                      AND T.JOB_GUBUN_CD = #{JOB_GUBUN_CD} 
+               </if>
+               <if test="TEXT != '' and TEXT !=null and COMBO != '' and COMBO !=null ">
+                   <if test="COMBO.equals('HLP_COURS_NM') and TEXT != null ">
+                       AND T.HLP_COURS_NM  LIKE '%' ||  #{TEXT} || '%'
+                   </if>
+                   <if test="COMBO.equals('HLP_SJ') and TEXT != null ">
+                       AND T.HLP_SJ  LIKE '%' ||  #{TEXT} || '%'
+                   </if>
+               </if>
+    </select>
+
+    <!-- 도움말 리스트(PAGING) -->
+    <select id="selectHlpList"  resultType="hashmap"  >
+       SELECT  /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.selectHlpList"  */
+            XX.*
+        FROM (
+            SELECT
+                 ROWNUM AS RNUM,
+                 X.*
+         FROM (
+            SELECT
+                    T.*
+                  FROM (
+                     SELECT
+                           A.HLP_ID
+                           , A.JOB_GUBUN_CD
+                           , GET_CODE_F('CMD_JOB_GUBUNCD', A.JOB_GUBUN_CD)  as JOB_GUBUN_NM                 /* 업무시스템 */
+                           , HLP_KND_CD
+                           , GET_CODE_F('CMD_HLP_KND', A.HLP_KND_CD)  as HLP_KND_NM                    /* 도움말종류 */
+                           , HLP_SUBJECT_TEXT as HLP_SJ                                                             /* 도움말 제목 */
+                           , B.HLP_COURS_ID                                                                              /* 도움말경로ID */
+                           , ATCH_FILE_CNT                                                                                /* 첨부파일 카운트 */
+                           , USE_YN
+                           , A.CREATED_BY
+                           , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_DATE
+                           , C.HLP_COURS AS HLP_COURS_NM
+                           , A.LAST_UPDATE_DATE
+                     FROM CMD_HLPS A
+                             LEFT OUTER JOIN CMD_HLPS_COURS_MPNGS B
+                             ON A.HLP_ID = B.HLP_ID
+                             LEFT OUTER JOIN
+			                 (  SELECT LTRIM (SYS_CONNECT_BY_PATH (MENU_NM, ' > '), ' > ') AS HLP_COURS
+			                   , JOB_MENU_ID
+			                    FROM CMD_JOB_MENU_MNG C
+			                    WHERE 1=1
+			                    START WITH MENU_LVS='0' CONNECT BY PRIOR JOB_MENU_ID = UPPER_MENU
+			                 ) C
+			                 ON C.JOB_MENU_ID = B.HLP_COURS_ID
+                    ) T
+              WHERE 1=1
+              <if test="HLP_ID != '' and HLP_ID !=null ">
+               AND T.HLP_ID = #{HLP_ID}
+               </if>
+               <if test="USE_YN != '' and USE_YN !=null ">
+                      AND T.USE_YN = #{USE_YN}
+               </if>
+               <if test="HLP_KND_CD != '' and HLP_KND_CD !=null ">
+                      AND T.HLP_KND_CD = #{HLP_KND_CD}
+               </if>
+               <if test="JOB_GUBUN_CD != '' and JOB_GUBUN_CD !=null ">
+                      AND T.JOB_GUBUN_CD = #{JOB_GUBUN_CD}
+               </if>
+               <if test="TEXT != '' and TEXT !=null and COMBO != '' and COMBO !=null ">
+                   <if test="COMBO.equals('HLP_COURS_NM') and TEXT != null ">
+                       AND T.HLP_COURS_NM  LIKE '%' ||  #{TEXT} || '%'
+                   </if>
+                   <if test="COMBO.equals('HLP_SJ') and TEXT != null ">
+                       AND T.HLP_SJ  LIKE '%' ||  #{TEXT} || '%'
+                   </if>
+               </if>
+               ORDER BY T.CREATED_DATE DESC
+           ) X
+           WHERE 1=1
+        ) XX
+        WHERE 1=1
+        <if test= "P_END != null and P_END != ''">
+        AND XX.RNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+        <if test= "P_START != null and P_START != ''">
+         AND  XX.RNUM >= #{P_START}
+        </if>
+    </select>
+
+    <!-- 도움말 첨부파일 유무 조회 -->
+    <select id="selectHlpAtchFileYn"  resultType="hashmap"  >
+     SELECT /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.selectHlpAtchFileYn"  */
+                ATCH_FILE_CNT
+                , HLP_ID
+     FROM   CMD_HLPS
+     WHERE HLP_ID = #{HLP_ID}
+     AND HLP_KND_CD = #{HLP_KND_CD}
+     </select>
+
+    <!-- 도움말 첨부파일 유무 조회 -->
+    <select id="selectHlpAtchFileYnPop"  resultType="hashmap"  >
+     SELECT /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.selectHlpAtchFileYnPop"  */
+                ATCH_FILE_CNT
+                , A.HLP_ID
+     FROM CMD_HLPS_COURS_MPNGS A, CMD_HLPS B
+     WHERE A.HLP_COURS_ID = #{HLP_COURS_ID}
+     AND A.HLP_ID=B.HLP_ID
+     AND B.HLP_KND_CD= #{HLP_KND_CD}
+     </select>
+
+     <!-- 도움말 상세 조회(조건 조회 포함) -->
+    <select id="selectHlp" resultType="hashmap"  >
+       SELECT  /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.selectHlp"  */
+                       ROWNUM AS RNUM
+                        , A.HLP_ID
+                        , JOB_GUBUN_CD
+                        , GET_CODE_F('CMD_JOB_GUBUNCD', JOB_GUBUN_CD)  as JOB_GUBUN_NM                 /* 업무시스템 */
+                        , HLP_KND_CD
+                        , GET_CODE_F('CMD_HLP_KND', HLP_KND_CD)  as HLP_KND_NM                    /* 도움말종류 */
+                        , HLP_SUBJECT_TEXT as HLP_SJ                                                             /* 도움말 제목 */
+                        , B.HLP_COURS_ID                                                                              /* 도움말경로ID */
+                        , ATCH_FILE_CNT                                                                                /* 첨부파일 카운트 */
+                        , DECODE(A.USE_YN, 'Y' ,1 ,'N' , 0 ) AS USE_YN
+                       , A.CREATED_BY
+                       , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_DATE
+                       , HLP_COMMENTS AS HLP_CN
+                       , ( SELECT
+                           LTRIM (SYS_CONNECT_BY_PATH (MENU_NM, ' > '), ' > ') AS HLP_COURS
+                           FROM CMD_JOB_MENU_MNG C
+                           WHERE 1=1
+                           /* AND USE_YN = 'Y' */
+                           AND JOB_GUBUN_CD = A.JOB_GUBUN_CD
+                           AND C.JOB_MENU_ID = B.HLP_COURS_ID
+                           AND A.HLP_ID = B.HLP_ID
+                          START WITH JOB_MENU_ID IN (SELECT JOB_MENU_ID FROM CMD_JOB_MENU_MNG WHERE JOB_GUBUN_CD = A.JOB_GUBUN_CD AND MENU_LVS='0')
+		                   CONNECT BY PRIOR JOB_MENU_ID = UPPER_MENU
+		                  ) AS HLP_COURS_NM
+		                , (SELECT USE_YN FROM CMD_JOB_MENU_MNG WHERE 1=1
+		                   AND JOB_GUBUN_CD = A.JOB_GUBUN_CD
+                           AND JOB_MENU_ID = B.HLP_COURS_ID
+                           AND A.HLP_ID = B.HLP_ID
+                           ) AS MENU_USE_YN
+              FROM CMD_HLPS A
+              LEFT OUTER JOIN CMD_HLPS_COURS_MPNGS B
+              ON A.HLP_ID = B.HLP_ID
+              WHERE 1=1
+               <if test="HLP_ID != '' and HLP_ID !=null ">
+              AND  A.HLP_ID = #{HLP_ID}
+              </if>
+               <if test="HLP_COURS_ID != '' and HLP_COURS_ID !=null ">
+              AND  B.HLP_COURS_ID = #{HLP_COURS_ID}
+              </if>
+               <if test="USE_YN != '' and USE_YN !=null ">
+              AND  A.USE_YN = #{USE_YN}
+              </if>
+              <if test="HLP_KND_CD != '' and HLP_KND_CD !=null ">
+              AND A.HLP_KND_CD = #{HLP_KND_CD}
+              </if>
+    </select>
+
+    <!-- 도움말 상세 조회(조건 조회 포함) - 사용안함 -->
+    <select id="selectHlp_OLD" resultType="hashmap"  >
+     SELECT  /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.selectHelp"  */
+                 A.HLP_ID
+                 , GET_CODE_F('CMD_JOB_GUBUNCD', JOB_GUBUN_CD)  as JOB_GUBUN_NM       /* 업무시스템 */
+                 , HLP_KND_CD
+                 , GET_CODE_F('CMD_HLP_KND', HLP_KND_CD)  as HLP_KND_NM          /* 도움말종류 */
+                 , HLP_SUBJECT_TEXT as HLP_SJ                                                   /* 도움말 제목 */
+                 , ( SELECT
+                                  LTRIM (SYS_CONNECT_BY_PATH (COURS_NAME, ' > '), ' > ') AS HLP_COURS
+                     FROM CMD_HLPS_COURS C
+                     WHERE 1=1
+                     AND USE_YN = 'Y'
+                     AND HLP_COURS_ID = B.HLP_COURS_ID
+                     AND A.HLP_ID = B.HLP_ID
+                     START WITH UPPER_HLP_COURS_ID = 0                                       /* 최상의 도움말 경로 ID (0: 통합경영관리시스템, 1:경영포탈) */
+                     CONNECT BY PRIOR HLP_COURS_ID = UPPER_HLP_COURS_ID
+                   ) AS HLP_COURS_NM                                                                 /* 도움말경로명 */
+                , B.HLP_COURS_ID                                                                       /* 도움말경로ID */
+                , ATCH_FILE_CNT                                                                        /* 첨부파일 카운트 */
+                , DECODE(A.USE_YN, 'Y' ,1 ,'N' , 0 ) AS USE_YN
+                , HLP_COMMENTS AS HLP_CN
+                , A.CREATED_BY
+                , TO_CHAR(A.CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') AS CREATED_DATE
+     FROM CMD_HLPS A
+     LEFT OUTER JOIN CMD_HLPS_COURS_MPNGS B
+     ON A.HLP_ID = B.HLP_ID
+     WHERE 1=1
+        <if test="HLP_ID != '' and HLP_ID !=null ">
+            AND A.HLP_ID = #{HLP_ID}
+       </if>
+       <if test="HLP_COURS_ID != '' and HLP_COURS_ID !=null ">
+            AND HLP_COURS_ID = #{HLP_COURS_ID}
+       </if>
+        <if test="HLP_KND_CD != '' and HLP_KND_CD !=null ">
+            AND HLP_KND_CD = #{HLP_KND_CD}
+       </if>
+    </select>
+
+    <!-- 도움말 삭제(상세 화면에서 삭제버튼을  클릭하였을 때) -->
+    <update id="deleteHlp" parameterType="hashmap">
+    DELETE  /* "com.nbdf.cmd.cm.cmcm.dao.CMHM01100Dao.deleteHlp"  */
+    FROM    CMD_HLPS
+    WHERE  HLP_ID = #{HLP_ID}
+    </update>
+
+    <!-- 도움말 상세 조회(조건 조회 포함) -->
+    <select id="selectHlpTree"  resultType="hashmap"  >
+       SELECT    /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.selectHlpTree"  */
+                      JOB_MENU_ID AS HLP_COURS_ID
+                    , 0 AS SCRIN_ID
+                    , MENU_NM AS COURS_NM
+                    , UPPER_MENU AS UPPER_HLP_COURS_ID
+                    , LEVEL as LVL
+                    , CONNECT_BY_ISLEAF AS ISLEAF   /* 자식노드가 없으면 1, 있으면 0 */
+                    , LTRIM (SYS_CONNECT_BY_PATH (MENU_NM, ' > '), ' > ') AS HLP_COURS
+        FROM CMD_JOB_MENU_MNG A
+        WHERE 1=1
+        <if test='MENU_DISP_YN == "Y" '>
+             AND USE_YN = 'Y'
+        </if>
+        START WITH UPPER_MENU is null /*IN (SELECT JOB_MENU_ID FROM CMD_JOB_MENU_MNG WHERE MENU_LVS='0')*/
+        CONNECT BY PRIOR JOB_MENU_ID = UPPER_MENU
+        ORDER SIBLINGS BY MENU_SEQ
+    </select>
+
+    <!-- 도움말 상세 조회(조건 조회 포함- 시용안함) -->
+    <select id="selectHlpTree_old"  resultType="hashmap"  >
+        SELECT    /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.selectHlpTree_old"  */
+                    HLP_COURS_ID
+                    , SCRIN_ID
+                    , COURS_NAME AS COURS_NM
+                    , UPPER_HLP_COURS_ID
+                    , LEVEL as LVL
+                    , CONNECT_BY_ISLEAF AS ISLEAF   /* 자식노드가 없으면 1, 있으면 0 */
+                    , LTRIM (SYS_CONNECT_BY_PATH (COURS_NAME, ' > '), ' > ') AS HLP_COURS
+                    , (SELECT
+                                     MIN(HLP_ID)
+                        FROM CMD_HLPS_COURS_MPNGS B
+                        WHERE B.HLP_COURS_ID = A.HLP_COURS_ID) as HLP_ID,
+                                  CREATED_BY,
+                                  TO_CHAR(CREATION_DATE, 'YYYY-MM-DD HH24:MI:SS') as CREATED_DATE
+        FROM CMD_HLPS_COURS A
+        WHERE 1=1
+        AND USE_YN = 'Y'
+        START WITH UPPER_HLP_COURS_ID = 0
+        CONNECT BY PRIOR HLP_COURS_ID = UPPER_HLP_COURS_ID
+        ORDER SIBLINGS BY
+        UPPER_HLP_COURS_ID ASC, HLP_COURS_ID ASC
+    </select>
+
+     <!-- (작업 진행중)도움말 update(샘플로 작성하였음 추후 추가해야함) -->
+    <select id="updateHlp" resultType="hashmap">
+    UPDATE   /* com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.updateHlp  */  CMD_HLPS
+        SET
+                    HLP_COMMENTS =  #{HLP_CN}
+                    , HLP_KND_CD =  #{HLP_KND_CD}
+                    , JOB_GUBUN_CD =  #{JOB_GUBUN_CD}
+                    , HLP_SUBJECT_TEXT =  #{HLP_SJ}
+                    <if test="USE_YN == 0 || USE_YN == null">
+                    , USE_YN =  'N'
+                    </if>
+                    <if test="USE_YN == 1">
+                    , USE_YN =  'Y'
+                    </if>
+                     <if test="ATCH_FILE_CNT != '' and ATCH_FILE_CNT !=null ">
+                    , ATCH_FILE_CNT = #{ATCH_FILE_CNT}
+                    </if>
+       WHERE
+                    HLP_ID = #{HLP_ID}
+    </select>
+
+    <!--도움말 신규 등록 -->
+    <insert id="insertHlp" parameterType="hashmap">
+	    <selectKey keyProperty="HLP_ID" resultType="Integer" order="BEFORE">
+	      SELECT  /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.insertHelp"  */
+	                  CMD_HLPS_S.NEXTVAL
+	      FROM     DUAL
+	    </selectKey>
+		 INSERT
+		 INTO     CMD_HLPS
+		             ( HLP_ID
+		             , HLP_KND_CD
+		             , JOB_GUBUN_CD
+		             , HLP_SUBJECT_TEXT
+		             , HLP_COMMENTS
+		             , ATCH_FILE_CNT
+		             , USE_YN
+		             , CREATED_BY
+		             )
+		VALUES
+		            (
+		              #{HLP_ID},
+		              #{HLP_KND_CD},
+		              #{JOB_GUBUN_CD},
+		              #{HLP_SJ},
+		              #{HLP_CN},
+		              #{ATCH_FILE_CNT},
+		              #{USE_YN},
+		              #{CREATED_BY}
+		              )
+     </insert>
+
+    <!-- 도움말 신규 등록- 트리메뉴에서 경로를 선택한 경우에 한함( 1.CMD_HLPS 등록 후 2. CMD_HLPS_COURS 등록) -->
+    <insert id="insertHlpMpngs" parameterType="hashmap">
+         INSERT   /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.insertHlpMpngs"  */
+         INTO     CMD_HLPS_COURS_MPNGS
+                     ( HLP_COURS_ID
+                     , HLP_ID
+                     , CREATED_BY
+                     , CREATION_DATE
+                     )
+        VALUES
+                    (
+                      #{HLP_COURS_ID}
+                      , #{HLP_ID}
+                      , #{CREATED_BY}
+                      , SYSDATE
+                    )
+     </insert>
+
+     <!-- 도움말 트리 경로 신규로 추가 -->
+    <insert id="insertHlpTree" parameterType="hashmap">
+         INSERT   /* "com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.insertHlpTree"  */
+         INTO     CMD_HLPS_COURS
+                     ( HLP_COURS_ID
+                     , SCRIN_ID
+                     , COURS_NAME
+                     , UPPER_HLP_COURS_ID
+                     , COURS_LVS
+                     , USE_YN
+                     , CREATED_BY
+                     , CREATION_DATE
+                     )
+        VALUES
+                    (
+                      CMD_HLPS_COURS_S.NEXTVAL
+                      , #{SCRIN_ID}
+                      , #{COURS_NM}
+                      , #{UPPER_HLP_COURS_ID}
+                      , #{COURS_LVS}
+                      , #{USE_YN}
+                      , #{CREATED_BY}
+                      , SYSDATE
+                    )
+     </insert>
+
+    <!-- 도움말 트리에서 경로를 수정한 경우 -->
+    <select id="updateHlpTree" resultType="hashmap">
+    /* com.nbdf.cmd.cm.cmhm.dao.CMHM01100Dao.updateHlpTree  */
+        UPDATE  CMD_HLPS_COURS
+        SET
+                    COURS_NAME =  #{COURS_NM}
+       WHERE
+                    HLP_COURS_ID = #{HLP_COURS_ID}
+    </select>
+
+    <!-- 도움말 트리 메뉴 삭제 -->
+    <update id="deleteHlpTree" parameterType="hashmap">
+        DELETE  /* "com.nbdf.cmd.cm.cmcm.dao.CMHM01100Dao.deleteHlpTree"  */
+        FROM    CMD_HLPS_COURS
+        WHERE  HLP_COURS_ID = #{HLP_COURS_ID}
+    </update>
+
+ </mapper>

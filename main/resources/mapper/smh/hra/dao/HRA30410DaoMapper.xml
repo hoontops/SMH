@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.hra.dao.HRA30410Dao">
+    
+
+    <!-- 유저 조회 -->
+   <select id="selectUserInfo" parameterType="map" resultType="hashmap">   
+   		/*smh.hra.dao.HRA30410Dao.selectUserInfo*/
+		SELECT *
+			  FROM
+			   HJSHR_SSHR_EMPLOYEE_LOV_V A
+		 WHERE 1=1
+		   AND A.EMPLOYEE_NUMBER = '170052'  -- 로그인 사번
+   </select> 
+    
+    
+    <!-- qna 리스트 조회 -->
+    <select id="selectQnaList" parameterType="map" resultType="hashmap">
+		  /*smh.hra.dao.HRA30410Dao.selectQnaList*/
+		SELECT    
+		    IN_A.HJSHR_COUNSELING_SEQ           /* 인사고충상담 PK  */ 
+           , 0                     AS CHECK_YN  /*CHECKBOX*/
+           ,IN_A.REQUEST_DATE                   /* 신청일자        */ 
+           ,IN_A.SUBJECT                        /* 제목           */    
+           ,IN_A.WRITER_ID                      /* 신청자 PERSONID */
+           ,IN_A.NAME                           /* 신청자          */
+           ,IN_A.COUNSELOR_ID                   /* 상담자 PERSONID */
+           ,IN_A.CNAME                          /* 상담자          */
+           ,IN_A.STATUS                         /* 상태코드        */
+           ,IN_A.STATUS_NAME                    /* 상태           */
+           ,IN_A.AREA_NAME						/* 분류 (화면명칭)*/
+        FROM (
+	           SELECT
+	                HC.HJSHR_COUNSELING_SEQ         /* 인사고충상담 PK  */
+	               ,TO_CHAR(HC.REQUEST_DATE,'YYYY/MM/DD') AS REQUEST_DATE /* 신청일자 */
+	               ,HC.SUBJECT                      /* 제목            */
+	               ,HC.WRITER_ID                    /* 신청자 PERSONID */
+	               ,HSE.NAME                        /* 신청자          */
+	               ,HC.COUNSELOR_ID                 /* 상담자 PERSONID */
+	               ,HSE2.NAME AS CNAME              /* 상담자          */
+	               ,HC.STATUS                       /* 상태코드         */
+	               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_HRA_COUNSEL_STATUS', HC.STATUS) AS STATUS_NAME   
+	           	   ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_HRA_COUNSEL_AREA',HC.COUNSEL_AREA) AS AREA_NAME
+	        
+	            FROM 
+	            	 HJSHR_COUNSELING HC,
+	                 HJSHR_SSHR_EMPLOYEE_LOV_V HSE,
+	                 HJSHR_SSHR_EMPLOYEE_LOV_V HSE2
+	           WHERE 
+	                 HC.WRITER_ID = HSE.PERSON_ID
+		             AND HC.COUNSELOR_ID = HSE2.PERSON_ID
+		             AND HC.COUNSELOR_ID = #{PERSON_ID}
+	    	    	 AND HC.REQUEST_DATE BETWEEN TO_DATE(#{FROM_DATE}, 'YYYY-MM-DD') 
+	        		 AND TO_DATE(#{TO_DATE}, 'YYYY-MM-DD'
+        	 )
+
+ 	 <if test="STATUS != null and STATUS !='' ">
+              AND  HC.STATUS = #{STATUS}
+    </if>
+             AND    HC.SUBJECT LIKE '%'||#{SUBJECT}||'%'
+           UNION
+          SELECT
+                HC.HJSHR_COUNSELING_SEQ         /* 인사고충상담 PK  */
+               ,TO_CHAR(HC.REQUEST_DATE,'YYYY/MM/DD') AS REQUEST_DATE /* 신청일자 */
+               ,HC.SUBJECT                      /* 제목            */             
+               ,HC.WRITER_ID                    /* 신청자 PERSONID */
+               ,HSE.NAME                        /* 신청자          */
+               ,HC.COUNSELOR_ID                 /* 상담자 PERSONID */
+               ,HSE2.NAME AS CNAME              /* 상담자          */
+               ,HC.STATUS                       /* 상태코드         */
+               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_HRA_COUNSEL_STATUS', HC.STATUS) AS STATUS_NAME                                     
+               ,HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_HRA_COUNSEL_AREA',HC.COUNSEL_AREA) AS AREA_NAME
+           FROM
+                 HJSHR_COUNSELING HC,
+                 HJSHR_SSHR_EMPLOYEE_LOV_V HSE,
+                 HJSHR_SSHR_EMPLOYEE_LOV_V HSE2
+           WHERE 
+                 HC.WRITER_ID = HSE.PERSON_ID
+             AND HC.COUNSELOR_ID = HSE2.PERSON_ID
+        	 AND HC.REQUEST_DATE BETWEEN TO_DATE(#{FROM_DATE}, 'YYYY-MM-DD') AND TO_DATE(#{TO_DATE}, 'YYYY-MM-DD')
+	
+ 	 <if test="STATUS != null and STATUS !='' ">
+             AND  HC.STATUS = #{STATUS}
+    </if>
+             AND    HC.SUBJECT LIKE '%'||#{SUBJECT}||'%'
+             AND 	EXISTS ( SELECT 'X'
+                        
+                            FROM
+                            	 FND_LOOKUP_VALUES
+                           WHERE 
+                           		 LOOKUP_TYPE = 'HJS_HR_HRA_COUNSEL_MASTER'
+                             AND ENABLED_FLAG = 'Y'
+                             AND LOOKUP_CODE = #{PERSON_ID} ) /* 로그인 사원 사번 */
+            
+		        ) IN_A
+		 WHERE 1=1     
+		 ORDER BY HJSHR_COUNSELING_SEQ DESC
+		 
+    </select>
+    
+    <!-- QNA 상세 -->
+    <select id="selectQnaDetail" parameterType="map" resultType="hashmap">
+		/*smh.hra.dao.hra30410dao.selectQnaDetail*/
+	SELECT 
+           HC.HJSHR_COUNSELING_SEQ,                               /*고충상담 및 인사문의 PK*/
+           TO_CHAR(HC.REQUEST_DATE,'YYYY-MM-DD') AS REQUEST_DATE, /*등록일*/
+           HC.COUNSELOR_ID,                                       /*상담자*/
+           HC.WRITER_ID,                                          /*작성자 */
+           HC.STATUS,                                              /*상태*/
+           HC.SUBJECT,                                             /*제목*/
+           HC.REQUEST_CONTEXT,                                     /*상담/문의내용*/
+           HC.COUNSEL_CONTEXT,                                     /*답변내용*/
+           INS.NAME ,                                              /* 이름 */
+           INS.EMPLOYEE_NUMBER,                                    /* 사번 */
+           INS.ORG_NAME,                                           /* 부서명 */
+           INS.GRADE_NAME,                                         /* 직급 */
+           HC.OBJECT_VERSION_NUMBER,                               /* 버전체크 */
+           HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_HRA_COUNSEL_AREA',HC.COUNSEL_AREA) AS AREA_NAME /*구분 */
+    FROM    
+   		   HJSHR_COUNSELING          HC, 
+           HJSHR_SSHR_EMPLOYEE_LOV_V INS
+     WHERE
+     		 1=1
+       AND HC.WRITER_ID         = INS.PERSON_ID
+       AND HJSHR_COUNSELING_SEQ =  #{HJSHR_COUNSELING_SEQ} 
+   	</select>
+   	
+   <!-- 중복 확인 -->
+   <select id="selectDuplicateChk" parameterType="map" resultType="string">
+   		/* smh.hra.dao.HRA30410Dao.selectDuplicateChk */ 
+	   SELECT 'Y'
+	     FROM HJSHR_COUNSELING HC
+	    WHERE HC.HJSHR_COUNSELING_SEQ       = #{HJSHR_COUNSELING_SEQ}    /*PK 일련번호*/
+   </select>
+	
+	
+    <!-- 고충상담 답변내용 수정 -->
+    <update id="updateQna" parameterType="map">
+    
+    /* smh.hra.dao.HRA30410MDao.updateQna */ 
+		UPDATE 		
+					HJSHR_COUNSELING
+		   SET		
+		   			COUNSELOR_ID		= HJS_HR_COMMON_PKG.GET_PERSON_ID(#{COUNSELOR_ID})      
+		           ,COUNSEL_CONTEXT 	= #{COUNSEL_CONTEXT}     
+		           ,ANSWER_DATE			= SYSDATE          
+		           ,STATUS				= '02'				/*접수*/      
+		           ,LAST_UPDATED_BY		=# {PERSONID}
+		           ,LAST_UPDATE_DATE   	= SYSDATE
+		           ,LAST_UPDATE_LOGIN 	= #{PERSONID} 
+		           ,OBJECT_VERSION_NUMBER = #{OBJECT_VERSION_NUMBER} + 1
+		WHERE     
+				   HJSHR_COUNSELING_SEQ = #{HJSHR_COUNSELING_SEQ}	
+    </update>
+	
+	
+	<!--상담황 삭제 -->
+    <delete id="deleteQna" parameterType="map">
+    	/* smh.hra.dao.HRA30410MDao.deleteQna */
+	     DELETE 
+	       FROM 	HJSHR_COUNSELING
+		  WHERE 	HJSHR_COUNSELING_SEQ   =   #{HJSHR_COUNSELING_SEQ}
+		    AND 	STATUS                !=   02
+    </delete>    
+
+</mapper>

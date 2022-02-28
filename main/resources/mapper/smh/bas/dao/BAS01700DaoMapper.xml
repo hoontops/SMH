@@ -1,0 +1,1152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS01700Dao">
+<!-- 모델등록 및 진행현황 정보-->
+
+    <!-- 모델등록 및 진행현황 정보 조회-->
+    <select id="selectBasGovernanceList" parameterType="map" resultType="hashmap">
+   		
+			 /* smh.bas.dao.BAS01700Dao.selectBasGovernanceList */
+WITH ITEMSPECDETAIL AS
+     (SELECT X.ITEMID
+            ,X.ITEMVERSION
+             --외층동도금
+            ,CASE
+                 WHEN X.COPPER4_SEGMENT2 IS NULL THEN
+                  X.COPPER4_SEGMENT1
+                 ELSE
+                  X.COPPER4_SEGMENT2
+             END AS COPPER4_SEGMENT
+             --내층동도금1
+            ,CASE
+                 WHEN X.COPPER1_SEGMENT2 IS NULL THEN
+                  X.COPPER1_SEGMENT1
+                 ELSE
+                  X.COPPER1_SEGMENT2
+             END AS COPPER1_SEGMENT
+             --내층동도금2
+            ,CASE
+                 WHEN X.COPPER2_SEGMENT2 IS NULL THEN
+                  X.COPPER2_SEGMENT1
+                 ELSE
+                  X.COPPER2_SEGMENT2
+             END AS COPPER2_SEGMENT
+             --내층동도금3
+            ,CASE
+                 WHEN X.COPPER3_SEGMENT2 IS NULL THEN
+                  X.COPPER3_SEGMENT1
+                 ELSE
+                  X.COPPER3_SEGMENT2
+             END AS COPPER3_SEGMENT
+             --표면도금1
+            ,X.SURFACE1_SEGMENT
+             --표면도금2
+            ,X.SURFACE2_SEGMENT
+             --표면도금3
+            ,X.SURFACE3_SEGMENT
+      
+  FROM   (SELECT PRODS.ITEMID AS ITEMID
+                ,PRODS.ITEMVERSION AS ITEMVERSION
+                ,MAX(PRODS.COPPER4_SEGMENT1) AS COPPER4_SEGMENT1
+                ,MAX(PRODS.COPPER4_SEGMENT2) AS COPPER4_SEGMENT2
+                ,MAX(PRODS.COPPER1_SEGMENT1) AS COPPER1_SEGMENT1
+                ,MAX(PRODS.COPPER1_SEGMENT2) AS COPPER1_SEGMENT2
+                ,MAX(PRODS.COPPER2_SEGMENT1) AS COPPER2_SEGMENT1
+                ,MAX(PRODS.COPPER2_SEGMENT2) AS COPPER2_SEGMENT2
+                ,MAX(PRODS.COPPER3_SEGMENT1) AS COPPER3_SEGMENT1
+                ,MAX(PRODS.COPPER3_SEGMENT2) AS COPPER3_SEGMENT2
+                ,MAX(PRODS.SURFACE1_SEGMENT) AS SURFACE1_SEGMENT
+                ,MAX(PRODS.SURFACE2_SEGMENT) AS SURFACE2_SEGMENT
+                ,MAX(PRODS.SURFACE3_SEGMENT) AS SURFACE3_SEGMENT
+          FROM   --외층동도금
+                 (SELECT ITEMID
+                        ,ITEMVERSION
+                        ,(SELECT MAX(DESCRIPTION)
+                          FROM   BAS_PRODUCTITEMSPECDETAIL Q
+                          WHERE  Q.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                          AND    Q.ITEMID = BP.ITEMID
+                          AND    Q.ITEMVERSION = BP.ITEMVERSION
+                          AND    Q.DETAILNAME = 'PLATINGSPEC2'
+                          AND    Q.DETAILTYPE IN ('CopperPlating', 'Circuit')) AS COPPER4_SEGMENT1
+                        ,(SELECT MAX(DESCRIPTION)
+                          FROM   BAS_PRODUCTITEMSPECDETAIL Q
+                          WHERE  Q.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                          AND    Q.ITEMID = BP.ITEMID
+                          AND    Q.ITEMVERSION = BP.ITEMVERSION
+                          AND    Q.DETAILNAME = 'PLATINGSPEC3'
+                          AND    Q.DETAILTYPE IN ('CopperPlating', 'Circuit')) AS COPPER4_SEGMENT2
+                        ,NULL AS COPPER1_SEGMENT1
+                        ,NULL AS COPPER1_SEGMENT2
+                        ,NULL AS COPPER2_SEGMENT1
+                        ,NULL AS COPPER2_SEGMENT2
+                        ,NULL AS COPPER3_SEGMENT1
+                        ,NULL AS COPPER3_SEGMENT2
+                        ,NULL AS SURFACE1_SEGMENT
+                        ,NULL AS SURFACE2_SEGMENT
+                        ,NULL AS SURFACE3_SEGMENT                    
+                  FROM   BAS_PRODUCTITEMSPECDETAIL BP
+                  WHERE  1 = 1
+                  AND    BP.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                  AND    BP.DETAILTYPE IN ('CopperPlating', 'Circuit')
+                  AND    BP.DETAILNAME = 'PLATINGSPEC1'
+                  GROUP  BY ITEMID
+                           ,ITEMVERSION
+                  
+                  UNION ALL
+                  
+                  --내층동도금1
+                  SELECT ITEMID
+                        ,ITEMVERSION
+                        ,NULL AS COPPER4_SEGMENT1
+                        ,NULL AS COPPER4_SEGMENT2
+                        ,(SELECT MAX(DESCRIPTION)
+                          FROM   BAS_PRODUCTITEMSPECDETAIL Q
+                          WHERE  Q.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                          AND    Q.ITEMID = BP.ITEMID
+                          AND    Q.ITEMVERSION = BP.ITEMVERSION
+                          AND    Q.DETAILNAME = 'PLATINGSPEC5'
+                          AND    Q.DETAILTYPE IN ('CopperPlating', 'Circuit')) AS COPPER1_SEGMENT1
+                        ,(SELECT MAX(DESCRIPTION)
+                          FROM   BAS_PRODUCTITEMSPECDETAIL Q
+                          WHERE  Q.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                          AND    Q.ITEMID = BP.ITEMID
+                          AND    Q.ITEMVERSION = BP.ITEMVERSION
+                          AND    Q.DETAILNAME = 'PLATINGSPEC6'
+                          AND    Q.DETAILTYPE IN ('CopperPlating', 'Circuit')) AS COPPER1_SEGMENT2
+                        ,NULL AS COPPER2_SEGMENT1
+                        ,NULL AS COPPER2_SEGMENT2
+                        ,NULL AS COPPER3_SEGMENT1
+                        ,NULL AS COPPER3_SEGMENT2
+                        ,NULL AS SURFACE1_SEGMENT
+                        ,NULL AS SURFACE2_SEGMENT
+                        ,NULL AS SURFACE3_SEGMENT
+                  FROM   BAS_PRODUCTITEMSPECDETAIL BP
+                  WHERE  1 = 1
+                  AND    BP.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                  AND    BP.DETAILTYPE IN ('CopperPlating', 'Circuit')
+                  AND    BP.DETAILNAME = 'PLATINGSPEC4'
+                  GROUP  BY ITEMID
+                           ,ITEMVERSION
+                  
+                  UNION ALL
+                  --내층동도금2 
+                  SELECT ITEMID
+                        ,ITEMVERSION
+                        ,NULL AS COPPER4_SEGMENT1
+                        ,NULL AS COPPER4_SEGMENT2
+                        ,NULL AS COPPER1_SEGMENT1
+                        ,NULL AS COPPER1_SEGMENT2
+                        ,(SELECT MAX(DESCRIPTION)
+                          FROM   BAS_PRODUCTITEMSPECDETAIL Q
+                          WHERE  Q.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                          AND    Q.ITEMID = BP.ITEMID
+                          AND    Q.ITEMVERSION = BP.ITEMVERSION
+                          AND    Q.DETAILNAME = 'PLATINGSPEC8'
+                          AND    Q.DETAILTYPE IN ('CopperPlating', 'Circuit')) AS COPPER2_SEGMENT1
+                        ,(SELECT MAX(DESCRIPTION)
+                          FROM   BAS_PRODUCTITEMSPECDETAIL Q
+                          WHERE  Q.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                          AND    Q.ITEMID = BP.ITEMID
+                          AND    Q.ITEMVERSION = BP.ITEMVERSION
+                          AND    Q.DETAILNAME = 'PLATINGSPEC9') AS COPPER2_SEGMENT2
+                        ,NULL AS COPPER3_SEGMENT1
+                        ,NULL AS COPPER3_SEGMENT2
+                        ,NULL AS SURFACE1_SEGMENT
+                        ,NULL AS SURFACE2_SEGMENT
+                        ,NULL AS SURFACE3_SEGMENT
+                  FROM   BAS_PRODUCTITEMSPECDETAIL BP
+                  WHERE  1 = 1
+                  AND    BP.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                  AND    BP.DETAILTYPE IN ('CopperPlating', 'Circuit')
+                  AND    BP.DETAILNAME = 'PLATINGSPEC7'
+                  GROUP  BY ITEMID
+                           ,ITEMVERSION
+                  
+                  UNION ALL
+                  --내층동도금3 
+                  SELECT ITEMID
+                        ,ITEMVERSION
+                        ,NULL AS COPPER4_SEGMENT1
+                        ,NULL AS COPPER4_SEGMENT2
+                        ,NULL AS COPPER1_SEGMENT1
+                        ,NULL AS COPPER1_SEGMENT2
+                        ,NULL AS COPPER2_SEGMENT1
+                        ,NULL AS COPPER2_SEGMENT2
+                        ,(SELECT MAX(DESCRIPTION)
+                          FROM   BAS_PRODUCTITEMSPECDETAIL Q
+                          WHERE  Q.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                          AND    Q.ITEMID = BP.ITEMID
+                          AND    Q.ITEMVERSION = BP.ITEMVERSION
+                          AND    Q.DETAILNAME = 'PLATINGSPEC11'
+                          AND    Q.DETAILTYPE IN ('CopperPlating', 'Circuit')) AS COPPER3_SEGMENT1
+                        ,(SELECT MAX(DESCRIPTION)
+                          FROM   BAS_PRODUCTITEMSPECDETAIL Q
+                          WHERE  Q.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                          AND    Q.ITEMID = BP.ITEMID
+                          AND    Q.ITEMVERSION = BP.ITEMVERSION
+                          AND    Q.DETAILNAME = 'PLATINGSPEC12'
+                          AND    Q.DETAILTYPE IN ('CopperPlating', 'Circuit')) AS COPPER3_SEGMENT2
+                        ,NULL AS SURFACE1_SEGMENT
+                        ,NULL AS SURFACE2_SEGMENT
+                        ,NULL AS SURFACE3_SEGMENT
+                  FROM   BAS_PRODUCTITEMSPECDETAIL BP
+                  WHERE  1 = 1
+                  AND    BP.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                  AND    BP.DETAILTYPE IN ('CopperPlating', 'Circuit')
+                  AND    BP.DETAILNAME = 'PLATINGSPEC10'
+                  GROUP  BY ITEMID
+                           ,ITEMVERSION
+                  
+                  UNION ALL
+                  --표면도금1 
+                  SELECT ITEMID
+                        ,ITEMVERSION
+                        ,NULL AS COPPER4_SEGMENT1
+                        ,NULL AS COPPER4_SEGMENT2
+                        ,NULL AS COPPER1_SEGMENT1
+                        ,NULL AS COPPER1_SEGMENT2
+                        ,NULL AS COPPER2_SEGMENT1
+                        ,NULL AS COPPER2_SEGMENT2
+                        ,NULL AS COPPER3_SEGMENT1
+                        ,NULL AS COPPER3_SEGMENT2
+                        ,MAX(DESCRIPTION) AS SURFACE1_SEGMENT
+                        ,NULL AS SURFACE2_SEGMENT
+                        ,NULL AS SURFACE3_SEGMENT
+                  FROM   BAS_PRODUCTITEMSPECDETAIL BP
+                  WHERE  1 = 1
+                  AND    BP.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                  AND    BP.DETAILTYPE IN ('CopperPlating', 'Circuit')
+                  AND    BP.DETAILNAME = 'PLATINGSPEC13'
+                  GROUP  BY ITEMID
+                           ,ITEMVERSION
+                  
+                  UNION ALL
+                  --표면도금2 
+                  SELECT ITEMID
+                        ,ITEMVERSION
+                        ,NULL AS COPPER4_SEGMENT1
+                        ,NULL AS COPPER4_SEGMENT2
+                        ,NULL AS COPPER1_SEGMENT1
+                        ,NULL AS COPPER1_SEGMENT2
+                        ,NULL AS COPPER2_SEGMENT1
+                        ,NULL AS COPPER2_SEGMENT2
+                        ,NULL AS COPPER3_SEGMENT1
+                        ,NULL AS COPPER3_SEGMENT2
+                        ,NULL AS SURFACE1_SEGMENT
+                        ,MAX(DESCRIPTION) AS SURFACE2_SEGMENT
+                        ,NULL AS SURFACE3_SEGMENT
+                  FROM   BAS_PRODUCTITEMSPECDETAIL BP
+                  WHERE  1 = 1
+                  AND    BP.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                  AND    BP.DETAILTYPE IN ('CopperPlating', 'Circuit')
+                  AND    BP.DETAILNAME = 'PLATINGSPEC14'
+                  GROUP  BY ITEMID
+                           ,ITEMVERSION
+                  
+                  UNION ALL
+                  --표면도금3 
+                  SELECT ITEMID
+                        ,ITEMVERSION
+                        ,NULL AS COPPER4_SEGMENT1
+                        ,NULL AS COPPER4_SEGMENT2
+                        ,NULL AS COPPER1_SEGMENT1
+                        ,NULL AS COPPER1_SEGMENT2
+                        ,NULL AS COPPER2_SEGMENT1
+                        ,NULL AS COPPER2_SEGMENT2
+                        ,NULL AS COPPER3_SEGMENT1
+                        ,NULL AS COPPER3_SEGMENT2
+                        ,NULL AS SURFACE1_SEGMENT
+                        ,NULL AS SURFACE2_SEGMENT
+                        ,MAX(DESCRIPTION) AS SURFACE3_SEGMENT
+                  FROM   BAS_PRODUCTITEMSPECDETAIL BP
+                  WHERE  1 = 1
+                  AND    BP.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+                  AND    BP.DETAILTYPE IN ('CopperPlating', 'Circuit')
+                  AND    BP.DETAILNAME = 'PLATINGSPEC15'
+                  GROUP  BY ITEMID
+                           ,ITEMVERSION                  
+                 ) PRODS
+          GROUP  BY PRODS.ITEMID
+                   ,PRODS.ITEMVERSION          
+          ) X),
+  ROUTING AS (
+SELECT Q.ITEMID
+       ,Q.ITEMVERSION
+       ,Q.ITEMNAME
+       ,MATERIALDETAILTYPE
+      ,ROW_NUMBER() OVER(PARTITION BY ITEMID, ITEMVERSION, MATERIALDETAILTYPE ORDER BY OPERATIONID, ITEMID) AS RN
+ FROM 
+(SELECT CASE
+           WHEN INSTR(PKEY, '-') > 0 THEN
+            SUBSTR(PKEY, 0, INSTR(PKEY, '-') - 1)
+           ELSE
+            PKEY
+       END AS ITEMID
+      ,CASE
+           WHEN INSTR(PVERSION, '-') > 0 THEN
+            SUBSTR(PVERSION, 0, INSTR(PVERSION, '-') - 1)
+           ELSE
+            PVERSION
+       END AS ITEMVERSION       
+      ,ITEMNAME
+      ,MATERIALDETAILTYPE
+      ,OPERATIONID
+FROM   (SELECT SUBSTR(SYS_CONNECT_BY_PATH(MAINPRODUCTID, '-'), 2) AS PKEY
+              ,SUBSTR(SYS_CONNECT_BY_PATH(MAINPRODUCTVERSION, '-'), 2) AS PVERSION
+              ,BC.COMPONENTITEMID AS ITEMID
+              ,BC.COMPONENTITEMVERSION AS ITEMVERSION
+              ,IM.ITEMNAME
+               ,CASE WHEN BC.MATERIALDETAILTYPE = 'FR4FCCL'
+               OR BC.MATERIALDETAILTYPE = 'MAINBASE'
+               OR BC.MATERIALDETAILTYPE = 'GENERALSUBBASE'
+               OR BC.MATERIALDETAILTYPE = 'EXPOSURESUBBASE' THEN
+              'BASE'   --BASE
+           WHEN BC.MATERIALDETAILTYPE = 'COVERLAY'
+               OR BC.MATERIALDETAILTYPE = 'PSR' THEN
+               'COVER' --절연체
+           WHEN BC.MATERIALDETAILTYPE = 'BONDING'
+               OR BC.MATERIALDETAILTYPE = 'PREPREG' THEN
+               'BONDING' --층간접착제
+           WHEN BC.MATERIALDETAILTYPE = 'GUSSETPLATE' THEN
+               'GUSSETPLATE' --보강판
+           WHEN BC.MATERIALDETAILTYPE = 'GULE' THEN
+               'GULE' --접착제
+           WHEN BC.MATERIALDETAILTYPE = 'SHIELD' THEN
+               'SHIELD' --SHIELD
+           ELSE
+             NULL
+           END MATERIALDETAILTYPE
+           ,BC.OPERATIONID
+        FROM   BAS_BOMCOMPONENT BC
+              ,BAS_ITEMMASTER   IM
+        WHERE  1 = 1
+        AND    BC.MATERIALDETAILTYPE IS NOT NULL
+        AND    BC.COMPONENTITEMID = IM.ITEMID
+        AND    BC.COMPONENTITEMVERSION = IM.ITEMVERSION
+        CONNECT BY NOCYCLE BC.MAINPRODUCTID = PRIOR BC.COMPONENTITEMID
+            AND    BC.MAINPRODUCTVERSION = PRIOR BC.COMPONENTITEMVERSION)
+WHERE  1 = 1) Q
+),
+  GOVERNANCE AS 
+                    (
+                        SELECT  GV.GOVERNANCENO
+                            ,   GV.GOVERNANCETYPE
+                            ,   GV.CUSTOMERID
+                            ,   GV.CUSTOMERREV                          AS CUSTOMERVERSION
+                            ,   PIS.CUSTOMERITEMID            
+                            ,   PIS.CUSTOMERITEMVERSION
+                            ,   GV.WORKCLASS                            AS JOBTYPE
+                            ,   PIS.PRODUCTTYPE 
+                            ,   PIS.LAYER
+                            ,   GV.INVENTORYCATEGORYID                  AS CATEGORYID
+                            ,   GV.PRODUCTCLASS                         AS PRODUCTIONTYPE
+                            ,   GV.PRODUCTDEFID
+                            ,   GV.PRODUCTDEFVERSION
+                            ,   IM.ITEMNAME
+                            ,   PIS.PRODUCTRATING
+                            ,   GV.STATUS                                       AS SPECWORKTYPE
+                            ,   GV.CAMWORKSTATE                                 AS CAMWORKSTATE
+                            ,   GV.HOLDSTATE                                    AS ISHOLDING      
+                            ,   GV.SPECPERSON                                   AS SPECOWNERID
+                            ,   GV.CAMPERSON                                    AS CAMOWNERID
+                            ,   (PIS.PNLSIZEXAXIS || ' X ' || PIS.PNLSIZEYAXIS) AS PNLSIZE
+                            ,   (PIS.PCSSIZEXAXIS || ' X ' || PIS.PCSSIZEYAXIS) AS PCSSIZE
+                            ,   (PIS.ARYSIZEXAXIS || ' X ' || PIS.ARYSIZEYAXIS) AS ARRAYSIZE
+                            ,   ROUND(TO_NUMBER(PIS.PCSPNL), 0)                                      AS ARRAY
+                            ,   ROUND(TO_NUMBER(PIS.PCSMM), 0)                    AS CALCULATION
+                            ,   TO_CHAR(GV.CREATEDTIME, 'YYYY-MM-DD')      AS RECEPTDATE
+                            ,   TO_CHAR(GV.CREATEDTIME, 'YYYY-MM-DD')           AS RECEPTDATE_YYYYMMDD
+                            ,   TO_CHAR(AP.APPROVEDATE, 'YYYY-MM-DD HH24:MI:SS')AS APPROVEDATE
+                            ,   GV.SALESPERSON                                  AS SALESOWNERID
+                            ,   GV.ENTERPRISEID
+                            ,   GV.PLANTID
+                            ,   GV.MODELNO
+                            ,  PIS.FACTORYID        AS MAINFACTORY
+                            ,   PIS.DESCRIPTION        AS REMARK
+                            ,   GV.DESCRIPTION              AS CMT
+                            ,   TO_CHAR(GV.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+                            ,   GV.MODIFIER
+                            ,   PID.SPECDETAILFROM
+                            ,   PID2.SPECDETAILFROM         AS SPECDETAILFROM2
+                            ,  GV.CREATEDTIME
+                            ,  GV.PLANTTRANSFERTYPE    AS OVERSEASTRANS
+                            ,  GV.INPUTTYPE
+                            ,  GV.HOLDSTATE
+                            ,COALESCE(D4.DICTIONARYNAME, P4.PROCESSSEGMENTNAME) AS COPPER4_TYPE
+                            ,COALESCE(D1.DICTIONARYNAME, P1.PROCESSSEGMENTNAME) AS COPPER1_TYPE
+                            ,COALESCE(D2.DICTIONARYNAME, P2.PROCESSSEGMENTNAME) AS COPPER2_TYPE
+                            ,COALESCE(D3.DICTIONARYNAME, P3.PROCESSSEGMENTNAME) AS COPPER3_TYPE                             
+                            ,COALESCE(DS1.DICTIONARYNAME, PS1.PROCESSSEGMENTNAME) AS SURFACE1_TYPE --표면도금1
+                            ,COALESCE(DS2.DICTIONARYNAME, PS2.PROCESSSEGMENTNAME) AS SURFACE2_TYPE --표면도금2
+                            ,COALESCE(DS3.DICTIONARYNAME, PS3.PROCESSSEGMENTNAME) AS SURFACE3_TYPE --표면도금3
+                            ,RT1.ITEMNAME AS BASE1
+                            ,RT2.ITEMNAME AS BASE2
+                            ,RT3.ITEMNAME AS BASE3
+                            ,RT4.ITEMNAME AS BASE4
+                            ,RT5.ITEMNAME AS BASE5
+                            ,RT6.ITEMNAME AS BASE6
+                            ,CRT1.ITEMNAME AS COVER1
+                            ,CRT2.ITEMNAME AS COVER2
+                            ,CRT3.ITEMNAME AS COVER3
+                            ,CRT4.ITEMNAME AS COVER4
+                            ,CRT5.ITEMNAME AS COVER5
+                            ,CRT6.ITEMNAME AS COVER6
+                            ,BRT1.ITEMNAME AS BONDING1
+                            ,BRT2.ITEMNAME AS BONDING2
+                            ,BRT3.ITEMNAME AS BONDING3
+                            ,BRT4.ITEMNAME AS BONDING4
+                            ,GRT1.ITEMNAME AS GUSSETPLATE1
+                            ,GRT2.ITEMNAME AS GUSSETPLATE2
+                            ,GRT3.ITEMNAME AS GUSSETPLATE3
+                            ,GRT4.ITEMNAME AS GUSSETPLATE4
+                            ,GRT5.ITEMNAME AS GUSSETPLATE5
+                            ,GRT6.ITEMNAME AS GUSSETPLATE6
+                            ,GRT7.ITEMNAME AS GUSSETPLATE7
+                            ,GRT8.ITEMNAME AS GUSSETPLATE8
+                            ,ERT1.ITEMNAME AS GLUE1
+                            ,ERT2.ITEMNAME AS GLUE2
+                            ,ERT3.ITEMNAME AS GLUE3
+                            ,ERT4.ITEMNAME AS GLUE4
+                            ,ERT5.ITEMNAME AS GLUE5
+                            ,ERT6.ITEMNAME AS GLUE6
+                            ,ERT7.ITEMNAME AS GLUE7
+                            ,ERT8.ITEMNAME AS GLUE8
+                            ,SRT1.ITEMNAME AS SHIELD1
+                            ,SRT2.ITEMNAME AS SHIELD2
+                        FROM    BAS_GOVERNANCE               GV
+                        LEFT JOIN BAS_ITEMMASTER             IM      ON  GV.PRODUCTDEFID = IM.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = IM.ITEMVERSION
+                                                                    AND GV.ENTERPRISEID = IM.ENTERPRISEID
+                        /* BASE */
+                        LEFT JOIN ROUTING                    RT1      ON  GV.PRODUCTDEFID = RT1.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = RT1.ITEMVERSION
+                                                                    AND RT1.MATERIALDETAILTYPE = 'BASE'
+                                                                    AND RT1.RN = 1
+                        LEFT JOIN ROUTING                    RT2      ON  GV.PRODUCTDEFID = RT2.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = RT2.ITEMVERSION
+                                                                    AND RT2.MATERIALDETAILTYPE = 'BASE'
+                                                                    AND RT2.RN = 2
+                        LEFT JOIN ROUTING                    RT3      ON  GV.PRODUCTDEFID = RT3.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = RT3.ITEMVERSION
+                                                                    AND RT3.MATERIALDETAILTYPE = 'BASE'
+                                                                    AND RT3.RN = 3
+                        LEFT JOIN ROUTING                    RT4      ON  GV.PRODUCTDEFID = RT4.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = RT4.ITEMVERSION
+                                                                    AND RT4.MATERIALDETAILTYPE = 'BASE'
+                                                                    AND RT4.RN = 4
+                        LEFT JOIN ROUTING                    RT5      ON  GV.PRODUCTDEFID = RT5.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = RT5.ITEMVERSION
+                                                                    AND RT5.MATERIALDETAILTYPE = 'BASE'
+                                                                    AND RT5.RN = 5
+                        LEFT JOIN ROUTING                    RT6      ON  GV.PRODUCTDEFID = RT6.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = RT6.ITEMVERSION
+                                                                    AND RT6.MATERIALDETAILTYPE = 'BASE'
+                                                                    AND RT6.RN = 6
+                        /* BASE */
+                        
+                        /* COVER */
+                        LEFT JOIN ROUTING                    CRT1      ON  GV.PRODUCTDEFID = CRT1.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = CRT1.ITEMVERSION
+                                                                    AND CRT1.MATERIALDETAILTYPE = 'COVER'
+                                                                    AND CRT1.RN = 1
+                        LEFT JOIN ROUTING                    CRT2      ON  GV.PRODUCTDEFID = CRT2.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = CRT2.ITEMVERSION
+                                                                    AND CRT2.MATERIALDETAILTYPE = 'COVER'
+                                                                    AND CRT2.RN = 2
+                        LEFT JOIN ROUTING                    CRT3      ON  GV.PRODUCTDEFID = CRT3.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = CRT3.ITEMVERSION
+                                                                    AND CRT3.MATERIALDETAILTYPE = 'COVER'
+                                                                    AND CRT3.RN = 3
+                        LEFT JOIN ROUTING                    CRT4      ON  GV.PRODUCTDEFID = CRT4.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = CRT4.ITEMVERSION
+                                                                    AND CRT4.MATERIALDETAILTYPE = 'COVER'
+                                                                    AND CRT4.RN = 4
+                        LEFT JOIN ROUTING                    CRT5      ON  GV.PRODUCTDEFID = CRT5.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = CRT5.ITEMVERSION
+                                                                    AND CRT5.MATERIALDETAILTYPE = 'COVER'
+                                                                    AND CRT5.RN = 5
+                        LEFT JOIN ROUTING                    CRT6      ON  GV.PRODUCTDEFID = CRT6.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = CRT6.ITEMVERSION
+                                                                    AND CRT6.MATERIALDETAILTYPE = 'COVER'
+                                                                    AND CRT6.RN = 6
+                        /* COVER */                                                                    
+                        
+                        /* BONDING */
+                        LEFT JOIN ROUTING                    BRT1      ON  GV.PRODUCTDEFID = BRT1.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = BRT1.ITEMVERSION
+                                                                    AND BRT1.MATERIALDETAILTYPE = 'BONDING'
+                                                                    AND BRT1.RN = 1
+                        LEFT JOIN ROUTING                    BRT2      ON  GV.PRODUCTDEFID = BRT2.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = BRT2.ITEMVERSION
+                                                                    AND BRT2.MATERIALDETAILTYPE = 'BONDING'
+                                                                    AND BRT2.RN = 2
+                        LEFT JOIN ROUTING                    BRT3      ON  GV.PRODUCTDEFID = BRT3.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = BRT3.ITEMVERSION
+                                                                    AND BRT3.MATERIALDETAILTYPE = 'BONDING'
+                                                                    AND BRT3.RN = 3
+                        LEFT JOIN ROUTING                    BRT4      ON  GV.PRODUCTDEFID = BRT4.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = BRT4.ITEMVERSION
+                                                                    AND BRT4.MATERIALDETAILTYPE = 'BONDING'
+                                                                    AND BRT4.RN = 4
+                        /* BONDING */
+                        
+                        /* 보강판 */
+                        LEFT JOIN ROUTING                    GRT1      ON  GV.PRODUCTDEFID = GRT1.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = GRT1.ITEMVERSION
+                                                                    AND GRT1.MATERIALDETAILTYPE = 'GUSSETPLATE'
+                                                                    AND GRT1.RN = 1
+                        LEFT JOIN ROUTING                    GRT2      ON  GV.PRODUCTDEFID = GRT2.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = GRT2.ITEMVERSION
+                                                                    AND GRT2.MATERIALDETAILTYPE = 'GUSSETPLATE'
+                                                                    AND GRT2.RN = 2
+                        LEFT JOIN ROUTING                    GRT3      ON  GV.PRODUCTDEFID = GRT3.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = GRT3.ITEMVERSION
+                                                                    AND GRT3.MATERIALDETAILTYPE = 'GUSSETPLATE'
+                                                                    AND GRT3.RN = 3
+                        LEFT JOIN ROUTING                    GRT4      ON  GV.PRODUCTDEFID = GRT4.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = GRT4.ITEMVERSION
+                                                                    AND GRT4.MATERIALDETAILTYPE = 'GUSSETPLATE'
+                                                                    AND GRT4.RN = 4
+                        LEFT JOIN ROUTING                    GRT5      ON  GV.PRODUCTDEFID = GRT5.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = GRT5.ITEMVERSION
+                                                                    AND GRT5.MATERIALDETAILTYPE = 'GUSSETPLATE'
+                                                                    AND GRT5.RN = 5
+                        LEFT JOIN ROUTING                    GRT6      ON  GV.PRODUCTDEFID = GRT6.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = GRT6.ITEMVERSION
+                                                                    AND GRT6.MATERIALDETAILTYPE = 'GUSSETPLATE'
+                                                                    AND GRT6.RN = 6
+                        LEFT JOIN ROUTING                    GRT7      ON  GV.PRODUCTDEFID = GRT7.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = GRT7.ITEMVERSION
+                                                                    AND GRT7.MATERIALDETAILTYPE = 'GUSSETPLATE'
+                                                                    AND GRT7.RN = 7
+                        LEFT JOIN ROUTING                    GRT8      ON  GV.PRODUCTDEFID = GRT8.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = GRT8.ITEMVERSION
+                                                                    AND GRT8.MATERIALDETAILTYPE = 'GUSSETPLATE'
+                                                                    AND GRT8.RN = 8
+                        /* 보강판 */
+                        
+                        /* 접착제 */
+                        LEFT JOIN ROUTING                    ERT1      ON  GV.PRODUCTDEFID = ERT1.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = ERT1.ITEMVERSION
+                                                                    AND ERT1.MATERIALDETAILTYPE = 'GULE'
+                                                                    AND ERT1.RN = 1
+                        LEFT JOIN ROUTING                    ERT2      ON  GV.PRODUCTDEFID = ERT2.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = ERT2.ITEMVERSION
+                                                                    AND ERT2.MATERIALDETAILTYPE = 'GULE'
+                                                                    AND ERT2.RN = 2
+                        LEFT JOIN ROUTING                    ERT3      ON  GV.PRODUCTDEFID = ERT3.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = ERT3.ITEMVERSION
+                                                                    AND ERT3.MATERIALDETAILTYPE = 'GULE'
+                                                                    AND ERT3.RN = 3
+                        LEFT JOIN ROUTING                    ERT4      ON  GV.PRODUCTDEFID = ERT4.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = ERT4.ITEMVERSION
+                                                                    AND ERT4.MATERIALDETAILTYPE = 'GULE'
+                                                                    AND ERT4.RN = 4
+                        LEFT JOIN ROUTING                    ERT5      ON  GV.PRODUCTDEFID = ERT5.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = ERT5.ITEMVERSION
+                                                                    AND ERT5.MATERIALDETAILTYPE = 'GULE'
+                                                                    AND ERT5.RN = 5
+                        LEFT JOIN ROUTING                    ERT6      ON  GV.PRODUCTDEFID = ERT6.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = ERT6.ITEMVERSION
+                                                                    AND ERT6.MATERIALDETAILTYPE = 'GULE'
+                                                                    AND ERT6.RN = 6
+                        LEFT JOIN ROUTING                    ERT7      ON  GV.PRODUCTDEFID = ERT7.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = ERT7.ITEMVERSION
+                                                                    AND ERT7.MATERIALDETAILTYPE = 'GULE'
+                                                                    AND ERT7.RN = 7
+                        LEFT JOIN ROUTING                    ERT8      ON  GV.PRODUCTDEFID = ERT8.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = ERT8.ITEMVERSION
+                                                                    AND ERT8.MATERIALDETAILTYPE = 'GULE'
+                                                                    AND ERT8.RN = 8
+                        /* 접착제 */
+                        
+                        /* SHIELD */
+                        LEFT JOIN ROUTING                    SRT1      ON  GV.PRODUCTDEFID = SRT1.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = SRT1.ITEMVERSION
+                                                                    AND SRT1.MATERIALDETAILTYPE = 'SHIELD'
+                                                                    AND SRT1.RN = 1
+                        LEFT JOIN ROUTING                    SRT2      ON  GV.PRODUCTDEFID = SRT2.ITEMID
+                                                                    AND GV.PRODUCTDEFVERSION = SRT2.ITEMVERSION
+                                                                    AND SRT2.MATERIALDETAILTYPE = 'SHIELD'
+                                                                    AND SRT2.RN = 2
+                        /* SHIELD */
+                        LEFT JOIN ITEMSPECDETAIL             ISS     ON ISS.ITEMID = IM.ITEMID
+                                                                     AND ISS.ITEMVERSION = IM.ITEMVERSION
+                        LEFT   JOIN BAS_PROCESSSEGMENT P4            ON  ISS.COPPER4_SEGMENT = P4.PROCESSSEGMENTID
+                                                                     AND P4.PROCESSSEGMENTVERSION = '*'
+                        LEFT   JOIN CMD_DICTIONARY D4                ON  P4.PROCESSSEGMENTNAME = D4.DICTIONARYID
+                                                                     AND    D4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                                                                     
+                        LEFT   JOIN BAS_PROCESSSEGMENT P1            ON  ISS.COPPER1_SEGMENT = P1.PROCESSSEGMENTID
+                                                                     AND P1.PROCESSSEGMENTVERSION = '*'
+                        LEFT   JOIN CMD_DICTIONARY D1                ON  P1.PROCESSSEGMENTNAME = D1.DICTIONARYID
+                                                                     AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                                                                     
+                        LEFT   JOIN BAS_PROCESSSEGMENT P2            ON  ISS.COPPER2_SEGMENT = P2.PROCESSSEGMENTID
+                                                                     AND P2.PROCESSSEGMENTVERSION = '*'
+                        LEFT   JOIN CMD_DICTIONARY D2                ON  P2.PROCESSSEGMENTNAME = D2.DICTIONARYID
+                                                                     AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                                                                     
+                        LEFT   JOIN BAS_PROCESSSEGMENT P3            ON  ISS.COPPER3_SEGMENT = P3.PROCESSSEGMENTID
+                                                                     AND P3.PROCESSSEGMENTVERSION = '*'
+                        LEFT   JOIN CMD_DICTIONARY D3                ON  P3.PROCESSSEGMENTNAME = D3.DICTIONARYID
+                                                                     AND D3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                                                                     
+                        LEFT   JOIN BAS_PROCESSSEGMENT PS1           ON  ISS.SURFACE1_SEGMENT = PS1.PROCESSSEGMENTID
+                                                                     AND PS1.PROCESSSEGMENTVERSION = '*'
+                        LEFT   JOIN CMD_DICTIONARY DS1               ON  PS1.PROCESSSEGMENTNAME = DS1.DICTIONARYID
+                                                                     AND DS1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                                                                     
+                        LEFT   JOIN BAS_PROCESSSEGMENT PS2           ON  ISS.SURFACE2_SEGMENT = PS2.PROCESSSEGMENTID
+                                                                     AND PS2.PROCESSSEGMENTVERSION = '*'
+                        LEFT   JOIN CMD_DICTIONARY DS2               ON  PS2.PROCESSSEGMENTNAME = DS2.DICTIONARYID
+                                                                     AND DS2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+
+                        LEFT   JOIN BAS_PROCESSSEGMENT PS3           ON  ISS.SURFACE3_SEGMENT = PS3.PROCESSSEGMENTID
+                                                                     AND PS3.PROCESSSEGMENTVERSION = '*'
+                        LEFT   JOIN CMD_DICTIONARY DS3               ON  PS3.PROCESSSEGMENTNAME = DS3.DICTIONARYID
+                                                                     AND DS3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                        LEFT JOIN BAS_PRODUCTITEMSPEC        PIS     ON  IM.ITEMID = PIS.ITEMID
+                                                                    AND IM.ITEMVERSION = PIS.ITEMVERSION
+                                                                    AND IM.ENTERPRISEID = PIS.ENTERPRISEID
+                        LEFT JOIN BAS_PRODUCTITEMSPECDETAIL  PID     ON  PIS.ITEMID = PID.ITEMID
+                                                                    AND PIS.ITEMVERSION = PID.ITEMVERSION
+                                                                    AND PIS.ENTERPRISEID = PID.ENTERPRISEID
+                                                                    AND PID.DETAILTYPE = 'SurfacePlating'
+                                                                    AND PID.SEQUENCE = 4
+                        LEFT JOIN BAS_PRODUCTITEMSPECDETAIL  PID2    ON  PIS.ITEMID = PID2.ITEMID
+                                                                    AND PIS.ITEMVERSION = PID2.ITEMVERSION
+                                                                    AND PIS.ENTERPRISEID = PID2.ENTERPRISEID
+                                                                    AND PID2.DETAILTYPE = 'SurfacePlating'
+                                                                    AND PID2.SEQUENCE = 7
+                        LEFT JOIN BAS_APPROVAL               AP      ON  GV.GOVERNANCETYPE = AP.APPROVALTYPE
+                                                                    AND GV.GOVERNANCENO = AP.APPROVALID
+                                                                    AND GV.ENTERPRISEID = AP.ENTERPRISEID
+                                                                    AND GV.PLANTID = AP.PLANTID
+                        WHERE   1 = 1
+                        AND     GV.GOVERNANCETYPE = 'NewRequest'
+                        <if test="PLANTID != null and PLANTID !='' ">
+                            AND     GV.PLANTID = #{PLANTID}
+                        </if>
+						<if test="P_PERIOD_PERIODFR != null and P_PERIOD_PERIODFR !='' ">
+							<![CDATA[
+								AND	GV.CREATEDTIME >= to_timestamp( #{P_PERIOD_PERIODFR} || ' 00:00:00','YYYY-MM-DD HH24:MI:SS')
+							]]>
+						</if>
+						<if test="P_PERIOD_PERIODTO != null and P_PERIOD_PERIODTO !='' ">
+							<![CDATA[
+								AND	GV.CREATEDTIME <= to_timestamp( #{P_PERIOD_PERIODTO} || ' 23:59:59','YYYY-MM-DD HH24:MI:SS')
+							]]>
+						</if>
+                        
+                        <if test="CUSTOMER_ID != null and CUSTOMER_ID !='' ">
+                        AND EXISTS
+                                    (
+                                        SELECT  1
+                                        FROM    ufn_selectStringToSplit(#{CUSTOMER_ID}, ',')      LMP
+                                        WHERE   GV.CUSTOMERID = LMP.VALUE
+                                    )
+                        </if>
+                        <if test="JOBTYPE != null and JOBTYPE !='' ">
+                        	AND     GV.WORKCLASS = #{JOBTYPE}
+                        </if>
+                        <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' ">
+                        	AND     GV.PRODUCTCLASS = #{PRODUCTIONTYPE}
+                        </if>
+                        <if test="ITEMID != null and ITEMID !='' ">
+                        	  AND EXISTS
+                                        (
+                                            SELECT  1
+                                            FROM    UFN_SELECTSTRINGTOSPLIT2(#{ITEMID}, ',', '|')      LMP
+                                            WHERE   GV.PRODUCTDEFID = LMP.VALUE
+                                            AND     (GV.PRODUCTDEFVERSION = LMP.VALUE2 OR LMP.VALUE2 = '')
+                                        )
+                        </if>
+
+                       <if test="SPECOWNER != null and SPECOWNER !='' ">
+                        	  AND EXISTS (
+                                            SELECT  1
+                                            FROM    ufn_selectStringToSplit(#{SPECOWNER}, ',') M
+                                            WHERE   GV.SPECPERSON = M.VALUE
+                                       )    
+                        </if>
+                       <if test="CAMSTATE != null and CAMSTATE !='' ">
+                        	  AND EXISTS (
+                                            SELECT  1
+                                            FROM    ufn_selectStringToSplit(#{CAMSTATE}, ',') M
+                                            WHERE   GV.CAMWORKSTATE = M.VALUE
+                                       )    
+                        </if>
+                       <if test="CAMOWNER != null and CAMOWNER !='' ">
+                        	  AND EXISTS (
+                                            SELECT  1
+                                            FROM    ufn_selectStringToSplit(#{CAMOWNER}, ',') M
+                                            WHERE   GV.CAMPERSON = M.VALUE
+                                       )    
+                        </if>  
+                    ), SALESORDER AS 
+                    (
+                        SELECT  G.*  
+                            ,   SOA.SPECAPPROVALDATE
+                             ,-- R/C 인경우 처리로직 추가 2021-07-29 사양팀 요청
+                              CASE WHEN RC.Toproductdefversion IS NOT NULL THEN
+                                'Y'
+                              ELSE    
+                                NVL(SOA.ISAPPROVAL, 'N')                                
+                              END ISAPPROVAL
+                            ,-- R/C 인경우 처리로직 추가 2021-07-29 사양팀 요청
+                              CASE WHEN RC.Toproductdefversion IS NOT NULL THEN
+                                'Input'
+                              ELSE    
+                                G.SPECWORKTYPE                                 
+                              END SPECWORKTYPE_NEW
+                            ,-- R/C 인경우 처리로직 추가 2021-07-29 사양팀 요청
+                              CASE WHEN RC.Toproductdefversion IS NOT NULL THEN
+                                'Complete'
+                              ELSE    
+                                G.CAMWORKSTATE 
+                              END CAMWORKSTATE_NEW                              
+                            ,   ROW_NUMBER() OVER(PARTITION BY G.GOVERNANCENO, SOA.PRODUCTDEFID, SOA.PRODUCTDEFVERSION ORDER BY SOA.SPECAPPROVALDATE ASC) AS RN
+                        FROM    GOVERNANCE                  G
+                        LEFT JOIN   BAS_SALEORDERAPPROVAL       SOA ON  G.PRODUCTDEFID = SOA.PRODUCTDEFID
+                                                                AND G.PRODUCTDEFVERSION = SOA.PRODUCTDEFVERSION
+                                                                AND G.ENTERPRISEID = SOA.ENTERPRISEID
+                                                                AND G.PLANTID = SOA.PLANTID
+                                                                AND NVL(SOA.ISAPPROVAL, 'N') = 'Y'
+                    LEFT JOIN (SELECT PR.PRODUCTDEFID, PR.PRODUCTDEFVERSION, PR.TOPRODUCTDEFID, PR.TOPRODUCTDEFVERSION 
+                                 FROM PCM_RUNNINGCHANGEINFO PR 
+                                WHERE PR.CHANGESTATE = 'PASS' 
+                                GROUP BY PR.PRODUCTDEFID, PR.PRODUCTDEFVERSION, PR.TOPRODUCTDEFID, PR.TOPRODUCTDEFVERSION ) RC 
+                                		ON RC.TOPRODUCTDEFID = G.PRODUCTDEFID
+                                         AND RC.TOPRODUCTDEFVERSION = G.PRODUCTDEFVERSION
+                    )
+                    SELECT   X.* 
+                      ,   NVL(D4.DICTIONARYNAME, X.SPECWORKTYPE)     AS SPECWORKTYPENAME
+                    FROM 
+                    (
+                      SELECT  S.GOVERNANCENO
+                          ,   S.GOVERNANCETYPE
+                          ,   S.CUSTOMERID
+                          ,   CM.CUSTOMERNAME
+                          ,   S.CUSTOMERVERSION
+        			      ,   S.CUSTOMERITEMID            
+                          ,   S.CUSTOMERITEMVERSION
+                          ,   S.JOBTYPE
+                          ,   S.PRODUCTTYPE 
+                          ,   NVL(D4.DICTIONARYNAME, S.LAYER)     AS LAYER
+                          ,   S.CATEGORYID
+                          ,   S.PRODUCTIONTYPE
+                          ,   S.PRODUCTDEFID
+                          ,   S.PRODUCTDEFVERSION
+                          ,   NVL(S.ITEMNAME, S.MODELNO) AS ITEMNAME
+                          ,   S.PRODUCTRATING
+                          ,   CASE WHEN NVL(S.ISAPPROVAL, 'N') = 'Y' THEN 'Input' ELSE S.SPECWORKTYPE_NEW END SPECWORKTYPE
+                          ,   S.CAMWORKSTATE_NEW AS CAMWORKSTATE                          
+                          ,   NVL(D3.DICTIONARYNAME, S.CAMWORKSTATE_NEW)     AS CAMWORKSTATENAME
+                          ,   S.ISHOLDING      
+                          ,   S.SPECOWNERID
+                          ,   NVL(U1.USERNAME, S.SPECOWNERID)            AS SPECOWNERNAME
+                          ,   S.CAMOWNERID
+                          ,   NVL(U2.USERNAME, S.CAMOWNERID)             AS CAMOWNERNAME
+						  ,   DECODE(S.PNLSIZE, ' X ',NULL, S.PNLSIZE) AS PNLSIZE
+                          ,   S.ARRAY
+                          ,   S.CALCULATION
+                          ,   NVL(D1.DICTIONARYNAME, S.SPECDETAILFROM)   AS SURFACETYPE1
+                          ,   NVL(D2.DICTIONARYNAME, S.SPECDETAILFROM)   AS SURFACETYPE2
+                          ,   S.RECEPTDATE
+                          ,   S.RECEPTDATE_YYYYMMDD
+                          ,   S.APPROVEDATE
+                          ,   S.SALESOWNERID
+                          ,   NVL(U3.USERNAME, S.SALESOWNERID)   AS SALESOWNERNAME
+                          ,   S.ENTERPRISEID
+                          ,   S.PLANTID
+                          ,  NVL(CF.FACTORYNAME, S.MAINFACTORY)      AS MAINFACTORY
+                          ,   S.MODELNO
+                          ,   S.CMT
+                          ,   NVL(MU.USERNAME, S.MODIFIER)       AS MODIFIER
+                          ,   S.MODIFIEDTIME
+                          ,   S.SPECAPPROVALDATE
+                          ,  S.CREATEDTIME
+                          ,  S.OVERSEASTRANS
+						  ,   S.ARRAYSIZE
+                          ,  S.REMARK
+                          ,  NULL AS CHK
+                          ,  S.INPUTTYPE
+                          ,  S.HOLDSTATE
+                          ,  DECODE(S.PCSSIZE, ' X ',NULL, S.PCSSIZE) AS PCSSIZE
+ 						  ,   S.SURFACE1_TYPE   --표면도금1
+                          ,   S.SURFACE2_TYPE   --표면도금2
+                          ,   S.SURFACE3_TYPE   --표면도금3
+                          ,   S.COPPER4_TYPE    --외층동도금1
+                          ,   S.COPPER1_TYPE    --내층동도금1
+                          ,   S.COPPER2_TYPE    --내층동도금1
+                          ,   S.COPPER3_TYPE    --내층동도금1
+                            ,S.BASE1
+                            ,S.BASE2
+                            ,S.BASE3
+                            ,S.BASE4
+                            ,S.BASE5
+                            ,S.BASE6
+                            ,S.COVER1
+                            ,S.COVER2
+                            ,S.COVER3
+                            ,S.COVER4
+                            ,S.COVER5
+                            ,S.COVER6
+                            ,S.BONDING1
+                            ,S.BONDING2
+                            ,S.BONDING3
+                            ,S.BONDING4
+                            ,S.GUSSETPLATE1
+                            ,S.GUSSETPLATE2
+                            ,S.GUSSETPLATE3
+                            ,S.GUSSETPLATE4
+                            ,S.GUSSETPLATE5
+                            ,S.GUSSETPLATE6
+                            ,S.GUSSETPLATE7
+                            ,S.GUSSETPLATE8
+                            ,S.GLUE1
+                            ,S.GLUE2
+                            ,S.GLUE3
+                            ,S.GLUE4
+                            ,S.GLUE5
+                            ,S.GLUE6
+                            ,S.GLUE7
+                            ,S.GLUE8
+                            ,S.SHIELD1
+                            ,S.SHIELD2
+                      FROM    SALESORDER          S
+                      LEFT JOIN CMD_USER_V           U1      ON  S.SPECOWNERID = U1.USERID
+                      LEFT JOIN CMD_USER_V           U2      ON  S.CAMOWNERID = U2.USERID
+                      LEFT JOIN CMD_USER_V           U3      ON  S.SALESOWNERID = U3.USERID
+                      LEFT JOIN CMD_USER_V           MU      ON  S.MODIFIER = MU.USERID
+                      LEFT JOIN CMD_LOOKUP_VALUES           C1      ON  S.SPECDETAILFROM = C1.lookup_code
+                                                          AND C1.lookup_type = 'PlatingType'
+                      LEFT JOIN CMD_DICTIONARY     D1      ON  C1.DICTIONARYID = D1.DICTIONARYID
+                                                          AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                      LEFT JOIN CMD_LOOKUP_VALUES           C2      ON  S.SPECDETAILFROM2 = C2.lookup_code
+                                                          AND C2.lookup_type = 'PlatingType'
+                      LEFT JOIN CMD_DICTIONARY     D2      ON  C2.DICTIONARYID = D2.DICTIONARYID
+                                                          AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                      LEFT JOIN CMD_LOOKUP_VALUES           C3      ON  S.CAMWORKSTATE_NEW = C3.lookup_code
+                                                          AND C3.lookup_type = 'CAMState'                                            
+                      LEFT JOIN CMD_DICTIONARY     D3      ON  C3.DICTIONARYID = D3.DICTIONARYID
+                                                          AND D3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                      LEFT JOIN CMD_LOOKUP_VALUES           C4      ON  S.Layer = C4.lookup_code
+                                                          AND C4.lookup_type = 'Layer'   
+                      LEFT JOIN CMD_DICTIONARY     D4      ON  C4.DICTIONARYID = D4.DICTIONARYID
+                                                          AND D4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                      LEFT JOIN BAS_CUSTOMER       CM      ON  S.CUSTOMERID = CM.CUSTOMERID
+                                                          AND S.ENTERPRISEID = CM.ENTERPRISEID
+                                                          AND S.PLANTID = CM.PLANTID
+                      LEFT JOIN BAS_FACTORY    CF    ON  S.MAINFACTORY = CF.FACTORYID                                    
+                      WHERE RN = 1
+                    )X
+                    LEFT JOIN CMD_LOOKUP_VALUES           C4      ON  X.SPECWORKTYPE = C4.lookup_code
+                                                          AND C4.lookup_type = 'GovernanceState'
+                  LEFT JOIN CMD_DICTIONARY     D4      ON  C4.DICTIONARYID = D4.DICTIONARYID
+                                                          AND D4.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                  WHERE 1 = 1
+        
+	    <if test="GOVERNANCESTATE != null and GOVERNANCESTATE !='' "> 
+	        AND EXISTS (
+                              SELECT  1
+                              FROM  ufn_selectStringToSplit(#{GOVERNANCESTATE}, ',')  M
+                              WHERE  X.SPECWORKTYPE = M.VALUE
+                             )
+	    </if>
+	    
+	    <if test="EXCEPTINPUT eq 'Y'.toString()">
+	    	AND X.SPECWORKTYPE NOT IN ('Input')
+	    </if>
+	    <if test="GOVERNANCENO != null and GOVERNANCENO !='' "> 
+	        AND GOVERNANCENO = #{GOVERNANCENO}
+	    </if>
+	    
+		ORDER BY X.CREATEDTIME ASC
+    </select>     
+
+    <!-- Governance 저장 -->
+	<select id="saveGovernance"  statementType="CALLABLE" parameterType="map">
+		{call   /* smh.bas.dao.BAS01700Dao.saveGovernance */
+				BAS_01700_PKG.SAVE(#{WRK_TP}
+									    ,#{SESSION_LANGUAGETYPE}
+										,#{SESSION_ENTERPRISEID}
+										,#{SESSION_SITETYPE}
+										,#{GOVERNANCENO}
+										,#{PRODUCTDEFID}
+										,#{PRODUCTDEFVERSION}
+										,#{PRODUCTIONTYPE}
+										,#{ITEMNAME}
+										,#{INPUTTYPE}
+										,#{OVERSEASTRANS}
+										,#{CAMWORKSTATE}
+										,#{INVENTORYCATEGORYID}
+										,#{SALESOWNERID}
+										,#{CAMOWNERID}
+										,#{SPECOWNERID}
+										,#{HOLDSTATE}
+										,#{JOBTYPE}										
+										,'NewRequest'
+										,#{CUSTOMERID}
+										,#{CUSTOMERVERSION}
+										,#{CMT}
+										,'Valid'
+										,#{CREATOR}
+										,#{MODIFIER}
+										,#{LASTTXNHISTKEY}
+										,#{O_RESULT_CODE,mode=OUT,jdbcType=VARCHAR ,javaType=string}
+										,#{O_RESULT_MSG,mode=OUT,jdbcType=VARCHAR ,javaType=string}
+										)
+	     }
+    </select>
+    
+    <!-- 승인요청 정보 조회-->
+    <select id="selectGovernanceApprovalList" parameterType="map" resultType="hashmap">
+    SELECT  GV.GOVERNANCENO
+					,	GV.GOVERNANCETYPE
+					,	GV.SPECPERSON                           AS SPECOWNER
+            ,   NVL(U3.USERNAME, GV.SPECPERSON)    AS SPECOWNERNAME
+            ,   AP.APPROVALID
+            ,   AP.APPROVALTYPE
+            ,   AT.ACTOR                            AS REVIEWERID
+            ,   NVL(U.USERNAME, AT.ACTOR)      AS REVIEWERNAME
+            ,   AT.RESULTS                              AS REVIEWERSTATE
+            ,   AT2.ACTOR                           AS APPROVER
+            ,   NVL(U2.USERNAME, AT2.ACTOR)    AS APPROVERNAME
+            ,   AT2.RESULTS                             AS APPROVERSTATE
+            ,  GV.STATUS                               AS GOVERNANCESTATE
+        FROM    BAS_APPROVAL                 AP
+        INNER JOIN BAS_APPROVALTRANSACTION   AT  ON   AP.APPROVALID = AT.APPROVALID
+                                                AND  AP.APPROVALTYPE = AT.APPROVALTYPE
+                                                AND  AP.ENTERPRISEID = AT.ENTERPRISEID
+                                                AND  AP.PLANTID = AT.PLANTID
+                                                AND  AT.RESULTTYPE = 'Reviewer'
+                                                AND  AT.SEQUENCE = (SELECT MAX(SEQUENCE) FROM BAS_APPROVALTRANSACTION ATT
+                                                                                        WHERE ATT.APPROVALID = AT.APPROVALID
+                                                                                          AND ATT.APPROVALTYPE = AT.APPROVALTYPE
+                                                                                          AND ATT.ENTERPRISEID = AT.ENTERPRISEID
+                                                                                          AND ATT.PLANTID = AT.PLANTID
+                                                                                          AND ATT.RESULTTYPE = 'Reviewer' )
+        LEFT JOIN CMD_USER_V                   U   ON   AT.ACTOR = U.USERID
+        INNER JOIN BAS_APPROVALTRANSACTION   AT2 ON   AP.APPROVALID = AT2.APPROVALID
+                                                AND  AP.APPROVALTYPE = AT2.APPROVALTYPE
+                                                AND  AP.ENTERPRISEID = AT2.ENTERPRISEID
+                                                AND  AP.PLANTID = AT2.PLANTID
+                                                AND  AT2.RESULTTYPE = 'Approver'
+                                                AND  AT2.SEQUENCE = (SELECT MAX(SEQUENCE) FROM BAS_APPROVALTRANSACTION ATT2
+                                                                                        WHERE ATT2.APPROVALID = AT2.APPROVALID
+                                                                                          AND  ATT2.APPROVALTYPE = AT2.APPROVALTYPE
+                                                                                          AND  ATT2.ENTERPRISEID = AT2.ENTERPRISEID
+                                                                                          AND  ATT2.PLANTID = AT2.PLANTID
+                                                                                          AND  ATT2.RESULTTYPE = 'Approver' )
+        LEFT JOIN CMD_USER_V                   U2  ON   AT2.ACTOR = U2.USERID
+        INNER JOIN BAS_GOVERNANCE            GV  ON   AP.APPROVALID = GV.GOVERNANCENO
+                                                AND  AP.APPROVALTYPE = GV.GOVERNANCETYPE
+                                                AND  AP.ENTERPRISEID = GV.ENTERPRISEID
+                                                AND  AP.PLANTID = GV.PLANTID
+        LEFT JOIN CMD_USER_V                   U3  ON   GV.SPECPERSON = U3.USERID
+        WHERE   1 = 1
+        AND     AP.APPROVALID = #{GOVERNANCENO}
+        AND     AP.APPROVALTYPE = 'NewRequest'
+        AND     AP.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+        AND     AP.PLANTID = #{SESSION_SITETYPE} 
+    </select>
+    
+<select id="selectGovernanceNewApprovalList" parameterType="map" resultType="hashmap">
+   		SELECT  GV.GOVERNANCENO
+				    ,   GV.GOVERNANCETYPE
+				    ,   GV.SPECPERSON           AS SPECOWNER
+				    ,   U.USERNAME              AS SPECOWNERNAME
+				    ,   ''                      AS APPROVALID
+				    ,   ''                      AS APPROVALTYPE
+				    ,   ''                      AS REVIEWERID
+				    ,   ''                      AS REVIEWERNAME
+				    ,	''						AS REVIEWERSTATE
+				    ,   ''                      AS APPROVER
+				    ,   ''                      AS APPROVERNAME
+				    ,	''						AS APPROVERSTATE
+				    ,	''						AS GOVERNANCESTATE
+				FROM    BAS_GOVERNANCE           GV
+				LEFT JOIN CMD_USER_V               U   ON  GV.SPECPERSON = U.USERID
+				WHERE   1 = 1
+				AND     GV.GOVERNANCENO =#{GOVERNANCENO}
+			    <if test="GOVERNANCETYPE != null and GOVERNANCETYPE !='' "> 
+			        AND GV.GOVERNANCETYPE = #{GOVERNANCETYPE}
+			    </if>				
+			    AND     GV.ENTERPRISEID =  #{SESSION_ENTERPRISEID}
+				AND     GV.PLANTID = #{SESSION_SITETYPE}
+    </select>
+    
+  <update id="getUpsertApprovalData" parameterType="map">
+ 	 /* smh.bas.dao.BAS01700Dao.getUpsertApprovalData */
+    	MERGE INTO BAS_APPROVAL BR
+    	USING DUAL
+    	        	ON ( BR.APPROVALTYPE = #{GOVERNANCETYPE} 
+    	        		AND BR.APPROVALID = #{GOVERNANCENO}
+    	        		AND BR.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+    	        		AND BR.PLANTID = #{SESSION_SITETYPE}						    
+                    )
+              WHEN  MATCHED THEN  
+	              UPDATE SET 
+	              	         REQUESTOR = #{CREATOR}
+							,REVIEWER = #{REVIEWERID}
+							,REVIEWDATE	= NULL
+					        ,APPROVER = #{APPROVER}
+					        ,APPROVALSTATUS	= #{APPROVALSTATUS}
+					        ,APPROVEDATE	= NULL
+					        ,REQUESTDATE = SYSDATE            
+					        ,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = #{LASTTXNID}     
+					        ,LASTTXNUSER = #{MODIFIER}     
+					        ,LASTTXNTIME = SYSDATE   
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+			WHEN NOT MATCHED THEN
+				INSERT ( APPROVALTYPE
+							,APPROVALID
+							,ENTERPRISEID
+							,PLANTID
+							,APPROVALSTATUS
+							,REQUESTOR
+							,REQUESTDATE
+							,REVIEWER
+							,APPROVER
+							,VALIDSTATE
+							,CREATOR
+							,CREATEDTIME
+							,MODIFIER
+							,MODIFIEDTIME
+							,LASTTXNHISTKEY
+							,LASTTXNID
+							,LASTTXNUSER
+							,LASTTXNTIME
+							,LASTTXNCOMMENT) 
+				    VALUES( 
+						#{GOVERNANCETYPE}
+						,#{GOVERNANCENO}
+						,#{SESSION_ENTERPRISEID}
+						,#{SESSION_SITETYPE}
+						,#{APPROVALSTATUS}
+						,#{CREATOR}
+						,SYSDATE
+						,#{REVIEWERID}
+						,#{APPROVER}
+						,#{VALIDSTATE}
+						,#{CREATOR}  
+				        ,SYSDATE  
+				        ,#{MODIFIER}  
+				        ,SYSDATE  
+				        ,#{LASTTXNHISTKEY}  
+				        ,#{LASTTXNID}
+				        ,#{CREATOR} 
+				        ,SYSDATE
+				        ,#{LASTTXNCOMMENT}  
+						)
+    </update>
+    
+<update id="getUpsertApprovalTransactionData" parameterType="map">
+ 	 /* smh.bas.dao.BAS01700Dao.getUpsertApprovalTransactionData */
+    	MERGE INTO BAS_APPROVALTRANSACTION BR
+    	USING DUAL
+    	        	ON ( BR.APPROVALTYPE = #{GOVERNANCETYPE} 
+    	        		AND BR.APPROVALID = #{GOVERNANCENO}
+    	        		AND BR.ENTERPRISEID = #{SESSION_ENTERPRISEID}
+    	        		AND BR.PLANTID = #{SESSION_SITETYPE}
+    	        		AND BR.SEQUENCE = #{SEQUENCE}						    
+                    )
+              WHEN  MATCHED THEN  
+	              UPDATE SET 
+	              	         RESULTS = #{RESULTS}
+							,ENDDATE = DECODE(#{ENDDATE}, 'NOW', SYSDATE, NULL)
+					        ,STARTDATE = SYSDATE
+					        ,RESULTTYPE = #{RESULTTYPE}
+					        ,DESCRIPTION = NULL
+					        ,ACTOR	= #{ACTOR}					        
+					        ,MODIFIER = #{MODIFIER}     
+					        ,MODIFIEDTIME = SYSDATE     
+					        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+					        ,LASTTXNID = #{LASTTXNID}     
+					        ,LASTTXNUSER = #{MODIFIER}     
+					        ,LASTTXNTIME = SYSDATE   
+					        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+			WHEN NOT MATCHED THEN
+				INSERT ( APPROVALTYPE
+							,APPROVALID
+							,ENTERPRISEID
+							,PLANTID
+							,SEQUENCE
+							,RESULTS
+							,RESULTTYPE
+							,ACTOR
+							,STARTDATE
+							,ENDDATE
+							,VALIDSTATE
+							,CREATOR
+							,CREATEDTIME
+							,MODIFIER
+							,MODIFIEDTIME
+							,LASTTXNHISTKEY
+							,LASTTXNID
+							,LASTTXNUSER
+							,LASTTXNTIME
+							,LASTTXNCOMMENT) 
+				    VALUES( 
+						#{GOVERNANCETYPE}
+						,#{GOVERNANCENO}
+						,#{SESSION_ENTERPRISEID}
+						,#{SESSION_SITETYPE}
+						,#{SEQUENCE}
+						,#{RESULTS}
+						,#{RESULTTYPE}
+						,#{ACTOR}
+						,SYSDATE
+						,DECODE(#{ENDDATE}, 'NOW', SYSDATE, NULL)
+						,#{VALIDSTATE}
+						,#{CREATOR}  
+				        ,SYSDATE  
+				        ,#{MODIFIER}  
+				        ,SYSDATE  
+				        ,#{LASTTXNHISTKEY}  
+				        ,#{LASTTXNID}
+				        ,#{CREATOR} 
+				        ,SYSDATE
+				        ,#{LASTTXNCOMMENT}  
+						)
+    </update>
+    
+    <update id="getUpdateGovernanceData" parameterType="map" >
+    	/* smh.bas.dao.BAS01700Dao.getUpdateGovernanceData */ 
+	    UPDATE  BAS_GOVERNANCE SET 
+	    			STATUS = 'Working'
+	    			,REQUESTDATE = SYSDATE
+					,MODIFIER = #{MODIFIER}     
+			        ,MODIFIEDTIME = SYSDATE     
+			        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+			        ,LASTTXNID = #{LASTTXNID}     
+			        ,LASTTXNUSER = #{MODIFIER}     
+			        ,LASTTXNTIME = SYSDATE   
+			        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}
+	     WHERE  GOVERNANCENO = #{GOVERNANCENO}	        
+    </update>
+    
+    <select id="selectBasGovernanceListExists" parameterType="map" resultType="hashmap">   		
+			 /* smh.bas.dao.BAS01700Dao.selectBasGovernanceListExists */
+			SELECT GV.GOVERNANCENO
+             FROM BAS_GOVERNANCE               GV
+            WHERE 1=1 
+	           AND GV.GOVERNANCENO = #{GOVERNANCENO}	    
+    </select>
+
+    <select id="getLastSequence" parameterType="map" resultType="hashmap">   		
+			 /* smh.bas.dao.BAS01700Dao.getLastSequence */
+				SELECT TO_CHAR(NVL(MAX(SEQUENCE),0)) AS SEQ
+				FROM   BAS_APPROVALTRANSACTION
+				WHERE  APPROVALID =  #{GOVERNANCENO}	    
+
+    </select>    
+        
+</mapper>

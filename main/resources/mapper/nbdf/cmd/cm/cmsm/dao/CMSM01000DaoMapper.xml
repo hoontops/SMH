@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 개인정보 조회로그
+    설명          : 개인정보 조회로그 등록 및 조회
+    작성자       : 진성하
+    최초작성일 : 2017.04.27
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.04.27    진성하      최초작성
+-->
+
+<mapper namespace="com.nbdf.cmd.cm.cmsm.dao.CMSM01000Dao">
+    <sql id="whoCol" >
+    , CREATED_BY
+    , TO_CHAR(CREATION_DATE, 'YYYY-MM-DD') AS CREATED_DATE
+    , LAST_UPDATED_BY
+    , TO_CHAR(LAST_UPDATE_DATE, 'YYYY-MM-DD') AS LAST_UPDATE_DATE
+    </sql>
+
+    <!-- 개인정보 조회로그 조회(화면에서 사용) -->
+    <select id="selectIvlList" parameterType="map" resultType="map">
+     /* "com.nbdf.cmd.cm.cmsm.dao.CMSM01000Dao.selectIvlList"  */
+      SELECT *
+      FROM   (
+                  SELECT
+                               ROWNUM AS RNUM, T.*
+                  FROM (
+	                           SELECT
+											IVL_INFO_LOG_ID
+											, REQ_URI
+											, PGM_NM
+											, SQL_NAME
+											, DBMS_LOB.SUBSTR(SQL_SNTENC,1000,1)  as SQL_SNTENC
+											, QRY_RSLT_CNT
+											, LGN_IP
+											, REQ_FULL_URL
+											, SAVE_FILE_NM
+											, FILE_SIZE
+											, RM
+											, (SELECT USER_NM FROM CMD_USERS WHERE USER_ID = CMD_IVL_INFO_LOGS.CREATED_BY) as USER_ID    /* 최초생성자명 */
+											, LGN_LOG_ID
+											, QRY_CND
+											, TO_CHAR(CREATION_DATE, 'yyyy-mm-dd hh24:mi:ss') as CREATION_DATE
+		                          FROM CMD_IVL_INFO_LOGS
+		                          WHERE
+		                          TO_CHAR(CREATION_DATE,'yyyymmddhh24miss') >= #{DETAIL_PRE_DATE}
+                                  AND #{DETAIL_TO_DATE} >= TO_CHAR(CREATION_DATE,'yyyymmddhh24miss')
+           <if test="QRY_RSLT_CNT != null and QRY_RSLT_CNT != ''">
+                                   AND QRY_RSLT_CNT >=  #{QRY_RSLT_CNT}   /* 조회건수 */
+          </if>
+          <if test="ORDER.equals('ASC') and ORDER != null ">
+                                   ORDER BY CREATION_DATE DESC
+          </if>
+          <if test="ORDER.equals('CNT') and ORDER != null ">
+                                    ORDER BY QRY_RSLT_CNT DESC
+          </if>
+	               ) T WHERE 1=1
+	     <if test= "P_END != null and P_END != ''">
+                    AND  ROWNUM <![CDATA[<= ]]> #{P_END}
+        </if>
+        ) WHERE 1=1
+    <if test= "P_START != null and P_START != ''">
+         AND  RNUM >= #{P_START}
+    </if>
+    </select>
+
+   <!-- 개인정보 조회로그 카운트 조회(화면-paging에서 사용) -->
+    <select id="selectIvlCount" parameterType="map" resultType="map">
+	     SELECT /* "com.nbdf.cmd.cm.cmsm.dao.CMSM01000Dao.selectIvlCount"  */
+		            COUNT(*) AS COUNT
+		 FROM CMD_IVL_INFO_LOGS
+		 WHERE
+		 TO_CHAR(CREATION_DATE,'yyyymmddhh24miss') >= #{DETAIL_PRE_DATE}
+	     AND #{DETAIL_TO_DATE} >= TO_CHAR(CREATION_DATE,'yyyymmddhh24miss')
+	 <if test="QRY_RSLT_CNT != null and QRY_RSLT_CNT != ''">
+	     AND QRY_RSLT_CNT >=  #{QRY_RSLT_CNT}   /* 조회건수 */
+	</if>
+	</select>
+
+    <!-- 개인정보 조회로그 조회 저장(업무단에서 호출)-->
+    <insert id="insertIvlInfo" parameterType="hashMap">
+    INSERT   /* "com.nbdf.cmd.cm.cmsm.dao.CMSM01000Dao.insertIvlInfo"  */
+    INTO       CMD_IVL_INFO_LOGS
+                 ( IVL_INFO_LOG_ID
+                 , REQ_URI
+                 , PGM_NM
+                 , SQL_NAME
+                 , SQL_SNTENC
+                 , QRY_CND
+                 , QRY_RSLT_CNT
+                 , LGN_IP
+                 , REQ_FULL_URL
+                 , SAVE_FILE_NM
+                 , FILE_SIZE
+                 , RM
+                 , PORTAL_USER_ID
+                 , LGN_LOG_ID
+                 , KEEP_START_DATEC /* 보관 시작일자C */
+                 , CREATED_BY
+                 , LAST_UPDATED_BY
+                 )
+                 VALUES
+                 (
+                 CMD_IVL_INFO_LOGS_S.NEXTVAL
+				 , #{REQ_URI}
+				 , #{PGM_NM}
+                 , #{SQL_NM}
+                 , #{SQL_SNTENC}
+                 , #{QRY_CND}
+                 , #{QRY_RSLT_CNT}
+                 , #{LGN_IP}
+                 , #{REQ_FULL_URL}
+                 , #{SAVE_FILE_NM}
+                 , #{FILE_SIZE}
+                 , #{RM}
+                 , #{PORTAL_USER_ID}
+                 , #{LGN_LOG_ID}
+                 , TO_CHAR(SYSDATE, 'YYYYMMDD')
+                 , #{CREATED_BY}
+                 , #{LAST_UPDATED_BY}
+    			)
+   </insert>
+
+ </mapper>

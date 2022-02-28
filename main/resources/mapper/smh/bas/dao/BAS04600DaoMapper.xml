@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS04600Dao">
+
+    <!-- 출하 검사기준 정보 조회 -->
+    <select id="selectShipmentInspectionList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04600Dao.selectShipmentInspectionList */
+        SELECT
+               REL.RESOURCEID               AS ITEMID
+             , REL.RESOURCEVERSION          AS ITEMVERSION
+             , NVL(PDF.PRODUCTDEFNAME,'*')  AS ITEMNAME
+             , '*'                          AS PROCESSSEGID
+             , '*'                          AS PROCESSEGVERSION
+             , IDF.INSPECTIONDEFID
+             , IDF.INSPECTIONDEFVERSION
+             , '*'                          AS INSPITEMID
+             , '*'                          AS INSPITEMVERSION
+             , ICL.RESOURCETYPE
+             , PDF.ENTERPRISEID
+             , '*'                          AS PLANTID
+             , REL.AQLINSPECTIONLEVEL
+             , REL.INSPECTORDEGREE
+             , REL.ISINSPECTIONREQUIRED
+             , REL.ISAQL
+             , REL.AQLDEFECTLEVEL
+             , REL.AQLCYCLE
+             , CASE WHEN NVL(REL.ISAQL,'N')='Y' THEN  NVL(REL.AQLDECISIONDEGREE,'A')
+               END                          AS AQLDECISIONDEGREE
+             , REL.ISNCR
+             , REL.NCRINSPECTIONQTY
+             , REL.NCRCYCLE
+             , REL.NCRDECISIONDEGREE
+             , REL.NCRLOTSIZE
+             , REL.INSPECTIONUNIT
+             , REL.VALIDSTATE
+             , CUSER.USER_NM    CREATOR
+             , TO_CHAR(REL.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+             , MUSER.USER_NM    MODIFIER
+             , TO_CHAR(REL.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+             , REL.RESOURCEID
+             , REL.RESOURCEVERSION
+          FROM            BAS_INSPECTIONCLASS        ICL
+          LEFT OUTER JOIN BAS_INSPECTIONDEFINITION   IDF     ON  IDF.INSPECTIONCLASSID    = ICL.INSPECTIONCLASSID
+          LEFT OUTER JOIN BAS_INSPECTIONITEMREL      REL     ON  REL.INSPECTIONDEFID      = IDF.INSPECTIONDEFID
+                                                             AND REL.INSPECTIONDEFVERSION = IDF.INSPECTIONDEFVERSION
+          LEFT OUTER JOIN BAS_PRODUCTDEFINITION      PDF     ON  PDF.PRODUCTDEFID         = REL.RESOURCEID
+                                                             AND PDF.PRODUCTDEFVERSION    = REL.RESOURCEVERSION
+          LEFT OUTER JOIN CMD_USERS                  CUSER   ON  REL.ENTERPRISEID         = CUSER.ENTERPRISEID
+                                                             AND REL.CREATOR              = CUSER.USER_ID
+          LEFT OUTER JOIN CMD_USERS                  MUSER   ON  REL.ENTERPRISEID         = MUSER.ENTERPRISEID
+                                                             AND REL.MODIFIER             = MUSER.USER_ID
+        WHERE 1=1
+       ]]>
+        AND  ICL.INSPECTIONCLASSID    = #{INSPECTIONDEFID}
+        <if test="ITEMID != null and ITEMID !='' ">
+            AND  REL.RESOURCEID   LIKE   '%'||#{ITEMID}|| '%'
+        </if>
+        <if test="ITEMNAME != null and ITEMNAME !='' ">
+            AND NVL(PDF.PRODUCTDEFNAME,'*') LIKE  '%'||#{ITEMNAME}|| '%'
+        </if>
+        <if test="ITEMVERSION != null and ITEMVERSION !='' and !(ITEMVERSION eq '*'.toString()) ">
+            AND REL.RESOURCEVERSION =  #{ITEMVERSION}
+        </if>
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+            AND REL.VALIDSTATE = #{VALIDSTATE}
+        </if>
+        ORDER  BY REL.RESOURCEID , REL.RESOURCEVERSION
+    </select>
+
+    <!-- 출하 검사기준 정보 수정 -->
+    <update id="updateInspectionitemrel" parameterType="map">
+        UPDATE /* smh.bas.dao.BAS04600Dao.updateInspectionitemrel */ BAS_INSPECTIONITEMREL
+           SET ISINSPECTIONREQUIRED          = #{ISINSPECTIONREQUIRED}       /*검사필수여부*/
+             , INSPECTORDEGREE               = #{INSPECTORDEGREE}            /*검사원 등급*/
+             , ISAQL                         = #{ISAQL}                      /*AQL여부*/
+        <if test="AQLINSPECTIONLEVEL != null and AQLINSPECTIONLEVEL !=''">
+             , AQLINSPECTIONLEVEL            = #{AQLINSPECTIONLEVEL}         /*검사수준*/
+        </if>
+        <if test="AQLDEFECTLEVEL != null and AQLDEFECTLEVEL !=''">
+             , AQLDEFECTLEVEL                = #{AQLDEFECTLEVEL}             /*불량수준*/
+        </if>
+             , AQLDECISIONDEGREE             = #{AQLDECISIONDEGREE}          /*AQL판정등급*/
+        <if test="AQLCYCLE != null and AQLCYCLE !=''">
+             , AQLCYCLE                      = #{AQLCYCLE}                   /*AQL주기*/
+        </if>
+           , ISNCR                         = #{ISNCR}                        /*NCR여부*/
+        <if test="NCRINSPECTIONQTY != null and NCRINSPECTIONQTY !=''">
+             , NCRINSPECTIONQTY              = #{NCRINSPECTIONQTY}           /*검사수량*/
+        </if>
+             , NCRCYCLE                      = #{NCRCYCLE}                   /*NCR주기*/
+             , NCRDECISIONDEGREE             = #{NCRDECISIONDEGREE}          /*NCR판정등급*/
+        <if test="NCRLOTSIZE != null and NCRLOTSIZE !=''">
+             , NCRLOTSIZE                    = #{NCRLOTSIZE}                 /*Lot Size*/
+        </if>
+             , DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+         WHERE INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+           AND INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+           AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*자원 ID*/
+           AND RESOURCEVERSION               = #{RESOURCEVERSION}            /*자원 Version*/
+           AND PROCESSSEGID                  = #{PROCESSSEGID}               /*공정ID*/
+           AND PROCESSEGVERSION              = #{PROCESSEGVERSION}           /*공정Version*/
+    </update>
+</mapper>

@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM05800Dao">
+	<select id="selectWipListOfPhysicalCount" parameterType="map" resultType="hashmap">
+	/* "SelectWipListOfPhysicalCount" 10001 */
+	--id : selectWipListOfPhysicalCount
+		WITH LOTINFO AS
+		(
+			SELECT  COALESCE(D3.DICTIONARYNAME, L.LOTTYPE)              AS LOTTYPE
+				,	CASE WHEN L.ENTERPRISEID = 'SMLINES' THEN
+						 CASE WHEN L.ISREWORK = 'Y' OR L.WORKCOUNT > 0 THEN 'IsRework'
+						 	  ELSE CASE WHEN L.LOTCREATEDTYPE = 'Claim' THEN 'Claim'
+						 	  			ELSE 'Normal'
+						 	  	   END
+						 END
+						 ELSE
+						 CASE WHEN L.LOTCREATEDTYPE = 'Return' THEN 'Return'
+						 	  WHEN L.LOTCREATEDTYPE = 'Repair' THEN 'MRB'
+						 	  WHEN L.LOTCREATEDTYPE = 'Claim' THEN 'Claim'
+						 	  ELSE CASE WHEN L.ISREWORK = 'Y' OR L.WORKCOUNT > 0 THEN 'IsRework'
+						 	  	   		ELSE 'Normal'
+						 	  	   END
+						 END
+					END													AS PROCESSCLASSID_R
+			    ,   L.AREAID
+			    ,   COALESCE(D1.DICTIONARYNAME, A.AREANAME)             AS AREANAME 
+			    ,   L.PRODUCTDEFID
+			    ,   L.PRODUCTDEFVERSION
+			    ,   PD.PRODUCTDEFNAME
+			    ,   L.LOTID
+			    ,   L.PROCESSSEGMENTID
+			    ,   COALESCE(D2.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)  AS PROCESSSEGMENTNAME
+			    ,   CASE WHEN PP.PATHTYPE IN ('Start', 'StartEnd') OR LH.QTY IS NULL THEN L.CREATEDQTY 
+                            ELSE LH.QTY END                                AS INPUTQTY --첫공정부터 SKIP했을 때 LH.QTY = NULL이니까 L.CREATEDQTY로 보여줌
+                   ,   CASE WHEN PP.PATHTYPE IN ('Start', 'StartEnd') OR LH.QTY IS NULL THEN L.CREATEDQTY / L.PANELPERQTY
+                            ELSE LH.PANELQTY END                           AS INPUTPNLQTY
+                   ,   L.QTY
+                   ,   CEIL(L.QTY/L.PANELPERQTY)        							AS PANELQTY
+                   ,   CASE WHEN L.UNIT = 'EA'  THEN L.QTY ELSE 0 END 		AS EAQTY
+			    ,   ROUND((L.QTY / CASE WHEN PD.PCSMM = 0  THEN NULL ELSE PD.PCSMM END), 2)                  AS MM
+			    ,   TO_CHAR(L.LOTSTARTDATE, 'YYYY-MM-DD HH24:MI:SS')    AS INPUTDATE
+			    ,   TO_CHAR(LWR.RECEIVETIME, 'YYYY-MM-DD HH24:MI:SS')   AS RECEIVETIME
+			    ,   TO_CHAR(LWR.WORKSTARTTIME, 'YYYY-MM-DD HH24:MI:SS') AS WORKSTARTTIME
+			    ,   TO_CHAR(LWR.WORKENDTIME, 'YYYY-MM-DD HH24:MI:SS')   AS WORKENDTIME
+			--    ,   LL.TXNHISTKEY
+			    ,	L.PLANTID
+			    ,	99					AS SORTORDER
+			    ,	L.PANELPERQTY
+			FROM    PCM_LOT                  L
+			--작업장
+              	<if test="AREANAME != null and AREANAME !=''">
+               INNER JOIN UFN_SELECTSTRINGTOSPLIT(#{AREAID}, ',') LMP ON L.AREAID = LMP.VALUE
+              	</if>				
+			LEFT  JOIN FN_AREA(#{MODIFIER}) A 	ON	L.AREAID = A.AREAID
+			LEFT  JOIN BAS_PRODUCTDEFINITION PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+			                                    AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+			LEFT  JOIN BAS_PROCESSSEGMENT    PS  ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+			                                    AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+			LEFT  JOIN BAS_PROCESSPATH       PP  ON  L.PROCESSDEFID = PP.PROCESSDEFID
+			                                    AND L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+			                                    AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+			LEFT  JOIN PCM_LOTWORKRESULT     LWR ON L.LOTID                  = LWR.LOTID             
+												AND L.PROCESSSEGMENTID      = LWR.PROCESSSEGMENTID 
+												AND L.USERSEQUENCE   = LWR.USERSEQUENCE 
+												AND LWR.RESULTTYPE = 'NORMAL' 
+												AND L.WORKCOUNT = LWR.WORKCOUNT
+			LEFT JOIN PCM_LOTHISTORY         LH  ON  LWR.PREVSENDLOTHISTKEY = LH.TXNHISTKEY
+												AND LWR.LOTID = LH.LOTID
+			LEFT JOIN CMD_DICTIONARY         D1  ON  A.AREANAME = D1.DICTIONARYID
+			                                    AND D1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			LEFT JOIN CMD_DICTIONARY         D2  ON  PS.PROCESSSEGMENTNAME = D2.DICTIONARYID
+			                                    AND D2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			LEFT JOIN CMD_LOOKUP_VALUES      C   ON  L.LOTTYPE = C.LOOKUP_CODE
+			                                    AND C.LOOKUP_TYPE = 'ProductionType'
+			LEFT JOIN CMD_DICTIONARY         D3  ON  C.DICTIONARYID = D3.DICTIONARYID
+			                                    AND D3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+			--LEFT JOIN CT_WIPSURVEY          WS  ON  L.LOTID = WS.LOTID
+			--                                    AND WS.SURVEYMONTH = TO_CHAR(CURRENT_DATE, 'YYYY-MM')
+			--                                    AND WS.WIPSURVEYCONFIRM = 'Y'
+			WHERE   1 = 1
+			AND     L.LOTSTATE IN ('InProduction', 'InTransit')
+			AND     COALESCE(L.ISDEFECTED, 'N') = 'N'
+			--AND		COALESCE(L.ISREPRESENTROLLLOT, 'N') = 'N'
+			--AND     WS.LOTID IS NULL
+			<if test="PLANTID != null and PLANTID !=''">
+				AND     L.PLANTID = #{PLANTID}
+			</if>
+			<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">
+           		AND     L.LOTTYPE = #{PRODUCTIONTYPE}
+           	</if>
+           	-- 품목코드
+           	<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">
+           		AND		EXISTS
+              				(
+              					SELECT	1
+              					FROM	UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ',')	T
+              					WHERE	L.PRODUCTDEFID = T.VALUE
+              				)
+			</if>
+			<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''">
+           		AND		EXISTS
+            				(
+            					SELECT	1
+            					FROM	UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFVERSION}, ',')	T
+            					WHERE	L.PRODUCTDEFVERSION = T.VALUE
+            				)
+			</if>
+			ORDER BY L.PRODUCTDEFID, L.PROCESSSEGMENTID, L.LOTID ASC
+		)
+		SELECT
+				L.LOTTYPE
+			,	COALESCE(PCN.DICTIONARYNAME, L.PROCESSCLASSID_R)	AS PROCESSCLASSID_R
+			,	L.AREAID
+			,	L.AREANAME
+			,	L.PRODUCTDEFID
+			,	L.PRODUCTDEFVERSION
+			,	L.PRODUCTDEFNAME
+			,	L.LOTID
+			,	L.PROCESSSEGMENTID
+			,	L.PROCESSSEGMENTNAME
+			,	L.INPUTQTY			-- 투입 PCS
+			,	L.INPUTPNLQTY		-- 투입 PNL
+			,	L.QTY				-- 재공
+			,	L.PANELQTY			-- 재공(PNL)
+			,	L.EAQTY
+			,	L.MM				
+			,	L.INPUTDATE			-- 투입 일자 
+			,	L.RECEIVETIME		-- 인수 일시
+			,	L.WORKSTARTTIME		-- 작업 시작
+			,	L.WORKENDTIME		-- 작업 완료
+			,	L.PLANTID
+			,	L.SORTORDER
+			,	L.QTY				AS REALWIPQTY
+			,	L.QTY				AS REALWIPPCSQTY
+			,	CEIL(L.QTY / L.PANELPERQTY)	AS REALWIPPNLQTY
+			,	0					AS REALWIPLOSSQTY
+			,	0					AS REALWIPLOSSPCSQTY
+			,	0					AS REALWIPLOSSPNLQTY
+			,	0					AS REALWIPETCQTY
+			,	0					AS REALWIPETCPCSQTY
+			,	0					AS REALWIPETCPNLQTY
+			,	L.QTY				AS REALWIPTOTALQTY
+			,	NULL				AS REASONCOMMENT
+			,	L.PANELPERQTY
+		FROM	LOTINFO				L
+		LEFT JOIN CMD_LOOKUP_VALUES	PC	ON	L.PROCESSCLASSID_R = PC.LOOKUP_CODE
+										AND	PC.LOOKUP_TYPE = 'LotWorkType'
+		LEFT JOIN CMD_DICTIONARY		PCN	ON	PC.DICTIONARYID = PCN.DICTIONARYID
+										AND	PCN.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		WHERE	1 = 1
+	</select>
+	<select id="selectBasPlantList" parameterType="map" resultType="hashmap">
+	--id : selectBasPlantList
+		SELECT 
+				PLANTID
+				, ENTERPRISEID
+				, PLANTNAME
+				, ADDRESS
+				, PHONE
+				, FAXNO
+				, "LANGUAGE"
+				, ISOSPBUDGETCONTROL
+				, ISOSPETCBUDGETCONTROL
+				, WORKTIME
+				, TIMEZONE
+				, SETHOLDDATE
+				, ISOTIMEZONE
+				, ISAUDIT
+				, ISOSPWAREHOUSEOPERATE
+				, ISWIPSURVEY
+				, DESCRIPTION
+				, CREATOR
+				, CREATEDTIME
+				, MODIFIER
+				, MODIFIEDTIME
+				, LASTTXNHISTKEY
+				, LASTTXNID
+				, LASTTXNUSER
+				, LASTTXNTIME
+				, LASTTXNCOMMENT
+				, VALIDSTATE
+		FROM BAS_PLANT
+		WHERE 	ENTERPRISEID = 'SMLINES'
+		AND		PLANTID = #{PLANTID}
+
+	</select>
+	<select id="selectIsWipSurvey" parameterType="map" resultType="hashmap">
+	/* "GetIsWipSurvey" 10001 */
+		--selectIsWipSurvey
+		SELECT  COALESCE(ISWIPSURVEY, 'N')	AS ISWIPSURVEY
+		FROM    BAS_PLANT
+		WHERE   PLANTID = #{PLANTID}
+	 </select>
+	<select id="insertWipSurvey"  statementType="CALLABLE" parameterType="map">
+		--insertWipSurvey
+		{ 
+			call PCM_INSERT_WIPSURVEY
+            (
+                #{ P_PLANTID,   		mode=IN,	jdbcType=VARCHAR, javaType=java.lang.String },
+                #{ P_SURVEYMONTH,   	mode=IN,   	jdbcType=VARCHAR, javaType=java.lang.String },
+                #{ P_USERID,   			mode=IN,   	jdbcType=VARCHAR, javaType=java.lang.String },
+                #{ P_DATETIME,   		mode=IN,   	jdbcType=VARCHAR, javaType=java.sql.Date },
+                #{ P_TXNGROUPHISTKEY,   mode=IN,   	jdbcType=VARCHAR, javaType=java.lang.String },
+                #{ P_TXNID,   			mode=IN,   	jdbcType=VARCHAR, javaType=java.lang.String }        
+             )
+        }
+    </select>
+    <update id="updateBasPlant"  parameterType="map">
+	--id : updateBasPlant
+		UPDATE BAS_PLANT SET 
+			ISWIPSURVEY = #{ISWIPSURVEY}
+			,LASTTXNID = #{LASTTXNID}
+			,MODIFIEDTIME = SYSDATE 
+			,MODIFIER = #{MODIFIER}
+			,LASTTXNHISTKEY = #{LASTTXNHISTKEY}
+			,LASTTXNUSER = #{MODIFIER}
+			,LASTTXNTIME = SYSDATE 
+		WHERE PLANTID = #{PLANTID}
+	</update>
+	<insert id="insertBasPlantHistory" parameterType="map">
+		--id : insertBasPlantHistory
+		INSERT INTO BAS_PLANTHISTORY
+		(
+			TXNHISTKEY
+			,PLANTID
+			,ENTERPRISEID
+			,PLANTNAME
+			,ADDRESS
+			,PHONE
+			,FAXNO
+			,"LANGUAGE"
+			,ISOSPBUDGETCONTROL
+			,ISOSPETCBUDGETCONTROL
+			,WORKTIME
+			,TIMEZONE
+			,DESCRIPTION
+			,CREATOR
+			,CREATEDTIME
+			,MODIFIER
+			,MODIFIEDTIME
+			,TXNID
+			,TXNUSER
+			,TXNTIME
+			,TXNCOMMENT
+			,VALIDSTATE
+			,SETHOLDDATE
+			,ISOTIMEZONE
+			,ISAUDIT
+			,ISOSPWAREHOUSEOPERATE
+			,ISWIPSURVEY
+		) 
+		VALUES
+		(
+			#{TXNHISTKEY}
+			,#{PLANTID}
+			,#{ENTERPRISEID}
+			,#{PLANTNAME}
+			,#{ADDRESS}
+			,#{PHONE}
+			,#{FAXNO}
+			,#{LANGUAGE}
+			,#{ISOSPBUDGETCONTROL}
+			,#{ISOSPETCBUDGETCONTROL}
+			,#{WORKTIME}
+			,#{TIMEZONE}
+			,#{DESCRIPTION}
+			,#{MODIFIER}
+			,SYSDATE
+			,#{MODIFIER}
+			,SYSDATE
+			,#{TXNID}
+			,#{MODIFIER}
+			,SYSDATE
+			,NULL
+			,#{VALIDSTATE}
+			,NULL
+			,#{ISOTIMEZONE}
+			,#{ISAUDIT}
+			,#{ISOSPWAREHOUSEOPERATE}
+			,#{ISWIPSURVEY}
+		)
+	</insert> 
+	
+	
+</mapper>

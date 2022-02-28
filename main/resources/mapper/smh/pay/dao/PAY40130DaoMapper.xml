@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pay.dao.PAY40130Dao">
+
+
+  <!-- 출근현황 조회 -->
+  <select id="selectPayCalendarList" parameterType="map" resultType="hashmap">
+    /* smh.pay.dao.PAY40130Dao.selectPayCalendarList */
+    SELECT DEF.HJSPAY_CALENDAR_SEQ /* PK 일련번호 */
+		 , 0 AS CHECK_YN
+		 , DEF.PERSON_ID /* PERSON_ID */
+		 , DEF.WORK_DATE /* 근태일자 */
+		 , DEF.WEEK_DAY /* 요일 */
+		 , DEF.ATTENDANCE_TIME /* 출근시각 */
+		 , DEF.LATE_NAME /* 지각여부명 */
+		 , DEF.LATE_YN /* 지각여부 */
+		 , DEF.CALENDAR_TYPE /* 근태유형 */
+		 , DEF.CALENDAR_TYPE_NAME /* 근태유형명 */
+		 , DEF.COMMENTS /* 비고 */
+		 , DEF.DAYCHECK /* 휴일여부 */
+		 , DEF.ATTENDANCE_DELAY /* 출근지연 */
+		 , DEF.CLOSING_HOUR /*퇴근시간*/
+		 , DEF.OBJECT_VERSION_NUMBER /*버전관리*/
+    FROM
+          (
+			SELECT NVL(ATT.HJSPAY_CALENDAR_SEQ, 90000000000 || ROWNUM) AS HJSPAY_CALENDAR_SEQ /* PK 일련번호 */
+				, ATT.OBJECT_VERSION_NUMBER                            AS OBJECT_VERSION_NUMBER /* OBJECT NUBMER*/
+				, ATT.PERSON_ID                                        AS PERSON_ID /* PERSON_ID */
+				, DECODE(ATT.CALENDAR_TYPE, '310', TO_CHAR(ATT.ATTENDANCE_TIME, 'HH24:MI:SS')
+				                                 , TO_CHAR(ATT.ATTENDANCE_TIME, 'HH24:MI')) AS ATTENDANCE_TIME /* 출근시각 */
+				, ATT.ATTENDANCE_DELAY                                 AS ATTENDANCE_DELAY /* 출근지연 */
+				, DECODE(ATT.LATE_YN, 'Y', '지각', '')                   AS LATE_NAME /* 지각여부명 */
+				, ATT.LATE_YN                                           AS LATE_YN /* 지각여부 */
+				, ATT.CALENDAR_TYPE                                    AS CALENDAR_TYPE /* 근태유형 */
+				, ATT.ATTRIBUTE2                                       AS COMMENTS /* 비고 */
+				, ATT.ATTRIBUTE1                                       AS ATTRIBUTE1 /* E:SSHR, S:CONCURRENT */
+				, HJSHRF_DECODE_LOOKUP_FNC('HJS_HR_ATTENDANCE_TYPE', ATT.CALENDAR_TYPE) AS CALENDAR_TYPE_NAME
+				, TO_CHAR(CALENDAR.WORK_DATE, 'YYYY-MM-DD')            AS WORK_DATE /* 근태일자 */
+				, CALENDAR.WEEK_DAY                                    AS WEEK_DAY /* 요일 */
+				, CALENDAR.DAYCHECK                                    AS DAYCHECK /* 휴일여부 */
+				, DECODE(ATT.CALENDAR_TYPE, '310', TO_CHAR(ATT.CLOSING_HOUR, 'HH24:MI:SS')
+				                                 , TO_CHAR(ATT.CLOSING_HOUR, 'HH24:MI')) AS CLOSING_HOUR /* 퇴근시간*/
+            FROM <![CDATA[
+                         (
+                           SELECT ZCC.WORK_DATE
+                                , ZCC.WEEK_DAY
+                                , DECODE(NVL(HHD.NAME, 'NONE'), 'NONE', DECODE(ZCC.WEEK_DAY, '토', 'HOLIDAY', '일','HOLIDAY', 'WORK'), 'HOLIDAY') AS DAYCHECK
+                           FROM
+                                (
+                                  SELECT XCC.START_DATE + LEVEL - 1                                                          AS WORK_DATE
+                                       , TO_CHAR(XCC.START_DATE + LEVEL - 1, 'DY', 'NLS_DATE_LANGUAGE=KOREAN')               AS WEEK_DAY
+                                  FROM
+                                       (
+                                         SELECT TO_DATE(#{WORK_DATE}, 'YYYY/MM')                                                  AS START_DATE  -- 기본값 현재년월 (조건 년월)
+                                              , LAST_DAY(TO_DATE(#{WORK_DATE}, 'YYYY-MM')) - TO_DATE(#{WORK_DATE}, 'YYYY-MM') + 1      AS DAY_CNT     -- 기본값 현재년월 (조건 년월) 
+                                         FROM   DUAL
+                                       ) XCC
+                                  WHERE XCC.DAY_CNT > 0
+                                  CONNECT BY LEVEL <= XCC.DAY_CNT
+                                ) ZCC
+                              , HXT_HOLIDAY_DAYS HHD
+                           WHERE 1=1
+                           AND   ZCC.WORK_DATE = HHD.HOLIDAY_DATE(+)
+                         ) CALENDAR
+                       , HJSPAY_CALENDAR     ATT
+            WHERE 1=1
+            AND   CALENDAR.WORK_DATE = ATT.CALENDAR_DAY(+)
+            AND   ATT.PERSON_ID(+)   = #{PERSON_ID}     /* 로그인 PERSON ID 7156 */
+            ORDER BY CALENDAR.WORK_DATE
+            ) DEF
+    ]]>
+  </select>
+
+
+  <!-- 중복 확인 -->
+   <select id="selectDuplicateChk" parameterType="map" resultType="string">
+    /* smh.pay.dao.pay40130Dao.selectDuplicateChk */
+    SELECT    'Y'
+      FROM    HJSPAY_CALENDAR
+     WHERE    HJSPAY_CALENDAR_SEQ = #{HJSPAY_CALENDAR_SEQ} /*PK 일련번호*/
+       AND    OBJECT_VERSION_NUMBER = #{OBJECT_VERSION_NUMBER} 
+  </select>	
+
+  <!-- 출근지연항목 체크 -->
+  <select id="selectAttandanceDelay" parameterType="map" resultType="hashmap">
+    /* smh.pay.dao.pay40130Dao.selectAttandanceDelay */
+     SELECT   TIME_NORMAL_START,
+              TIME_NORMAL_FINISH,
+              NVL(WORK_AT_HOME, 'N') AS WORK_AT_HOME
+       FROM   PER_ALL_ASSIGNMENTS_F PAAF,
+      	      PER_ALL_PEOPLE_F PAPF
+      WHERE   TRUNC(SYSDATE) BETWEEN PAAF.EFFECTIVE_START_DATE 
+        AND   PAAF.EFFECTIVE_END_DATE
+        AND   TRUNC(SYSDATE) BETWEEN PAPF.EFFECTIVE_START_DATE
+        AND   PAPF.EFFECTIVE_END_DATE
+        AND   PAPF.PERSON_ID = PAAF.PERSON_ID
+        AND   PAAF.PRIMARY_FLAG = 'Y'
+        AND   PAAF.ASSIGNMENT_TYPE = 'E'
+        AND   PAPF.PERSON_ID = #{PERSON_ID} -- 로그인 PERSON_ID
+  </select>
+
+  <!-- 출근지연 여부판단을 위해 실제출근시간  시스템출근시간 -->
+  <select id="selectAttandanceDelayCheck" parameterType="map" resultType="Integer">
+    /* smh.pay.dao.pay40130Dao.selectAttandanceDelayCheck */
+    SELECT    TO_NUMBER(SUBSTR(#{ATTENDANCE_TIME}, 0, 2) || SUBSTR(#{ATTENDANCE_TIME}, 4, 2))
+              - TO_NUMBER(SUBSTR(#{TIME_NORMAL_START}, 0, 2) ||
+              SUBSTR(#{TIME_NORMAL_START}, 4, 2)+5)
+        FROM    DUAL
+  </select>
+  
+  <!--로그인ID로 ERP Person_Id 가져오기 -->
+  <select id="selectErpPersonId" parameterType="map" resultType="String">
+    /* smh.pay.dao.pay40130Dao.selectErpPersonId */
+    SELECT HJS_HR_COMMON_PKG.GET_PERSON_ID(#{SESSION_USER_ID}) AS PERSON_ID
+      FROM DUAL
+  </select>  
+  
+  <!-- 출근현황 등록 -->
+  <insert id="insertCalendarList" parameterType="map">
+    /*smh.pay.dao.PAY40130Dao.insertCalendarList*/
+    <selectKey keyProperty="HJSHR_CERTIFICATION_SEQ"
+      resultType="int" order="BEFORE">
+      select HJSHR_CERTIFICATION_SEQ.NEXTVAL FROM DUAL
+    </selectKey>
+    INSERT INTO HJSPAY_CALENDAR
+    (
+			    HJSPAY_CALENDAR_SEQ 		/*PK*/
+			    ,PERSON_ID 					/*PERSON_ID*/
+			    ,CALENDAR_DAY 				/*근태일자*/
+			    ,ATTENDANCE_TIME 			/*출근시간*/
+			    ,ATTENDANCE_DELAY 			/*출근지연*/
+			    ,LATE_YN 					/*지각여부*/
+			    ,CALENDAR_TYPE 				/*근태유형*/
+			    ,COMMENTS 					/**/
+			    ,ATTRIBUTE1 				/*구분자*/
+			    ,ATTRIBUTE2 				/*비고*/
+			    ,ATTRIBUTE3 				/**/
+			    ,ATTRIBUTE4 				/**/
+			    ,ATTRIBUTE5 				/**/
+			    ,ATTRIBUTE6 				/**/
+			    ,ATTRIBUTE7 				/**/
+			    ,ATTRIBUTE8 				/**/
+			    ,ATTRIBUTE9 				/**/
+			    ,ATTRIBUTE10 				/**/
+			    ,ATTRIBUTE11 				/**/
+			    ,ATTRIBUTE12 				/**/
+			    ,ATTRIBUTE13 				/**/
+			    ,ATTRIBUTE14 				/**/
+			    ,ATTRIBUTE15 				/**/
+			    ,ATTRIBUTE16 				/**/
+			    ,CREATED_BY 				/*자료생성자*/
+			    ,CREATION_DATE 				/*자료생성일*/
+			    ,LAST_UPDATED_BY 			/*최종수정자*/
+			    ,LAST_UPDATE_DATE 			/*최종수정일*/
+			    ,LAST_UPDATE_LOGIN 			/*로그인유저*/
+			    ,OBJECT_VERSION_NUMBER 		/*버전관리*/
+			    ,CLOSING_HOUR 				/*퇴근시간*/
+			    
+			    ) values(
+					    #{HJSHR_CERTIFICATION_SEQ} 								/*PK*/
+					    ,#{PERSON_ID} 											/*PERSON_ID*/
+					    ,#{WORK_DATE} 											/*근태일자*/
+					    ,SYSDATE 												/*출근시간*/
+					    ,#{ATTENDANCE_DELAY} 									/*출근지연*/
+					    ,#{LATE_YN} 											/*지각여부*/
+					    ,#{CALENDAR_TYPE} 										/*근태유형*/
+					    ,NULL 													/**/
+					    ,'S' 													/*구분자*/
+					    ,NULL 													/*비고*/
+					    ,#{ATTRIBUTE3} 											/**/
+					    ,#{ATTRIBUTE4} 											/**/
+					    ,#{ATTRIBUTE5} 											/**/
+					    ,#{ATTRIBUTE6}											/**/
+					    ,#{ATTRIBUTE7} 											/**/
+					    ,#{ATTRIBUTE8} 											/**/
+					    ,#{ATTRIBUTE9} 											/**/
+					    ,#{ATTRIBUTE10} 										/**/
+					    ,#{ATTRIBUTE11} 										/**/
+					    ,#{ATTRIBUTE12} 										/**/
+					    ,#{ATTRIBUTE13} 										/**/
+					    ,#{ATTRIBUTE14} 										/**/
+					    ,#{ATTRIBUTE15} 										/**/
+					    ,#{ATTRIBUTE16} 										/**/
+					    ,#{PERSONID} 											/*자료생성자*/
+					    ,SYSDATE		 										/*자료생성일*/
+					    ,#{PERSONID}	     									/*최종수정자*/
+					    ,SYSDATE			 									/*최종수정일*/
+					    ,#{PERSONID} 											/*로그인유저*/
+					    ,1 														/*버전관리*/
+					    ,#{CLOSING_HOUR} 										/*퇴근시간*/
+			
+			    )
+  </insert>
+
+
+
+
+  <!-- 출근현황 비고 업데이트 -->
+  <update id="updateCalendarList" parameterType="map">
+    /* smh.pay.dao.pay40130Dao.updateCalendarList */
+    UPDATE 			HJSPAY_CALENDAR
+       SET 			ATTRIBUTE2 = #{COMMENTS}
+    				,LAST_UPDATE_DATE = SYSDATE
+				    ,LAST_UPDATED_BY = #{PERSONID}
+				    ,OBJECT_VERSION_NUMBER = #{OBJECT_VERSION_NUMBER} + 1
+     WHERE			HJSPAY_CALENDAR_SEQ = #{HJSPAY_CALENDAR_SEQ} /*PK 일련번호*/
+  </update>
+
+
+
+  <!--공휴일 삭제 -->
+  <delete id="deleteCalendarList" parameterType="map">
+    /* smh.hra.dao.HRA30210MDao.deleteCalendarList */
+    DELETE
+      FROM  HJSPAY_CALENDAR HC
+     WHERE  HC.HJSPAY_CALENDAR_SEQ = #{HJSPAY_CALENDAR_SEQ}
+       AND  HC.CALENDAR_TYPE IN ('110' , '130')
+       AND  HC.CALENDAR_DAY IN ( SELECT HHD.HOLIDAY_DATE
+      FROM  HXT_HOLIDAY_DAYS HHD )
+  </delete>
+
+
+</mapper>

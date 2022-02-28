@@ -1,0 +1,400 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM07500Dao">
+      
+    
+    	<!--
+			설		명	: 포장라벨출력(2블럭) - Line List  조회
+			생	성	자	: 김진현 
+			생	성	일	: 2020-04-09 
+			수  정   이  력	:
+		-->
+		<select id="selectPackLineList" parameterType="map" resultType="hashmap">	
+		
+			SELECT  /*selectPackLineList - 포장실적등록 (2블럭 Line List 조회)*/
+					'0' AS CHK
+					, D.ENTERPRISEID
+					, D.PLANTID    				AS SITE 
+					, D.PACKINGHDRID        -- 헤더
+					, D.PACKINGDTLID        -- seq
+					, D.PACKHDRNO           AS PACKLINE-- PACKLINE
+					, D.BOXLINENO           -- 소포장박스넘버(3~4 블럭)
+					, D.BOXSEQ              -- 소포장박스시퀀스(포장내)
+					, D.X_OUT               AS X_OUT -- X-OUT
+					, D.CARD_QTY            AS CARD -- 카드수량
+					, D.GOOD_QTY            AS GOODQTY -- 양품수량
+					, D.REJECT_QTY          AS DEFECTQTY -- 블량수량
+					, D.LOTID               -- lot id (3~4블럭)
+					, D.DC                  -- 주차 (3~4블럭)
+					, D.PRINT_COUNT         -- 내부라벨인쇄횟수
+					, D.PRINT_DATE          -- 내부라벨인쇄일자
+					, D.PRINT_USER          -- 내부라벨인쇄자
+					, D.BARCODENO           -- 바코드넘버
+					, D.ATTRIBUTE1
+					, D.ATTRIBUTE2
+					, D.ATTRIBUTE3
+					, D.ATTRIBUTE4
+					, D.ATTRIBUTE5
+					, D.ATTRIBUTE6
+					, D.ATTRIBUTE7
+					, D.ATTRIBUTE8
+					, D.ATTRIBUTE9
+					, D.ATTRIBUTE10					
+					, D.CREATER 	AS CREATER
+					, D.MODIFIER	AS MODIFIER					
+					,TO_CHAR(D.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+					,TO_CHAR(D.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME	
+					
+					, (
+                            SELECT SUM(DT.GOOD_QTY) AS SUM_QTY
+                              FROM PCM_PACKING_DTL DT
+                              WHERE 1 = 1
+                                AND DT.ENTERPRISEID   = D.ENTERPRISEID
+                                AND DT.PLANTID        = D.PLANTID
+                                AND DT.PACKINGHDRID   = D.PACKINGHDRID
+                             GROUP BY DT.ENTERPRISEID, DT.PLANTID, DT.PACKINGHDRID
+                    ) AS SUM_QTY            -- 21.04.12 추가(소포장바코드 생성시 총 양품수량 필요)
+					
+					-- (21.06.08) LOT 주차 추가
+					, LOTWEEK					
+			  FROM PCM_PACKING_DTL D
+			  LEFT   OUTER JOIN CMD_USERS U1
+				ON     D.CREATER = U1.USER_ID
+				LEFT   OUTER JOIN CMD_USERS U2
+				ON     D.MODIFIER = U2.USER_ID
+			 WHERE 1 = 1
+				<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">
+					AND D.ENTERPRISEID   = #{ENTERPRISEID}
+				</if>			
+				<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString()) ">
+					AND D.PLANTID        = #{PLANTID}
+				</if>				
+				<if test="PACKINGHDRID != null and PACKINGHDRID !='' and !(PACKINGHDRID eq '*'.toString()) ">
+					AND D.PACKINGHDRID     = #{PACKINGHDRID}
+				</if>				
+			ORDER BY PACKINGDTLID, PACKHDRNO
+		</select>
+		
+		
+		<!--
+					설		명	: 포장실적등록 - Main조회(2블럭)
+					생	성	자	: 김진현 
+					생	성	일	: 2020-04-01
+					수  정   이  력	:
+				-->
+				<select id="selectPackLabelMain2BList" parameterType="map" resultType="hashmap">
+
+				-- 메인에 품목 코드 있으면 연결 가능.. 
+                WITH ITEM AS (
+                
+                -- 양산에 따른 품목 코드
+				SELECT  /*selectPackLabelMain2BList - 포장실적등록 - Main조회 (2블럭)*/
+						IM.ITEMID       -- 품목코드 
+				FROM BAS_ITEMMASTER IM 
+				LEFT JOIN BAS_MASTERDATACLASS MDC  ON IM.MASTERDATACLASSID = MDC.MASTERDATACLASSID
+				                                  AND IM.ENTERPRISEID = MDC.ENTERPRISEID
+				LEFT JOIN BAS_PRODUCTITEMSPEC PIS  ON IM.ITEMID = PIS.ITEMID
+				                                  AND IM.ITEMVERSION = PIS.ITEMVERSION
+				LEFT JOIN BAS_CUSTOMER        CT   ON  PIS.ENTERPRISEID = CT.ENTERPRISEID
+				   							      AND PIS.CUSTOMERID = CT.CUSTOMERID
+			    WHERE   1 = 1
+			      AND   IM.VALIDSTATE = 'Valid'	 
+                
+			    <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+					AND	IM.ENTERPRISEID = #{ENTERPRISEID}
+				</if>
+				
+				<if test="ITEMID != null and ITEMID !='' and !(ITEMID eq '*'.toString()) ">		
+					AND	UPPER(IM.ITEMID) LIKE  '%' || UPPER(#{ITEMID})|| '%'
+				</if>
+				<if test="ITEMNAME != null and ITEMNAME !='' and !(ITEMNAME eq '*'.toString()) ">				                
+					AND	UPPER(IM.ITEMNAME) LIKE  '%' || UPPER(#{ITEMNAME})|| '%'
+				</if>
+				<if test="PRODTYPE != null and PRODTYPE !='' and !(PRODTYPE eq '*'.toString()) ">		                
+					AND	PIS.PRODUCTIONTYPE =  #{PRODTYPE}	-- 품목구분
+				</if>
+				
+			    GROUP BY IM.ITEMID,IM.ITEMNAME,MDC.MASTERDATACLASSNAME, IM.UOMDEFID
+			    		, IM.ITEMVERSION		-- 포장사양관리에서 사용
+                )
+                
+                
+                -- 수량 정보 
+                , LINE_QTY AS (
+                        SELECT    D.ENTERPRISEID
+	                                , D.PLANTID     
+	                                , D.PACKINGHDRID        -- 헤더
+	                                , SUM(D.GOOD_QTY)            AS GOODQTY -- 양품수량
+	                                , SUM(D.REJECT_QTY)          AS DEFECTQTY -- 블량수량
+	                                , SUM(D.CARD_QTY)            AS CARDQTY
+                          FROM PCM_PACKING_DTL D
+                         WHERE 1 = 1
+                           <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+								AND D.ENTERPRISEID   = #{ENTERPRISEID}
+                          </if>
+                          <if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())">
+							 	AND D.PLANTID   = #{PLANTID}
+						  </if>
+                          GROUP BY ENTERPRISEID, PLANTID, PACKINGHDRID
+                )
+                
+                -- (인계 연동 수정가능 여부 확인) 21.05.22 
+                , CHK_FLAG  AS (
+                    
+                     SELECT ENTERPRISEID
+		                      , PLANTID
+		                      , PACKINGHDRID
+		                      , MIN(MODIFI_FLAG) AS MODIFI_FLAG
+                      FROM (                      
+		                    SELECT	A.ENTERPRISEID
+		                          , A.PLANTID
+		                          , A.PACKINGHDRID
+		                          , A.LOTID
+		                          , (CASE WHEN B.LOTID IS NULL 
+		                                 THEN 'Y'               			-- 인계된 내용 없으면 수정 가능
+		                                 ELSE 'N'
+		                                 END
+		                             ) AS MODIFI_FLAG    
+		                      FROM PCM_PACKING_DTL  A          -- (3,BOE 블럭 LOT 정보)
+		                      LEFT JOIN PCM_BOXPACKING B        -- 인계된 LOT 정보 확인
+		                      ON A.LOTID = B.LOTID
+		                      WHERE 1 = 1
+		                       		<if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+										AND A.ENTERPRISEID   	= #{ENTERPRISEID}
+		                          	</if>
+		                          	<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())">
+									 	AND A.PLANTID   			= #{PLANTID}
+								  	</if>
+								  		AND A.LOTID IS NOT NULL
+						)
+                    	GROUP BY ENTERPRISEID, PLANTID, PACKINGHDRID	
+                    			  	
+                )
+             
+                
+               SELECT '0'                   AS CHK
+                        , M.ENTERPRISEID	        --회사 ID
+                        , M.PLANTID	            AS SITE--	Site ID
+                        , M.PACKINGHDRID	
+                        , M.CUSTOMERID	        AS COMP--	고객사 ID
+                        
+                        
+                       , 	CASE WHEN CUSTOMERID = 'Common_1_*' OR CUSTOMERID = 'Common_2_*' OR CUSTOMERID = 'Boe_*'
+             
+							             THEN 'Sample'
+							             ELSE
+							            (
+							                SELECT CUSTOMERNM
+							                  FROM BAS_PACKAGEPRODUCT_MST
+							                 WHERE 1 = 1
+							                   AND ENTERPRISEID = M.ENTERPRISEID
+							                   --AND PLANTID      = M.PLANTID 			-- (21.06.05) 사이트 직접 선택 가능으로 변경 고객사 정보 PLANTID 정보 우선 주석 처리
+							                   AND CUSTOMERID   = M.CUSTOMERID
+							                   AND DECODE( VALIDSTATE, 1, 'Valid', 'Invalid') = 'Valid'
+							            )                    
+							            END
+							            AS COMP_NAME  -- 고객사명
+								
+								
+                        , PRODUCTDEFID	        AS PRODUCTDEFID --	제품 정의 ID
+                        , PRODUCTDEFVERSION	    --	제품 정의 Ver   
+                        
+                        , PRODUCTDEFID||
+                         (
+                            CASE WHEN NVL(PRODUCTDEFVERSION,' ') = ' ' 
+                                 THEN ''
+                                 ELSE PRODUCTDEFVERSION
+                                 END
+                         ) AS PRODUCTDEFNM      -- 추가(id || 버전)
+                        
+                                               
+                        , CUSTOMERMODELID	    --	고객모델ID                              
+                        , CUSTOMER_ITEM_NAME    AS CUSTOMERMODELNM --	고객모델명       
+                        , CUSTOMERPN                 AS CUSTOMERPN       -- 고객PN (테이블 필요)   -- [생성 필요]
+                        , CUSTOMERPRODNAME      AS CUSTOMERPRODNAME  -- 품목명              -- [생성 필요] 21.04.16 생성 
+                        
+                        , TO_CHAR(PACKINGDATE, 'YYYYMMDD')		    AS PACK_DATE--	포장일자
+                        , BOXNO	                AS BOXNO--	대포장박스넘버
+                        , BOXSEQ		    --	대포장박스시퀀스 (Why)
+                        , MANUFACTUREDATE	--	제조일자 (Why)
+                        , PONO	        AS PONO --	PO넘버
+                        , DNo	        AS DNO  --	딜리버리넘버
+                        , INVNO	        AS INVNO    --	인보이스넘버
+                        , BARCODENO	    --	바코드넘버
+                        , DC	        AS DC   --주차
+                        , PACKHDRNO	    AS PACKNO --PackNo
+                        , ASN	        AS ASN  --	사전출하명세
+                        , CUSTOMERREV	AS REV --	고객Rev
+                        , PACKING_NAME	AS PACKING_ID   --	포장작업자
+                        , INSPECTOR     AS INSPECTOR      -- 포장 검사자 / 명 
+                        , REMARK            AS REMARK           -- 비고               -- [생성 필요]  [21.04.27 생성]
+                        , COALESCE(U3.USER_NM, M.PACKING_NAME)  AS PACKING_NAME   -- 포장작업자명
+                        
+                        , COALESCE(U4.USER_NM, M.INSPECTOR)    AS  INPNAME   -- 포장작업자명
+                        
+                        , PRINT_COUNT   --	라벨인쇄횟수
+                        , PRINT_DATE	--	라벨인쇄일자
+                        , PRINT_USER	--	라벨인쇄작업자
+                        
+                        , ATTRIBUTE1
+                        , ATTRIBUTE2
+                        , ATTRIBUTE3
+                        , ATTRIBUTE4
+                        , ATTRIBUTE5
+                        , ATTRIBUTE6
+                        , ATTRIBUTE7
+                        , ATTRIBUTE8
+                        , ATTRIBUTE9
+                        , ATTRIBUTE10
+                        /*
+                        , SEQ_NUM1 AS GOODQTY
+                        , SEQ_NUM2 AS DEFECTQTY
+                        , SEQ_NUM3 AS CARDQTY
+                        */
+                        , NVL(Q.GOODQTY,0)     		AS GOODQTY
+                        , NVL(Q.DEFECTQTY,0)  		AS DEFECTQTY
+                        , NVL(Q.CARDQTY,0)     		AS CARDQTY
+                        
+                        , SEQ_NUM4 AS SUMPCS			-- 합수
+                        /*
+                        ,COALESCE(U1.USER_NM, M.CREATER) AS CREATER
+                        ,COALESCE(U2.USER_NM, M.MODIFIER) AS MODIFIER
+                        */
+                        , M.CREATER 	AS CREATER
+                        , M.MODIFIER 	AS MODIFIER
+                        
+                        ,TO_CHAR(M.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+                        ,TO_CHAR(M.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+                        
+                        , ''  AS LOTS				-- 임시 lot정보들 담을곳
+                        , M.COMPUTERYN     AS COMPUTERYN -- 무전산여부(Y/N) 추가
+                        
+                        , M.CUSTOMERCOMPANYID     AS CUSTOMERCOMPANYID 			-- 고객 업체 코드 21.04.14추가
+                        
+                        , C.MODIFI_FLAG                     											-- 포장인계 된 LOT 확인 수정 가능 여부 판단(21.05.22)
+                        
+				 FROM PCM_PACKING_HDR M   -- 대포장 테이블
+                      LEFT   OUTER JOIN CMD_USERS U1
+                        ON     M.CREATER = U1.USER_ID
+                      LEFT   OUTER JOIN CMD_USERS U2
+                        ON     M.MODIFIER = U2.USER_ID
+                      LEFT   OUTER JOIN CMD_USERS U3
+                        ON     M.PACKING_NAME = U3.USER_ID
+                      LEFT   OUTER JOIN CMD_USERS U4
+                        ON     M.INSPECTOR = U4.USER_ID   
+                        
+                     -- 수량 정보 
+                      LEFT   OUTER JOIN LINE_QTY Q
+                        ON     M.PACKINGHDRID = Q.PACKINGHDRID
+                        AND      M.PLANTID  = Q.PLANTID       -- (21.06.05)  사이트 정보 추가
+                        
+                     -- 인계 LOT 체크 수정 가능 여부 판단(21.05.22)
+                      LEFT  OUTER JOIN CHK_FLAG  C
+                        ON     M.PACKINGHDRID = C.PACKINGHDRID      
+                        AND      M.PLANTID  = C.PLANTID     -- (21.06.05)  사이트 정보 추가
+                      
+                      
+                      <if test="(ITEMID != null and ITEMID !='' and !(ITEMID eq '*'.toString())) or (PRODTYPE != null and PRODTYPE !='' and !(PRODTYPE eq '*'.toString()) )">
+							-- 품목코드 조건
+	                      INNER  JOIN ITEM I
+	                        ON     M.PRODUCTDEFID = I.ITEMID
+						</if> 
+                        
+                        WHERE 1 = 1
+                          
+                        <if test="LOTID != null and LOTID !='' and !(LOTID eq '*'.toString())">
+                        -- LOT (이미 입력된 lot 조회) 
+                         AND M.PACKINGHDRID   IN (
+                          		SELECT PACKINGHDRID
+								  --FROM PCM_PACKING_LOT PL
+								  FROM PCM_PACKING_DTL  DT
+								 WHERE 1 = 1
+								   <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+										AND	DT.ENTERPRISEID = #{ENTERPRISEID}
+									</if>
+									<if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())">
+										AND DT.PLANTID = #{PLANTID}
+									</if>	
+									<if test="LOTID != null and LOTID !='' and !(LOTID eq '*'.toString())">
+					                   AND	DT.LOTID  LIKE '%' || UPPER(#{LOTID})|| '%'      
+					                 </if>
+                          )
+                           </if>
+                          
+						   -- 날짜
+                          AND TO_CHAR(M.PACKINGDATE, 'YYYYMMDD') BETWEEN #{P_PERIOD_PERIODFR} AND #{P_PERIOD_PERIODTO}      -- 포장일자
+                         
+                         <if test="ENTERPRISEID != null and ENTERPRISEID !='' and !(ENTERPRISEID eq '*'.toString()) ">				                
+								AND	M.ENTERPRISEID = #{ENTERPRISEID}
+						</if>
+                         
+                         <if test="CUSTOMERPN != null and CUSTOMERPN !='' and !(CUSTOMERPN eq '*'.toString())">
+						  -- 고객 파트명(컬럽 없음)
+						  </if>
+						  <if test="CUSTOMERMODELNM != null and CUSTOMERMODELNM !='' and !(CUSTOMERMODELNM eq '*'.toString())">
+							-- 고객모델명
+							AND CUSTOMER_ITEM_NAME = #{CUSTOMERMODELNM}
+						  </if>
+						  
+						  <if test="INVNO != null and INVNO !='' and !(INVNO eq '*'.toString())">
+							-- INVNO
+							AND INVNO = #{INVNO}
+						  </if>
+						  
+						  <if test="INVNOTYPE != null and INVNOTYPE !='' and (INVNOTYPE eq 'write'.toString())">
+							-- INVNOTYPE
+							AND INVNO IS NOT NULL
+						  </if>
+						  <if test="INVNOTYPE != null and INVNOTYPE !='' and (INVNOTYPE eq 'Unwritten'.toString())">
+							-- INVNOTYPE
+							AND INVNO IS NULL
+						  </if>
+						  <if test="BARCODENO != null and BARCODENO !='' and !(BARCODENO eq '*'.toString())">
+							-- BARCODENO
+							AND BARCODENO LIKE  '%' || UPPER(#{BARCODENO})|| '%' 
+						  </if>
+						  <if test="DC != null and DC !='' and !(DC eq '*'.toString())">
+							-- DC
+							AND DC = #{DC}
+						  </if>	
+						  <if test="BOXNO != null and BOXNO !='' and !(BOXNO eq '*'.toString())">
+							-- BOXNO
+							AND BOXNO = #{BOXNO}
+						  </if>	
+						  
+						  <if test="DNO != null and DNO !='' and !(DNO eq '*'.toString())">
+							-- DNO
+							AND DNo = #{DNO}
+						  </if>	
+						  <if test="DNOTYPE != null and DNOTYPE !='' and (DNOTYPE eq 'write'.toString())">
+							-- DNOTYPE
+							AND DNo IS NOT NULL
+						  </if>
+						  <if test="DNOTYPE != null and INVNOTYPE !='' and (DNOTYPE eq 'Unwritten'.toString())">
+							-- DNOTYPE
+							AND DNo IS NULL
+						  </if>
+						  <if test="PLANTID != null and PLANTID !='' and !(PLANTID eq '*'.toString())">
+							-- PLANTID
+							AND M.PLANTID = #{PLANTID}
+						  </if>	
+						  
+						  <if test="CUSTOMERID != null and CUSTOMERID !='' ">
+							-- CUSTOMERID
+							AND M.CUSTOMERID = #{CUSTOMERID}
+						  </if>
+						  
+						  ORDER BY ENTERPRISEID, SITE, BOXNO DESC , PACKINGHDRID DESC
+			</select>
+	
+	
+	
+	
+	
+				
+	
+	 
+
+</mapper>

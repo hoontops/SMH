@@ -1,0 +1,422 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM00800Dao">
+
+
+    <!--  -->
+    <select id="selectProductVersion" parameterType="map" resultType="hashmap">
+    		SELECT 
+					PRODUCTDEFVERSION        AS PRODUCTDEFVERSIONCODE
+				,	PRODUCTDEFVERSION        AS PRODUCTDEFVERSIONNAME
+			FROM 	BAS_PRODUCTDEFINITION 
+			WHERE 	1=1
+			AND     PRODUCTDEFID = #{PRODUCTDEFID}
+		<if test="ENTERPRISEID != null and ENTERPRISEID !=''"> 
+			AND 	ENTERPRISEID = #{ENTERPRISEID}
+		</if>
+    </select>
+
+	<select id="selectInputResultByInputDay" parameterType="map" resultType="hashmap">
+		/* SelectInputResultByInputDay 10001 */
+			SELECT     INPUTDAY
+						, TO_CHAR(TO_TIMESTAMP(INPUTDAY,'YYYY-MM-DD'),'d') AS WEEK
+						,  INPUTPCSQTY
+						, INPUTPNLQTY
+						, INPUTMMQTY
+						, INPUTPRICE
+						, SUM(INPUTPCSQTY)OVER (ORDER BY INPUTDAY )  STACKPCSQTY
+						, SUM(INPUTPNLQTY)OVER (ORDER BY INPUTDAY )  STACKPNLQTY
+						, SUM(INPUTMMQTY)OVER (ORDER BY INPUTDAY )  STACKMMQTY
+						, SUM(INPUTPRICE)OVER (ORDER BY INPUTDAY )  STACKPRICE
+				FROM 
+				(
+					SELECT INPUTDAY
+						,  SUM(InputQty)    AS INPUTPCSQTY
+						,  SUM(pnlinputqty) AS INPUTPNLQTY
+						,  SUM(inputmm)     AS INPUTMMQTY
+						,  SUM(inputprice)  AS INPUTPRICE	
+					FROM
+					(
+						SELECT   INPUTDAY
+						      ,  INPUTQTY
+						      ,  PNLINPUTQTY
+						      ,  INPUTMM
+						      ,  INPUTPRICE
+						FROM
+						(
+							SELECT  TO_CHAR (DD.DDAY, 'YYYY-MM-DD') AS INPUTDAY
+								--TO_CHAR(PCM_PRODDATE_FN(L.PLANTID, L.LOTSTARTDATE),'YYYY-MM-DD')			AS INPUTDAY      --수정  
+								--TO_CHAR(L.LOTSTARTDATE,'YYYY-MM-DD')			AS INPUTDAY
+							      ,  L.LOTINPUTQTY 									AS INPUTQTY
+							      ,  L.LOTINPUTQTY / L.PANELPERQTY 			  		AS PNLINPUTQTY
+							      ,  ROUND(L.LOTINPUTQTY / PD.PCSMM,2) 				AS INPUTMM
+							      ,  NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE , UP.CURRENCY_CODE, L.LOTINPUTQTY * UP.UNITPRICE),0) AS INPUTPRICE --1차는 계획 환율만 
+							FROM MFM_PRODUCTIONORDER PO
+							INNER JOIN PCM_LOT                L ON  PO.PRODUCTDEFID =L.PRODUCTDEFID
+							                                   AND PO.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+							                                   AND PO.PRODUCTIONORDERID = L.PRODUCTIONORDERID
+							                                   AND PO.LINENO = L.LINENO
+							INNER JOIN CMD_DAY DD     ON  L.LOTSTARTDATE BETWEEN DD.PROD_START_DT AND DD.PROD_END_DT 
+													AND L.PLANTID = DD.PLANTID 
+							INNER JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+							                                   AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+							LEFT JOIN BAS_UNITPRICEFORMES    UP ON UP.PRODUCTDEFID = PO.PRODUCTDEFID 
+															   AND UP.PRODUCTDEFVERSION = PO.PRODUCTDEFVERSION 
+															   --AND DD.DDAY  BETWEEN APPLY_START_DATE
+															   AND SYSDATE  BETWEEN APPLY_START_DATE 
+															   				AND NVL(APPLY_END_DATE,TO_TIMESTAMP('9999-12-31 23:59:59','yyyy-MM-dd HH24:MI:SS'))	
+							WHERE 1=1
+							AND L.LOTSTATE <![CDATA[<>]]> 'Created'
+							AND NVL(L.ISDEFECTED ,'N') <![CDATA[<>]]> 'Y'  
+							AND (
+									( NVL(PD.RTRSHT,'SHT')  =  'SHT' AND NVL(L.ISREPRESENTROLLLOT,'N') = 'N' )
+									OR
+									( NVL(PD.RTRSHT,'SHT')  =  'RTR' AND NVL(L.ISREPRESENTROLLLOT,'N') = 'Y' )
+								)
+							AND L.LOTID = L.PARENTLOTID		
+							AND NVL(L.ISOEM,'N') = 'N'
+							AND L.LOTSTARTDATE 	 BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+												AND	 TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')
+                  			AND L.LOTINPUTQTY IS NOT NULL
+							AND L.PLANTID = #{PLANTID}
+						<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+							AND L.PRODUCTDEFID = #{PRODUCTDEFID}
+						</if>
+						<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+							AND L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+						</if>
+						<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+							AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+						</if>
+						<if test="LOTINPUTTYPE != null and LOTINPUTTYPE !=''"> 
+							AND NVL(L.LOTINPUTTYPE, 'Normal') =  #{LOTINPUTTYPE} --투입구분
+						</if>
+						<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+							AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE} -- 양산구분
+						</if>
+						<if test="LOTID != null and LOTID !=''"> 
+							AND L.LOTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') ) --LOTID
+						</if>
+						<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+							AND L.PROCESSSEGMENTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID},',') ) --공정
+						</if>
+						<if test="CUSTOMERID != null and CUSTOMERID !=''"> 
+							AND PO.CUSTOMERID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{CUSTOMERID},',') ) --고객
+						</if>
+						)X
+					)Y
+					GROUP BY INPUTDAY
+				)Z
+				ORDER BY INPUTDAY DESC 
+	</select>
+	
+	<select id="selectInputResultbyProduct" parameterType="map" resultType="hashmap">
+		/* SelectInputResultbyProduct 10001 */
+		SELECT INPUTDAY
+				    ,  SPECAPPROVALDATE
+				    ,  SALESORDERDATE
+				    ,  LOTCREATEDTIME
+				    ,  MAX(INPUTTIME) INPUTTIME
+				    ,  MAX(INPUTLT)   INPUTLT
+				    ,  SALESORDERID
+				    ,  LINENO
+				    ,  CUSTOMERNAME
+				    ,  LOTTYPENAME
+				    ,  LOTINPUTTYPE
+				    ,  PRODUCTDEFID
+				    ,  PRODUCTDEFVERSION
+				    ,  PRODUCTDEFNAME
+				    ,  SUM(INPUTPCSQTY)                     AS INPUTPCSQTY
+				    ,  CEIL(SUM(INPUTPNLQTY))               AS INPUTPNLQTY
+				    ,  ROUND(SUM(INPUTMMQTY),2)     		AS INPUTMMQTY
+				    ,  ROUND(SUM(INPUTPRICE),0)             AS INPUTPRICE
+				    ,  ROUND(SUM(INPUTPRICE_BARE),0)  		AS INPUTPRICE_BARE
+				    ,  ROUND(SUM(INPUTPRICE_SMT),0)  		AS INPUTPRICE_SMT
+				    ,  ROUND(SUM(INPUTPRICE_ETC),0)  		AS INPUTPRICE_ETC
+				FROM
+				( 
+					SELECT   
+					         TO_CHAR(L.LOTSTARTDATE,'YYYY-MM-DD')                             AS INPUTDAY
+					      ,  TO_CHAR(SO.SPECAPPROVALDATE,'YYYY-MM-DD HH24:MI:SS')             AS SPECAPPROVALDATE
+					      ,  TO_CHAR(SO.SALESORDERDATE,'YYYY-MM-DD HH24:MI:SS')               AS SALESORDERDATE
+					      ,  TO_CHAR (NVL(L1.CREATEDTIME, L.CREATEDTIME),'YYYY-MM-DD HH24:MI:SS')  AS LOTCREATEDTIME
+					      ,  TO_CHAR(L.LOTSTARTDATE,'YYYY-MM-DD HH24:MI:SS')                  AS INPUTTIME
+					      ,  TRUNC(L.LOTSTARTDATE) - TRUNC(SO.SALESORDERDATE)                 AS INPUTLT
+					      ,  L.PRODUCTIONORDERID                                              AS SALESORDERID
+					      ,  L.LINENO                                                         AS LINENO
+					      ,  NVL(CM.CUSTOMERNAME,PO.CUSTOMERID)                               AS CUSTOMERNAME
+					      ,  NVL(SD1.DICTIONARYNAME,L.LOTTYPE)                                AS LOTTYPENAME
+					      ,  NVL(SD.DICTIONARYNAME,L.LOTINPUTTYPE)                            AS LOTINPUTTYPE
+					      ,  PD.PRODUCTDEFID
+					      ,  PD.PRODUCTDEFVERSION
+					      ,  PD.PRODUCTDEFNAME
+					      ,  TO_NUMBER(L.LOTINPUTQTY)                                           AS INPUTPCSQTY
+					      ,  CEIL(L.LOTINPUTQTY / L.PANELPERQTY)                                AS INPUTPNLQTY   
+					      ,  ROUND(L.LOTINPUTQTY / PD.PCSMM,2)                                  AS INPUTMMQTY
+					      ,  NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE, UP.CURRENCY_CODE, L.LOTINPUTQTY * UP.UNITPRICE),0) AS INPUTPRICE
+					      ,  NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE, UP.CURRENCY_CODE, L.LOTINPUTQTY * UP.UNITPRICE_BARE),0) AS INPUTPRICE_BARE
+					      ,  NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE, UP.CURRENCY_CODE, L.LOTINPUTQTY * UP.UNITPRICE_SMT),0) AS INPUTPRICE_SMT
+					      ,  NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE, UP.CURRENCY_CODE, L.LOTINPUTQTY * UP.UNITPRICE_ETC),0) AS INPUTPRICE_ETC
+					FROM MFM_PRODUCTIONORDER         PO
+					INNER JOIN PCM_LOT                L ON  PO.PRODUCTDEFID =L.PRODUCTDEFID
+					                                   AND PO.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+					                                   AND PO.PRODUCTIONORDERID = L.PRODUCTIONORDERID
+					                                   AND PO.LINENO = L.LINENO
+					--INNER JOIN CMD_DAY DD     ON  L.LOTSTARTDATE BETWEEN DD.PROD_START_DT AND DD.PROD_END_DT 
+					--							AND L.PLANTID = DD.PLANTID       
+					INNER JOIN BAS_PRODUCTDEFINITION PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+					                                   AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+					LEFT JOIN BAS_UNITPRICEFORMES    UP ON UP.PRODUCTDEFID = PO.PRODUCTDEFID 
+													   AND UP.PRODUCTDEFVERSION = PO.PRODUCTDEFVERSION 
+													   AND L.LOTSTARTDATE BETWEEN APPLY_START_DATE 
+													   			   AND NVL(APPLY_END_DATE,TO_TIMESTAMP('9999-12-31 23:59:59','yyyy-MM-dd HH24:MI:SS'))	
+					INNER JOIN BAS_SALEORDERAPPROVAL SO ON  PO.PRODUCTIONORDERID = SO.SALESORDERID
+					                                   AND PO.LINENO = SO.LINENO
+					                                   AND PO.ENTERPRISEID = SO.ENTERPRISEID
+					                                   AND PO.PLANTID = SO.PLANTID        			                                   
+					LEFT JOIN BAS_CUSTOMER           CM ON  PD.PLANTID = CM.PLANTID
+					                                   AND PD.CUSTOMERID = CM.CUSTOMERID
+					LEFT JOIN CMD_LOOKUP_VALUES      SC ON  L.LOTINPUTTYPE = SC.LOOKUP_CODE     
+					                                   AND SC.LOOKUP_TYPE = 'LotInputType'
+					LEFT JOIN CMD_DICTIONARY         SD ON SC.MEANING = SD.DICTIONARYID
+					                                   AND SD.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}  	
+					LEFT JOIN CMD_LOOKUP_VALUES     SC1 ON  L.LOTTYPE = SC1.LOOKUP_CODE
+					                                   AND SC1.LOOKUP_TYPE = 'ProductionType'
+					LEFT JOIN CMD_DICTIONARY        SD1 ON  SC1.MEANING = SD1.DICTIONARYID
+					                                   AND SD1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}   	
+                	LEFT JOIN PCM_LOTGENEAL           LG ON  L.LOTID  = LG.DESTINATIONLOTID 
+                	                                   AND LG.LOTCREATETYPE   = 'SplitLot'
+                	LEFT JOIN PCM_LOT                 L1 ON LG.ROOTLOTID  = L1.LOTID 						                                    				                                    
+					WHERE 1=1
+					AND L.LOTSTATE <![CDATA[<>]]> 'Created'
+					AND L.LOTCREATEDTYPE <![CDATA[<>]]> 'Return'
+					AND	L.ISDEFECTED  = 'N'  
+					AND (
+							( NVL(PD.RTRSHT,'SHT')  =  'SHT' AND NVL(L.ISREPRESENTROLLLOT,'N') = 'N' )
+							OR
+							( NVL(PD.RTRSHT,'SHT')  =  'RTR' AND NVL(L.ISREPRESENTROLLLOT,'N') = 'Y' )
+						)
+					AND L.LOTID = L.PARENTLOTID 
+					AND NVL(L.ISOEM,'N') = 'N'
+					AND L.LOTINPUTQTY  IS NOT NULL
+					AND L.LOTSTARTDATE 	BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+	                  						 AND TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')		 
+			        AND    L.PLANTID = #{PLANTID}
+			        <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+                 		AND L.PRODUCTDEFID = #{PRODUCTDEFID}
+                	</if>
+                	<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+						AND L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+					</if>
+					<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				 	   AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+					</if>
+					<if test="LOTINPUTTYPE != null and LOTINPUTTYPE !=''"> 
+						AND NVL(L.LOTINPUTTYPE, 'Normal') = #{LOTINPUTTYPE} --투입구분
+					</if>
+					<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+						AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE} -- 양산구분
+					</if>
+					<if test="LOTID != null and LOTID !=''"> 
+						AND L.LOTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') ) --LOTID
+					</if>
+					<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+						AND L.PROCESSSEGMENTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID},',') ) --공정
+					</if>
+					<if test="CUSTOMERID != null and CUSTOMERID !=''"> 
+						AND PO.CUSTOMERID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{CUSTOMERID},',') ) --고객
+					</if>
+			     )X
+ 				  GROUP BY INPUTDAY
+					    ,  SPECAPPROVALDATE
+					    ,  SALESORDERDATE
+					    ,  LOTCREATEDTIME
+					    ,  SALESORDERID
+					    ,  LINENO
+					    ,  CUSTOMERNAME
+					    ,  LOTTYPENAME
+					    ,  LOTINPUTTYPE
+					    ,  PRODUCTDEFID
+					    ,  PRODUCTDEFVERSION
+					    ,  PRODUCTDEFNAME			          
+	          	ORDER BY INPUTDAY,PRODUCTDEFID
+	</select>
+
+	<select id="selectInputResultByLot" parameterType="map" resultType="hashmap">
+					SELECT SO.PLANTID --Site
+						, SO.PRODUCTIONTYPE --생산구분
+						, L.LOTINPUTTYPE --투입구분
+						, SA.PRODUCTDEFID --품목코드
+						, SA.PRODUCTDEFVERSION --REV
+						, PD.PRODUCTDEFNAME --품목명
+						, L.LOTID --LOT NO
+						, TO_CHAR(SO.SALESORDERDATE,'YYYY-MM-DD HH24:MI:SS') AS SALESORDERDATE --수주일
+						, SA.SALESORDERID --수주번호
+						, SA.LINENO --라인
+						, SO.CUSTOMERID 
+						, NVL(CM.CUSTOMERNAME,SO.CUSTOMERID) AS CUSTOMERNAME --고객사
+						, CM.CUSTOMERGROUP AS CUSTOMERGROUP --고객그룹
+						, PD.LAYER --LA
+						, PS.PRODUCTTYPE --TYPE
+						, SA.SALESCHARGE --영업담당코드
+						, CU.USER_NM AS SALESCHARGENAME --영업담당
+						--, SA.SPECIFICATIONCHARGE --사양담당코드
+						, PS.SPECIFICATIONMAN AS SPECIFICATIONCHARGE
+						, CU2.USER_NM AS SPECIFICATIONCHARGENAME --사양담당
+						, SO.JOBTYPE --작업
+						, TO_CHAR(L.DUEDATE,'YYYY-MM-DD') AS DELIVERYDATE --납기일
+				<choose>
+		          <when test="PRODUCTDIVISION =='Product'">
+						, PD.PCSPNL 											--합수
+						, PD.PCSMM												--산출수
+						, NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE, UP.CURRENCY_CODE, UP.UNITPRICE),0) AS UNITPRICE --단가
+						, PS.ASSY 
+						, PD.PNLSIZEXAXIS 
+						, PD.PNLSIZEYAXIS 
+						, L.LOTINPUTQTY   	AS PCSQTY	  --L.PCSQTY : 불량 나서 분할 된 양과 상관 없이 실제 투입 수량이 와야함. 
+						, CEIL(L.LOTINPUTQTY / PD.PCSPNL) AS PNL
+						, ROUND(L.LOTINPUTQTY / PD.PCSMM,2) AS M2
+						, NVL(PCM_EXCHANGE_FN(L.PLANTID , SYSDATE, UP.CURRENCY_CODE, L.LOTINPUTQTY * UP.UNITPRICE),0) AS INPUTPRICE --금액
+						, SA.ORDERQTY 											-- 수주 PCS
+						, CEIL(SA.ORDERQTY / PD.PCSPNL) AS ORDERPNL				-- 수주 PNL
+						, ROUND(SA.ORDERQTY / PD.PCSMM,2) 									AS ORDERMMQTY			--수주M2
+				</when>
+		         <otherwise>
+					    , '' AS PCSPNL 											--합수
+						, '' AS PCSMM											--산출수
+						, '' AS UNITPRICE 										--단가
+						, '' AS ASSY 
+						, '' AS PNLSIZEXAXIS 
+						, '' AS PNLSIZEYAXIS 
+						, L.PCSQTY 
+						, CEIL(L.PCSQTY / PD.PCSPNL) AS PNL
+						, '' AS M2
+						, '' AS INPUTPRICE 											--금액
+						, '' AS ORDERQTY 											-- 수주 PCS
+						, '' AS ORDERPNL											-- 수주 PNL
+						, '' AS ORDERMMQTY											-- 수주M2
+				</otherwise>
+	          </choose>
+						, NVL(DIC2.DICTIONARYNAME, AR.AREANAME)            AS STARTAREA     --투입 작업장 명
+						, NVL(DIC1.DICTIONARYNAME, PSG.PROCESSSEGMENTNAME) AS STARTSEGMENT  --투입 공정 명
+						, NVL(DIC2.DICTIONARYNAME, RSC.DESCRIPTION)        AS STARTRESOURCE --투입 자원 명
+						, DECODE(SO.PRODUCTIONTYPE ,'Sample','Y','N') AS ISAMPLE --샘플유무
+						, TO_CHAR(SO.ERP_INPUTTIME, 'YYYY-MM-DD') AS ERP_INPUTTIME --수주입력시간
+						, TO_CHAR(SA.CREATEDTIME,'YYYY-MM-DD') AS CREATEDDATE --수주배분일
+						, TO_CHAR(SA.CREATEDTIME,'HH24:MI:SS') AS CREATEDTIME --수주배분시간
+						, TO_CHAR(SA.SPECAPPROVALDATE,'YYYY-MM-DD') AS SPECAPPROVALDATE --사양결재일
+						, TO_CHAR(SA.SPECAPPROVALDATE,'HH24:MI:SS') AS SPECAPPROVALTIME --결재시간 
+						, TO_CHAR(L.LOTSTARTDATE,'YYYY-MM-DD') AS LOTSTARTDATE --투입일
+						, TO_CHAR(L.LOTSTARTDATE,'HH24:MI:SS') AS LOTSTARTTIME --투입시간
+						, FLOOR(NVL(TRUNC(L.LOTSTARTDATE, 'MI') - TRUNC(SO.ERP_INPUTTIME, 'MI'),0) * 24 * 60) AS LOTSTARTMI -- 투입LT 분
+						, LWR.AREAID            -- 투입 작업장 코드
+						, LWR.PROCESSSEGMENTID  -- 투입 공정 코드
+						, LWR.RESOURCEID        -- 투입 자원 코드
+						, TO_CHAR(DD.DDAY,'YYYY-MM-DD')   AS INPUTDAY
+						FROM MFM_PRODUCTIONORDER PO
+						INNER JOIN PCM_LOT L 
+								ON PO.PRODUCTDEFID =L.PRODUCTDEFID
+								AND PO.PRODUCTDEFVERSION = L.PRODUCTDEFVERSION
+								AND PO.PRODUCTIONORDERID = L.PRODUCTIONORDERID
+								AND PO.LINENO = L.LINENO
+						INNER JOIN CMD_DAY DD   ON  L.LOTSTARTDATE BETWEEN DD.PROD_START_DT AND DD.PROD_END_DT 
+												AND L.PLANTID = DD.PLANTID  
+						INNER JOIN BAS_PRODUCTDEFINITION PD 
+								ON L.PRODUCTDEFID = PD.PRODUCTDEFID
+								AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+						INNER JOIN BAS_PRODUCTITEMSPEC PS 
+								ON PD.PRODUCTDEFID = PS.ITEMID 
+								AND PD.PRODUCTDEFVERSION = PS.ITEMVERSION 
+						INNER JOIN BAS_SALEORDERAPPROVAL SA 
+								ON PO.PRODUCTIONORDERID = SA.SALESORDERID
+								AND PO.LINENO = SA.LINENO
+						INNER JOIN BAS_SALESORDER SO 
+								ON SO.SALESORDERID = SA.SALESORDERID 
+								AND SO.LINENO = SA.ORG_LINENO 
+						LEFT OUTER JOIN BAS_UNITPRICEFORMES UP 
+								ON UP.PRODUCTDEFID = PO.PRODUCTDEFID 
+								AND UP.PRODUCTDEFVERSION = PO.PRODUCTDEFVERSION 
+								AND DD.DDAY BETWEEN APPLY_START_DATE 
+								            AND NVL(APPLY_END_DATE,TO_TIMESTAMP('9999-12-31 23:59:59','yyyy-MM-dd HH24:MI:SS')) 
+						LEFT OUTER JOIN BAS_CUSTOMER CM ON PD.CUSTOMERID = CM.CUSTOMERID
+						LEFT OUTER JOIN CMD_USERS CU ON CU.USER_ID = PS.SALESMAN
+						--LEFT OUTER JOIN CMD_USERS CU ON CU.USER_ID = SA.SALESCHARGE
+						--LEFT OUTER JOIN CMD_USERS CU2 ON CU2.USER_ID = SA.SPECIFICATIONCHARGE
+						LEFT OUTER JOIN CMD_USERS CU2 ON CU2.USER_ID = PS.SPECIFICATIONMAN
+						-- 투입공정 조회
+						INNER JOIN BAS_PROCESSPATH PP 
+								ON L.PROCESSDEFID = PP.PROCESSDEFID 
+								AND L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION 
+								AND PP.PATHTYPE IN ('Start', 'StartEnd')
+						INNER JOIN BAS_PROCESSSEGMENT PSG  
+								ON PP.PROCESSSEGMENTID = PSG.PROCESSSEGMENTID 
+								AND PP.PROCESSSEGMENTVERSION = PSG.PROCESSSEGMENTVERSION 
+						LEFT JOIN CMD_DICTIONARY DIC1
+								ON DIC1.DICTIONARYID = PSG.PROCESSSEGMENTNAME 
+								AND DIC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+						-- 투입공정 작업실적 조회
+						INNER JOIN PCM_LOTWORKRESULT LWR 	
+								ON L.LOTID = LWR.LOTID 
+								AND LWR.USERSEQUENCE = PP.USERSEQUENCE  
+								AND LWR.PROCESSSEGMENTID = PP.PROCESSSEGMENTID 
+								AND LWR.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION 
+								-- AND LWR.RESULTTYPE != 'SKIP'  --시작공정 SKIP , 재작업 안할거라고 하심...by 이동우 
+								AND LWR.WORKCOUNT = 0
+						-- 투입공정 작업장 조ㅚ
+						LEFT JOIN BAS_AREA   AR
+								ON AR.AREAID = LWR.AREAID 
+						LEFT JOIN CMD_DICTIONARY DIC2
+								ON DIC2.DICTIONARYID = AR.AREANAME 
+								AND DIC2.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+						-- 투입공정 자원 조회
+						LEFT JOIN BAS_RESOURCE RSC
+								ON RSC.RESOURCEID = LWR.RESOURCEID
+						LEFT JOIN CMD_DICTIONARY DIC3
+								ON DIC3.DICTIONARYID = RSC.DESCRIPTION 
+								AND DIC3.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+						WHERE 1=1
+						AND L.LOTSTATE  !=  'Created'
+						AND L.LOTCREATEDTYPE  !=  'Return'
+						AND	L.ISDEFECTED  = 'N'  
+						AND (
+							( NVL(PD.RTRSHT,'SHT')  =  'SHT' AND NVL(L.ISREPRESENTROLLLOT,'N') = 'N' )
+							OR
+							( NVL(PD.RTRSHT,'SHT')  =  'RTR' AND NVL(L.ISREPRESENTROLLLOT,'N') = 'Y' )
+						)
+						AND L.LOTID = L.PARENTLOTID
+						AND NVL(L.ISOEM,'N') = 'N'
+						AND L.LOTINPUTQTY  IS NOT NULL 
+					AND L.LOTSTARTDATE 	BETWEEN TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODFR},1,8) || ' 08:30:00','YYYY-MM-DD HH24:MI:SS')
+	                  						 AND TO_TIMESTAMP( SUBSTR(#{PERIOD_PERIODTO},1,8) || ' 08:29:59','YYYY-MM-DD HH24:MI:SS')		
+			        AND L.PLANTID = #{PLANTID}
+			        AND PD.PRODUCTCLASSID = #{PRODUCTDIVISION}
+			        <if test="PRODUCTDEFID != null and PRODUCTDEFID !=''"> 
+                 		AND L.PRODUCTDEFID = #{PRODUCTDEFID}
+                	</if>
+                	<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 
+						AND L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+					</if>
+					<if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''">
+				 	    AND UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PRODUCTDEFNAME} <![CDATA[|| '%']]> )
+					</if>
+					<if test="LOTINPUTTYPE != null and LOTINPUTTYPE !=''"> 
+						AND NVL(L.LOTINPUTTYPE, 'Normal') = #{LOTINPUTTYPE} --투입구분
+					</if>
+					<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''"> 
+						AND PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE} -- 양산구분
+					</if>
+					<if test="LOTID != null and LOTID !=''"> 
+						AND L.LOTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID},',') ) --LOTID
+					</if>
+					<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !=''"> 
+						AND L.PROCESSSEGMENTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PROCESSSEGMENTID},',') ) --공정
+					</if>
+					<if test="CUSTOMERID != null and CUSTOMERID !=''"> 
+						AND PO.CUSTOMERID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{CUSTOMERID},',') ) --고객
+					</if>
+			        
+	</select>
+	
+</mapper>

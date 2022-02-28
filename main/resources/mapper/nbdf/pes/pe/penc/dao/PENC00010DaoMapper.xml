@@ -1,0 +1,425 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nbdf.pes.pe.penc.dao.PENC00010Dao">
+    <!-- 페이징 처리 쿼리 부분 시작 -->
+    <sql id="head">
+        SELECT *
+        FROM ( SELECT
+                    ROWNUM RNUM
+                   ,COUNT(*) OVER() TOT_CNT
+                   ,A.*
+               FROM (SELECT * FROM (
+    </sql>
+
+    <!-- 페이징 처리 쿼리 부분 끝 -->
+    <sql id="bottom">
+        )
+                    ) A
+             )
+        WHERE RNUM BETWEEN (#{PAGE_NUM} -1) * #{PAGE_SIZE} + 1 AND #{PAGE_NUM} * #{PAGE_SIZE}
+    </sql>
+
+    <!-- 권한별 메뉴조회 -->
+    <select id="selectMenuAuthTree" resultType="hashmap">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectMenuAuthTree */
+		SELECT
+		   JOB_MENU_ID as MENU_ID
+		   ,MENU_NM 
+		   ,MENU_RM
+		   ,USE_YN
+		   ,replace(substr(PAGE_URL,instr(PAGE_URL,'::')+2,length(PAGE_URL)),'.xfdl','') as PGM_ID
+		   ,MENU_GRP
+		   ,MENU_SEQ
+		   ,ORDR
+		   ,MENU_LEVEL
+		   ,MENU_TOP
+		   ,PAGE_URL
+		   ,INS_AUTH_YN
+		   ,QRY_AUTH_YN
+		   ,UPD_AUTH_YN
+		   ,DEL_AUTH_YN
+		   ,MENU_AUTH
+		   ,POPUP_YN
+        FROM (
+	        SELECT
+	             D.JOB_MENU_ID
+			     ,decode(#{SESSION_LANGUAGETYPE},'ko-KR',MAX(D.MENU_NM),MAX((select x.dictionaryname from cmd_dictionary x where x.dictionaryid = D.dictionaryid and x.languagetype=#{SESSION_LANGUAGETYPE}))) as MENU_NM
+			     , MAX(D.MENU_RM) AS MENU_RM
+			     , MIN(D.USE_YN) AS USE_YN
+			     , MIN(D.POPUP_YN) AS POPUP_YN
+			     , MAX(TO_CHAR(D.JOB_MENU_ID)) AS MENU_ID
+			     , MAX(TO_CHAR(D.MENU_GRP)) AS MENU_GRP
+			     , MAX(TO_CHAR(D.MENU_SEQ)) AS MENU_SEQ
+			     , MAX(D.MENU_SEQ) AS ORDR
+			     , MAX(TO_CHAR(D.MENU_LVS)) AS MENU_LEVEL
+			     , MAX(TO_CHAR(D.UPPER_MENU)) AS MENU_TOP
+			     , MAX(D.PGE_URL) AS PAGE_URL
+			     , MAX(C.INS_AUTH_YN) AS INS_AUTH_YN
+			     , MAX(C.QRY_AUTH_YN) AS QRY_AUTH_YN
+			     , MAX(C.UPD_AUTH_YN) AS UPD_AUTH_YN
+			     , MAX(C.DEL_AUTH_YN) AS DEL_AUTH_YN
+			     , MAX(REPLACE(REPLACE(NVL(C.INS_AUTH_YN,'N') || NVL(C.QRY_AUTH_YN,'N') || NVL(C.UPD_AUTH_YN,'N') || NVL(C.DEL_AUTH_YN,'N'),'Y','1'),'N','0')) AS MENU_AUTH
+			  FROM CMD_USER_AUTH_MPNG A
+			     , CMD_JOB_AUTH_MNG B
+			     , CMD_JOB_AUTH_MENU_MPNG C
+			     , CMD_JOB_MENU_MNG D
+			 WHERE A.JOB_AUTH_ID = B.JOB_AUTH_ID
+			   AND B.JOB_AUTH_ID = C.JOB_AUTH_ID
+			   AND C.JOB_MENU_ID = D.JOB_MENU_ID
+			   AND A.USER_ID = #{SESSION_USER_ID} 
+			   /*AND SYSDATE BETWEEN B.AUTH_START_DATE AND B.AUTH_END_DATE*/
+			   AND B.USE_YN = 'Y'
+			   AND C.QRY_AUTH_YN = 'Y' 
+			   AND D.USE_YN = 'Y'
+			   AND B.PLANTID=#{SESSION_SITETYPE}
+			 GROUP BY D.JOB_MENU_ID   
+        ) 
+        START WITH MENU_TOP IS NULL 
+        CONNECT BY PRIOR MENU_ID = MENU_TOP 
+        ORDER SIBLINGS BY ORDR
+        
+
+    </select>
+
+    <!-- 권한별 메뉴조회 -->
+    <select id="selectMenuAuthTop" resultType="hashmap">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectMenuAuthTop */ 
+	SELECT MENU_ID
+		   ,MENU_NM
+		   ,rownum as RN 
+	FROM (
+	        SELECT
+			   JOB_MENU_ID
+			  ,MENU_NM
+			   ,MENU_RM
+			   ,USE_YN
+			   ,MENU_ID
+			   ,MENU_GRP
+			   ,MENU_SEQ
+			   ,ORDR
+			   ,MENU_LEVEL
+			   ,MENU_TOP
+			   ,PAGE_URL
+			   ,INS_AUTH_YN
+			   ,QRY_AUTH_YN
+			   ,UPD_AUTH_YN
+			   ,DEL_AUTH_YN
+			   ,MENU_AUTH
+	        FROM (
+		        SELECT
+		             D.JOB_MENU_ID
+				     , decode(#{SESSION_LANGUAGETYPE},'ko-KR',MAX(D.MENU_NM),MAX((select x.dictionaryname from cmd_dictionary x where x.dictionaryid = D.dictionaryid and x.languagetype=#{SESSION_LANGUAGETYPE}))) AS MENU_NM
+				     , MAX(D.MENU_RM) AS MENU_RM
+				     , MIN(D.USE_YN) AS USE_YN
+				     , MAX(TO_CHAR(D.JOB_MENU_ID)) AS MENU_ID
+				     , MAX(TO_CHAR(D.MENU_GRP)) AS MENU_GRP
+				     , MAX(TO_CHAR(D.MENU_SEQ)) AS MENU_SEQ
+				     , MAX(D.MENU_SEQ) AS ORDR
+				     , MAX(TO_CHAR(D.MENU_LVS)) AS MENU_LEVEL
+				     , MAX(TO_CHAR(D.UPPER_MENU)) AS MENU_TOP
+				     , MAX(D.PGE_URL) AS PAGE_URL
+				     , MAX(C.INS_AUTH_YN) AS INS_AUTH_YN
+				     , MAX(C.QRY_AUTH_YN) AS QRY_AUTH_YN
+				     , MAX(C.UPD_AUTH_YN) AS UPD_AUTH_YN
+				     , MAX(C.DEL_AUTH_YN) AS DEL_AUTH_YN
+				     , MAX(REPLACE(REPLACE(NVL(C.INS_AUTH_YN,'N') || NVL(C.QRY_AUTH_YN,'N') || NVL(C.UPD_AUTH_YN,'N') || NVL(C.DEL_AUTH_YN,'N'),'Y','1'),'N','0')) AS MENU_AUTH
+				  FROM CMD_USER_AUTH_MPNG A
+				     , CMD_JOB_AUTH_MNG B
+				     , CMD_JOB_AUTH_MENU_MPNG C
+				     , CMD_JOB_MENU_MNG D
+				 WHERE A.JOB_AUTH_ID = B.JOB_AUTH_ID
+				   AND B.JOB_AUTH_ID = C.JOB_AUTH_ID
+				   AND C.JOB_MENU_ID = D.JOB_MENU_ID
+				   AND A.USER_ID = #{SESSION_USER_ID} 
+				   /*AND SYSDATE BETWEEN B.AUTH_START_DATE AND B.AUTH_END_DATE*/
+				   AND B.USE_YN = 'Y'
+				   AND C.QRY_AUTH_YN = 'Y' 
+				   AND D.USE_YN = 'Y'
+				   AND B.PLANTID=#{SESSION_SITETYPE}
+				 GROUP BY D.JOB_MENU_ID   
+	        ) 
+	        START WITH MENU_TOP IS NULL 
+	        CONNECT BY PRIOR MENU_ID = MENU_TOP 
+	        ORDER SIBLINGS BY ORDR
+		)
+		where menu_level=1
+    </select>
+    
+    <select id="selectMenuUrlList" resultType="hashmap">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectMenuUrlList */
+	  SELECT
+         TO_CHAR(C.JOB_MENU_ID) as MENU_ID
+         ,C.MENU_NM
+         ,C.pge_url as PAGE_URL
+         ,C.MENU_RM
+         ,TO_CHAR(C.MENU_GRP) AS MENU_GRP
+         ,TO_CHAR(C.UPPER_MENU) AS MENU_TOP
+         ,TO_CHAR(C.MENU_LVS) AS MENU_LEVEL
+         ,MENU_AUTH
+        FROM  CMD_JOB_MENU_MNG C
+              ,(SELECT X.JOB_AUTH_ID,X.JOB_MENU_ID,
+                           REPLACE(REPLACE(NVL(X.INS_AUTH_YN, 'N') ||
+                                           NVL(X.QRY_AUTH_YN, 'N') ||
+                                           NVL(X.UPD_AUTH_YN, 'N') ||
+                                           NVL(X.DEL_AUTH_YN, 'N'),
+                                           'Y',
+                                           '1'),
+                                           'N',
+                                           '0') AS MENU_AUTH
+                    FROM CMD_JOB_AUTH_MENU_MPNG X, CMD_USER_AUTH_MPNG Y
+                    WHERE 1=1
+                    AND Y.USER_ID = #{SESSION_USER_ID}
+                    AND Y.COMPANY_CD = #{SESSION_COMPANY_CD}
+                    AND Y.JOB_AUTH_ID = X.JOB_AUTH_ID) D
+    WHERE 1=1
+    AND C.JOB_MENU_ID = D.JOB_MENU_ID(+)
+    AND C.PLANTID=#{SESSION_SITETYPE}
+		        
+    </select>
+    
+    <!-- 세션테이블의 글로벌변수 조회 -->
+    <select id="selectGlovelValueInfo" parameterType="hashmap" resultType="hashmap">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectGlovelValueInfo */
+        select
+            USER_ID
+            , LGN_LOG_ID
+            , SESSION_GUID
+            , USER_CRTFC_TKN
+            , SSO_CRTFC_TKN
+            , LGN_IP as CNCT_IP
+            , TO_CHAR(LST_SCRIN_UT_TIME,'yyyymmddhh24miss') as LST_SCRIN_UT_TIME
+            , LST_SCRIN_REQ_URI
+            , DUP_LGN_TIME
+            , SESSION_VLD_YN
+        from CMD_SESSIONS
+        where SESSION_GUID = #{SESSION_GUID}
+    </select>
+
+    <!-- 업무 아이콘 순서 조회 -->
+    <select id="selectJobSysOrder" resultType="hashmap">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectJobSysOrder */
+        select
+            USER_ID,
+            ORDR as ICON_ID
+        from pes_user_job
+        where USER_ID = #{SESSION_USER_ID}
+        order by ordr
+    </select>
+
+    <!-- 업무 아이콘 순서 변경 -->
+    <update id="updateJobSysOrder" parameterType="hashmap">
+         /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.updateJobSysOrder */
+        update pes_user_job set ORDR = #{ICON_ID}
+        where USER_ID = #{SESSION_USER_ID}
+    </update>
+
+    <!-- 나의 할일 목록조회 -->
+    <select id="selectMyWork" resultType="hashmap">
+         /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectMyWork */
+ 	select v.GRP_CD,v.CM_CD as MY_WORK_CD
+	      ,D.CD_NM||' : '||v.CD_NM as MY_WORK_NM
+        ,v.CD_DESC
+        ,v.ORDR
+        ,v.RM as JOB_SYS_CD
+        ,v.USE_YN
+        ,v.CD_NM as JOB_SYS_NM
+        ,p.MY_WORK_CNT
+        ,p.MY_WORK_MVMN_URL
+        ,p.MY_WORK_MENU_ID
+        ,(select PGE_URL from CMD_JOB_MENU_MNG where JOB_MENU_ID = p.MY_WORK_MENU_ID) as  MY_WORK_PAGE_URL
+      from CMD_CM_CDS D
+          ,CMD_CM_CDS v
+          ,CMD_MY_WORKS p
+      where v.grp_cd = 'CMD_MY_WORK_TY'
+      	<!-- and RM in (select job_sys_cd from pes_user_job where USER_ID = #{CREATED_BY}) -->
+        and p.USER_ID = #{CREATED_BY}
+        and p.my_work_cd     = v.CM_CD
+        and p.job_sys_cd     = v.RM
+        and p.my_work_id = (select max(p1.my_work_id)
+                              from CMD_MY_WORKS p1
+                             where p1.USER_ID = #{CREATED_BY}
+                               and p1.my_work_cd     = v.CM_CD
+                               and p1.job_sys_cd    = v.RM
+                           )
+        and p.my_work_cnt   <![CDATA[<>]]> 0
+        and D.GRP_CD = 'JOB_SYS_CD'
+        and D.CM_CD = v.RM
+      order by v.RM,v.ORDR
+    </select>
+
+    <!-- 나의할일 클릭시 로그 쌓기 : 넥사크로에서 USER_ID전달을 못해서 CREATED_BY로 변경 -->
+    <insert id="insertMyWork" parameterType="hashmap">
+         /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.insertMyWork */
+        insert into CMD_MY_WORK_STATISTICS
+			(
+			  MY_WORK_STATISTIC_ID, USER_ID, MY_WORK_CD, CNCT_PORTAL_GUBUN,
+			  CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATE_DATE
+			)
+        values
+			(
+			  CMD_MY_WORK_STATISTICS_S.nextval, #{SESSION_USER_ID}, #{MY_WORK_CD}, #{CNCT_PORTAL_GUBUN},
+			  #{CREATED_BY}, sysdate, #{CREATED_BY}, sysdate
+			)
+    </insert>
+
+    <!-- 즐겨찾기 조회 -->
+    <select id="selectFavorites" resultType="hashmap">
+        /*  com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectFavorites */
+        select distinct
+		  A.FAVORITES_ID
+		  ,A.USER_ID
+		  ,A.FAVORITES_MVMN_URL
+		  ,(SUBSTR(FAVORITES_MVMN_URL,INSTR(UPPER(A.FAVORITES_MVMN_URL),'FORMURL=',1)+8)) as FAVORITES_PAGE_URL
+		  ,A.FAVORITES_MENU_ID
+		  ,replace(substr(PGE_URL,instr(PGE_URL,'::')+2,length(B.PGE_URL)),'.xfdl','') as PGM_ID
+		  ,decode(#{SESSION_LANGUAGETYPE},
+                      'ko-KR',
+                      B.MENU_NM,
+                      (select x.dictionaryname
+                            from cmd_dictionary x
+                           where x.dictionaryid = B.dictionaryid
+                             and x.languagetype = #{SESSION_LANGUAGETYPE})) AS FAVORITES_MENU_NM
+		  ,A.ORDR
+		  ,decode(A.ATMC_LOAD_YN,'Y','1','') as ATMC_LOAD_YN
+	      ,C.INS_AUTH_YN
+	      ,C.QRY_AUTH_YN
+	      ,C.UPD_AUTH_YN
+	      ,C.DEL_AUTH_YN
+	      ,REPLACE(REPLACE(NVL(C.INS_AUTH_YN, 'N') ||
+	                        NVL(C.QRY_AUTH_YN, 'N') ||
+	                        NVL(C.UPD_AUTH_YN, 'N') ||
+	                        NVL(C.DEL_AUTH_YN, 'N'),
+	                        'Y',
+	                        '1'),
+	                'N',
+	                '0') as MENU_AUTH		  
+		from CMD_FAVORITES A, CMD_JOB_MENU_MNG B, CMD_JOB_AUTH_MENU_MPNG C, CMD_JOB_AUTH_MNG D, CMD_USER_AUTH_MPNG E
+		where A.USER_ID=#{SESSION_USER_ID}
+		AND A.FAVORITES_MENU_ID = B.JOB_MENU_ID
+		and E.USER_ID = #{SESSION_USER_ID}
+		AND D.JOB_AUTH_ID = E.JOB_AUTH_ID
+		AND C.JOB_AUTH_ID = D.JOB_AUTH_ID
+		AND B.JOB_MENU_ID = C.JOB_MENU_ID
+		AND C.QRY_AUTH_YN = 'Y'
+		AND D.PLANTID=#{SESSION_SITETYPE}
+		order by A.ORDR
+
+    </select>
+
+    <!-- 즐겨찾기 이미 존재하는지 체크 -->
+    <select id="selectFavoritesIsExsist" resultType="int">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectFavoritesIsExsist */
+        select
+            count(*) AS COUNT
+        from CMD_FAVORITES where USER_ID=#{SESSION_USER_ID} and FAVORITES_MENU_ID=#{FAVORITES_MENU_ID}
+    </select>
+
+    <!-- 즐겨찾기 저장 -->
+    <insert id="insertFavorites" parameterType="hashmap">
+         /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.insertFavorites */
+        insert into CMD_FAVORITES
+        (
+            FAVORITES_ID, USER_ID, FAVORITES_MVMN_URL, FAVORITES_MENU_ID,
+            ORDR,ATMC_LOAD_YN,
+            CREATED_BY, CREATION_DATE, LAST_UPDATED_BY, LAST_UPDATE_DATE
+        )
+        values
+        (
+            CMD_FAVORITES_S.nextval, #{SESSION_USER_ID}, #{FAVORITES_MVMN_URL}, #{FAVORITES_MENU_ID},
+            (select NVL(MAX(ORDR)+1,0) from CMD_FAVORITES where USER_ID=#{SESSION_USER_ID}),#{ATMC_LOAD_YN},
+            #{USER_ID}, sysdate, #{CREATED_BY}, sysdate
+        )
+    </insert>
+
+    <!-- 즐겨찾기 순서 변경 -->
+    <update id="updateFavorites" parameterType="hashmap">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.updateFavorites */
+        update CMD_FAVORITES 
+        set ORDR = #{ORDR}
+        	,ATMC_LOAD_YN = decode(#{ATMC_LOAD_YN},'1','Y','N')
+        where FAVORITES_ID = #{FAVORITES_ID}
+    </update>
+
+    <!-- 즐겨찾기 삭제 -->
+    <delete id="deleteFavorites" parameterType="hashmap">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.deleteFavorites */
+        delete from CMD_FAVORITES where FAVORITES_ID=#{FAVORITES_ID}
+    </delete>
+
+    <!-- 즐겨찾기 전체삭제 -->
+    <delete id="deleteFavoritesAll" parameterType="hashmap">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.deleteFavoritesAll */
+        delete from CMD_FAVORITES where USER_ID=#{SESSION_USER_ID}
+    </delete>
+
+    <!-- 즐겨찾기 자동로딩 변경 -->
+    <update id="updateFavoritesAuto" parameterType="hashmap">
+        /* com.nbdf.pes.pe.penc.dao.PENC00010Dao.updateFavoritesAuto */
+        update CMD_FAVORITES set ATMC_LOAD_YN = decode(#{ATMC_LOAD_YN},'1','Y','N')
+        where FAVORITES_ID = #{FAVORITES_ID}
+    </update>
+
+    <!-- 회사변경권한조회 -->
+	<select id="selectCmdCompanyAltAuthList" resultType="hashmap" parameterType="hashmap">
+        SELECT /* "com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectCmdCompanyAltAuthList" */
+			LRGE_MENU_ID      
+			,COMPANY_ALT_AUTH_YN
+			,(SELECT COMPANY_CD FROM CMD_USERS WHERE USER_ID = #{SESSION_USER_ID} ) AS COMPANY_CD
+			,(SELECT MEANING FROM CMD_USERS A,CMD_LOOKUP_VALUES B 
+				WHERE USER_ID = #{SESSION_USER_ID}
+				AND LOOKUP_TYPE='CMD_USER_COMPANY' 
+				AND A.COMPANY_CD = B.LOOKUP_CODE ) AS COMPANY_NM
+		FROM CMD_COMPANY_ALT_AUTH A
+		where A.USER_ID	=	#{SESSION_USER_ID}
+	</select>
+
+    <!-- 회사변경권한조회 -->
+	<select id="selectUserCompanyList" resultType="hashmap" parameterType="hashmap">
+        SELECT /* "com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectUserCompanyList" */
+			LOOKUP_CODE as COMPANY_CD 
+            ,MEANING as COMPANY_NM 
+		FROM CMD_USER_COMPANY_MPNG A, CMD_LOOKUP_VALUES B
+		WHERE A.COMPANY_CD = B.LOOKUP_CODE
+		AND B.LOOKUP_TYPE='CMD_USER_COMPANY'
+        AND A.USER_ID = #{SESSION_USER_ID}
+        AND A.COMPANY_CD != #{SESSION_COMPANY_CD}
+	</select>
+
+    <!-- 다국어 사전 정보 상세조회-->
+    <select id="selectCmdDictionary" parameterType="map" resultType="hashmap">
+    SELECT /* "com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectCmdDictionary" */
+        A.DICTIONARYID	 
+        ,A.LANGUAGETYPE	 
+        ,A.DICTIONARYNAME	 
+        ,A.DESCRIPTION	 
+        ,A.USE_YN	 
+        ,A.CREATED_BY	 
+        ,A.CREATION_DATE	 
+        ,A.LAST_UPDATED_BY	 
+        ,A.LAST_UPDATE_DATE	 
+    FROM	CMD_DICTIONARY A 
+    WHERE A.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+    
+    </select>
+
+    <!-- 다국어 사전 정보 상세조회-->
+    <select id="selectCmdDictionaryCnt" parameterType="map" resultType="Integer">
+    SELECT /* "com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectCmdDictionaryCnt" */
+        count(*) 
+    FROM	CMD_DICTIONARY A 
+    WHERE A.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+    </select>
+
+    <!-- site-->
+    <select id="selectUserSiteType" parameterType="map" resultType="hashmap">
+    SELECT /* "com.nbdf.pes.pe.penc.dao.PENC00010Dao.selectUserSiteType" */
+        A.PLANTID as code,
+        A.PLANTID as name	 
+    FROM	CMD_PLANTUSER A 
+    WHERE A.USER_ID = #{CREATOR}
+    and validstate = 'Valid'
+    </select>
+</mapper>

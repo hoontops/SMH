@@ -1,0 +1,969 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS03000Dao">
+<!-- Rework Routing 등록-->
+	
+	<!-- 재작업 번호 팝업 리스트 조회-->
+    <select id="selectProcessDefIDPopup" parameterType="map" resultType="hashmap">
+	    SELECT 
+				PROCESSDEFID          
+			,	PROCESSDEFNAME       
+		  FROM 	BAS_PROCESSDEFINITION
+		 WHERE 	PROCESSDEFTYPE = 'Rework'
+		 <if test="ENTERPRISEID != null and ENTERPRISEID !=''"> 
+		  AND 	ENTERPRISEID = #{ENTERPRISEID}
+		 </if>
+		  AND 	PLANTID = #{PLANTID}
+		  <if test="PROCESSDEFID != null and PROCESSDEFID !=''"> 
+		  AND   UPPER(PROCESSDEFID) LIKE UPPER(<![CDATA['%' ||]]> #{PROCESSDEFID} <![CDATA[|| '%']]> )
+		  </if>
+		  <if test="PROCESSDEFNAME != null and PROCESSDEFNAME !=''"> 
+		  AND   UPPER(PROCESSDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PROCESSDEFNAME} <![CDATA[|| '%']]> )
+		  </if>
+		 GROUP BY 
+				PROCESSDEFID
+		    ,	PROCESSDEFNAME
+
+    </select>
+	
+
+    <!-- Plant Combo Dataset 조회-->
+    <select id="selectPLANTID" parameterType="map" resultType="hashmap">
+	    SELECT LOOKUP_CODE AS PLANTID
+			, MEANING AS PLANTNAME
+			, ATTRIBUTE1 AS STARTBUSINESSHOUR
+		FROM CMD_LOOKUP_VALUES WHERE LOOKUP_TYPE ='SiteType'
+		AND ENABLED_FLAG = 'Y'
+    </select>
+    
+    <!-- 적용구분 Combo Dataset 조회-->
+    <select id="selectProcessClassType" parameterType="map" resultType="hashmap">
+	    SELECT 
+				PC.PROCESSCLASSID
+		    ,   PC.PROCESSCLASSNAME
+		    ,   PC.PROCESSCLASSTYPE
+		FROM BAS_PROCESSCLASS PC
+		WHERE 	PC.ENTERPRISEID = #{ENTERPRISEID}
+		AND 	PROCESSCLASSTYPE != 'Production'
+    </select>
+    
+    <!-- 재작업 버전 Combo Dataset 조회-->
+    <select id="selectProcessdefVersion" parameterType="map" resultType="hashmap">
+		    /* GetProcessdefVersion , 10001 */
+		    SELECT 
+					PROCESSDEFVERSION        AS PROCESSDEFVERSIONCODE
+				,	PROCESSDEFVERSION        AS PROCESSDEFVERSIONNAME
+			FROM 	BAS_PROCESSDEFINITION
+			WHERE 	PROCESSDEFTYPE = 'Rework'
+			AND     PROCESSDEFID = #{PROCESSDEFID}
+			<if test="ENTERPRISEID != null and ENTERPRISEID !=''"> 
+				  AND 	ENTERPRISEID = #{ENTERPRISEID}
+			</if>
+    </select>
+    
+    <!-- 대공정 Combo Dataset 조회-->
+    <select id="selectProcessSegMentTop" parameterType="map" resultType="hashmap">
+		    SELECT 
+			    	PGC.PROCESSSEGMENTCLASSID       
+			    ,	DIC.DICTIONARYNAME          	PROCESSSEGMENTCLASSNAME
+			    ,   PGC.PARENTPROCESSSEGMENTCLASSID 
+			FROM    BAS_PROCESSSEGMENTCLASS          PGC
+			LEFT JOIN CMD_DICTIONARY 				DIC	 ON  DIC.DICTIONARYID = PGC.PROCESSSEGMENTCLASSNAME
+														AND DIC.LANGUAGETYPE = #{LANGUAGETYPE}
+			WHERE 1=1
+			<if test="ENTERPRISEID != null and ENTERPRISEID !=''"> 
+			  AND PGC.ENTERPRISEID = #{ENTERPRISEID}
+			</if>
+			  AND PGC.PARENTPROCESSSEGMENTCLASSID IS NULL  
+    </select>
+    
+    <!-- 재작업 라우팅 조회(상단 그리드)-->
+    <select id="selectProcessdefinitionList" parameterType="map" resultType="hashmap">
+    	/* GetProcessdefinitionList 10001 */
+    					SELECT  
+			    		PC.PROCESSCLASSTYPE 
+		            ,	PC.PROCESSCLASSID 					as PROCESSCLASSID_R
+		          	,	PD.PROCESSDEFID 					as PROCESSDEFID_R
+		          	,   PD.PROCESSDEFVERSION 				as PROCESSDEFVERSION_R
+		          	,	PD.PROCESSDEFNAME 					as PROCESSDEFNAME_R
+		          	,	PD.DESCRIPTION
+		          	,	TO_CHAR(PD.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+		          	,	PD.CREATOR
+		          	,	TO_CHAR(PD.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+		          	,	PD.MODIFIER
+		          	,	PD.VALIDSTATE
+		          	,   PD.PROCESSDEFTYPE
+		          	,   PD.VERSIONSTATE
+		          	,   PD.ENTERPRISEID
+		          	,   PD.PLANTID
+		          	,   PD.REWORKITEMCONTROL
+		          	,   PD.REWORKSEGMENTCONTROL
+		          	,   PD.TOPPROCESSSEGMENTID
+					,   CTU.USER_NM 						as CREATORNAME
+					,   MFU.USER_NM 						as MODIFIERNAME
+					,   '' 									as TEMPSEQ
+		          	,	PD.VALIDSTATE
+				FROM BAS_PROCESSDEFINITION PD
+				LEFT JOIN BAS_PROCESSCLASS PC    ON  PD.ENTERPRISEID = PC.ENTERPRISEID
+				                                AND PD.PROCESSCLASSID = PC.PROCESSCLASSID
+				LEFT JOIN CMD_USERS CTU    		 ON  PD.CREATOR =  CTU.USER_ID   
+				LEFT JOIN CMD_USERS MFU    		 ON  PD.MODIFIER =  MFU.USER_ID
+				WHERE PD.ENTERPRISEID = #{ENTERPRISEID}
+				AND   PD.PROCESSDEFTYPE = 'Rework'
+				<if test="VALIDSTATE != null and VALIDSTATE !=''"> 
+						 AND PD.VALIDSTATE = #{VALIDSTATE}
+			   	</if>
+			    <if test="PLANTID != null and PLANTID !=''"> 
+						  AND PD.PLANTID = #{PLANTID}
+			   	</if>
+				<if test="PROCESSCLASSTYPE != null and PROCESSCLASSTYPE !=''"> 
+						   AND PC.PROCESSCLASSTYPE = #{PROCESSCLASSTYPE}
+			   	</if>
+				<if test="PROCESSCLASSID != null and PROCESSCLASSID !=''"> 
+						   AND PC.PROCESSCLASSID = #{PROCESSCLASSID}
+			   	</if>
+				<if test="PROCESSDEFID != null and PROCESSDEFID !=''"> 
+						   AND UPPER(PD.PROCESSDEFID) LIKE UPPER(<![CDATA['%' ||]]> #{PROCESSDEFID} <![CDATA[|| '%']]> )
+			   	</if>
+				<if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !=''"> 
+						   AND UPPER(PD.PROCESSDEFVERSION) LIKE UPPER(<![CDATA['%' ||]]> #{PROCESSDEFVERSION} <![CDATA[|| '%']]> )
+			   	</if>
+				<if test="TOPPROCESSSEGMENTID != null and TOPPROCESSSEGMENTID !=''"> 
+						   AND PD.TOPPROCESSSEGMENTID = #{TOPPROCESSSEGMENTID}
+			   	</if>
+    </select>
+    
+    <!-- 공정 순서 조회(중간 탭 1 페이지)-->
+    <select id="selectProcessPathList" parameterType="map" resultType="hashmap">
+    	/* GetProcessPathList 10004 */
+    			SELECT 
+				        PP.PROCESSPATHID
+				    ,   PP.ENTERPRISEID
+				    ,   PP.PLANTID
+				    ,   PP.PROCESSDEFID
+				    ,   PP.PROCESSDEFVERSION
+				    ,   PP.PATHSEQUENCE
+				    ,   PP.PATHTYPE
+				    , 	PP.PROCESSUOM
+					,   TO_NUMBER(PP.USERSEQUENCE) USERSEQUENCE
+				    ,	PP.PROCESSSEGMENTID
+				    ,   PP.PROCESSSEGMENTVERSION
+				    ,   DI.DICTIONARYNAME AS PROCESSSEGMENTNAME
+				    ,   PP.DESCRIPTION    AS UNIQUENESS
+				    ,   PP.VALIDSTATE
+				    ,	PP.CREATOR
+				    ,	TO_CHAR(PP.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+				    ,	PP.MODIFIER
+				    ,	TO_CHAR(PP.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+				    ,	PP.ALTERNATIVERESOURCE
+				    ,	PP.ASSIGNEQUIPMENT
+				    , 	BI.RESOURCEID
+				    , 	BI.RESOURCEVERSION
+				    ,   RS.DESCRIPTION RESOURCENAME
+				    ,	BI.ISPRIMARYRESOURCE
+				FROM 	BAS_PROCESSPATH 				PP 
+				INNER JOIN BAS_PROCESSDEFINITION 	PDF ON 	PDF.PROCESSDEFID 			= PP.PROCESSDEFID
+														AND PDF.PROCESSDEFVERSION 		= PP.PROCESSDEFVERSION
+				LEFT JOIN BAS_PROCESSSEGMENT         PG  ON  PP.ENTERPRISEID 			= PG.ENTERPRISEID        
+													    AND PP.PROCESSSEGMENTID 		= PG.PROCESSSEGMENTID
+				LEFT JOIN CMD_DICTIONARY 	        DI  ON	DI.DICTIONARYID 			= PG.PROCESSSEGMENTNAME
+				     								    AND DI.LANGUAGETYPE 			= #{LANGUAGETYPE}
+				LEFT JOIN BAS_BILLOFRESOURCE			BI	ON	BI.ENTERPRISEID 			= PG.ENTERPRISEID        
+				 										AND BI.PROCESSDEFID 			= PP.PROCESSDEFID
+														AND BI.PROCESSDEFVERSION 		= PP.PROCESSDEFVERSION
+													    AND BI.PROCESSSEGMENTID 		= PG.PROCESSSEGMENTID
+													    AND BI.ISPRIMARYRESOURCE 		= 'Y'
+				LEFT OUTER JOIN BAS_RESOURCE       	RS 	ON  BI.ENTERPRISEID				= RS.ENTERPRISEID
+                                                     	AND BI.PLANTID 					= RS.PLANTID
+                                                     	AND BI.RESOURCEID 				= RS.RESOURCEID									    
+				WHERE PP.ENTERPRISEID   = #{ENTERPRISEID}
+				  AND PP.PROCESSDEFID	= #{PROCESSDEFID}
+			<if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !=''"> 
+				  AND PP.PROCESSDEFVERSION	= #{PROCESSDEFVERSION}
+			</if>
+			<if test="PLANTID != null and PLANTID !=''">
+				  AND PP.PLANTID	= #{PLANTID}
+			</if>
+				ORDER BY PP.USERSEQUENCE 
+    </select>
+    
+    <!-- 품목지정 조회(중간 탭 2 페이지)-->
+    <select id="selectProductReworkControl" parameterType="map" resultType="hashmap">
+    	/* GetProductReworkControl 10001  */
+    		SELECT 
+					 	RWC.PROCESSDEFID
+					,	RWC.PROCESSDEFVERSION
+					,	RWC.CONTROLTYPE
+					,	RWC.SEQUENCE  AS SEQ
+					,	RWC.CONTROLRESOURCEID         RESOURCEID
+					,   IM.ITEMNAME                   RESOURCENAME    
+					,	RWC.CONTROLRESOURCEVERSION    RESOURCEVERSION 
+					,	RWC.ENTERPRISEID
+					,	RWC.PLANTID
+					,	RWC.DESCRIPTION
+					,   RWC.VALIDSTATE
+					,	TO_CHAR(RWC.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+	                ,	CU.USER_NM					  CREATOR
+	                ,	TO_CHAR(RWC.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+	                ,	MU.USER_NM 				  MODIFIER
+				FROM 	BAS_REWORKCONTROL 		  RWC
+				LEFT JOIN BAS_ITEMMASTER        	  IM   	ON  IM.ITEMID      = RWC.CONTROLRESOURCEID
+  				                                       	AND IM.ITEMVERSION = RWC.CONTROLRESOURCEVERSION
+  				LEFT OUTER JOIN CMD_USERS           CU	ON 	CU.USER_ID  	   = RWC.CREATOR
+	            LEFT OUTER JOIN CMD_USERS           MU 	ON 	MU.USER_ID  	   = RWC.MODIFIER
+				WHERE   RWC.PROCESSDEFID = #{PROCESSDEFID}
+				AND   	RWC.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+				AND   	RWC.CONTROLTYPE =  'Product'
+				
+    </select>
+    
+    <!-- 사용 작업장 조회(중간 탭 3 페이지)-->
+    <select id="selectAreaReworkControl" parameterType="map" resultType="hashmap">
+    	/* GetAreaReworkControl 10001 */
+    			SELECT 
+					 	RWC.PROCESSDEFID
+					,	RWC.PROCESSDEFVERSION
+					,	RWC.CONTROLTYPE
+					,	RWC.SEQUENCE  AS SEQ
+					,	RWC.CONTROLRESOURCEID         	RESOURCEID
+					,   DIC.DICTIONARYNAME            	RESOURCENAME    
+					,	RWC.CONTROLRESOURCEVERSION		RESOURCEVERSION
+					,	RWC.ENTERPRISEID
+					,	RWC.PLANTID
+					,	RWC.DESCRIPTION
+					,   RWC.VALIDSTATE
+					,	TO_CHAR(RWC.CREATEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS CREATEDTIME
+	                ,	CU.USER_NM 					CREATOR
+	                ,	TO_CHAR(RWC.MODIFIEDTIME, 'YYYY-MM-DD HH24:MI:SS') AS MODIFIEDTIME
+	                ,	MU.USER_NM 					MODIFIER
+				FROM 	BAS_REWORKCONTROL 		  RWC
+				LEFT JOIN BAS_AREA        		  ARA  	ON  RWC.PLANTID 			=  ARA.PLANTID
+  				                                       	AND RWC.CONTROLRESOURCEID 	=  ARA.AREAID
+				LEFT OUTER JOIN CMD_DICTIONARY 	  DIC  	ON  DIC.DICTIONARYID 		= ARA.AREANAME
+													   	AND DIC.LANGUAGETYPE 		= #{LANGUAGETYPE}  	
+				LEFT OUTER JOIN CMD_USERS           CU 	ON 	CU.USER_ID      			= RWC.CREATOR
+	            LEFT OUTER JOIN CMD_USERS           MU  ON 	MU.USER_ID      			= RWC.MODIFIER   
+				WHERE   RWC.PROCESSDEFID = #{PROCESSDEFID}
+				AND   	RWC.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+				AND   	RWC.CONTROLTYPE =  'Area'
+    </select>
+    
+    <!-- 대체자원 조회(하단 탭 1 페이지)-->
+    <select id="selectReworkRoutingResource" parameterType="map" resultType="hashmap">
+    	/* GetReworkRoutingResource 10001 */
+    	SELECT  
+					 	BOR.PRODUCTDEFID
+					,	BOR.PRODUCTDEFVERSION
+					,	BOR.PROCESSDEFID
+					,	BOR.PROCESSDEFVERSION
+					,	BOR.PROCESSSEGMENTID
+					,	BOR.PROCESSSEGMENTVERSION
+					,	BOR.EQUIPMENTID
+					,	BOR.RESOURCETYPE
+					,	BOR.RESOURCECLASSID
+					,	BOR.RESOURCEID 
+					,	BOR.RESOURCEVERSION
+					,   RS.DESCRIPTION RESOURCENAME
+					,   EC.EQUIPMENTCLASSID
+					,   DIE.DICTIONARYNAME AS EQUIPMENTCLASSNAME
+					,   AR.AREAID
+					,   DIA.DICTIONARYNAME AS AREANAME					
+					,	BOR."sequence"	   AS SEQ
+					,	BOR.VALIDSTATE
+					,	BOR.ENTERPRISEID
+					,	BOR.PLANTID
+					,	BOR.ISPRIMARYRESOURCE   
+					,	BOR.CREATEDTIME
+	                ,	CU.USER_NM AS CREATOR
+	                ,	BOR.MODIFIEDTIME
+	                ,	MU.USER_NM AS MODIFIER                        
+				FROM 	BAS_BILLOFRESOURCE 			BOR
+ 				LEFT OUTER JOIN BAS_RESOURCE       	RS 	ON  BOR.ENTERPRISEID	= RS.ENTERPRISEID
+                                                     	AND BOR.PLANTID 		= RS.PLANTID
+                                                     	AND BOR.RESOURCEID 		= RS.RESOURCEID
+                LEFT OUTER JOIN BAS_AREA           	AR 	ON  RS.ENTERPRISEID 	= AR.ENTERPRISEID
+                                                     	AND RS.PLANTID 			= AR.PLANTID
+                                                    	AND RS.AREAID  			= AR.AREAID
+                LEFT JOIN CMD_DICTIONARY 		  	DIA ON 	DIA.DICTIONARYID 	= AR.AREANAME
+                                                     	AND DIA.LANGUAGETYPE 	= #{LANGUAGETYPE}                                           
+                LEFT OUTER JOIN BAS_WAREHOUSE      	WH 	ON  AR.ENTERPRISEID 	= WH.ENTERPRISEID
+                                                     	AND AR.PLANTID 			= WH.PLANTID
+                                                     	AND AR.WAREHOUSEID 		= WH.WAREHOUSEID
+                LEFT OUTER JOIN BAS_EQUIPMENTCLASS 	EC 	ON  RS.ENTERPRISEID 	= EC.ENTERPRISEID
+                                                     	AND RS.EQUIPMENTCLASSID = EC.EQUIPMENTCLASSID
+                LEFT JOIN CMD_DICTIONARY 		  	DIE ON 	DIE.DICTIONARYID 	= EC.EQUIPMENTCLASSNAME
+                                                     	AND DIE.LANGUAGETYPE 	= #{LANGUAGETYPE}
+                LEFT OUTER JOIN CMD_USERS           CU 	ON 	CU.USER_ID      	= BOR.CREATOR
+	            LEFT OUTER JOIN CMD_USERS           MU  ON 	MU.USER_ID      	= BOR.MODIFIER	
+				WHERE 	1=1 
+				AND     BOR.RESOURCETYPE IN ('Resource')
+				AND 	BOR.ENTERPRISEID = #{ENTERPRISEID}
+				AND 	BOR.PLANTID = #{PLANTID}
+				AND 	BOR.PROCESSDEFID = #{PROCESSDEFID}
+				AND 	BOR.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+				AND 	BOR.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+				AND 	BOR.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+			<if test="ISPRIMARYRESOURCE != null and ISPRIMARYRESOURCE !='' and !(ISPRIMARYRESOURCE eq '*'.toString())"> 
+				AND	    BOR.ISPRIMARYRESOURCE = #{ISPRIMARYRESOURCE}
+			</if>
+    	
+    </select>
+   
+    <!-- 설비 지정 조회(하단 탭 2 페이지)-->
+    <select id="selectReworkRoutingEquipment" parameterType="map" resultType="hashmap">
+    	/* GetReworkRoutingEquipment 10002 */
+    		SELECT  
+				 	RAR.PRODUCTDEFID
+				,	RAR.PRODUCTDEFVERSION
+				,	RAR.PROCESSDEFID
+				,	RAR.PROCESSDEFVERSION
+				,	RAR.PROCESSSEGMENTID
+				,	RAR.PROCESSSEGMENTVERSION
+				,	RAR.RESOURCEID					AS RESOURCEID
+				,	EDI.DICTIONARYNAME 				AS RESOURCENAME
+				,	RAR.RESOURCETYPE
+				,	RAR.RESOURCECLASSID
+				,	RAR.RESOURCEVERSION
+				,	RAR."sequence"					AS SEQ
+				,	RAR.VALIDSTATE
+				,	RAR.ENTERPRISEID
+				,	RAR.PLANTID
+				,	RAR.ISPRIMARYRESOURCE
+				,	RAR.CREATEDTIME
+	            ,	CU.USER_NM AS CREATOR
+	            ,	RAR.MODIFIEDTIME
+	            ,	MU.USER_NM AS MODIFIER                             
+			FROM 	BAS_BILLOFRESOURCE 			RAR
+			LEFT OUTER JOIN BAS_EQUIPMENT 	   	EP 	ON  RAR.ENTERPRISEID = EP.ENTERPRISEID
+													AND EP.EQUIPMENTID 			= RAR.RESOURCEID
+			LEFT OUTER JOIN CMD_DICTIONARY 		EDI ON  EP.EQUIPMENTNAME = EDI.DICTIONARYID
+											   		AND EDI.LANGUAGETYPE =#{LANGUAGETYPE}
+			LEFT OUTER JOIN CMD_USERS          	CU 	ON 	CU.USER_ID      		= RAR.CREATOR
+            LEFT OUTER JOIN CMD_USERS           MU  ON 	MU.USER_ID      		= RAR.MODIFIER	
+			WHERE 	RAR.RESOURCETYPE = 'Equipment'
+			AND 	RAR.ENTERPRISEID = #{ENTERPRISEID}
+			AND 	RAR.PLANTID = #{PLANTID}
+			AND 	RAR.PROCESSDEFID = #{PROCESSDEFID}
+			AND 	RAR.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+			AND 	RAR.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+			AND 	RAR.PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+    </select>
+
+	<!-- 공정 팝업 -->
+    <select id="selectProcessSegmentExtPupop" parameterType="map" resultType="hashmap">
+    	/* GetProcessSegmentExtPupop 10001 */
+    	
+    			SELECT   
+					 	PG.PROCESSSEGMENTID             
+				    ,	DI.DICTIONARYNAME          	 	AS PROCESSSEGMENTNAME
+				    ,	PG.DESCRIPTION
+				    ,	PG.PROCESSSEGMENTCLASSID
+				    ,	PG.SEGMENTTYPE
+				    ,	PG.STEPCLASS
+				    ,   (
+					      SELECT 
+					            LISTAGG(B.DICTIONARYNAME,',') WITHIN GROUP(ORDER BY A.DISPLAYSEQUENCE)
+					      FROM CMD_LOOKUP_VALUES A
+					      LEFT JOIN CMD_DICTIONARY B ON A.DICTIONARYID = B.DICTIONARYID AND B.LANGUAGETYPE = #{LANGUAGETYPE}
+					      WHERE A.LOOKUP_TYPE  = PG.STEPCLASS				    
+				        ) STEPTYPE
+				    ,	PG.SUBSEGMENTID
+				    ,	PG.ISTOOLWORK
+				    ,	PG.ISINCOMINGINSPECTION
+				    ,	PG.COSTCODE
+				    ,	PG.VALIDSTATE
+					,   CU.USER_NM AS CREATOR
+					,   PG.CREATEDTIME
+					,   MU.USER_NM AS MODIFIER
+					,   PG.MODIFIEDTIME
+				FROM BAS_PROCESSSEGMENTEXT           	PG
+				LEFT JOIN CMD_USERS                       CU   ON CU.USER_ID = PG.CREATOR
+				LEFT JOIN CMD_USERS                       MU   ON MU.USER_ID = PG.MODIFIER
+				LEFT JOIN CMD_DICTIONARY 				DI	 ON DI.DICTIONARYID = PG.PROCESSSEGMENTNAME
+														 	 AND DI.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE 1=1
+			<if test="ENTERPRISEID != null and ENTERPRISEID !=''"> 
+				AND	PG.ENTERPRISEID = #{ENTERPRISEID}
+			</if>
+			<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' and !(PROCESSSEGMENTID eq '*'.toString())"> 
+		  		AND	UPPER(PG.PROCESSSEGMENTID) LIKE UPPER(<![CDATA['%' ||]]> #{PROCESSSEGMENTID} <![CDATA[|| '%']]> )
+		  	</if>
+		  	<if test="PROCESSSEGMENTNAME != null and PROCESSSEGMENTNAME !='' and !(PROCESSSEGMENTNAME eq '*'.toString())"> 
+		  		AND	UPPER(DI.DICTIONARYNAME) LIKE UPPER(<![CDATA['%' ||]]> #{PROCESSSEGMENTNAME} <![CDATA[|| '%']]> )
+		  	</if>
+		  		AND PG.VALIDSTATE = #{VALIDSTATE}
+		  		ORDER BY PG.PROCESSSEGMENTID 
+	</select>
+
+	<!-- 품목 코드 -->
+	<select id="selectProductDefinitionList" parameterType="map" resultType="hashmap">
+		/* GetProductDefinitionList 10002 */
+		SELECT 
+				PD.PRODUCTDEFID
+			,	PD.PRODUCTDEFNAME
+			,	PD.PRODUCTDEFVERSION
+			,	PD.PRODUCTDEFTYPE
+			, 	(SELECT MEANING FROM CMD_LOOKUP_VALUES WHERE LOOKUP_TYPE = 'ProductDefType' AND LOOKUP_CODE = PD.PRODUCTDEFTYPE) AS PRODUCTDEFTYPE_NM
+			,	PD.PRODUCTIONTYPE
+			, 	(SELECT MEANING FROM CMD_LOOKUP_VALUES WHERE LOOKUP_TYPE = 'ProductionType' AND LOOKUP_CODE = PD.PRODUCTIONTYPE) AS PRODUCTIONTYPE_NM
+			,	PD.UNIT
+			,	UOM.UOMDEFNAME AS UNIT_NM
+			,	PD.PRODUCTDEFID || '|' || PD.PRODUCTDEFVERSION	AS PRODUCTDEF
+		  FROM	BAS_PRODUCTDEFINITION	PD
+		  LEFT JOIN (SELECT UD.UOMDEFID
+					 , UI.UOMDEFNAME
+				  FROM	BAS_UOMDEFMAP		UD
+				  JOIN BAS_UOMDEFINITION	UI	ON	UD.UOMDEFID = UI.UOMDEFID
+				 WHERE	UD.UOMCATEGORY = 'Segment'
+				   AND  UD.VALIDSTATE = 'Valid'
+				)UOM ON PD.UNIT = UOM.UOMDEFID
+		 WHERE 1 = 1
+	 <if test="TXTPRODUCTDEFNAME != null and TXTPRODUCTDEFNAME !=''"> 
+		 AND		(UPPER(PD.PRODUCTDEFID) LIKE UPPER(<![CDATA['%' ||]]> #{TXTPRODUCTDEFNAME} <![CDATA[|| '%']]> )
+					OR UPPER(PD.PRODUCTDEFNAME) LIKE UPPER(<![CDATA['%' ||]]> #{TXTPRODUCTDEFNAME} <![CDATA[|| '%']]> )
+					)
+	 </if>
+	 <if test="PRODUCTDIVISION != null and PRODUCTDIVISION !='' and !(PRODUCTDIVISION eq '*'.toString())">
+	 	AND		PD.PRODUCTDEFTYPE = #{PRODUCTDIVISION}
+	 </if>
+	 <if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !='' and !(PRODUCTIONTYPE eq '*'.toString())">
+	 	AND		PD.PRODUCTIONTYPE = #{PRODUCTIONTYPE}
+	 </if>
+		 ORDER BY PD.PRODUCTDEFID, PD.PRODUCTDEFVERSION
+	</select>
+	
+	<!-- PROCESSDEFID 가져오기  -->
+	<select id="selectProductDefinitionNewID" parameterType="map" resultType="hashmap">
+			SELECT NVL(MAX(substr(PROCESSDEFID ,1,6)),0) AS NEWID
+				FROM BAS_PROCESSDEFINITION WHERE 1=1
+				AND PROCESSDEFTYPE = 'Rework'
+				AND TOPPROCESSSEGMENTID = #{TOPPROCESSSEGMENTID}
+	</select>
+	
+	
+	
+	
+	
+	<!-- 라우팅 정의 등록 -->
+    <insert id="insertBasProcessdefinition" parameterType="map">
+    INSERT INTO BAS_PROCESSDEFINITION( 
+        PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,PROCESSCLASSID  
+        ,PROCESSDEFNAME  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,PROCESSDEFTYPE  
+        ,LEADTIME  
+        ,VERSIONSTATE  
+        ,REWORKITEMCONTROL  
+        ,REWORKSEGMENTCONTROL  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,MODIFIER  
+        ,MODIFIEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE  
+        ,TOPPROCESSSEGMENTID        ) 
+    VALUES( 
+        #{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{PROCESSCLASSID_R}  
+        ,#{PROCESSDEFNAME_R}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{PROCESSDEFTYPE}  
+        ,#{LEADTIME}  
+        ,#{VERSIONSTATE}  
+        ,#{REWORKITEMCONTROL}  
+        ,#{REWORKSEGMENTCONTROL}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{CREATOR}  
+        ,SYSDATE
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}  
+        ,#{TOPPROCESSSEGMENTID}    )
+    </insert>
+
+    <!-- 라우팅 정의 변경 -->
+    <update id="updateBasProcessdefinition" parameterType="map" >
+    UPDATE BAS_PROCESSDEFINITION 
+    SET 
+        PROCESSCLASSID = #{PROCESSCLASSID_R}     
+        ,PROCESSDEFNAME = #{PROCESSDEFNAME_R}     
+        ,ENTERPRISEID = #{ENTERPRISEID}     
+        ,PLANTID = #{PLANTID}     
+        ,PROCESSDEFTYPE = #{PROCESSDEFTYPE}     
+        ,LEADTIME = #{LEADTIME}     
+        ,VERSIONSTATE = #{VERSIONSTATE}     
+        ,REWORKITEMCONTROL = #{REWORKITEMCONTROL}     
+        ,REWORKSEGMENTCONTROL = #{REWORKSEGMENTCONTROL}     
+        ,DESCRIPTION = #{DESCRIPTION}                     
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{MODIFIER}         
+        ,LASTTXNTIME = SYSDATE  
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+        ,VALIDSTATE = #{VALIDSTATE}     
+        ,TOPPROCESSSEGMENTID = #{TOPPROCESSSEGMENTID}
+    WHERE PROCESSDEFID = #{PROCESSDEFID_R}
+    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION_R}
+    </update>
+
+    <!-- 라우팅 정의 삭제 -->
+    <delete id="deleteBasProcessdefinition" parameterType="map" > 
+	    DELETE FROM BAS_PROCESSDEFINITION 
+	    WHERE PROCESSDEFID = #{PROCESSDEFID_R}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION_R}
+    </delete>
+    
+    <!-- REWORKITEMCONTROL 이 N 일때 삭제 1 -->
+    <delete id="deleteBasReworkcontrolAll" parameterType="map" > 
+	    DELETE FROM BAS_REWORKCONTROL 
+	    WHERE CONTROLTYPE = #{CONTROLTYPE}
+	    AND PROCESSDEFID = #{PROCESSDEFID}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </delete>
+    
+    <!-- REWORKITEMCONTROL 이 N 일때, REWORKSEGMENTCONTROL 이 N 일 때 삭제 -->
+    <delete id="deleteBasBillofmaterialAll" parameterType="map" > 
+	    DELETE FROM BAS_BILLOFMATERIAL 
+	    WHERE 1=1
+	    AND PROCESSDEFID = #{PROCESSDEFID}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </delete>
+    
+    <!-- 공정 순서,대체자원,설지비정 탭 등록 -->
+    <insert id="insertBasBillofresource" parameterType="map">
+	    INSERT INTO BAS_BILLOFRESOURCE( 
+	        PRODUCTDEFID  
+	        ,PRODUCTDEFVERSION  
+	        ,PROCESSDEFID  
+	        ,PROCESSDEFVERSION  
+	        ,PROCESSSEGMENTID  
+	        ,PROCESSSEGMENTVERSION  
+	        ,RESOURCETYPE  
+	        ,"sequence"  
+	        ,EQUIPMENTID  
+	        ,RESOURCECLASSID  
+	        ,RESOURCEID  
+	        ,ISPRIMARYRESOURCE  
+	        ,ENTERPRISEID  
+	        ,PLANTID  
+	        ,DESCRIPTION  
+	        ,CREATOR  
+	        ,CREATEDTIME  
+	        ,MODIFIER  
+	        ,MODIFIEDTIME  
+	        ,LASTTXNHISTKEY  
+	        ,LASTTXNID  
+	        ,LASTTXNUSER  
+	        ,LASTTXNTIME  
+	        ,LASTTXNCOMMENT  
+	        ,VALIDSTATE  
+	        ,RESOURCEVERSION        ) 
+	    VALUES( 
+	        #{PRODUCTDEFID}  
+	        ,#{PRODUCTDEFVERSION}  
+	        ,#{PROCESSDEFID}  
+	        ,#{PROCESSDEFVERSION}  
+	        ,#{PROCESSSEGMENTID}  
+	        ,#{PROCESSSEGMENTVERSION}  
+	        ,#{RESOURCETYPE}
+	        ,#{PATHSEQUENCE}  
+	        ,#{EQUIPMENTID} 
+	        ,#{RESOURCECLASSID}
+	        ,#{RESOURCEID}  
+	        ,#{ISPRIMARYRESOURCE}
+	        ,#{ENTERPRISEID}  
+	        ,#{PLANTID}  
+	        ,#{DESCRIPTION}  
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{MODIFIER}  
+	        ,SYSDATE  
+	        ,#{LASTTXNHISTKEY}  
+	        ,'create'
+	        ,#{CREATOR}
+	        ,SYSDATE  
+	        ,#{LASTTXNCOMMENT}  
+	        ,#{VALIDSTATE}  
+	        ,#{RESOURCEVERSION}    )
+    </insert>
+
+    <!-- 공정 순서,대체자원,설지비정 탭 변경 -->
+    <update id="updateBasBillofresource" parameterType="map" >
+	    UPDATE BAS_BILLOFRESOURCE 
+	    SET  DESCRIPTION = #{DESCRIPTION}    
+	    	,ISPRIMARYRESOURCE = #{ISPRIMARYRESOURCE}                 
+	        ,MODIFIER = #{MODIFIER}     
+	        ,MODIFIEDTIME = SYSDATE     
+	        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+	        ,LASTTXNID = 'modify'   
+	        ,LASTTXNUSER = #{MODIFIER}     
+	        ,LASTTXNTIME = SYSDATE  
+	        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+	        ,VALIDSTATE = #{VALIDSTATE}
+	    WHERE EQUIPMENTID = #{EQUIPMENTID}
+	    AND PROCESSDEFID = #{PROCESSDEFID}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+	    AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	    AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	    AND PRODUCTDEFID = #{PRODUCTDEFID}
+	    AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	    AND RESOURCECLASSID = #{RESOURCECLASSID}
+	    AND RESOURCEID = #{RESOURCEID}
+	    AND RESOURCETYPE = #{RESOURCETYPE}
+	    AND RESOURCEVERSION = #{RESOURCEVERSION}
+	    AND "sequence" = #{PATHSEQUENCE}
+    </update>
+
+    <!-- 공정 순서,대체자원,설지비정 탭 삭제 -->
+    <delete id="deleteBasBillofresource" parameterType="map" > 
+	    DELETE FROM BAS_BILLOFRESOURCE 
+	    WHERE EQUIPMENTID = #{EQUIPMENTID}
+	    AND PROCESSDEFID = #{PROCESSDEFID}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+	    AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	    AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	    AND PRODUCTDEFID = #{PRODUCTDEFID}
+	    AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	    AND RESOURCECLASSID = #{RESOURCECLASSID}
+	    AND RESOURCEID = #{RESOURCEID}
+	    AND RESOURCETYPE = #{RESOURCETYPE}
+	    AND RESOURCEVERSION = #{RESOURCEVERSION}
+	   <!-- AND "sequence" = #{SEQ} --> 
+    </delete>
+    
+    <!-- 공정순서의 ALTERNATIVERESOURCE, ASSIGNEQUIPMENT 가 N 일 때 -->
+    <delete id="deleteBillofresource4Sub" parameterType="map" > 
+	    DELETE FROM BAS_BILLOFRESOURCE 
+	    WHERE 1=1
+	    AND PROCESSDEFID = #{PROCESSDEFID}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+	    AND PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+	    AND PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+	    AND RESOURCETYPE = #{RESOURCETYPE}
+	    AND ISPRIMARYRESOURCE = 'N'
+	   <!-- AND "sequence" = #{SEQ} --> 
+    </delete>
+    
+    <!-- sequence 조회  -->
+    <select id="selectMaxSequenceByBillofResource" parameterType="map" resultType="hashmap">
+    	/* GetMaxSequenceByBillofResource 10001 */
+    	SELECT MAX(TO_NUMBER("sequence")) SEQUENCE1
+				FROM BAS_BILLOFRESOURCE
+				WHERE 1 = 1
+					AND PRODUCTDEFID   			=#{PRODUCTDEFID}
+					AND PRODUCTDEFVERSION   	=#{PRODUCTDEFVERSION}
+					AND PROCESSDEFID   			=#{PROCESSDEFID}
+					AND PROCESSDEFVERSION   	=#{PROCESSDEFVERSION}
+					AND PROCESSSEGMENTID   		=#{PROCESSSEGMENTID}
+					AND PROCESSSEGMENTVERSION   =#{PROCESSSEGMENTVERSION}
+					AND RESOURCETYPE   			=#{RESOURCETYPE}
+    </select>
+    
+    
+     <!-- 라우팅 상세 정의 등록 -->
+    <insert id="insertBasProcesspath" parameterType="map">
+    INSERT INTO BAS_PROCESSPATH( 
+        PROCESSPATHID  
+        ,ENTERPRISEID  
+        ,PLANTID  
+        ,PROCESSDEFID  
+        ,PROCESSDEFVERSION  
+        ,PROCESSSEGMENTID  
+        ,PROCESSSEGMENTVERSION  
+        ,PATHSEQUENCE  
+        ,USERSEQUENCE  
+        ,PATHTYPE  
+        ,ALTERNATETYPE  
+        ,ALTERNATEPROCESSCLASSID  
+        ,REWORKPROCESSDEFID  
+        ,REWORKPROCESSDEFVERSION  
+        ,REWORKRETURNPATHID  
+        ,DESCRIPTION  
+        ,CREATOR  
+        ,CREATEDTIME  
+        ,MODIFIER  
+        ,MODIFIEDTIME  
+        ,LASTTXNHISTKEY  
+        ,LASTTXNID  
+        ,LASTTXNUSER  
+        ,LASTTXNTIME  
+        ,LASTTXNCOMMENT  
+        ,VALIDSTATE  
+        ,PROCESSUOM  
+        ,ALTERNATIVERESOURCE  
+        ,ASSIGNEQUIPMENT  
+        ,ISWEEKMNG        ) 
+    VALUES( 
+        #{PROCESSPATHID}  
+        ,#{ENTERPRISEID}  
+        ,#{PLANTID}  
+        ,#{PROCESSDEFID}  
+        ,#{PROCESSDEFVERSION}  
+        ,#{PROCESSSEGMENTID}  
+        ,#{PROCESSSEGMENTVERSION}  
+        ,#{PATHSEQUENCE}  
+        ,#{USERSEQUENCE}  
+        ,#{PATHTYPE}  
+        ,#{ALTERNATETYPE}  
+        ,#{ALTERNATEPROCESSCLASSID}  
+        ,#{REWORKPROCESSDEFID}  
+        ,#{REWORKPROCESSDEFVERSION}  
+        ,#{REWORKRETURNPATHID}  
+        ,#{DESCRIPTION}  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{CREATOR}  
+        ,SYSDATE  
+        ,#{LASTTXNHISTKEY}  
+        ,#{LASTTXNID}  
+        ,#{CREATOR}  
+        ,SYSDATE
+        ,#{LASTTXNCOMMENT}  
+        ,#{VALIDSTATE}  
+        ,#{PROCESSUOM}  
+        ,#{ALTERNATIVERESOURCE}  
+        ,#{ASSIGNEQUIPMENT}  
+        ,#{ISWEEKMNG}    )
+    </insert>
+
+    <!-- 라우팅 상세 정의 변경 -->
+    <update id="updateBasProcesspath" parameterType="map" >
+    UPDATE BAS_PROCESSPATH 
+    SET 
+        ENTERPRISEID = #{ENTERPRISEID}     
+        ,PLANTID = #{PLANTID}     
+        ,PROCESSDEFID = #{PROCESSDEFID}     
+        ,PROCESSDEFVERSION = #{PROCESSDEFVERSION}     
+        ,PROCESSSEGMENTID = #{PROCESSSEGMENTID}     
+        ,PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}     
+        ,PATHSEQUENCE = #{PATHSEQUENCE}     
+        ,USERSEQUENCE = #{USERSEQUENCE}     
+        ,PATHTYPE = #{PATHTYPE}     
+        ,ALTERNATETYPE = #{ALTERNATETYPE}     
+        ,ALTERNATEPROCESSCLASSID = #{ALTERNATEPROCESSCLASSID}     
+        ,REWORKPROCESSDEFID = #{REWORKPROCESSDEFID}     
+        ,REWORKPROCESSDEFVERSION = #{REWORKPROCESSDEFVERSION}     
+        ,REWORKRETURNPATHID = #{REWORKRETURNPATHID}     
+        ,DESCRIPTION = #{DESCRIPTION}                     
+        ,MODIFIER = #{MODIFIER}     
+        ,MODIFIEDTIME = SYSDATE     
+        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+        ,LASTTXNID = #{LASTTXNID}     
+        ,LASTTXNUSER = #{LASTTXNUSER}     
+        ,LASTTXNTIME = #{LASTTXNTIME}     
+        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+        ,VALIDSTATE = #{VALIDSTATE}     
+        ,PROCESSUOM = #{PROCESSUOM}     
+        ,ALTERNATIVERESOURCE = #{ALTERNATIVERESOURCE}     
+        ,ASSIGNEQUIPMENT = #{ASSIGNEQUIPMENT}     
+        ,ISWEEKMNG = #{ISWEEKMNG}
+    WHERE PROCESSPATHID = #{PROCESSPATHID}
+    </update>
+
+    <!--공정순서 삭제 -->
+    <delete id="deleteBasProcesspath" parameterType="map" > 
+    DELETE FROM BAS_PROCESSPATH 
+    WHERE PROCESSPATHID = #{PROCESSPATHID}
+    </delete>
+    
+    <!-- USERSEQUENCE 중심으로 routing 조회  -->
+    <select id="selectBasProcesspath4UserSeq" parameterType="map" resultType="hashmap">
+    	SELECT 
+        A.PROCESSPATHID	
+        ,A.ENTERPRISEID	
+        ,A.PLANTID	
+        ,A.PROCESSDEFID	
+        ,A.PROCESSDEFVERSION	
+        ,A.PROCESSSEGMENTID	
+        ,A.PROCESSSEGMENTVERSION	
+        ,A.PATHSEQUENCE	
+        ,A.USERSEQUENCE	
+        ,A.PATHTYPE	
+        ,A.ALTERNATETYPE	
+        ,A.ALTERNATEPROCESSCLASSID	
+        ,A.REWORKPROCESSDEFID	
+        ,A.REWORKPROCESSDEFVERSION	
+        ,A.REWORKRETURNPATHID	
+        ,A.DESCRIPTION	
+        ,A.CREATOR	
+        ,A.CREATEDTIME	
+        ,A.MODIFIER	
+        ,A.MODIFIEDTIME	
+        ,A.LASTTXNHISTKEY	
+        ,A.LASTTXNID	
+        ,A.LASTTXNUSER	
+        ,A.LASTTXNTIME	
+        ,A.LASTTXNCOMMENT	
+        ,A.VALIDSTATE	
+        ,A.PROCESSUOM	
+        ,A.ALTERNATIVERESOURCE	
+        ,A.ASSIGNEQUIPMENT	
+        ,A.ISWEEKMNG	
+    FROM	BAS_PROCESSPATH A 
+    WHERE 1=1 
+    <if test="PROCESSPATHID != null and PROCESSPATHID !='' "> 
+        AND A.PROCESSPATHID = #{PROCESSPATHID}
+    </if>
+    <if test="ENTERPRISEID != null and ENTERPRISEID !='' "> 
+        AND A.ENTERPRISEID = #{ENTERPRISEID}
+    </if>
+    <if test="PLANTID != null and PLANTID !='' "> 
+        AND A.PLANTID = #{PLANTID}
+    </if>
+    <if test="PROCESSDEFID != null and PROCESSDEFID !='' "> 
+        AND A.PROCESSDEFID = #{PROCESSDEFID}
+    </if>
+    <if test="PROCESSDEFVERSION != null and PROCESSDEFVERSION !='' "> 
+        AND A.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </if>
+    ORDER BY USERSEQUENCE
+    </select>
+    
+    <!-- 품목지정 그리드 등록 -->
+    <insert id="insertBasReworkcontrol" parameterType="map">
+	    INSERT INTO BAS_REWORKCONTROL( 
+	        PROCESSDEFID  
+	        ,PROCESSDEFVERSION  
+	        ,CONTROLTYPE  
+	        ,SEQUENCE  
+	        ,CONTROLRESOURCEID  
+	        ,CONTROLRESOURCEVERSION  
+	        ,ENTERPRISEID  
+	        ,PLANTID  
+	        ,DESCRIPTION  
+	        ,CREATOR  
+	        ,CREATEDTIME  
+	        ,MODIFIER  
+	        ,MODIFIEDTIME  
+	        ,LASTTXNHISTKEY  
+	        ,LASTTXNID  
+	        ,LASTTXNUSER  
+	        ,LASTTXNTIME  
+	        ,LASTTXNCOMMENT  
+	        ,VALIDSTATE        ) 
+	    VALUES( 
+	        #{PROCESSDEFID}  
+	        ,#{PROCESSDEFVERSION}  
+	        ,#{CONTROLTYPE}  
+	        ,#{SEQ}  
+	        ,#{RESOURCEID}  
+	        ,#{RESOURCEVERSION}  
+	        ,#{ENTERPRISEID}  
+	        ,#{PLANTID}  
+	        ,#{DESCRIPTION}  
+	        ,#{CREATOR}  
+	        ,SYSDATE  
+	        ,#{MODIFIER}  
+	        ,SYSDATE  
+	        ,#{LASTTXNHISTKEY}  
+	        ,#{LASTTXNID}  
+	        ,#{CREATOR}  
+	        ,SYSDATE
+	        ,#{LASTTXNCOMMENT}  
+	        ,#{VALIDSTATE}    )
+    </insert>
+
+    <!-- 품목지정 그리드 변경 -->
+    <update id="updateBasReworkcontrol" parameterType="map" >
+	    UPDATE BAS_REWORKCONTROL 
+	    SET 
+	        CONTROLRESOURCEID = #{RESOURCEID}     
+	        ,CONTROLRESOURCEVERSION = #{RESOURCEVERSION}     
+	        ,ENTERPRISEID = #{ENTERPRISEID}     
+	        ,PLANTID = #{PLANTID}     
+	        ,DESCRIPTION = #{DESCRIPTION}                     
+	        ,MODIFIER = #{MODIFIER}     
+	        ,MODIFIEDTIME = SYSDATE     
+	        ,LASTTXNHISTKEY = #{LASTTXNHISTKEY}     
+	        ,LASTTXNID = #{LASTTXNID}     
+	        ,LASTTXNUSER = #{MODIFIER}       
+	        ,LASTTXNTIME = SYSDATE 
+	        ,LASTTXNCOMMENT = #{LASTTXNCOMMENT}     
+	        ,VALIDSTATE = #{VALIDSTATE}
+	    WHERE CONTROLTYPE = #{CONTROLTYPE}
+	    AND PROCESSDEFID = #{PROCESSDEFID}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+	    AND SEQUENCE = #{SEQ}
+    </update>
+
+    <!-- 품목지정 그리드 삭제 -->
+    <delete id="deleteBasReworkcontrol" parameterType="map" > 
+	    DELETE FROM BAS_REWORKCONTROL 
+	    WHERE CONTROLTYPE = #{CONTROLTYPE}
+	    AND PROCESSDEFID = #{PROCESSDEFID}
+	    AND PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+	    AND SEQUENCE = #{SEQ}
+    </delete>
+    
+        <!-- sequence 조회  -->
+    <select id="selectMaxSequenceByReworkControl" parameterType="map" resultType="hashmap">
+    	/* GetMaxSequenceByReworkControl 10001 */
+    		SELECT MAX(TO_NUMBER("SEQUENCE")) SEQUENCE1 
+			    FROM	BAS_REWORKCONTROL A 
+			    WHERE A.ENTERPRISEID = #{ENTERPRISEID}   
+			    AND	A.PROCESSDEFID = #{PROCESSDEFID}
+			    AND	A.PROCESSDEFVERSION = #{PROCESSDEFVERSION}
+    </select>
+    
+    <select id="selectAreaList" parameterType="map" resultType="hashmap">
+    /* GetAreaList 10003 */
+	    	SELECT	AREAID
+					, NVL(D.DICTIONARYNAME,A.AREANAME ) AS AREANAME
+					, A.PLANTID
+			FROM	BAS_AREA 					A
+			LEFT OUTER JOIN CMD_DICTIONARY 		D	ON	A.AREANAME = D.DICTIONARYID
+											  		AND	D.LANGUAGETYPE = #{LANGUAGETYPE}
+			WHERE 	1 = 1
+		<if test="TXTAREA != null and TXTAREA !='' and !(TXTAREA eq '*'.toString())">
+			AND    ( UPPER(AREAID) LIKE UPPER(<![CDATA['%' ||]]> #{TXTAREA} <![CDATA[|| '%']]> )
+					 OR 	 UPPER(AREANAME) LIKE UPPER(<![CDATA['%' ||]]> #{TXTAREA} <![CDATA[|| '%']]> )
+					 OR 	 UPPER(D.DICTIONARYNAME) LIKE UPPER(<![CDATA['%' ||]]> #{TXTAREA} <![CDATA[|| '%']]> )
+					)
+		</if>
+			AND 	A.PLANTID = #{PLANTID}
+			AND 	AREATYPE = 'Area'
+			AND 	A.VALIDSTATE = 'Valid'
+			ORDER BY AREAID ASC
+    </select>
+
+	<select id="selectReworkRoutingEquipmentPopup" parameterType="map" resultType="hashmap">
+		/* GetReworkRoutingEquipmentPopup 10001 */
+			SELECT SE.EQUIPMENTID
+					 , D.DICTIONARYNAME		AS EQUIPMENTNAME
+				FROM BAS_BILLOFRESOURCE 	BR
+				INNER JOIN BAS_RESOURCE 	MR 	ON 	BR.RESOURCEID 		= MR.RESOURCEID
+										 	AND BR.ENTERPRISEID 	= MR.ENTERPRISEID
+				INNER JOIN BAS_EQUIPMENT SE 	ON 	MR.EQUIPMENTCLASSID = SE.EQUIPMENTCLASSID
+											AND MR.AREAID 			= SE.AREAID
+				LEFT JOIN CMD_DICTIONARY D	ON SE.EQUIPMENTNAME 	= D.DICTIONARYID
+											AND D.LANGUAGETYPE 		= #{LANGUAGETYPE}
+				WHERE BR.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+			<if test="EQUIPMENTID != null and EQUIPMENTID !='' and !(EQUIPMENTID eq '*'.toString())">
+				  AND	UPPER(SE.EQUIPMENTID) LIKE UPPER(<![CDATA['%' ||]]> #{EQUIPMENTID} <![CDATA[|| '%']]> )
+			</if>
+			<if test="EQUIPMENTNAME != null and EQUIPMENTNAME !='' and !(EQUIPMENTNAME eq '*'.toString())">
+				  AND	UPPER(D.DICTIONARYNAME)  LIKE UPPER(<![CDATA['%' ||]]> #{EQUIPMENTNAME} <![CDATA[|| '%']]> )
+			</if>
+				GROUP BY  SE.EQUIPMENTID, SE.EQUIPMENTCLASSID, SE.AREAID, D.DICTIONARYNAME
+				ORDER BY SE.EQUIPMENTID
+	</select>
+</mapper>

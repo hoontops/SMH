@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+	PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+	"http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : 권한사용자 관리
+    설명          : 권한사용자 테이블 관련 쿼리 정의
+    작성자       : 진성하
+    최초작성일 : 2017.10.01
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.10.01     진성하     최초  생성
+-->
+
+<!-- 권한사용자 관리 -->
+<mapper namespace="com.nbdf.cmd.cm.cmsy.dao.CMSY01500Dao">
+
+    <!-- 사용자조회 -->
+	<select id="selectCmdUsersList" resultType="hashmap" parameterType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01500Dao.selectCmdUsersList" */
+			ID              													
+			,USER_ID           													
+			,USER_PWD             													
+			,USER_NM              													
+			,EMP_NO               													
+			,EMAIL_ADDR           													
+			,CLPS_CD              													
+			,JIKWI_CD             													
+			,A.DEPT_CD              													
+			,CMPN_PHN_NO          													
+			,MBPH_NO              													
+			,A.USE_YN               													
+			,B.DEPT_NM          	
+			,'' as CHK    													
+		FROM CMD_USERS A, CMD_DEPTS B
+		WHERE 1=1
+		AND A.DEPT_CD = B.DEPT_CD(+)
+		AND NOT EXISTS (SELECT 1 
+						FROM CMD_USER_AUTH_MPNG
+						WHERE USER_ID=A.USER_ID AND JOB_AUTH_ID = #{JOB_AUTH_ID} )
+        AND A.USE_YN='Y'
+       <if test="USER_ID != null and USER_ID != ''">
+           AND USER_ID LIKE #{USER_ID} || '%'
+       </if>
+       <if test="USER_NM != null and USER_NM != ''">
+           AND A.USER_NM LIKE '%' || #{USER_NM} || '%' 
+       </if>
+       
+    </select>
+
+    <!-- 사용자조회(선택유저 제외) -->
+	<select id="selectCmdUsersListExceptSelected" resultType="hashmap" parameterType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01500Dao.selectCmdUsersListExceptSelected" */
+			ID              													
+			,USER_ID            													
+			,USER_PWD             													
+			,USER_NM              													
+			,EMP_NO               													
+			,EMAIL_ADDR           													
+			,CLPS_CD              													
+			,JIKWI_CD             													
+			,DEPT_CD              													
+			,CMPN_PHN_NO          													
+			,MBPH_NO              													
+			,HFFC_STTUS_CD        													
+			,USE_YN               													
+			,JOB_APRC_ENBL_YN     													
+			,USER_GUBUN_CD        													
+			,JNG_COURS_CD         													
+			,'' as CHK
+			,'' as USER_ID_FROM
+			,#{PLATFORM_FLAG} AS PLATFORM_FLAG    													
+		FROM CMD_USERS A
+		WHERE 1=1
+        AND USER_ID != #{USER_ID}
+        AND USER_ID NOT IN (SELECT B.USER_ID 
+        				FROM CMD_USER_AUTH_MPNG B
+        				WHERE JOB_AUTH_ID IN (               
+							SELECT JOB_AUTH_ID 
+								FROM  CMD_USER_AUTH_MPNG 
+								WHERE USER_ID=#{USER_ID} 
+								AND JOB_AUTH_ID IN (SELECT JOB_AUTH_ID FROM CMD_JOB_AUTH_MNG WHERE PLATFORM_FLAG = #{PLATFORM_FLAG})		   
+								AND COMPANY_CD = #{COMPANY_CD}
+							)  
+						AND B.USER_ID != #{USER_ID}    	  
+        				)
+       <if test="USER_ID != null and USER_ID != ''">
+           AND USER_ID LIKE #{USER_ID} || '%'
+       </if>
+       <if test="USER_NM != null and USER_NM != ''">
+           AND USER_NM LIKE '%' || #{USER_NM} || '%' 
+       </if>
+    </select>
+    <!-- 권한조회 -->
+	<select id="selectCmdJobAuthMngList" resultType="hashmap" parameterType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01500Dao.selectCmdJobAuthMngList" */
+			JOB_AUTH_ID              													
+			,AUTH_NM            													
+			,'' as CHK    													
+		FROM CMD_JOB_AUTH_MNG A
+		WHERE 1=1
+		AND NOT EXISTS (SELECT 1 
+						FROM CMD_USER_AUTH_MPNG 
+						WHERE JOB_AUTH_ID=A.JOB_AUTH_ID AND USER_ID = #{USER_ID} )
+       <if test="AUTH_NM != null and AUTH_NM != ''">
+           AND AUTH_NM LIKE '%' || #{AUTH_NM} || '%' 
+       </if>
+    </select>
+    
+    <!-- 권한사용자조회 -->
+	<select id="selectCmdUserAuthMpngList" resultType="hashmap" parameterType="hashmap">
+        SELECT /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01500Dao.selectCmdUserAuthMpngList" */
+			B.ID      
+			,A.JOB_AUTH_ID 
+            ,USER_NM 
+			,AUTH_NM
+			,B.USER_ID
+			,B.DEPT_CD
+			,D.DEPT_NM          	
+			,'' as CHK
+			,TO_CHAR(A.CREATION_DATE,'YYYYMMDD') AS CREATION_DATE        
+		FROM CMD_USER_AUTH_MPNG A, CMD_USERS B, CMD_JOB_AUTH_MNG C , CMD_DEPTS D
+		WHERE A.USER_ID = B.USER_ID
+		AND A.JOB_AUTH_ID = C.JOB_AUTH_ID
+		AND B.DEPT_CD = D.DEPT_CD(+)
+		AND C.PLANTID = #{PLANTID}
+       <if test="JOB_AUTH_ID != null and JOB_AUTH_ID != ''">
+           AND A.JOB_AUTH_ID = #{JOB_AUTH_ID}
+       </if>
+       <if test="USER_ID != null and USER_ID != ''">
+           AND B.USER_ID = #{USER_ID}
+       </if>
+       <if test="USE_YN != null and USE_YN != ''">
+           AND A.USE_YN = #{USE_YN}
+       </if>
+	</select>
+
+    <!-- 권한사용자등록 -->
+    <insert id="insertCmdUserAuthMpng" parameterType="hashmap">
+    INSERT  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01500Dao.insertCmdUserAuthMpng" */
+    INTO     CMD_USER_AUTH_MPNG
+                (	USER_ID           
+					,JOB_AUTH_ID      
+					,CREATED_BY       
+					,CREATION_DATE    
+					,LAST_UPDATED_BY  
+					,LAST_UPDATE_DATE 
+					,USE_YN
+                )
+    VALUES 	(
+                #{USER_ID}
+                ,#{JOB_AUTH_ID}               
+			    ,#{CREATED_BY}
+			    ,SYSDATE
+				,#{LAST_UPDATED_BY}      
+				,SYSDATE
+				,'Y'
+			    )
+    </insert>
+
+   <!-- 권한사용자 삭제 -->
+    <delete id="deleteCmdUserAuthMpng" parameterType="hashmap">
+    DELETE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01500Dao.deleteCmdUserAuthMpng" */
+    FROM    CMD_USER_AUTH_MPNG
+    WHERE  USER_ID = #{USER_ID}
+    AND JOB_AUTH_ID = #{JOB_AUTH_ID}
+    </delete>
+
+    <!-- 권한사용자 수정 -->
+    <update id="updateCmdUserAuthMpng" parameterType="hashmap">
+    UPDATE  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01500Dao.updateCmdUserAuthMpng" */  
+    CMD_USER_AUTH_MPNG
+    SET     LAST_UPDATED_BY	= #{LAST_UPDATED_BY}          
+			,LAST_UPDATE_DATE 	= SYSDATE                   
+    WHERE  USER_ID = #{USER_ID}
+    AND JOB_AUTH_ID = #{JOB_AUTH_ID}
+    </update>
+
+    <!-- 권한사용자등록 -->
+    <insert id="insertCmdUserAuthMpngCopy" parameterType="hashmap">
+    INSERT  /* "com.nbdf.cmd.cm.cmsy.dao.CMSY01500Dao.insertCmdUserAuthMpngCopy" */
+    INTO     CMD_USER_AUTH_MPNG
+                (	USER_ID           
+					,JOB_AUTH_ID      
+					,CREATED_BY       
+					,CREATION_DATE    
+					,LAST_UPDATED_BY  
+					,LAST_UPDATE_DATE 
+					,USE_YN
+                )
+    		SELECT #{USER_ID}
+				,JOB_AUTH_ID      
+			    ,#{CREATED_BY}
+			    ,SYSDATE
+				,#{LAST_UPDATED_BY}      
+				,SYSDATE
+				,USE_YN
+    		FROM CMD_USER_AUTH_MPNG
+		    WHERE  USER_ID = #{USER_ID_FROM}
+    </insert>
+  </mapper>

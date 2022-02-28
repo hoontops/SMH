@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<mapper namespace="com.nbdf.cmd.cm.cmsa.dao.CMSA01230Dao">
+
+    <!-- 파일 업로드/다운로드 - 자료 조회 -->    
+    <select id="selectAtchFileList" parameterType="map" resultType="hashmap">
+	    /* com.nbdf.cmd.cm.cmsa.dao.CMSA01230Dao.selectAtchFileList */
+        SELECT CAF.ATCH_FILE_ID
+              ,CAF.OC_FILE_NM
+              ,CAF.ATCH_FILE_GUID
+              ,CAF.SVR_SAVE_COURS
+              ,CAF.FULL_SAVE_COURS
+              ,CAF.FILE_SIZE
+              ,CAF.FILE_EXT
+              ,CAF.DRM_APY_YN
+              ,CAF.DNLD_CNT
+              ,CAF.KEEP_START_DATEC
+              ,CAF.KEEP_END_DATEC              
+              ,CAF.USE_YN
+              ,CAF.CREATED_BY
+              ,CAF.CREATION_DATE
+              ,CAF.LAST_UPDATED_BY
+              ,CAF.LAST_UPDATE_DATE
+              ,CAF.SEQ_NO
+              ,CAF.ROWID AS ROW_ID
+              ,CAM.ATCH_SRC_KEY
+              ,CAM.RM
+          FROM CMD_ATCH_FILES_MPNGS CAM
+              ,CMD_ATCH_FILES       CAF
+         WHERE 1 = 1
+           AND CAM.ATCH_FILE_ID   = CAF.ATCH_FILE_ID
+           AND CAF.ATCH_FILE_ID   = #{ATCH_FILE_ID}
+         ORDER BY CAF.SEQ_NO  
+    </select>
+    
+    <!-- 파일 업로드/다운로드 - 파일정보 조회 -->
+    <select id="getFileInfo" parameterType="map" resultType="hashmap">
+        /* com.nbdf.cmd.cm.cmsa.dao.CMSA01230Dao.getFileInfo */
+        SELECT CAM.*
+          FROM CMD_ATCH_FILES_MPNGS CAM
+         WHERE CAM.ATCH_FILE_ID     = #{ATCH_FILE_ID}
+    </select>
+    
+    <!-- 파일 업로드/다운로드 - 상세/헤더 삭제 -->
+    <delete id="deleteAtchFile" parameterType="map">
+        /* com.nbdf.cmd.cm.cmsa.dao.CMSA01230Dao.deleteAtchFile */
+        DECLARE
+        BEGIN
+	        DELETE
+	          FROM CMD_ATCH_FILES CAF
+	         WHERE CAF.ROWID       = #{ROW_ID};
+        	
+        	DELETE
+	          FROM CMD_ATCH_FILES_MPNGS CAM
+	        WHERE 1=1
+	          AND CAM.ATCH_FILE_ID = #{ATCH_FILE_ID}
+	          AND 0                = (SELECT COUNT(1)
+	                                    FROM CMD_ATCH_FILES CAF
+	                                   WHERE 1=1
+	                                     AND CAF.ATCH_FILE_ID = #{ATCH_FILE_ID}  
+	                                 )
+	          ;
+	          
+        END; 	                                        
+    </delete>
+    
+    <!-- 첨부파일 정보 저장 - 헤더 -->
+    <insert id="insertAtchFilesHeader" parameterType="hashmap">
+    	<selectKey keyProperty="ATCH_FILE_ID" resultType="Integer" order="BEFORE">
+           SELECT CMD_ATCH_FILES_S.NEXTVAL FROM DUAL
+        </selectKey>        
+        /* com.nbdf.cmd.cm.cmsa.dao.CMSA01230Dao.insertAtchFilesHeader */
+        DECLARE
+        BEGIN
+        	INSERT INTO CMD_ATCH_FILES_MPNGS
+			  (ATCH_FILE_ID
+			  ,ATCH_SRC_KEY
+			  ,ATCH_TY_CD
+			  ,RM
+			  ,CREATED_BY
+			  ,CREATION_DATE
+			  ,LAST_UPDATED_BY
+			  ,LAST_UPDATE_DATE 
+			  )
+			VALUES
+			  (#{ATCH_FILE_ID}
+			  ,TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS')
+			  ,#{ATCH_TY_CD}
+			  ,#{RM}
+			  ,#{CREATED_BY}
+			  ,SYSDATE
+			  ,#{CREATED_BY}
+			  ,SYSDATE
+			  );
+		END;		  
+    </insert>
+     
+    <!-- 첨부파일 정보 저장 - 상세 -->
+    <insert id="insertAtchFilesDetail" parameterType="hashmap">
+    	/* com.nbdf.cmd.cm.cmsa.dao.CMSA01230Dao.insertAtchFilesDetail */
+		INSERT INTO CMD_ATCH_FILES
+		  (ATCH_FILE_ID
+		  ,SEQ_NO
+		  ,OC_FILE_NM
+		  ,ATCH_FILE_GUID
+		  ,SVR_SAVE_COURS
+		  ,FULL_SAVE_COURS
+		  ,FILE_SIZE
+		  ,FILE_EXT
+		  ,DRM_APY_YN
+		  ,DNLD_CNT
+		  ,KEEP_START_DATEC
+		  ,KEEP_END_DATEC
+		  ,USE_YN
+		  ,CREATED_BY
+		  ,CREATION_DATE
+		  ,LAST_UPDATED_BY
+		  ,LAST_UPDATE_DATE
+		  )
+		VALUES
+		  (#{ATCH_FILE_ID}
+		  ,(SELECT NVL(MAX(SEQ_NO), 0) + 1
+		     FROM CMD_ATCH_FILES
+		    WHERE ATCH_FILE_ID = #{ATCH_FILE_ID}
+		   )
+		  ,#{OC_FILE_NM}
+		  ,#{ATCH_FILE_GUID}
+		  ,#{SVR_SAVE_COURS}
+		  ,#{SVR_SAVE_COURS} || #{ATCH_FILE_GUID}
+		  ,#{FILE_SIZE}
+		  ,#{FILE_EXT}
+		  ,'N'
+		  ,0
+		  ,TO_CHAR(SYSDATE, 'YYYYMMDD')
+		  ,'99991231'
+		  ,'Y'
+		  ,#{CREATED_BY}
+		  ,SYSDATE
+		  ,#{LAST_UPDATED_BY}
+		  ,SYSDATE
+		  )
+    </insert>
+
+	<!-- 파일 업로드/다운로드 - 상세정보 중복 카운트 조회(원본 파일명이 동일하면 중복) -->
+    <select id="selectAtchFilesDetailDup" resultType="Integer">
+        /* com.nbdf.cmd.cm.cmsa.dao.CMSA01230Dao.selectAtchFilesDetailDup */
+        SELECT COUNT(*)          AS CNT
+          FROM CMD_ATCH_FILES    CAF
+         WHERE 1=1
+           AND CAF.OC_FILE_NM   = #{OC_FILE_NM}
+           AND CAF.ATCH_FILE_ID = #{ATCH_FILE_ID}
+    </select>
+    
+    <!-- 파일 업로드/다운로드 - 상세정보 ATCH_FILE_GUID sequence 채번 -->
+    <select id="selectAtchFileGuidID"  resultType="String" >
+        /* com.nbdf.cmd.cm.cmsa.dao.CMSA01230Dao.selectAtchFileGuidID */
+        SELECT to_char(CMD_SAVE_FILES_S.nextval)
+          FROM DUAL
+    </select>
+       
+ </mapper>

@@ -1,0 +1,551 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM03400Dao">
+   <select id="selectBatchTrackOut" parameterType="map" resultType="hashmap">
+			/* smh.pcm.dao.PCM03400Dao.selectBatchTrackOut */
+  						--
+				-- Id : SelectBatchTrackOut
+				-- Version : 10001
+				
+				SELECT   L.LOTID
+			              ,  PD.PRODUCTDEFID
+			              ,  PD.PRODUCTDEFNAME
+			              ,  L.PROCESSSEGMENTID
+			              ,  COALESCE(PSD.DICTIONARYNAME, PS.PROCESSSEGMENTNAME) AS PROCESSSEGMENTNAME
+			              ,  L.UNIT
+			              ,  L.QTY
+			              ,  L.PRODUCTIONORDERID
+			              ,  L.AREAID
+			              ,  COALESCE(ARD.DICTIONARYNAME, AR.AREANAME) AS AREANAME 
+			              ,  CASE WHEN PP.PATHTYPE = 'Start' OR PP.PATHTYPE = 'StartEnd' THEN TO_CHAR(L.LOTSTARTDATE,'YYYY-MM-DD HH24:MI:SS')
+			                      ELSE TO_CHAR(LH.SENDTIME,'YYYY-MM-DD HH24:MI:SS') 
+			                      END SEGMENTINCOMETIME
+			              ,  L.PANELQTY
+			              ,  L.USERSEQUENCE                   
+			        FROM    PCM_LOT         L
+			        INNER JOIN BAS_PRODUCTDEFINITION PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+			                                            AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION                                       
+			        INNER JOIN BAS_PROCESSSEGMENT    PS  ON  L.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+			                                            AND L.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+			                                            AND  PS.PROCESSSEGMENTCLASSID NOT IN ('7026' ,'7030', '7534', '7536')
+			                                            AND PS.PROCESSSEGMENTTYPE NOT IN ('Package')
+			                                            AND   PS.VALIDSTATE = 'Valid'
+			        LEFT  JOIN CMD_DICTIONARY        PSD ON  PSD.DICTIONARYID = PS.PROCESSSEGMENTNAME
+			                                            AND PSD.LANGUAGETYPE = #{LANGUAGETYPE}                                         
+			        INNER  JOIN BAS_AREA             AR  ON L.AREAID = AR.AREAID
+			        										AND   AR.VALIDSTATE = 'Valid'
+			        LEFT   JOIN CMD_DICTIONARY       ARD ON  AR.AREANAME = ARD.DICTIONARYID
+			                                            AND ARD.LANGUAGETYPE = #{LANGUAGETYPE}  
+			        INNER  JOIN PCM_LOTWORKRESULT    CW  ON  L.LOTID = CW.LOTID
+			                                            AND L.PROCESSSEGMENTID = CW.PROCESSSEGMENTID
+			                                            AND L.PROCESSSEGMENTVERSION = CW.PROCESSSEGMENTVERSION
+			                                            AND L.PROCESSDEFID = CW.PROCESSDEFID
+			                                            AND L.PROCESSDEFVERSION = CW.PROCESSDEFVERSION
+			                                            AND L.WORKCOUNT = CW.WORKCOUNT
+			        LEFT    JOIN PCM_LOTHISTORY      LH   ON CW.PREVSENDLOTHISTKEY = LH.TXNHISTKEY
+			        INNER   JOIN BAS_PROCESSPATH     PP   ON  L.PROCESSDEFID = PP.PROCESSDEFID
+			                                             AND L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+			                                             AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+			                                             AND L.PROCESSSEGMENTVERSION = PP.PROCESSSEGMENTVERSION
+			                                             AND PP.VALIDSTATE = 'Valid'
+			        WHERE 1=1        
+			        AND L.LOTSTATE = 'InProduction'
+			        AND L.PROCESSSTATE = 'Run'
+					AND NVL(L.ISLOCKING, 'N') != 'Y'   -- 2021-05-27 locking Lot은 안보이도록 처리, 노석안 과장
+			        AND EXISTS (  SELECT  1
+			                FROM  PCM_LOTEQUIPMENT  LE
+			                WHERE  LE.EQUIPMENTID = #{EQUIPMENTID}
+			                AND    LE.LOTID = L.LOTID
+			                AND    LE.TRACKINTIME IS NOT NULL
+			                AND    LE.TRACKOUTTIME IS NULL  )
+  		
+  		<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+  			-- 품목코드
+  			AND	L.PRODUCTDEFID = #{PRODUCTDEFID}
+  			AND	L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+  		</if>
+		<if test="AREAID != null and AREAID !='' ">
+  			-- 작업장
+  			AND	L.AREAID = #{AREAID}
+  		</if>
+		<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+  			-- 공정
+  			AND	L.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+  		</if>  				
+		<if test="P_LOTID != null and P_LOTID !='' ">
+  			-- LOTID
+  			AND	UPPER(L.LOTID) LIKE '%' || UPPER(#{P_LOTID}) || '%'
+  		</if>
+  		
+        ORDER BY L.LOTID 
+	</select>
+	
+	   <select id="selectCommentByProcess" parameterType="map" resultType="hashmap">	
+				-- Id : SelectCommentByProcess
+				-- Version : 10001
+				SELECT
+						PP1.PROCESSPATHID
+					,	PP1.USERSEQUENCE
+					,	PP1.PROCESSSEGMENTID
+					,	NVL(PSN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+					,	PP1.DESCRIPTION
+					,	CASE WHEN PS.PROCESSSEGMENTID = #{PROCESSSEGMENTID} THEN 'Y'
+							 ELSE 'N'
+						END							AS ISCURRENTPROCESS
+				FROM	PCM_LOT						L
+				INNER JOIN BAS_PRODUCTDEFINITION      PD ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+				                                        AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION	
+				INNER JOIN BAS_PROCESSPATH           PP1 ON SPLIT_PART(L.PROCESSPATHSTACK,'.',1) = PP1.PROCESSPATHID
+																	AND	PP1.VALIDSTATE = 'Valid' 				                                        			
+				<!-- LEFT OUTER JOIN BAS_PROCESSPATH		PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+														AND	L.PLANTID = PP.PLANTID
+														AND	PD.PROCESSDEFID = PP.PROCESSDEFID
+														AND	PD.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+														AND	PP.VALIDSTATE = 'Valid' -->
+														--AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT	PS	ON	PP1.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+														AND	PP1.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY		PSN	ON	PS.PROCESSSEGMENTNAME = PSN.DICTIONARYID
+														AND	PSN.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				AND     ((L.ENTERPRISEID = 'SMLINES' <!-- AND PP.PATHSEQUENCE = PP1.PATHSEQUENCE -->) 
+				<!-- OR      ( L.ENTERPRISEID = 'YOUNGPOONG' AND (PP.PATHSEQUENCE = PP1.PATHSEQUENCE OR PP.PATHSEQUENCE = PP1.PATHSEQUENCE+1)) -->)
+				ORDER BY PP1.PATHSEQUENCE ASC
+	</select>
+	
+<select id="selectProcessSpecByProcess" parameterType="map" resultType="hashmap">	    		
+				-- Id : SelectProcessSpecByProcess
+				-- Version : 10001
+				SELECT
+						PP.PROCESSPATHID
+					,	PP.USERSEQUENCE
+					,	PP.PROCESSSEGMENTID
+					,	NVL(PSN.DICTIONARYNAME, PS.PROCESSSEGMENTNAME)	AS PROCESSSEGMENTNAME
+					,	IID.DICTIONARYNAME				AS SPECCLASSNAME
+					,	SD.LSL
+					,	SD.SL
+					,	SD.USL
+					,	CASE WHEN PP.PROCESSSEGMENTID = #{PROCESSSEGMENTID} THEN 'Y'
+							 ELSE 'N'
+						END								AS ISCURRENTPROCESS
+					,   PP.PATHSEQUENCE	
+					,   CASE WHEN L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID 
+					         THEN PP.PATHSEQUENCE
+					         ELSE 0
+					         END  LOTPATHSEQUENCE							
+				FROM	PCM_LOT							L
+				LEFT OUTER JOIN BAS_PROCESSPATH			PP	ON	L.ENTERPRISEID = PP.ENTERPRISEID
+															AND	L.PLANTID = PP.PLANTID
+															AND	L.PROCESSDEFID = PP.PROCESSDEFID
+															AND	L.PROCESSDEFVERSION = PP.PROCESSDEFVERSION
+															AND L.PROCESSSEGMENTID = PP.PROCESSSEGMENTID
+				LEFT OUTER JOIN BAS_PROCESSSEGMENT		PS	ON	PP.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+															AND	PP.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION
+				LEFT OUTER JOIN CMD_DICTIONARY			PSN	ON	PS.PROCESSSEGMENTNAME = PSN.DICTIONARYID
+															AND	PSN.LANGUAGETYPE = #{LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_INSPECTIONITEMREL	IR	ON	L.PRODUCTDEFID = IR.RESOURCEID
+															AND	L.PRODUCTDEFVERSION = IR.RESOURCEVERSION
+															AND	IR.INSPECTIONDEFID = 'OperationInspection-OperationInspection'
+															AND	L.PROCESSSEGMENTID = IR.PROCESSSEGID
+				LEFT OUTER JOIN BAS_INSPITEM                    II      ON  IR.ENTERPRISEID   = II.ENTERPRISEID
+		                                     AND IR.INSPITEMID    = II.INSPITEMID   
+		        LEFT OUTER JOIN CMD_DICTIONARY              IID     ON  II.INSPITEMNAME   = IID.DICTIONARYID
+		                                     AND IID.LANGUAGETYPE =#{SESSION_LANGUAGETYPE}
+				LEFT OUTER JOIN BAS_SPECDEFINITION		S	ON	IR.SPECCLASSID = S.SPECCLASSID
+															AND	IR.SPECSEQUENCE = S.SPECSEQUENCE
+				INNER JOIN BAS_SPECDETAIL			SD	ON	S.SPECSEQUENCE = SD.SPECSEQUENCE
+															AND	SD.CONTROLTYPE = #{CONTROLTYPE} 
+															AND	SD.SPECCLASSID = #{SPECCLASSID} 
+				LEFT OUTER JOIN BAS_SPECCLASS			SC	ON	S.SPECCLASSID = SC.SPECCLASSID
+				LEFT OUTER JOIN CMD_DICTIONARY			DIC	ON	SC.SPECCLASSNAME = DIC.DICTIONARYID
+															AND	DIC.LANGUAGETYPE = #{LANGUAGETYPE} 
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+	</select>
+	
+ <select id="getEquipmentByArea" parameterType="map" resultType="hashmap">
+ 				--
+				-- Id : SelectEquipmentListForBatchTrackIn
+				-- Version : 10001
+				SELECT DISTINCT
+							EQP.EQUIPMENTID
+						,	COALESCE(EQD.DICTIONARYNAME, EQP.EQUIPMENTNAME)	AS EQUIPMENTNAME
+						,	(	SELECT	COUNT(*) 
+								FROM	PCM_LOTEQUIPMENT LE 
+								WHERE	LE.EQUIPMENTID = EQP.EQUIPMENTID
+								AND 	LE.TRACKINTIME IS NOT NULL
+								AND 	LE.TRACKOUTTIME IS NULL	) AS LOTCNT
+						,	EQP.STATE 
+            ,NULL AS CHK
+				FROM		BAS_PRODUCTDEFINITION	PD
+				INNER JOIN	BAS_BILLOFRESOURCE		BOR ON	BOR.PRODUCTDEFID = PD.PRODUCTDEFID
+														AND BOR.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                            AND BOR.PROCESSDEFID = PD.PROCESSDEFID
+                            AND BOR.PROCESSDEFVERSION = PD.PROCESSDEFVERSION
+                            AND  BOR.RESOURCETYPE = 'Resource'
+        INNER JOIN  BAS_RESOURCE        RSC  ON  RSC.RESOURCEID = BOR.RESOURCEID
+                            AND RSC.ENTERPRISEID = BOR.ENTERPRISEID
+                            AND RSC.PLANTID = BOR.PLANTID
+        INNER JOIN  BAS_EQUIPMENT      EQP  ON  EQP.ENTERPRISEID = RSC.ENTERPRISEID
+                            AND  EQP.PLANTID = RSC.PLANTID
+                            AND  EQP.EQUIPMENTCLASSID = RSC.EQUIPMENTCLASSID 
+                            AND EQP.VALIDSTATE = 'Valid'
+        LEFT JOIN  CMD_DICTIONARY          EQD ON  EQD.DICTIONARYID = EQP.EQUIPMENTNAME
+                                              AND EQD.LANGUAGETYPE = #{LANGUAGETYPE}
+        WHERE  1 = 1
+        AND    PD.PRODUCTDEFID = #{PRODUCTDEFID}
+        AND    PD.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+        AND    BOR.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+        AND    EQP.AREAID = #{AREAID}
+        AND    RSC.RESOURCEID = #{RESOURCEID}
+        AND    COALESCE(EQP.STATE, '') IN ('Idle', 'Run')
+        ORDER BY EQP.EQUIPMENTID			
+    </select>
+    
+	<select id="selectEquipmentListForBatchTrackOut" parameterType="map" resultType="hashmap">	
+				-- Id : SelectEquipmentListForBatchTrackOut
+				-- Version : 10001
+					SELECT
+						L.LOTID
+					,	LE.EQUIPMENTID
+					,	COALESCE(EQD.DICTIONARYNAME, EQ.EQUIPMENTNAME) AS EQUIPMENTNAME
+					,	TO_CHAR(LE.TRACKINTIME,'YYYY-MM-DD HH24:MI:SS') AS TRACKINTIME
+				FROM 	 	PCM_LOT 				L
+				INNER JOIN	PCM_LOTEQUIPMENT		LE	ON	LE.LOTID = L.LOTID
+													AND LE.EQUIPMENTID = #{EQUIPMENTID}
+				INNER JOIN	BAS_EQUIPMENT		EQ	ON	EQ.EQUIPMENTID = LE.EQUIPMENTID
+				INNER JOIN	CMD_DICTIONARY		EQD	ON	EQD.DICTIONARYID = EQ.EQUIPMENTNAME
+													AND EQD.LANGUAGETYPE = #{LANGUAGETYPE}
+				WHERE 	1 = 1
+				AND 	L.LOTSTATE = 'InProduction'
+				AND 	L.PROCESSSTATE = 'Run'
+		<if test="PRODUCTDEFID != null and PRODUCTDEFID !='' ">
+  			-- 품목코드
+  			AND	L.PRODUCTDEFID = #{PRODUCTDEFID}
+  			AND	L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+  		</if>
+		<if test="AREAID != null and AREAID !='' ">
+  			-- 작업장
+  			AND	L.AREAID = #{AREAID}
+  		</if>
+		<if test="PROCESSSEGMENTID != null and PROCESSSEGMENTID !='' ">
+  			-- 공정
+  			AND	L.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+  		</if>  				
+		<if test="P_LOTID != null and P_LOTID !='' ">
+  			-- LOTID
+  			AND	UPPER(L.LOTID) LIKE '%' || UPPER(#{P_LOTID}) || '%'
+  		</if>
+  		ORDER BY L.LOTID
+	</select>
+	
+	<select id="selectUser" parameterType="map" resultType="hashmap">
+		/* smh.pcm.dao.PCM07100Dao.selectUser */
+			SELECT USERNAME
+			FROM   CMD_USER_V
+			WHERE  USERID = #{USERID}
+					
+	</select>
+	
+<insert id="insertPcmLotworker" parameterType="map">
+	    INSERT 
+	      INTO PCM_LOTWORKER(  TXNHISTKEY  
+	                         , LOTID  
+	                         , ENTERPRISEID  
+	                         , PLANTID  
+	                         , AREAID  
+	                         , PRODUCTDEFID  
+	                         , PRODUCTDEFVERSION  
+	                         , PROCESSDEFID  
+	                         , PROCESSDEFVERSION  
+	                         , PROCESSPATHID  
+	                         , USERSEQUENCE  
+	                         , PROCESSSEGMENTID  
+	                         , PROCESSSEGMENTVERSION  
+	                         , WORKCOUNT  
+	                         , WORKERNAME  
+	                         , USERID  
+	                         , DESCRIPTION  
+	                         , CREATOR  
+	                         , CREATEDTIME  
+	                         , TXNGROUPHISTKEY  
+	                         , TXNUSER  
+	                         , TXNTIME  
+	                         , TXNREASONCODECLASS  
+	                         , TXNREASONCODE  
+	                         , TXNCOMMENT        
+	                        ) VALUES(  #{TXNHISTKEY}  
+	                                 , #{LOTID}  
+	                                 , #{ENTERPRISEID}  
+	                                 , #{PLANTID}  
+	                                 , #{AREAID}  
+	                                 , #{PRODUCTDEFID}  
+	                                 , #{PRODUCTDEFVERSION}  
+	                                 , #{PROCESSDEFID}  
+	                                 , #{PROCESSDEFVERSION}  
+	                                 , #{PROCESSPATHID}  
+	                                 , #{USERSEQUENCE}  
+	                                 , #{PROCESSSEGMENTID}  
+	                                 , #{PROCESSSEGMENTVERSION}  
+	                                 , #{WORKCOUNT}  
+	                                 , #{WORKERNAME}  
+	                                 , #{USERID}  
+	                                 , #{DESCRIPTION}  
+	                                 , #{CREATOR}  
+	                                 , SYSDATE  
+	                                 , #{TXNGROUPHISTKEY}  
+	                                 , #{TXNUSER}  
+	                                 , #{TXNTIME}  
+	                                 , #{TXNREASONCODECLASS}  
+	                                 , #{TXNREASONCODE}  
+	                                 , #{TXNCOMMENT}    
+	                                )
+	</insert>
+	
+	   <select id="selectLotEquipmentData" parameterType="map" resultType="hashmap">
+    		SELECT 		/* selectLotEquipmentData */
+				*	
+			FROM 	PCM_LOTEQUIPMENT 
+			WHERE 	1=1
+			AND 	LOTID = #{LOTID}
+			AND		TXNHISTKEY = #{TXNHISTKEY}			
+    </select>
+
+    <delete id="deleteLotEquipmentData" parameterType="map" >
+    		 		/* deleteLotEquipmentData */
+			DELETE	
+			FROM 	PCM_LOTEQUIPMENT 
+			WHERE 	1=1
+			AND 		LOTID = #{LOTID}
+			AND		TXNHISTKEY = #{TXNHISTKEY}			
+    </delete>
+    
+    <update id="updateLotEquipmentData" parameterType="map">
+    	/* updateLotEquipmentData */
+    	UPDATE PCM_LOTEQUIPMENT	SET		
+    			PROCESSSTATE 	= #{PROCESSSTATE} 
+    		,	TRACKOUTTIME 	= #{TRACKOUTTIME}    		
+    		,	LOTQTY			= #{LOTQTY}
+    		,	TXNID 			= #{TXNID}
+    	WHERE 1=1
+    		AND LOTID 								= #{LOTID}
+    		AND PROCESSSEGMENTID           	= #{PROCESSSEGMENTID}
+		    AND PROCESSSEGMENTVERSION    = #{PROCESSSEGMENTVERSION}
+		    AND WORKCOUNT						= #{WORKCOUNT}
+    </update>
+    
+    <insert id="insertLotEquipmentData" parameterType="map">
+    	/* insertLotEquipmentData */    	
+	    INSERT INTO PCM_LOTEQUIPMENT(  LOTID  
+					                                 , TXNHISTKEY  
+					                                 , EQUIPMENTID  
+					                                 , PROCESSSTATE  
+					                                 , PROCESSSEGMENTID  
+					                                 , PROCESSSEGMENTVERSION  
+					                                 , WORKCOUNT  
+					                                 , TRACKINTIME
+					                                 , LOTQTY
+					                                 , CREATOR  
+					                                 , CREATEDTIME  
+					                                 , MODIFIER  
+					                                 , MODIFIEDTIME  
+					                                 , TXNGROUPHISTKEY  
+					                                 , TXNID  
+					                                 , TXNUSER  
+					                                 , TXNTIME  
+					                                 , TXNREASONCODECLASS  
+					                                 , TXNREASONCODE  
+					                                 , TXNCOMMENT
+					                                ) VALUES (  #{LOTID}  
+					                                          , #{TXNHISTKEY}  
+					                                          , #{EQUIPMENTID}  
+					                                          , #{PROCESSSTATE}  
+					                                          , #{PROCESSSEGMENTID}  
+					                                          , #{PROCESSSEGMENTVERSION}  
+					                                          , #{WORKCOUNT}  
+					                                          , #{TRACKINTIME}
+					                                          , #{LOTQTY}
+					                                          , #{CREATOR}  
+					                                          , SYSDATE  
+					                                          , #{MODIFIER}  
+					                                          , SYSDATE  
+					                                          , #{TXNGROUPHISTKEY}  
+					                                          , #{TXNID}  
+					                                          , #{TXNUSER}  
+					                                          , SYSDATE
+					                                          , #{TXNREASONCODECLASS}  
+					                                          , #{TXNREASONCODE}  
+					                                          , #{TXNCOMMENT}
+					                                         )
+	</insert>
+    
+	<select id="selectEquipmentData" parameterType="map" resultType="hashmap">
+    		/* selectEquipmentData */
+    		SELECT 	 EQUIPMENTID
+						,RECIPECLASSID
+						,EQUIPMENTCLASSID
+						,EQUIPMENTNAME
+						,ENTERPRISEID
+						,PLANTID
+						,AREAID
+						,LOCATIONID
+						,EQUIPMENTTYPE
+						,DETAILEQUIPMENTTYPE
+						,PARENTEQUIPMENTID
+						,STATEMODELID
+						,VENDORID
+						,MODEL
+						,SERIALNO
+						,PROCESSUNIT
+						,MINCAPACITY
+						,MAXCAPACITY
+						,TACTTIME
+						,LEADTIME
+						,STATE
+						,E10STATE
+						,CONTROLMODE
+						,OPERATIONMODE
+						,CURRENTRECIPEDEFID
+						,CURRENTRECIPEDEFVERSION
+						,PROCESSEDLOTCOUNT
+						,LASTLOTID
+						,LASTPRODUCTDEFID
+						,LASTPRODUCTDEFVERSION
+						,LASTPROCESSSEGMENTID
+						,LASTPROCESSSEGMENTVERSION
+						,TCID
+						,DESCRIPTION
+						,CREATOR
+						,CREATEDTIME
+						,MODIFIER
+						,MODIFIEDTIME
+						,LASTTXNHISTKEY
+						,LASTTXNID
+						,LASTTXNUSER
+						,LASTTXNTIME
+						,LASTTXNCOMMENT
+						,VALIDSTATE
+						,EQUIPMENTNUM	
+			FROM 	BAS_EQUIPMENT 
+			WHERE 	1=1
+			AND 		EQUIPMENTID = #{EQUIPMENTID}
+    </select>
+    
+    <update id="updateEquipmentData" parameterType="map">
+    	/* updateEquipmentData */
+    	UPDATE BAS_EQUIPMENT	SET		
+    			STATE 	= #{STATE} 
+    		,	LASTTXNID 			= #{LASTTXNID}
+    	WHERE 1=1
+    		AND 		EQUIPMENTID = #{EQUIPMENTID}
+    </update>
+
+    <update id="updateTrackOutTime" parameterType="map">
+    	/* updateTrackOutTime */
+    	UPDATE PCM_LOT	SET		
+    			TRACKOUTTIME 	= #{TRACKOUTTIME} 
+    		,	TRACKOUTUSER     = #{TRACKOUTUSER}
+    		,	LASTTXNID 		    = #{LASTTXNID}
+    	WHERE 1=1
+    		AND 		LOTID = #{LOTID}
+    </update>    
+    
+  <!-- 공정 관리 > 4-Step 설 명 : 공정 4-Step 상세 정보 탭의 자재 BOM 기준 항목 리스트를 
+		조회 한다.  -->
+    <select id="selectStandardRequirementByProcess" parameterType="map" resultType="hashmap">
+	    		--
+				-- Id : SelectStandardRequirementByProcess
+				-- Version : 10001
+				SELECT
+						BOM.MATERIALDEFID || '|' || BOM.MATERIALDEFVERSION	AS KEYCOLUMN
+					,	CD.CONSUMABLEDEFID
+					,	CD.CONSUMABLEDEFVERSION
+					,	CD.CONSUMABLEDEFNAME
+					,	BOM.QTY                 			AS STANDARDREQUIREMENTQTY
+					,	(L.QTY * BOM.QTY)             	AS REQUIREMENTQTY
+				FROM	PCM_LOT						L
+				INNER JOIN BAS_BILLOFMATERIAL		BOM	ON	L.ENTERPRISEID = BOM.ENTERPRISEID
+														AND	L.PRODUCTDEFID = BOM.PRODUCTDEFID
+														AND	L.PRODUCTDEFVERSION = BOM.PRODUCTDEFVERSION
+														AND	L.PROCESSDEFID = BOM.PROCESSDEFID
+														AND	L.PROCESSDEFVERSION = BOM.PROCESSDEFVERSION
+														AND	L.PROCESSSEGMENTID = BOM.PROCESSSEGMENTID
+														AND	L.PROCESSSEGMENTVERSION = BOM.PROCESSSEGMENTVERSION
+														AND	BOM.WIPSUPPLYTYPE != 'OperationPull'
+				INNER JOIN BAS_AREA					A	ON	L.AREAID = A.AREAID
+														AND  NVL(A.ISSUBCONTRACT, 'N') = 'N'
+				INNER JOIN BAS_CONSUMABLEDEFINITION	CD	ON	BOM.ENTERPRISEID = CD.ENTERPRISEID
+														AND	BOM.MATERIALDEFID = CD.CONSUMABLEDEFID
+														AND	BOM.MATERIALDEFVERSION = CD.CONSUMABLEDEFVERSION
+														AND	CD.ISLOTMNG = 'Y'
+				WHERE	1 = 1
+				AND		L.ENTERPRISEID = #{ENTERPRISEID}
+				AND		L.PLANTID = #{PLANTID}
+				AND		L.LOTID = #{LOTID}
+				ORDER BY BOM."sequence" ASC
+         
+    </select>
+    <select id="getLotWorkerByTrackOut" parameterType="map" resultType="hashmap">
+    /* smh.pcm.dao.PCM03400Dao."getLotWorkerByTrackOut" */
+    			--
+				-- Id : GetLotWorkerByTrackOut
+				-- Version : 10001
+				SELECT
+						COALESCE(LW.USERID, LW.WORKERNAME)	AS WORKERID
+					,	COALESCE(U.USERNAME, LW.WORKERNAME)	AS WORKERNAME
+				FROM	PCM_LOT			L
+				INNER JOIN PCM_LOTWORKER	LW	ON	L.ENTERPRISEID = LW.ENTERPRISEID
+											AND	L.PLANTID = LW.PLANTID
+											AND	L.LOTID = LW.LOTID
+											AND	L.AREAID = LW.AREAID
+											AND	L.PRODUCTDEFID = LW.PRODUCTDEFID
+											AND	L.PRODUCTDEFVERSION = LW.PRODUCTDEFVERSION
+--											AND	L.PROCESSDEFID = LW.PROCESSDEFID
+--											AND	L.PROCESSDEFVERSION = LW.PROCESSDEFVERSION
+											AND	L.PROCESSSEGMENTID = LW.PROCESSSEGMENTID
+											AND	L.PROCESSSEGMENTVERSION = LW.PROCESSSEGMENTVERSION
+											AND	COALESCE(L.WORKCOUNT, 0) = COALESCE(LW.WORKCOUNT, 0)
+				LEFT OUTER JOIN CMD_USER_V	U	ON	LW.USERID = U.USERID
+				WHERE	1 = 1				
+				AND		L.LOTID = #{LOTID}
+	</select>
+	
+    <select id="selectLotEquipmentList" parameterType="map" resultType="hashmap">
+    /* smh.pcm.dao.PCM03400Dao.selectLotEquipmentList */
+    	SELECT  DISTINCT LE.EQUIPMENTID
+			         ,NVL(ED.DICTIONARYNAME, LE.EQUIPMENTID) AS EQUIPMENTNAME
+            FROM    PCM_LOTEQUIPMENT LE
+                    ,PCM_LOT         L
+                    ,BAS_EQUIPMENT ET
+                    ,CMD_DICTIONARY ED
+            WHERE 1=1
+             AND    LE.LOTID = L.LOTID
+              AND LE.EQUIPMENTID = ET.EQUIPMENTID
+              AND  L.ENTERPRISEID  = ET.ENTERPRISEID
+              AND  L.PLANTID       = ET.PLANTID
+              AND  L.PRODUCTDEFID = #{PRODUCTDEFID}
+              AND  L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}            
+              AND  L.AREAID = #{AREAID}
+              AND  L.PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+              AND  LE.PROCESSSEGMENTID = L.PROCESSSEGMENTID
+			  AND  LE.PROCESSSEGMENTVERSION = L.PROCESSSEGMENTVERSION
+              AND  ET.EQUIPMENTNAME = ED.DICTIONARYID(+)
+              AND ED.LANGUAGETYPE(+) = #{SESSION_LANGUAGETYPE}
+              
+              <if test="SEARCH_KEY != null and SEARCH_KEY !='' ">
+              	AND (UPPER(LE.EQUIPMENTID) LIKE '%' || UPPER(#{SEARCH_KEY}) || '%'
+              			OR UPPER(ED.DICTIONARYNAME) LIKE '%' || UPPER(#{SEARCH_KEY}) || '%'
+              	       )
+              </if>
+              
+              ORDER BY 2
+			    
+	</select>
+</mapper>

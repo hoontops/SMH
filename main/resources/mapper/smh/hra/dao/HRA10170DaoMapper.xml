@@ -1,0 +1,156 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.hra.dao.HRA10170Dao">
+
+   <select id="selectDeptList" parameterType="map" resultType="hashmap">
+          -- 부서검색 조건
+       SELECT DEF.ORG_TYPE_NAME 
+            , DEF.ORG_TYPE_CODE
+            , DEF.ORG_NAME
+            , DEF.PARENT_ORG_ID
+            , DEF.ORG_ID_PATH
+            , DEF.NAME_PATH
+            , DEF.ORG_ID
+        FROM (
+              SELECT HOH.PARENT_ORGANIZATION_ID                                                          AS PARENT_ORG_ID
+                   , HOH.CHILD_ORGANIZATION_ID                                                           AS ORG_ID
+                   , DECODE('ko', 'ko', HOH.CHILD_ORGANIZATION_NAME, HOH.CHILD_ORGANIZATION_NAME_ENG)    AS ORG_NAME
+                   , SUBSTR(SYS_CONNECT_BY_PATH(DECODE('ko', 'ko', HOH.CHILD_ORGANIZATION_NAME, HOH.CHILD_ORGANIZATION_NAME_ENG), ' - '), 4)
+                                                                                                         AS NAME_PATH
+                   , SUBSTR(SYS_CONNECT_BY_PATH('O' || HOH.CHILD_ORGANIZATION_ID, ':'), 2)               AS ORG_ID_PATH
+                   , HOH.ORGANIZATION_TYPE_CODE                                                          AS ORG_TYPE_CODE
+                   , HOH.ORGANIZATION_TYPE_NAME                                                          AS ORG_TYPE_NAME
+                FROM HJSPFM_ORG_HIERARCHY_V3   HOH
+               WHERE 1=1
+             CONNECT BY HOH.PARENT_ORGANIZATION_ID = PRIOR HOH.CHILD_ORGANIZATION_ID
+                    AND TRUNC(SYSDATE) BETWEEN HOH.DATE_FROM AND HOH.DATE_TO
+             START WITH ( ( 'ORG'  = 'ALL'     AND HOH.PARENT_ORGANIZATION_ID IS NULL AND TRUNC(SYSDATE) BETWEEN HOH.DATE_FROM AND HOH.DATE_TO ) OR
+                          ( 'ORG'  = 'DAMDANG' AND TRUNC(SYSDATE) BETWEEN HOH.DATE_FROM AND HOH.DATE_TO
+                                           AND HOH.CHILD_ORGANIZATION_ID  IN ( SELECT MGR.ORGANIZATION_ID                                                                    
+                                                                                 FROM HJSHR_PER_SUB_MANAGERS MGR                                                             
+                                                                                WHERE MGR.SUB_MANAGER = 57055   /* 로그인 PERSON ID */                                                           
+                                                                                  AND TRUNC(SYSDATE) BETWEEN MGR.START_DATE             
+                                                                                                         AND NVL(MGR.END_DATE, TO_DATE('4712/12/31', 'YYYY/MM/DD')))) OR
+                          ( 'ORG'  = 'ORG'     AND TRUNC(SYSDATE)  BETWEEN HOH.DATE_FROM AND HOH.DATE_TO
+                                           AND HOH.CHILD_ORGANIZATION_ID  IN ( SELECT MGR.ORGANIZATION_ID
+                                                                                 FROM HJSPFM_ORG_MANAGER_V1 MGR
+                                                                                WHERE MGR.PERSON_ID  = 57055   /* 로그인 PERSON ID */
+                                                                                  AND TRUNC(SYSDATE) BETWEEN MGR.EFFECTIVE_START_DATE
+                                                                                                         AND MGR.EFFECTIVE_END_DATE   ) )
+                        )
+        ) DEF
+ WHERE 1=1
+   AND DEF.ORG_TYPE_CODE LIKE NVL(#{ORG_TYPE}, DEF.ORG_TYPE_CODE)  /* Param1: Organization Type */    
+   AND DEF.ORG_NAME      LIKE '%'||#{DEPT_NM}||'%'                        /* Param2: 부서명             */            
+
+    </select>
+    
+    
+    
+   <select id="selectDeptMemnberList" parameterType="map" resultType="hashmap">
+    	-- My People Manage : 부서원 검색
+          SELECT A.KOR_NAME                   KOR_NAME              /* 성명    */
+               , A.EMPLOYEE_NUMBER            EMPLOYEE_NUMBER       /* 사번    */
+               , A.ORG_NAME                   ORG_NAME              /* 부서명  */
+               , A.GRADE_NAME                 GRADE_NAME            /* 직급    */
+               , A.INCUMBENCY_STATUS          INCUMBENCY_STATUS     /* 재직여부 */
+               , A.ASSIGNMENT_ID              ASSIGNMENT_ID         /* ASSIGNMENT ID */
+               , A.GRADE_ID                   GRADE_ID              /* GRADE ID */
+               , A.ORGANIZATION_ID            ORGANIZATION_ID       /* ORG ID   */
+               , A.PERSON_ID                  PERSON_ID             /* PERSON ID*/
+               , A.POSITION_NAME              POSITION_NAME         /* 직책명    */
+               , A.TYPE                       TYPE                  /* TYPE  M: 부서장, E: 직원  */   
+               , A.STAFF                      STAFF                 /* STAFF(사용하지 않음)  */               
+          FROM  ( SELECT  HPPL.*
+                        , DECODE(PAAF.POSITION_ID, NULL, 'E', 'M')                    TYPE       /* TYPE  */   
+                        , DECODE(HPPL.REGISTERED_DISABLED_FLAG, 'H', 'HS', 'M', 'OT', 'O', 'OT', 'RS')     STAFF       /* STAFF */
+                        , PAP.ATTRIBUTE1                                                            POSITION_NAME      /*  */
+                    FROM  HJSHRA_PER_PERSON_LIST_V  HPPL,
+                          PER_ALL_ASSIGNMENTS_F     PAAF,   
+                          PER_ALL_POSITIONS         PAP,      
+                          (SELECT  LOOKUP_CODE MAN_NM, 
+                                   TAG MAN_ORDER
+                             FROM  FND_LOOKUP_VALUES
+                            WHERE  LOOKUP_TYPE = 'HJSHR_MANAGER_SORT') MS,  
+                          (SELECT ROWNUM ORDER_BY,
+                                  LEVEL,
+                                  TAB.CHILD_ORGANIZATION_NAME,
+                                  TAB.CHILD_ORGANIZATION_ID,
+                                  TAB.PARENT_ORGANIZATION_ID
+                             FROM (SELECT *
+                                     FROM HJSPFM_ORG_HIERARCHY_V3
+                                    WHERE TRUNC(SYSDATE) BETWEEN DATE_FROM AND DATE_TO) TAB
+                                    START WITH TAB.PARENT_ORGANIZATION_ID IS NULL
+                                    CONNECT BY TAB.PARENT_ORGANIZATION_ID = PRIOR TAB.CHILD_ORGANIZATION_ID
+                                    ORDER SIBLINGS BY TAB.PARENT_ORGANIZATION_ID, TAB.ORG_GUNJAE)         HOHV    
+                             WHERE HOHV.CHILD_ORGANIZATION_ID(+) = HPPL.ORGANIZATION_ID 
+                               AND PAP.ATTRIBUTE1 = MS.MAN_NM(+) 
+                               AND HPPL.REGISTERED_DISABLED_FLAG <![CDATA[<>]]> 'R' 
+                               AND HPPL.ORGANIZATION_ID IN ( SELECT PA.ORGANIZATION_ID
+                                                               FROM PER_ALL_ASSIGNMENTS_F PA
+                                                              WHERE 1=1
+                                                                AND PA.PERSON_ID  = 57283   /* 로그인 PERSON ID */
+                                                                AND TRUNC(SYSDATE) BETWEEN PA.EFFECTIVE_START_DATE AND PA.EFFECTIVE_END_DATE
+                                                                AND EXISTS ( SELECT HOM.ORGANIZATION_ID
+                                                                               FROM HJSPFM_ORG_MANAGER_V1 HOM
+                                                                              WHERE 1=1
+                                                                                AND HOM.PERSON_ID  = 57283   /* 로그인 PERSON ID */
+                                                                                AND PA.ORGANIZATION_ID = HOM.ORGANIZATION_ID
+                                                                                AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE AND HOM.EFFECTIVE_END_DATE)
+                                                           UNION
+                                                              SELECT HPSM.ORGANIZATION_ID 
+                                                                FROM HJSHR_PER_SUB_MANAGERS HPSM
+                                                               WHERE 1=1
+                                                                 AND HPSM.SUB_MANAGER = 57283   /* 로그인 PERSON ID */
+                                                                 AND TRUNC(SYSDATE) BETWEEN HPSM.START_DATE AND NVL(HPSM.END_DATE, TO_DATE('4712/12/31', 'YYYY/MM/DD'))
+                                                           UNION
+                                                              SELECT HOH.CHILD_ORGANIZATION_ID
+                                                                FROM HJSPFM_ORG_HIERARCHY_V1    HOH
+                                                             CONNECT BY HOH.PARENT_ORGANIZATION_ID   = PRIOR HOH.CHILD_ORGANIZATION_ID
+                                                               START WITH HOH.PARENT_ORGANIZATION_ID IN ( SELECT HOM.ORGANIZATION_ID
+                                                                                                            FROM HJSPFM_ORG_MANAGER_V1 HOM
+                                                                                                           WHERE 1=1
+                                                                                                             AND HOM.PERSON_ID  = 57283   /* 로그인 PERSON ID */
+                                                                                                             AND TRUNC(SYSDATE) BETWEEN HOM.EFFECTIVE_START_DATE
+                                                                                                                                    AND HOM.EFFECTIVE_END_DATE
+                                                                                                          UNION
+                                                                                                          SELECT HPSM.ORGANIZATION_ID 
+                                                                                                          FROM   HJSHR_PER_SUB_MANAGERS HPSM
+                                                                                                          WHERE 1=1
+                                                                                                           AND HPSM.SUB_MANAGER = 57283   /* 로그인 PERSON ID */
+                                                                                                           AND TRUNC(SYSDATE) BETWEEN HPSM.START_DATE  
+                                                                                                                              AND NVL(HPSM.END_DATE, TO_DATE('4712/12/31', 'YYYY/MM/DD'))
+                                                                                                         )
+                                                  )
+                    AND  HPPL.USER_PERSON_TYPE != 'Vessel'
+                    AND  HPPL.ORGANIZATION_ID IN ( SELECT #{ORG_ID}  /* Param1: ORAGNIZATION ID */
+                                                     FROM DUAL
+                                                    UNION
+                                                   SELECT TO_CHAR(HOH.CHILD_ORGANIZATION_ID)
+                                                     FROM HJSPFM_ORG_HIERARCHY_V1    HOH
+                                                 CONNECT BY HOH.PARENT_ORGANIZATION_ID   = PRIOR HOH.CHILD_ORGANIZATION_ID
+                                                   START WITH HOH.PARENT_ORGANIZATION_ID = NVL(#{ORG_ID}, HOH.PARENT_ORGANIZATION_ID))  /* Param1: ORAGNIZATION ID */
+                    AND   TRUNC(SYSDATE) BETWEEN TRUNC(PAAF.EFFECTIVE_START_DATE) AND  TRUNC(PAAF.EFFECTIVE_END_DATE)
+                    AND   PAAF.PERSON_ID   = HPPL.PERSON_ID               
+                    AND   PAAF.POSITION_ID = PAP.POSITION_ID(+)  
+                  ORDER  BY HOHV.ORDER_BY  
+                          , ORG_ORDER_BY
+                          , NVL(MS.MAN_ORDER, 999999) 
+                          , GRADE_ORDER_BY
+                          , KOR_NAME
+                ) A 
+    WHERE 1=1   
+       AND A.KOR_NAME LIKE '%'||#{NAME}||'%'   /* Param2: 성명 */  
+       AND A.ORG_NAME LIKE '%'||#{ORG_NAME}||'%'   /* Param3: 부서명 */  
+     -- AND A.TYPE     = NVL('M', A.TYPE)    /* Param3: Type M:부서장, E: 직원 */
+     -- AND A.STAFF    = NVL('HS', A.STAFF)  /* Param4: 직원유형 */             
+
+    </select>
+    
+    
+   
+    
+
+</mapper>

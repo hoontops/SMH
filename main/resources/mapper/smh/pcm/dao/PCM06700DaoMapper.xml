@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.pcm.dao.PCM06700Dao">
+	<select id="selectManufactureHistory" parameterType="map" resultType="hashmap">
+	/* selectManufactureHistory 10001 */
+	--id : selectManufactureHistory
+			WITH MFHistory AS
+			(
+				SELECT  PD.PRODUCTDEFID
+                    ,   PD.PRODUCTDEFVERSION
+                    ,   PD.PRODUCTDEFNAME
+                    ,   LH.LOTID
+                    ,   LH.PARENTLOTID
+                    ,   LH.ROOTLOTID
+                    ,   LH.PROCESSSEQUENCE
+                    ,   LH.PROCESSSEGMENTNAME
+                    ,   LH.PLANTID
+                    ,	LH.AREAID
+                    ,   LH.AREANAME
+                    ,   LH.WORKTYPE
+                    ,   LH.RESOURCEID
+                    ,   LH.RESOURCENAME
+                    ,   LQ.EQUIPMENTID
+                    ,   COALESCE(DC1.DICTIONARYNAME, EQ.DESCRIPTION)    AS EQUIPMENTNAME
+                    --,   LD.DURABLELOTID
+                    --,   COALESCE(DC2.DICTIONARYNAME, DD.DESCRIPTION)    AS DURABLEDEFNAME
+                    --,   LD.USEDQTY
+                    ,   LQ.RECIPEID
+                    ,   L.ROOTLOTSTARTDATE
+                    ,   LH.RECEIVEDATE
+                    ,   LH.STARTDATE
+                    ,   LH.WORKENDDATE
+                    ,   LH.LOTSENDDATE
+                    ,   LH.RECEIVEPCSQTY
+                    ,   LH.RECEIVEPANELQTY
+                    ,   LH.SENDPCSQTY
+                    ,   LH.SENDPANELQTY
+                    ,   LH.DEFECTQTY
+                    ,   CEIL(LH.DEFECTQTY / L.PANELPERQTY)          AS DEFECTPANELQTY
+                    ,   LH.RECEIVELEADTIME
+                    ,   LH.WORKSTARTLEADTIME
+                    ,   LH.WORKENDLEADTIME
+                    ,   LH.SENDLEADTIME
+                    ,   LH.LEADTIME
+                FROM    PCM_LOT                                                  L
+                INNER JOIN FN_GETLOTHISTORY3(L.LOTID, #{SESSION_LANGUAGETYPE})       LH  ON  L.LOTID = LH.LOTID
+                INNER JOIN BAS_PRODUCTDEFINITION                                 PD  ON  L.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                                                    AND L.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                LEFT  JOIN PCM_LOTEQUIPMENT                                      LQ  ON  LH.LOTID = LQ.LOTID
+                                                                                    AND LH.PROCESSSEGMENTID = LQ.PROCESSSEGMENTID
+                                                                                    AND LH.WORKCOUNT = LQ.WORKCOUNT
+                LEFT  JOIN BAS_EQUIPMENT                                         EQ  ON  LQ.EQUIPMENTID = EQ.EQUIPMENTID
+                LEFT  JOIN CMD_DICTIONARY                                        DC1 ON  EQ.EQUIPMENTNAME = DC1.DICTIONARYID
+                                                                                    AND DC1.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                --LEFT  JOIN PCM_LOTDURABLE                                        LD  ON  LH.LOTID = LD.LOTID
+                --                                                                    AND LH.PROCESSSEGMENTID = LD.PROCESSSEGMENTID
+                --LEFT  JOIN SF_DURABLELOT                                        DL  ON  LD.DURABLELOTID = DL.DURABLELOTID
+                --LEFT  JOIN SF_DURABLEDEFINITION                                 DD  ON  DL.DURABLEDEFID = DD.DURABLEDEFID
+                --                                                                    AND DL.DURABLEDEFVERSION = DD.DURABLEDEFVERSION
+                --LEFT  JOIN SF_DICTIONARY                                        DC2 ON  DD.DURABLEDEFNAME = DC2.DICTIONARYID
+                --                                                                    AND DC2.LANGUAGETYPE = {SESSION_LANGUAGETYPE}
+                WHERE   COALESCE(L.ISDEFECTED, 'N') = 'N'
+                -- 품목명
+                <if test="PRODUCTDEFNAME != null and PRODUCTDEFNAME !=''"> 	
+                	--AND     PD.PRODUCTDEFNAME LIKE  '%' || {P_PRODUCTNAME} || '%' 
+                </if>
+				<if test="PRODUCTDEFID != null and PRODUCTDEFID !=''">
+					AND L.PRODUCTDEFID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDEFID}, ','))
+				</if>
+                -- 품목리비전
+				<if test="PRODUCTDEFVERSION != null and PRODUCTDEFVERSION !=''"> 	
+                	AND     L.PRODUCTDEFVERSION = #{PRODUCTDEFVERSION} 
+                </if>
+				<if test="PLANTID != null and PLANTID !=''">
+					AND     L.PLANTID = #{PLANTID}
+				</if>
+				<if test="LOTID != null and LOTID !=''">
+					AND L.LOTID IN (SELECT VALUE FROM UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ','))
+<!-- 					AND EXISTS
+                            (
+                                SELECT  1
+                                FROM    UFN_SELECTSTRINGTOSPLIT(#{LOTID}, ',')  MP
+                                WHERE   L.LOTID = MP.VALUE
+                            ) -->
+				</if>
+				<if test="SALEORDER != null and SALEORDER !=''">
+					AND     L.PRODUCTIONORDERID = #{SALEORDER}
+				</if>
+              	<if test="QRCODE != null and QRCODE !=''">
+					AND     EXISTS
+                        (
+                            SELECT  1
+                            FROM    PCM_LOTPCSREL        QR
+                            WHERE   L.LOTID = QR.LOTID
+                            AND     QR.PCSID = #{QRCODE}
+                        )
+				</if>               
+                -- 구분
+				<if test="PRODUCTIONTYPE != null and PRODUCTIONTYPE !=''">
+					AND     L.LOTTYPE = #{PRODUCTIONTYPE}
+				</if>               
+                -- 품목타입
+				<if test="PRODUCTDIVISION != null and PRODUCTDIVISION !=''">
+					AND     EXISTS
+                        (
+                            SELECT  1
+                            FROM    UFN_SELECTSTRINGTOSPLIT(#{PRODUCTDIVISION}, ',')        PMP
+                            WHERE   PD.PRODUCTDEFTYPE = PMP.VALUE
+                        )
+				</if>     
+             	<if test="WEEK != null and WEEK !=''">
+					AND     L.WEEK LIKE '%' || #{WEEK} || '%'  
+				</if> 
+				<if test="PERIOD_PERIODFR != null and PERIOD_PERIODFR !='' and PERIOD_PERIODTO != null and PERIOD_PERIODTO !=''">
+					AND     L.ROOTLOTSTARTDATE >= TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODFR},1,8), 'YYYYMMDD') 
+                    AND     L.ROOTLOTSTARTDATE <![CDATA[<]]>  TO_TIMESTAMP(SUBSTR(#{PERIOD_PERIODTO},1,8), 'YYYYMMDD')
+				</if> 
+			) ,
+			MFGroup AS  -- 자원까지 같으면 완료수량은 /COUNT(*)  로 표시, 불량은 하나의 장비에만 표시 by 노석안
+			(	
+				SELECT  PLANTID, PRODUCTDEFID , PRODUCTDEFVERSION , LOTID , ROOTLOTID , PROCESSSEQUENCE, AREAID, RESOURCEID
+					, COUNT(*) 									AS CNT
+					, FLOOR(MIN(SENDPCSQTY) / COUNT(*))		AS SENDPCSQTY
+					, FLOOR(MIN(SENDPANELQTY)  / COUNT(*))	AS SENDPANELQTY
+					, MAX(EQUIPMENTID)							AS EQUIPMENTID
+					, MIN(DEFECTQTY)							AS DEFECTQTY
+					, MIN(DEFECTPANELQTY)						AS DEFECTPANELQTY
+				FROM MFHistory
+				GROUP BY PLANTID, PRODUCTDEFID , PRODUCTDEFVERSION , LOTID , ROOTLOTID , PROCESSSEQUENCE, AREAID, RESOURCEID 
+			)
+				SELECT H.PRODUCTDEFID
+                    ,   H.PRODUCTDEFVERSION
+                    ,   H.PRODUCTDEFNAME
+                    ,   H.LOTID
+                    ,   H.PARENTLOTID
+                    ,   H.ROOTLOTID
+                    ,   H.PROCESSSEQUENCE
+                    ,   H.PROCESSSEGMENTNAME
+                    ,   H.PLANTID
+                    ,	H.AREAID
+                    ,   H.AREANAME
+                    ,   H.WORKTYPE
+                    ,   H.RESOURCEID
+                    ,   H.RESOURCENAME
+                    ,   H.EQUIPMENTID
+                    ,   H.EQUIPMENTNAME
+                    ,   H.RECIPEID
+                    ,   H.ROOTLOTSTARTDATE
+                    ,   H.RECEIVEDATE
+                    ,   H.STARTDATE
+                    ,   H.WORKENDDATE
+                    ,   H.LOTSENDDATE
+                    ,   H.RECEIVEPCSQTY
+                    ,   H.RECEIVEPANELQTY
+                    -- G1.SENDPCSQTY 이건 분할된 qty
+                    ,   G1.SENDPCSQTY + NVL(DECODE(G2.EQUIPMENTID,H.EQUIPMENTID, H.SENDPCSQTY - (G1.SENDPCSQTY*G1.CNT)),0) AS SENDPCSQTY
+                    ,   G1.SENDPANELQTY + NVL(DECODE(G2.EQUIPMENTID,H.EQUIPMENTID, H.SENDPANELQTY - (G1.SENDPANELQTY*G1.CNT)),0) AS SENDPANELQTY
+                    ,   G2.DEFECTQTY
+                    ,   G2.DEFECTPANELQTY
+                    ,   H.RECEIVELEADTIME
+                    ,   H.WORKSTARTLEADTIME
+                    ,   H.WORKENDLEADTIME
+                    ,   H.SENDLEADTIME
+                    ,   H.LEADTIME
+				FROM MFHistory	H 
+				LEFT JOIN MFGroup G1 ON  H.PLANTID = G1.PLANTID
+									 AND H.PRODUCTDEFID = G1.PRODUCTDEFID
+									 AND H.PRODUCTDEFVERSION = G1.PRODUCTDEFVERSION
+									 AND H.LOTID = G1.LOTID
+									 AND H.ROOTLOTID = G1.ROOTLOTID
+									 AND H.PROCESSSEQUENCE = G1.PROCESSSEQUENCE
+									 AND H.AREAID = G1.AREAID
+									 AND H.RESOURCEID = G1.RESOURCEID
+				LEFT JOIN MFGroup G2 ON  H.PLANTID = G2.PLANTID
+									 AND H.PRODUCTDEFID = G2.PRODUCTDEFID
+									 AND H.PRODUCTDEFVERSION = G2.PRODUCTDEFVERSION
+									 AND H.LOTID = G2.LOTID
+									 AND H.ROOTLOTID = G2.ROOTLOTID
+									 AND H.PROCESSSEQUENCE = G2.PROCESSSEQUENCE
+									 AND H.AREAID = G2.AREAID
+									 AND H.RESOURCEID = G2.RESOURCEID
+									 AND H.EQUIPMENTID = G2.EQUIPMENTID
+				 ORDER BY H.LOTID, TO_NUMBER(H.PROCESSSEQUENCE), H.RECEIVEDATE, H.RESOURCEID, H.EQUIPMENTNAME
+                
+	</select>
+	
+</mapper>

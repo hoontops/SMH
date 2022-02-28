@@ -1,0 +1,290 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM00300Dao">
+
+	<!--
+		설		명	: 공정 부하 예측
+		생	성	자	: 박현우
+		생	성	일	: 2021-05-18 
+		수  정   이  력	:
+	-->
+	<select id="selectDaySegmentLoad" parameterType="map" resultType="hashmap">
+		SELECT
+                    P.PRODUCTDEFID
+                ,   P.PRODUCTDEFVERSION
+                ,   P.PRODUCTDEFNAME
+                ,   P.USERSEQUENCE
+                ,   P.PROCESSSEGMENTID
+                ,   P.PROCESSSEGMENTVERSION
+                ,   P.PROCESSSEGMENTNAME
+                ,   P.PLANTID
+                ,   P.LOADTOPSEGMENTCLASSID
+                ,   P.LOADMIDDLESEGMENTCLASSID
+                ,   P.LOADSMALLSEGMENTCLASSID
+                ,   NVL(P.TARGETPANELQTY, 0) AS TARGETPANELQTY
+                ,   NVL(P.TARGETSEGMENTQTY, 0) AS TARGETSEGMENTQTY
+                ,   P.ISCONFIRM
+                ,   P.CONFIRMDATE
+                ,   P.CONFIRMUSERNAME
+                ,   NVL(P.WIP, 0) AS WIP
+                ,   P.LOADTYPE
+                ,	#{P_LOADDATE} AS LOADDATE
+                ${SELECT_COLUMNS}
+                
+                ,CASE WHEN PATHS = TO_CHAR(TO_NUMBER(P.USERSEQUENCE),'0000') THEN MFM_00100_PKG.SUJUQTY(P.PLANTID, P.PRODUCTDEFID, P.PRODUCTDEFVERSION, #{P_LOADDATE}, 0) ELSE 0 END AS SUJUQTY1
+                ,CASE WHEN PATHS = TO_CHAR(TO_NUMBER(P.USERSEQUENCE),'0000') THEN MFM_00100_PKG.SUJUQTY(P.PLANTID, P.PRODUCTDEFID, P.PRODUCTDEFVERSION, #{P_LOADDATE}, 1) ELSE 0 END AS SUJUQTY2
+                ,CASE WHEN PATHS = TO_CHAR(TO_NUMBER(P.USERSEQUENCE),'0000') THEN MFM_00100_PKG.SUJUQTY(P.PLANTID, P.PRODUCTDEFID, P.PRODUCTDEFVERSION, #{P_LOADDATE}, 2) ELSE 0 END AS SUJUQTY3
+                ,CASE WHEN PATHS = TO_CHAR(TO_NUMBER(P.USERSEQUENCE),'0000') THEN MFM_00100_PKG.SUJUQTY(P.PLANTID, P.PRODUCTDEFID, P.PRODUCTDEFVERSION, #{P_LOADDATE}, 3) ELSE 0 END AS SUJUQTY4
+                ,CASE WHEN PATHS = TO_CHAR(TO_NUMBER(P.USERSEQUENCE),'0000') THEN MFM_00100_PKG.SUJUQTY(P.PLANTID, P.PRODUCTDEFID, P.PRODUCTDEFVERSION, #{P_LOADDATE}, 4) ELSE 0 END AS SUJUQTY5
+                ,CASE WHEN PATHS = TO_CHAR(TO_NUMBER(P.USERSEQUENCE),'0000') THEN MFM_00100_PKG.SUJUQTY(P.PLANTID, P.PRODUCTDEFID, P.PRODUCTDEFVERSION, #{P_LOADDATE}, 5) ELSE 0 END AS SUJUQTY6
+                ,CASE WHEN PATHS = TO_CHAR(TO_NUMBER(P.USERSEQUENCE),'0000') THEN MFM_00100_PKG.M2QTY(P.PLANTID, P.PRODUCTDEFID, P.PRODUCTDEFVERSION, #{P_LOADDATE}) ELSE 0 END AS NOINPUTQTY
+                --,PATHS
+            FROM 
+                (
+                --$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                --$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                --$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                SELECT
+                        ROW_NAME
+                    ,   PRODUCTDEFID
+                    ,   PRODUCTDEFVERSION
+                    ,   PRODUCTDEFNAME
+                    ,   PROCESSSEGMENTID
+                    ,   PROCESSSEGMENTVERSION
+                    ,   USERSEQUENCE
+                    ,   PROCESSSEGMENTNAME
+                    ,   PLANTID
+                    ,   LOADTOPSEGMENTCLASSID
+                    ,   LOADMIDDLESEGMENTCLASSID
+                    ,   LOADSMALLSEGMENTCLASSID
+                    ,   TARGETPANELQTY
+                    ,   TARGETSEGMENTQTY
+                    ,   ACTIONDATE
+                    ,   ISCONFIRM
+                    ,   CONFIRMDATE
+                    ,   CONFIRMUSERNAME
+                    ,   WIP
+                    ,   LOADTYPE
+                    ${SELECT_COLUMNS2}
+                    
+                    ,  NVL(MIN(TO_CHAR(TO_NUMBER(USERSEQUENCE),'0000')) OVER (PARTITION BY PRODUCTDEFID,PRODUCTDEFVERSION  ORDER BY TO_CHAR(TO_NUMBER(USERSEQUENCE),'0000')),1) PATHS
+                    
+                FROM
+                	--#############################################################################
+                    --#############################################################################
+                    --#############################################################################
+                	(
+                    SELECT 
+                            X.ROW_NAME
+                        ,   X.PRODUCTDEFID
+                        ,   X.PRODUCTDEFVERSION
+                        ,   X.PRODUCTDEFNAME
+                        ,   X.PROCESSSEGMENTID
+                        ,   X.PROCESSSEGMENTVERSION
+                        ,   X.USERSEQUENCE
+                        ,   X.PROCESSSEGMENTNAME
+                        ,   X.PLANTID
+                        ,   NVL(SD1.DICTIONARYNAME, X.LOADTOPSEGMENTCLASSID)    LOADTOPSEGMENTCLASSID
+                        ,   NVL(SD2.DICTIONARYNAME, X.LOADMIDDLESEGMENTCLASSID) LOADMIDDLESEGMENTCLASSID
+                        ,   NVL(SD3.DICTIONARYNAME, X.LOADSMALLSEGMENTCLASSID)  LOADSMALLSEGMENTCLASSID
+                        ,   X.TARGETPANELQTY
+                        ,   X.TARGETSEGMENTQTY
+                        ,   X.ACTIONDATE
+                        ,   X.ISCONFIRM
+                        ,   X.CONFIRMDATE
+                        ,   X.CONFIRMUSERNAME
+                        ,   X.MORNINGWIPQTY AS WIP
+                        ,   X.LOADTYPE 
+                        ,   X.PREDICDATE      
+                        ,   LOADQTY
+                        ,   PLANWIPQTY
+                    FROM
+                    	(
+                        SELECT
+                                NVL(LS.PRODUCTDEFID, '') || ',' || NVL(LS.PRODUCTDEFVERSION, '') || ','
+                                    || NVL(LS.PROCESSSEGMENTID, '') || ',' || NVL(LS.PROCESSSEGMENTVERSION, '') AS ROW_NAME
+                            ,   LS.PRODUCTDEFID
+                            ,   LS.PRODUCTDEFVERSION
+                            ,   NVL(PD.PRODUCTDEFNAME, '미등록') AS PRODUCTDEFNAME
+                            ,   LS.PROCESSSEGMENTID
+                            ,   LS.PROCESSSEGMENTVERSION
+                            ,   LS.USERSEQUENCE
+                            ,   LS.PLANTID
+                            ,   NVL(NVL(LD.TOPLOADSEGMENTCLASSID, ''), LSG.LOADTOPSEGMENTCLASSID)   LOADTOPSEGMENTCLASSID
+                            ,   NVL(NVL(LD.MIDDLESEGMENTCLASSID, ''), LSG.LOADMIDDLESEGMENTCLASSID) LOADMIDDLESEGMENTCLASSID
+                            ,   NVL(NVL(LD.SMALLSEGMENTCLASSID, ''), LSG.LOADSMALLSEGMENTCLASSID)   LOADSMALLSEGMENTCLASSID
+                            ,   LD.TARGETPANELQTY
+                            ,   LD.TARGETSEGMENTQTY
+                            ,   LS.ACTIONDATE
+                            ,   LS.PREDICDATE
+                            ,   NVL(LS.LOADQTY, 0)      AS LOADQTY  
+                            ,   NVL(LS.PLANWIPQTY, 0)   AS PLANWIPQTY 
+                            ,   NVL(LS.ISCONFIRM, 'N')                        ISCONFIRM
+                            ,   TO_CHAR(LS.CONFIRMDATE, 'YYYY-MM-DD HH24:MI:SS')   CONFIRMDATE
+                            ,   NVL(SU.USER_NM,LS.CONFIRMUSERID)              CONFIRMUSERNAME
+                            ,   NVL(SD.DICTIONARYNAME,PS.PROCESSSEGMENTNAME) PROCESSSEGMENTNAME
+                            ,   NVL(LS.MORNINGWIPQTY, 0) AS MORNINGWIPQTY 
+                            ,   NVL(LS.NOTINPUTQTY, 0)   AS NOTINPUTQTY
+                            ,   LS.LOADTYPE
+                       FROM BAS_LOADSEGMENTPERDATE  LS
+                       LEFT OUTER JOIN BAS_PRODUCTDEFINITION  	PD 	ON  LS.PRODUCTDEFID = PD.PRODUCTDEFID
+                                                           							AND LS.PRODUCTDEFVERSION = PD.PRODUCTDEFVERSION
+                       LEFT  JOIN BAS_LOADPRODUCTSEGMENT 	LD 	ON  LS.PRODUCTDEFID = LD.PRODUCTDEFID
+                                                           							AND LS.PROCESSSEGMENTID = LD.PROCESSSEGMENTID    
+                                                           							AND LS.PRODUCTDEFVERSION = LD.PRODUCTDEFVERSION 
+                       LEFT  JOIN BAS_LOADSEGMENTREL    		LSG 	ON LS.PROCESSSEGMENTID = LSG.PROCESSSEGMENTID
+                       INNER JOIN BAS_PROCESSSEGMENT     	PS 		ON  LS.PROCESSSEGMENTID = PS.PROCESSSEGMENTID
+                                                           							AND LS.PROCESSSEGMENTVERSION = PS.PROCESSSEGMENTVERSION   
+                       LEFT  JOIN CMD_DICTIONARY         		SD 	ON  PS.PROCESSSEGMENTNAME = SD.DICTIONARYID
+                                                           							AND SD.LANGUAGETYPE = #{LANGUAGETYPE}
+                       LEFT  JOIN CMD_USERS               			SU 	ON LS.CONFIRMUSERID = SU.USER_ID                                  
+                       
+                       
+                       WHERE 1=1
+                       AND ACTIONDATE = TO_CHAR(TO_DATE(#{P_LOADDATE},'YYYYMMDD'),'YYYY-MM-DD') || ' 00:00' --20200116
+                       
+                       AND NVL(PD.ISLOADMNG, 'N') = 'Y'
+  					   AND NVL(PD.VALIDSTATELOAD, 'X') = 'Valid'		-- 21.04.27 유효여부_공정부하 추가(담당자 Tab 설정 정보)
+                       
+                       <if test="P_PRODUCTTYPE != null and P_PRODUCTTYPE !='' ">
+                       AND      PD.PRODUCTIONTYPE = #{P_PRODUCTTYPE}			--양산구분
+                       </if>
+                       <if test="P_PRODUCTDEFTYPE != null and P_PRODUCTDEFTYPE !='' ">
+                       AND      PD.PRODUCTDEFTYPE = #{P_PRODUCTDEFTYPE}		--제품구분
+                       </if>
+                       <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                       AND      LS.PRODUCTDEFID||'|'||LS.PRODUCTDEFVERSION = #{P_PRODUCTDEFID}			--제품ID
+                       </if>
+                       <if test="P_LOADUSER != null and P_LOADUSER !='' ">
+                       AND      PD.LOADOWNER = #{P_LOADUSER}					--담당자
+                       </if>
+                       
+                       AND      LS.LOADTYPE = #{P_LOADTYPE}
+                       AND      LS.PLANTID = #{P_PLANTID}
+                       
+                    ) X
+                    LEFT JOIN BAS_LOADSEGMENTCLASS 		LC 		ON  X.LOADTOPSEGMENTCLASSID = LC.LOADSEGMENTCLASSID
+                                                      							AND LC.LOADSEGMENTCLASSTYPE = 'TopLoadSegmentClass' 
+                    LEFT JOIN CMD_DICTIONARY       			SD1 	ON  LC.LOADSEGMENTCLASSNAME = SD1.DICTIONARYID
+                                                      							AND SD1.LANGUAGETYPE = #{LANGUAGETYPE}
+                    LEFT JOIN BAS_LOADSEGMENTCLASS 		LC1 	ON  X.LOADMIDDLESEGMENTCLASSID = LC1.LOADSEGMENTCLASSID
+                                                      							AND LC1.LOADSEGMENTCLASSTYPE = 'MiddleLoadSegmentClass' 
+                    LEFT JOIN CMD_DICTIONARY       			SD2 	ON  LC1.LOADSEGMENTCLASSNAME = SD2.DICTIONARYID
+                                                      							AND SD2.LANGUAGETYPE = #{LANGUAGETYPE}
+                    LEFT JOIN BAS_LOADSEGMENTCLASS 		LC2 	ON  X.LOADSMALLSEGMENTCLASSID = LC2.LOADSEGMENTCLASSID
+                                                      							AND LC2.LOADSEGMENTCLASSTYPE = 'SmallLoadSegmentClass' 
+                    LEFT JOIN CMD_DICTIONARY       			SD3 	ON  LC2.LOADSEGMENTCLASSNAME = SD3.DICTIONARYID
+                                                      							AND SD3.LANGUAGETYPE = #{LANGUAGETYPE}
+                    ORDER BY
+                            X.ROW_NAME
+                        ,   X.PRODUCTDEFID
+                        ,   X.PRODUCTDEFVERSION
+                        ,   X.USERSEQUENCE
+                        ,   X.ACTIONDATE
+                        ,   X.PREDICDATE
+                    --#############################################################################
+                    --#############################################################################
+                    --#############################################################################
+                    )
+                    PIVOT ( 
+                             SUM(LOADQTY) AS LOADQTY,
+                             SUM(PLANWIPQTY) AS PLANWIPQTY
+                             FOR PREDICDATE 
+                             IN (
+                             		${PIVOT_COLUMNS}
+                             	)
+                             )
+                --$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                --$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                --$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
+                ) P
+                --ORDER BY P.PRODUCTDEFID, P.PRODUCTDEFVERSION, P.USERSEQUENCE
+                ORDER BY P.PRODUCTDEFID, P.PRODUCTDEFVERSION, TO_CHAR(TO_NUMBER(P.USERSEQUENCE),'0000')
+	</select> 
+	
+	
+	<select id="selectLoadSegmentPerDate" parameterType="map" resultType="hashmap">
+		SELECT 
+					PRODUCTDEFID
+				,	PRODUCTDEFVERSION
+				,	PROCESSSEGMENTID
+				,	PROCESSSEGMENTVERSION
+				,	ACTIONDATE
+				,	LOADTYPE
+				,	PREDICDATE
+				,	ENTERPRISEID
+				,	PLANTID
+				,	PATHSEQUENCE
+				,	USERSEQUENCE
+				,	LOADQTY
+				,	PLANWIPQTY
+				,	MORNINGWIPQTY
+				,	NOTINPUTQTY
+				,	ISCONFIRM
+				,	CONFIRMUSERID
+				,	CONFIRMDATE
+				,	DESCRIPTION
+				,	CREATOR
+				,	CREATEDTIME
+				,	MODIFIER
+				,	MODIFIEDTIME
+				,	LASTTXNHISTKEY
+				,	LASTTXNID
+				,	LASTTXNUSER
+				,	LASTTXNTIME
+				,	LASTTXNCOMMENT
+				,	VALIDSTATE
+		FROM BAS_LOADSEGMENTPERDATE
+		WHERE 1=1
+		AND 	PRODUCTDEFID = #{PRODUCTDEFID}
+		AND	PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+		AND	PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		AND	PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+		AND	ACTIONDATE = TO_CHAR(TO_DATE(#{ACTIONDATE}, 'YYYYMMDD HH24:MI'),'YYYY-MM-DD HH24:MI')			
+		AND	LOADTYPE = #{LOADTYPE}		
+	</select>
+	
+	<update id="getUpsertConfirm" parameterType="map">
+		UPDATE BAS_LOADSEGMENTPERDATE
+		SET  		ISCONFIRM				= 'Y'
+				,	CONFIRMUSERID		= #{MODIFIER}
+				,	CONFIRMDATE			= SYSDATE
+				,	DESCRIPTION			= #{DESCRIPTION}
+				
+				,	MODIFIER				= #{MODIFIER}
+				,	MODIFIEDTIME			= SYSDATE
+				,	LASTTXNHISTKEY		= #{LASTTXNHISTKEY}
+				,	LASTTXNID				= #{LASTTXNID}
+				,	LASTTXNUSER			= #{LASTTXNUSER}
+				,	LASTTXNTIME			= SYSDATE
+				,	LASTTXNCOMMENT	= 'Load Confirmed' 
+		WHERE 1=1
+		AND	ACTIONDATE = TO_CHAR(TO_DATE(#{P_LOADDATE},'YYYYMMDD'),'YYYY-MM-DD') || ' 00:00'
+		AND	LOADTYPE = #{P_LOADTYPE}
+	</update>
+	
+	<update id="getUpsertLoadQty" parameterType="map">
+		UPDATE BAS_LOADSEGMENTPERDATE
+		SET  		LOADQTY					= #{LOADQTY}
+				,	PLANWIPQTY				= #{PLANWIPQTY}
+				,	DESCRIPTION			= #{DESCRIPTION}
+				
+				,	MODIFIER				= #{MODIFIER}
+				,	MODIFIEDTIME			= SYSDATE
+				,	LASTTXNHISTKEY		= #{LASTTXNHISTKEY}
+				,	LASTTXNID				= #{LASTTXNID}
+				,	LASTTXNUSER			= #{LASTTXNUSER}
+				,	LASTTXNTIME			= SYSDATE
+				,	LASTTXNCOMMENT	= 'Data Update' 
+		WHERE 1=1
+		AND 	PRODUCTDEFID = #{PRODUCTDEFID}
+		AND	PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+		AND	PROCESSSEGMENTID = #{PROCESSSEGMENTID}
+		AND	PROCESSSEGMENTVERSION = #{PROCESSSEGMENTVERSION}
+		AND	ACTIONDATE = TO_CHAR(TO_DATE(#{ACTIONDATE},'YYYYMMDD'),'YYYY-MM-DD') || ' 00:00'
+		AND	LOADTYPE = #{LOADTYPE}
+		AND	PREDICDATE = 	#{PREDICDATE}
+	</update>
+</mapper>

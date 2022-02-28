@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper 
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.mfm.dao.MFM00800Dao">
+	
+	<select id="selectProductPriorityList" parameterType="map" resultType="hashmap">
+                --
+                -- Id : SelectProductPriorityList
+                -- Version : 10002                 
+                SELECT  X.PRIORITY
+                     ,  X.PRODUCTDEFID
+                     ,  X.PRODUCTDEFVERSION
+                     ,  X.PRODUCTDEFNAME
+                     ,  X.DESCRIPTION
+                     ,  X.CREATEDTIME
+                     ,  X.MODIFIEDTIME
+                     ,  U1.USER_NM             AS CREATOR
+                     ,  U2.USER_NM             AS MODIFIER
+                     ,  X.VALIDSTATE
+                     , '0' AS CHK
+                FROM
+                (
+                    SELECT  PD.PRIORITY
+                        ,   PD.PRODUCTDEFID
+                        ,   PD.PRODUCTDEFVERSION
+                        ,   PD.PRODUCTDEFNAME
+                        ,   PD.DESCRIPTION
+                        ,   TO_CHAR(PDH.CREATEDTIME,'YYYY-MM-DD HH24:MI:SS') CREATEDTIME
+                        ,   TO_CHAR(PDH.MODIFIEDTIME,'YYYY-MM-DD HH24:MI:SS') MODIFIEDTIME
+                        ,   PDH.CREATOR
+                        ,   PDH.MODIFIER
+                        ,   PD.VALIDSTATE
+                        ,   ROW_NUMBER() OVER(PARTITION BY PDH.PRODUCTDEFID, PDH.PRODUCTDEFVERSION ORDER BY PDH.MODIFIEDTIME DESC) RN
+                    FROM BAS_PRODUCTDEFINITION PD
+                    INNER JOIN BAS_PRODUCTDEFINITIONHISTORY PDH ON  PD.PRODUCTDEFID = PDH.PRODUCTDEFID
+                                                               AND PD.PRODUCTDEFVERSION = PDH.PRODUCTDEFVERSION
+                                                               AND PDH.TXNID = 'SaveProductPefPriority'
+                    WHERE 1=1
+                    AND     PD.ENTERPRISEID = #{ENTERPRISEID}
+                    AND     PD.PLANTID = #{PLANTID}
+                    AND     NVL(PD.PRIORITY, 0) != 0
+                     
+                    <if test="ENTERPRISEID != null and ENTERPRISEID !='' ">
+                        AND     PD.ENTERPRISEID = #{ENTERPRISEID}
+                    </if>
+                     
+                    <if test="P_LOTPRODUCTTYPESTATUS != null and P_LOTPRODUCTTYPESTATUS !='' ">
+                        AND     PD.PRODUCTIONTYPE = #{P_LOTPRODUCTTYPESTATUS}
+                    </if>
+                     
+                    <if test="P_PRODUCTDEFID != null and P_PRODUCTDEFID !='' ">
+                        AND EXISTS( 
+                                    SELECT  1 
+                                    FROM    ufn_selectStringToSplit(#{P_PRODUCTDEFID}, ',')      MAP
+                                    WHERE   PD.PRODUCTDEFID = MAP.VALUE
+                                  )
+                    </if>   
+                ) X
+                LEFT OUTER JOIN CMD_USERS U1 ON X.CREATOR = U1.USER_ID
+                LEFT OUTER JOIN CMD_USERS U2 ON X.MODIFIER = U2.USER_ID
+                WHERE 1=1
+                AND   RN=1
+                ORDER BY X.PRIORITY, X.PRODUCTDEFID ASC
+    </select>
+	
+	<select id="selectProductDefSearch" parameterType="map" resultType="hashmap">
+		SELECT PRODUCTDEFID FROM BAS_PRODUCTDEFINITION WHERE PRODUCTDEFID = #{PRODUCTDEFID}
+	</select>	
+	
+	<update id="updateProductDefPriority" parameterType="map">
+		UPDATE BAS_PRODUCTDEFINITION
+		SET  PRIORITY = #{PRIORITY},
+			MODIFIER		= #{MODIFIER}, 
+			MODIFIEDTIME	= SYSDATE, 
+			LASTTXNHISTKEY	= #{LASTTXNHISTKEY}, 
+			LASTTXNID		= #{LASTTXNID}, 
+			LASTTXNUSER		= #{LASTTXNUSER}, 
+			LASTTXNTIME		= SYSDATE, 
+			LASTTXNCOMMENT	= #{LASTTXNCOMMENT}
+		WHERE PRODUCTDEFID = #{PRODUCTDEFID}
+		AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	</update>
+	
+	<update id="updateProductDefPriorityHistory" parameterType="map">
+		INSERT INTO BAS_PRODUCTDEFINITIONHISTORY
+		(TXNHISTKEY, PRODUCTDEFID, PRODUCTDEFVERSION, PRODUCTCLASSID, PRODUCTDEFNAME, ENTERPRISEID, PLANTID, PRODUCTDEFTYPE,	PRODUCTIONTYPE,	PRODUCTSHAPE, PRIORITY,
+		MODIFIER, MODIFIEDTIME, TXNGROUPHISTKEY, TXNID, TXNUSER, TXNTIME, TXNREASONCODECLASS, TXNREASONCODE, TXNCOMMENT, VALIDSTATE)
+		SELECT #{HISTKEY}, PRODUCTDEFID, PRODUCTDEFVERSION, PRODUCTCLASSID, PRODUCTDEFNAME, ENTERPRISEID, PLANTID, PRODUCTDEFTYPE,	PRODUCTIONTYPE,	PRODUCTSHAPE, PRIORITY,
+				 MODIFIER, MODIFIEDTIME, LASTTXNHISTKEY, 'SaveProductPefPriority', #{MODIFIER}, SYSDATE, 'MFM00800ServiceImpl', 'Priority Change', '', 'Valid'
+		FROM BAS_PRODUCTDEFINITION
+		WHERE PRODUCTDEFID = #{PRODUCTDEFID}
+		AND PRODUCTDEFVERSION = #{PRODUCTDEFVERSION}
+	</update>
+	
+	
+	
+</mapper>

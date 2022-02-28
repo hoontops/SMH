@@ -1,0 +1,612 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="smh.bas.dao.BAS04300Dao">
+    <sql id="insertDictionary">
+    BAS_COMMON_PKG.GENERATE_DICTIONARY
+    </sql>
+
+    <!-- 검사종류 조회(조회조건) -->
+    <select id="selectInspClassIdList" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04300Dao.selectInspectclassidList */
+		SELECT ISC.INSPECTIONCLASSID			AS INSPECTIONCLASSID
+		 	 , DCI.DICTIONARYNAME				AS INSPECTIONCLASSNAME
+		  FROM       BAS_INSPECTIONCLASS ISC
+		  INNER JOIN CMD_DICTIONARY	     DCI	ON	ISC.INSPECTIONCLASSNAME = DCI.DICTIONARYID
+			                                    AND	DCI.LANGUAGETYPE		= #{SESSION_LANGUAGETYPE}
+		 WHERE ISC.ENTERPRISEID = #{ENTERPRISEID}
+		   AND ISC.PARENTINSPECTIONCLASSID IS NULL
+		   AND ISC.ISUSEITEM    = 'Y'
+		   AND ISC.VALIDSTATE   = 'Valid'
+		ORDER BY ISC.INSPECTIONCLASSID 
+    </select>
+    
+    <!-- 검사방법 조회 -->
+    <select id="selectInspDefinitionList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04300Dao.selectInspDefinitionList */
+		SELECT SIC.INSPECTIONDEFID             AS INSPECTIONDEFID
+		     , SIC.INSPECTIONMETHODID          AS INSPECTIONMETHODID
+		     , DIC.DICTIONARYNAME              AS INSPECTIONDEFNAME
+		     , SIC.INSPECTIONCLASSID
+		     , SIC.VALIDSTATE                  AS VALIDSTATE
+		     , ''                              AS PARENTINSPECTIONCLASSID
+		     , NVL(U1.USER_NM, SIC.CREATOR)    AS CREATOR
+		     , TO_CHAR(SIC.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+		     , NVL(U2.USER_NM, SIC.MODIFIER)   AS MODIFIER
+		     , TO_CHAR(SIC.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+		     , SIC.ENTERPRISEID
+		  FROM            BAS_INSPECTIONDEFINITION  SIC
+		  INNER JOIN      CMD_LOOKUP_VALUES         SCE ON  SCE.LOOKUP_TYPE     ='InspectionMethod'
+		                                                AND SCE.LOOKUP_CODE     = SIC.INSPECTIONMETHODID 
+		  LEFT OUTER JOIN CMD_DICTIONARY            DIC ON  DIC.DICTIONARYID    = SCE.DICTIONARYID
+		                                                AND DIC.LANGUAGETYPE    = #{SESSION_LANGUAGETYPE}
+		  LEFT OUTER JOIN CMD_USERS                 U1  ON  SIC.CREATOR         = U1.USER_ID
+		  LEFT OUTER JOIN CMD_USERS                 U2  ON  SIC.MODIFIER        = U2.USER_ID
+		 WHERE SIC.ENTERPRISEID      = #{ENTERPRISEID}
+		   AND SIC.INSPECTIONCLASSID = #{INSPECTIONCLASSID}
+        ]]>
+		<if test="VALIDSTATE != null and VALIDSTATE !='' ">
+		    AND SIC.VALIDSTATE = #{VALIDSTATE}
+		</if>
+		ORDER BY DIC.DICTIONARYNAME
+    </select>
+
+    <!-- 검사방법 정의 체크 -->
+    <select id="selectInspDefinitionChk" parameterType="map" resultType="hashmap">
+        /* smh.bas.dao.BAS04300Dao.selectInspDefinitionChk */
+        SELECT INSPECTIONDEFID             
+          FROM BAS_INSPECTIONDEFINITION
+         WHERE 1=1
+		   AND INSPECTIONDEFID        = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+		   AND INSPECTIONDEFVERSION   = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+		   AND INSPECTIONCLASSID      = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+		   AND INSPECTIONMETHODID     = #{INSPECTIONMETHODID}         /*검사방법ID*/
+           AND ROWNUM                 = 1
+    </select>
+    
+    <!-- 검사항목 조회 -->
+    <select id="selectInspMethodItemList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04300Dao.selectInspMethodItemList */
+		SELECT CIM.INSPECTIONCLASSID
+		     , CIM.INSPECTIONMETHODID
+		     , CIM.INSPITEMID
+		     , CIM.INSPITEMVERSION
+		     , CIM.ENTERPRISEID
+		     , CIM.INSPITEMTYPE
+		     , DIC.DICTIONARYNAME            AS INSPITEMNAME
+		     , CIM.VALIDSTATE
+		     , CIM.INSPECTIONCLASSID         AS PARENTINSPECTIONCLASSID
+		     , NVL(U1.USER_NM, CIM.CREATOR)  AS CREATOR
+		     , TO_CHAR(CIM.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+		     , NVL(U2.USER_NM, CIM.MODIFIER) AS MODIFIER
+		     , TO_CHAR(CIM.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+		  FROM BAS_INSPECTIONMETHODITEM  CIM
+		  INNER JOIN BAS_INSPITEM        SIM  ON  SIM.INSPITEMID      = CIM.INSPITEMID
+		                                      AND SIM.INSPITEMVERSION = CIM.INSPITEMVERSION
+		                                      AND SIM.ENTERPRISEID    = CIM.ENTERPRISEID
+		  LEFT OUTER JOIN CMD_DICTIONARY DIC  ON  DIC.DICTIONARYID    = SIM.INSPITEMNAME
+		                                      AND DIC.LANGUAGETYPE    = #{SESSION_LANGUAGETYPE}
+		  LEFT OUTER JOIN CMD_USERS      U1   ON  CIM.CREATOR 		  = U1.USER_ID
+		  LEFT OUTER JOIN CMD_USERS      U2   ON  CIM.MODIFIER        = U2.USER_ID
+		 WHERE CIM.ENTERPRISEID       = #{ENTERPRISEID}
+		   AND CIM.INSPECTIONCLASSID  = #{INSPECTIONCLASSID}
+		   AND CIM.INSPECTIONMETHODID = #{INSPECTIONMETHODID}
+		]]>
+		<if test="VALIDSTATE != null and VALIDSTATE !='' ">
+		    AND CIM.VALIDSTATE = #{VALIDSTATE}
+		</if>
+		ORDER BY DIC.DICTIONARYNAME
+    </select>
+
+    <!-- 검사정의 수입 검증 tree 조회 -->
+    <select id="selectImportInspTreeList" parameterType="map" resultType="hashmap">    
+        <![CDATA[
+        /* smh.bas.dao.BAS04300Dao.selectImportInspTreeList */ 
+          SELECT INSPECTIONCLASSID
+               , INSPECTIONCLASSNAME
+               , PARENTID
+               , INSPECTIONCLASSLEVEL
+            FROM (SELECT '*'         AS INSPECTIONCLASSID
+                       , 'SMLINES' AS INSPECTIONCLASSNAME
+                       , NULL        AS PARENTID
+                       , 0           AS INSPECTIONCLASSLEVEL
+                    FROM DUAL
+                  UNION ALL
+                    SELECT INSPECTIONCLASSID
+                         , INSPECTIONCLASSNAME
+                         , PARENTID
+                         , LEVEL       AS INSPECTIONCLASSLEVEL
+                      FROM (              
+                            SELECT LOOKUP_CODE          AS INSPECTIONCLASSID
+                                 , DIC.DICTIONARYNAME   AS INSPECTIONCLASSNAME
+                                 , ''                   AS PARENTID
+                              FROM            CMD_LOOKUP_VALUES  SCE 
+                              LEFT OUTER JOIN CMD_DICTIONARY     DIC ON  DIC.DICTIONARYID = SCE.DICTIONARYID
+                                                                     AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+                            WHERE SCE.LOOKUP_TYPE = #{INSPECTIONCLASSID}
+                            UNION 
+                            SELECT SIC.INSPECTIONDEFID     AS INSPECTIONCLASSIDMAT
+                                 , DIC.DICTIONARYNAME      AS INSPECTIONCLASSNAME
+                                 , SCL.CONSUMABLETYPE      AS PARENTID
+                              FROM            CMD_LOOKUP_VALUES          SCE 
+                              INNER JOIN      BAS_INSPECTIONCLASS        SCL ON  SCL.CONSUMABLETYPE    = SCE.LOOKUP_CODE
+                              INNER JOIN      BAS_INSPECTIONDEFINITION   SIC ON  SIC.INSPECTIONCLASSID = SCL.INSPECTIONCLASSID
+                                                                             AND SIC.ENTERPRISEID      = SCL.ENTERPRISEID
+                              INNER JOIN      CMD_LOOKUP_VALUES          SIE ON  SIE.LOOKUP_TYPE       ='InspectionMethod'
+                                                                             AND SIE.LOOKUP_CODE       = SIC.INSPECTIONMETHODID 
+                              LEFT OUTER JOIN CMD_DICTIONARY             DIC ON  DIC.DICTIONARYID      = SIE.DICTIONARYID
+                                                                             AND DIC.LANGUAGETYPE      = #{SESSION_LANGUAGETYPE}
+                             WHERE SCL.ENTERPRISEID = #{ENTERPRISEID}
+                               AND SCE.LOOKUP_TYPE = #{INSPECTIONCLASSID}
+        ]]>
+                            <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+                              AND SIC.VALIDSTATE = #{VALIDSTATE}
+                            </if>
+                       ) TR                       
+                  START  WITH PARENTID IS NULL
+                  CONNECT BY NOCYCLE PRIOR TR.INSPECTIONCLASSID = TR.PARENTID ) 
+    </select>
+
+    <!-- 검사정의 수입 자재분류 조회 -->
+    <select id="selectInspClassMatList" parameterType="map" resultType="hashmap">      
+        <![CDATA[
+        /* smh.bas.dao.BAS04300Dao.selectInspClassMatList */ 
+        SELECT SCE.LOOKUP_CODE         AS INSPECTIONCLASSMAT
+             , DIC.DICTIONARYNAME      AS INSPECTIONCLASSNAME
+             , SCL.VALIDSTATE          AS VALIDSTATE
+             , SCE.LOOKUP_TYPE         AS INSPECTIONCLASSID
+             , #{PARENTINSPECTIONCLASSID}||'.'||SCE.LOOKUP_CODE    AS PARENTINSPECTIONCLASSID
+             , SCL.ENTERPRISEID
+          FROM            CMD_LOOKUP_VALUES    SCE 
+          LEFT OUTER JOIN CMD_DICTIONARY       DIC ON  DIC.DICTIONARYID            = SCE.DICTIONARYID
+                                                   AND DIC.LANGUAGETYPE            = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN BAS_INSPECTIONCLASS  SCL ON  SCL.CONSUMABLETYPE          = SCE.LOOKUP_CODE
+                                                   AND SCL.PARENTINSPECTIONCLASSID = #{PARENTINSPECTIONCLASSID}
+         WHERE SCL.ENTERPRISEID = #{ENTERPRISEID}
+           AND SCE.LOOKUP_TYPE  = #{INSPECTIONCLASSID}
+        ]]>
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+            AND SCL.VALIDSTATE = #{VALIDSTATE}
+        </if>
+    </select> 
+
+    <!-- 검사정의 신뢰성 검증 tree 조회 -->
+    <select id="selectReliabilityInspTreeList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04300Dao.selectReliabilityInspTreeList */ 
+	      SELECT INSPECTIONCLASSID
+	           , INSPECTIONCLASSNAME
+	           , PARENTID
+	           , INSPECTIONCLASSLEVEL
+	        FROM (SELECT '*'         AS INSPECTIONCLASSID
+	                   , 'SMLINES' AS INSPECTIONCLASSNAME
+	                   , NULL        AS PARENTID
+	                   , 0           AS INSPECTIONCLASSLEVEL
+	                FROM DUAL
+	              UNION ALL
+	                SELECT INSPECTIONCLASSID
+	                     , INSPECTIONCLASSNAME
+	                     , PARENTID
+	                     , LEVEL       AS INSPECTIONCLASSLEVEL
+	                  FROM (              
+		                    SELECT INSPECTIONCLASSID                          AS INSPECTIONCLASSID
+		                         , NVL(DIC.DICTIONARYNAME,SIC.DESCRIPTION)    AS INSPECTIONCLASSNAME
+		                         , ''                                         AS PARENTID
+		                      FROM            BAS_INSPECTIONCLASS  SIC 
+		                      LEFT OUTER JOIN CMD_DICTIONARY       DIC ON  DIC.DICTIONARYID = SIC.INSPECTIONCLASSNAME
+		                                                               AND DIC.LANGUAGETYPE = #{SESSION_LANGUAGETYPE}
+		                     WHERE SIC.ENTERPRISEID = #{ENTERPRISEID}
+		                       AND SIC.PARENTINSPECTIONCLASSID  = #{INSPECTIONCLASSID}
+	    ]]>
+				            <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+		                       AND SIC.VALIDSTATE = #{VALIDSTATE}
+		                    </if>
+		<![CDATA[                            
+		                    UNION 
+		                    SELECT SID.INSPECTIONDEFID                     AS INSPECTIONCLASSID
+		                         , NVL(DIC.DICTIONARYNAME,SID.DESCRIPTION) AS INSPECTIONCLASSNAME
+		                         , SID.INSPECTIONCLASSID                   AS PARENTID
+		                      FROM       BAS_INSPECTIONDEFINITION  SID
+		                      INNER JOIN CMD_LOOKUP_VALUES         SCE ON  SCE.LOOKUP_TYPE              ='InspectionMethod'
+		                                                               AND SCE.LOOKUP_CODE              = SID.INSPECTIONMETHODID
+		                      INNER JOIN BAS_INSPECTIONCLASS       SIC ON  SIC.PARENTINSPECTIONCLASSID  = #{INSPECTIONCLASSID}
+		                                                               AND SIC.INSPECTIONCLASSID        = SID.INSPECTIONCLASSID
+		                                                               AND SIC.ENTERPRISEID             = SID.ENTERPRISEID
+		                      LEFT OUTER JOIN CMD_DICTIONARY       DIC ON  DIC.DICTIONARYID             = SCE.DICTIONARYID
+		                                                               AND DIC.LANGUAGETYPE             = #{SESSION_LANGUAGETYPE}
+		                     WHERE 1=1
+		                       AND SIC.ENTERPRISEID = #{ENTERPRISEID}
+	    ]]>
+		                    <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+		                      AND SID.VALIDSTATE = #{VALIDSTATE}
+		                    </if>
+                       ) TR                       
+                  START  WITH PARENTID IS NULL
+                  CONNECT BY NOCYCLE PRIOR TR.INSPECTIONCLASSID = TR.PARENTID )
+    </select>
+       
+    <!-- 검사정의 신뢰성 검사분류 리스트 조회 -->
+    <select id="selectReliabilityClassList" parameterType="map" resultType="hashmap">      
+        <![CDATA[
+        /* smh.bas.dao.BAS04300Dao.selectReliabilityClassList */ 
+        SELECT SIC.INSPECTIONCLASSID         AS INSPECTIONCLASSID
+             , SIC.PARENTINSPECTIONCLASSID   AS PARENTINSPECTIONCLASSID
+             , DK.DICTIONARYNAME             AS INSPECTIONCLASSNAME_KR
+             , DE.DICTIONARYNAME             AS INSPECTIONCLASSNAME_US
+             , DC.DICTIONARYNAME             AS INSPECTIONCLASSNAME_CN
+             , DV.DICTIONARYNAME             AS INSPECTIONCLASSNAME_VN
+             , SIC.VALIDSTATE                AS VALIDSTATE
+             , NVL(U1.USER_NM, SIC.CREATOR)  AS CREATOR
+             , TO_CHAR(SIC.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+             , NVL(U2.USER_NM, SIC.MODIFIER) AS MODIFIER
+             , TO_CHAR(SIC.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME
+             , SIC.ENTERPRISEID
+             , SIC.INSPECTIONCLASSNAME
+          FROM            BAS_INSPECTIONCLASS SIC 
+          LEFT OUTER JOIN CMD_DICTIONARY      DK    ON  SIC.INSPECTIONCLASSNAME      = DK.DICTIONARYID
+                                                    AND DK.LANGUAGETYPE              = 'ko-KR'
+          LEFT OUTER JOIN CMD_DICTIONARY      DE    ON  SIC.INSPECTIONCLASSNAME      = DE.DICTIONARYID
+                                                    AND DE.LANGUAGETYPE              = 'en-US'
+          LEFT OUTER JOIN CMD_DICTIONARY      DC    ON  SIC.INSPECTIONCLASSNAME      = DC.DICTIONARYID
+                                                    AND DC.LANGUAGETYPE              = 'zh-CN'
+          LEFT OUTER JOIN CMD_DICTIONARY      DV    ON  SIC.INSPECTIONCLASSNAME      = DV.DICTIONARYID
+                                                    AND DV.LANGUAGETYPE              = 'vi-VN'
+          LEFT OUTER JOIN CMD_USERS           U1    ON  SIC.CREATOR                  = U1.USER_ID
+          LEFT OUTER JOIN CMD_USERS           U2    ON  SIC.MODIFIER                 = U2.USER_ID
+         WHERE 1=1
+           AND SIC.ENTERPRISEID              = #{ENTERPRISEID}
+           AND SIC.PARENTINSPECTIONCLASSID   = #{INSPECTIONCLASSID}
+        ]]>
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+            AND SIC.VALIDSTATE = #{VALIDSTATE}
+        </if>
+    </select>
+     
+    <!-- 신뢰성 검증 검사항목 조회 -->
+    <select id="selectReliabilityItemList" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04300Dao.selectReliabilityItemList */
+        SELECT CIM.INSPECTIONCLASSID
+             , CIM.INSPECTIONMETHODID
+             , CIM.INSPITEMID
+             , CIM.INSPITEMVERSION
+             , CIM.ENTERPRISEID
+             , CIM.INSPITEMTYPE
+             , DIC.DICTIONARYNAME            AS INSPITEMNAME
+             , CIM.VALIDSTATE
+             , SIR.NCRDECISIONDEGREE
+             , CIM.INSPECTIONCLASSID         AS PARENTINSPECTIONCLASSID
+             , SIC.INSPECTIONDEFID
+             , NVL(U1.USER_NM, CIM.CREATOR)  AS CREATOR
+             , TO_CHAR(CIM.CREATEDTIME, 'YYYYMMDDHH24MISS') AS CREATEDTIME
+             , NVL(U2.USER_NM, CIM.MODIFIER) AS MODIFIER
+             , TO_CHAR(CIM.MODIFIEDTIME, 'YYYYMMDDHH24MISS') AS MODIFIEDTIME                    
+          FROM            BAS_INSPECTIONMETHODITEM CIM
+          INNER JOIN      BAS_INSPECTIONDEFINITION SIC ON  SIC.INSPECTIONDEFID         = #{INSPECTIONDEFID}
+                                                       AND SIC.INSPECTIONMETHODID      = CIM.INSPECTIONMETHODID 
+                                                       AND SIC.ENTERPRISEID            = CIM.ENTERPRISEID
+          INNER JOIN      BAS_INSPITEM             SIM ON  SIM.INSPITEMID              = CIM.INSPITEMID
+                                                       AND SIM.INSPITEMVERSION         = CIM.INSPITEMVERSION
+                                                       AND SIM.ENTERPRISEID            = CIM.ENTERPRISEID
+          LEFT OUTER JOIN BAS_INSPECTIONITEMREL    SIR ON  SIR.INSPITEMID              = CIM.INSPITEMID
+                                                       AND SIR.INSPITEMVERSION         = CIM.INSPITEMVERSION
+                                                       AND SIR.INSPECTIONDEFID         = SIC.INSPECTIONDEFID
+                                                       AND SIR.INSPECTIONDEFVERSION    = SIC.INSPECTIONDEFVERSION
+                                                       AND SIR.PROCESSSEGID            = #{PROCESSSEGID}
+                                                       AND SIR.PROCESSEGVERSION        = #{PROCESSEGVERSION}
+                                                       AND SIR.RESOURCEID              = #{RESOURCEID}
+                                                       AND SIR.RESOURCEVERSION         = #{RESOURCEVERSION}
+                                                       AND SIR.ENTERPRISEID            = CIM.ENTERPRISEID
+          ]]>
+                                                      <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+                                                          AND SIR.VALIDSTATE = #{VALIDSTATE}
+                                                      </if>
+          LEFT OUTER JOIN CMD_DICTIONARY           DIC  ON  DIC.DICTIONARYID           = SIM.INSPITEMNAME
+                                                        AND DIC.LANGUAGETYPE           = #{SESSION_LANGUAGETYPE}
+          LEFT OUTER JOIN CMD_USERS                U1   ON  CIM.CREATOR                = U1.USER_ID
+          LEFT OUTER JOIN CMD_USERS                U2   ON  CIM.MODIFIER               = U2.USER_ID
+         WHERE CIM.ENTERPRISEID       = #{ENTERPRISEID}
+           AND CIM.INSPECTIONCLASSID  = #{INSPECTIONCLASSID}
+           AND CIM.INSPECTIONMETHODID = #{INSPECTIONMETHODID}
+        <if test="VALIDSTATE != null and VALIDSTATE !='' ">
+            AND CIM.VALIDSTATE = #{VALIDSTATE}
+        </if>
+        ORDER BY DIC.DICTIONARYNAME
+    </select>
+
+    <!-- 검사 항목 정의 체크 -->
+    <select id="selectInspectionitemrelChk" parameterType="map" resultType="hashmap">
+        <![CDATA[
+        /* smh.bas.dao.BAS04300Dao.selectInspectionitemrelChk */
+        SELECT INSPECTIONDEFID
+          FROM BAS_INSPECTIONITEMREL    
+         WHERE 1=1
+           AND INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+           AND INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+           AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*자원 ID*/
+           AND RESOURCEVERSION               = #{RESOURCEVERSION}            /*자원 Version*/
+           AND PROCESSSEGID                  = #{PROCESSSEGID}               /*공정ID*/
+           AND PROCESSEGVERSION              = #{PROCESSEGVERSION}           /*공정Version*/           
+           AND ROWNUM                        = 1
+          ]]>
+    </select>   
+           
+    <!-- 검사방법 등록 -->
+    <insert id="insertInspDefinition" parameterType="map">
+		INSERT /* smh.bas.dao.BAS04300Dao.insertInspDefinition */ INTO BAS_INSPECTIONDEFINITION
+		    (     INSPECTIONDEFID               /*검사 정의 ID*/
+                , INSPECTIONDEFVERSION          /*검사 정의 Version*/
+                , INSPECTIONDEFNAME             /*검사 정의명*/
+                , INSPECTIONCLASSID             /*검사 그룹 ID*/
+                , INSPECTIONMETHODID            /*검사방법ID*/
+                , ENTERPRISEID                  /*회사 ID*/
+                , PLANTID                       /*Site ID*/
+                , VERSIONSTATE                  /*Version 상태*/
+                , DESCRIPTION                   /*설명*/
+                , CREATOR                       /*생성자*/
+                , CREATEDTIME                   /*생성일*/
+                , MODIFIER                      /*수정자*/
+                , MODIFIEDTIME                  /*수정일*/                 
+                , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+                , LASTTXNID                     /*마지막TXN ID*/
+                , LASTTXNUSER                   /*마지막TXN 사용자*/
+                , LASTTXNTIME                   /*마지막TXN 시간*/
+                , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+                , VALIDSTATE                    /*유효여부*/
+		    )VALUES(
+		          #{INSPECTIONDEFID}              /*검사 정의 ID*/
+		        , #{INSPECTIONDEFVERSION}         /*검사 정의 Version*/
+		        , #{INSPECTIONDEFNAME}            /*검사 정의명*/
+		        , #{INSPECTIONCLASSID}            /*검사 그룹 ID*/
+		        , #{INSPECTIONMETHODID}           /*검사방법ID*/
+		        , #{ENTERPRISEID}                 /*회사 ID*/
+		        , #{PLANTID}                      /*Site ID*/
+		        , #{VERSIONSTATE}                 /*Version 상태*/
+		        , #{DESCRIPTION}                  /*설명*/
+		        , #{CREATOR}                      /*생성자*/
+		        , SYSDATE                         /*생성일*/
+                , #{MODIFIER}                     /*수정자*/
+                , SYSDATE                         /*수정일*/ 		        
+		        , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+		        , #{LASTTXNID}                    /*마지막TXN ID*/
+		        , #{CREATOR}                      /*마지막TXN 사용자*/
+		        , SYSDATE                         /*마지막TXN 시간*/
+		        , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+		        , #{VALIDSTATE}                   /*유효여부*/
+		    )
+    </insert>
+    
+    <!-- 검사 그룹 정보 등록 -->
+    <insert id="insertInspectionclass" parameterType="map">
+    DECLARE
+    BEGIN
+		INSERT /* smh.bas.dao.BAS04300Dao.insertInspectionclass */ INTO BAS_INSPECTIONCLASS
+		    (     INSPECTIONCLASSID             /*검사 그룹 ID*/
+                , INSPECTIONCLASSNAME           /*검사 그룹명*/
+                , ENTERPRISEID                  /*회사 ID*/
+                , PLANTID                       /*Site ID*/
+                , PARENTINSPECTIONCLASSID       /*상위 검사 그룹 ID*/
+                , RESOURCETYPE                  /*자원유형*/
+                , ISUSEITEM                     /*검사항목사용여부*/
+                , INSPECTIONCLASSTYPE           /*검사그룹유형*/
+                , CONSUMABLETYPE                /*자재유형*/
+                , DESCRIPTION                   /*설명*/
+                , CREATOR                       /*생성자*/
+                , CREATEDTIME                   /*생성일*/
+                , MODIFIER                      /*수정자*/
+                , MODIFIEDTIME                  /*수정일*/                
+                , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+                , LASTTXNID                     /*마지막TXN ID*/
+                , LASTTXNUSER                   /*마지막TXN 사용자*/
+                , LASTTXNTIME                   /*마지막TXN 시간*/
+                , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+                , VALIDSTATE                    /*유효여부*/
+		    )VALUES(
+                  #{INSPECTIONCLASSID}            /*검사 그룹 ID*/
+                , #{INSPECTIONCLASSNAME}          /*검사 그룹명*/
+                , #{ENTERPRISEID}                 /*회사 ID*/
+                , #{PLANTID}                      /*Site ID*/
+                , #{PARENTINSPECTIONCLASSID}      /*상위 검사 그룹 ID*/
+                , #{RESOURCETYPE}                 /*자원유형*/
+                , #{ISUSEITEM}                    /*검사항목사용여부*/
+                , #{INSPECTIONCLASSTYPE}          /*검사그룹유형*/
+                , #{CONSUMABLETYPE}               /*자재유형*/
+                , #{DESCRIPTION}                  /*설명*/
+                , #{CREATOR}                      /*생성자*/
+                , SYSDATE                         /*생성일*/
+                , #{MODIFIER}                     /*수정자*/
+                , SYSDATE                         /*수정일*/                
+                , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+                , #{LASTTXNID}                    /*마지막TXN ID*/
+                , #{CREATOR}                      /*마지막TXN 사용자*/
+                , SYSDATE                         /*마지막TXN 시간*/
+                , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+                , #{VALIDSTATE}                   /*유효여부*/
+        );
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{INSPECTIONCLASSNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','ko-KR',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_KR}); END IF;
+        IF #{INSPECTIONCLASSNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','en-US',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_US}); END IF;
+        IF #{INSPECTIONCLASSNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','zh-CN',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_CN}); END IF;
+        IF #{INSPECTIONCLASSNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','vi-VN',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;
+    </insert>
+
+    <!-- 검사 항목 정의 등록 -->
+    <insert id="insertInspectionitemrel" parameterType="map">
+        INSERT /* smh.bas.dao.BAS04300Dao.insertInspectionitemrel */ INTO BAS_INSPECTIONITEMREL
+            (     INSPITEMID                    /*검사 항목 ID*/
+                , INSPITEMVERSION               /*검사 항목 Version*/
+                , INSPECTIONDEFID               /*검사 정의 ID*/
+                , INSPECTIONDEFVERSION          /*검사 정의 Version*/
+                , RESOURCEID                    /*자원 ID*/
+                , RESOURCEVERSION               /*자원 Version*/
+                , PROCESSSEGID                  /*공정ID*/
+                , PROCESSEGVERSION              /*공정Version*/
+                , RESOURCETYPE                  /*자원유형*/
+                , ENTERPRISEID                  /*회사 ID*/
+                , PLANTID                       /*Site ID*/
+                , VALIDTYPE                     /*확인 유형*/
+                , UNIT                          /*단위*/
+                , SEQUENCE                      /*순서*/
+                , TANKSIZE                      /*탱크사이즈*/
+                , CALCULATIONTYPE               /*분석값 계산식 유형*/
+                , ANALYSISCONST                 /*분석값 상수*/
+                , FOMULATYPE                    /*보충량 계산식 유형*/
+                , QTYCONST                      /*보충량 상수*/
+                , SPECCLASSID                   /*Spec 그룹 ID*/
+                , SPECSEQUENCE                  /*SpecSequence*/
+                , ISINSPECTIONREQUIRED          /*검사필수여부*/
+                , INSPECTORDEGREE               /*검사원 등급*/
+                , ISAQL                         /*AQL여부*/
+                , AQLINSPECTIONLEVEL            /*검사수준*/
+                , AQLDEFECTLEVEL                /*불량수준*/
+                , AQLDECISIONDEGREE             /*AQL판정등급*/
+                , AQLCYCLE                      /*AQL주기*/
+                , ISNCR                         /*NCR여부*/
+                , NCRINSPECTIONQTY              /*검사수량*/
+                , NCRCYCLE                      /*NCR주기*/
+                , NCRDECISIONDEGREE             /*NCR판정등급*/
+                , NCRDEFECTRATE                 /*불량율*/
+                , NCRLOTSIZE                    /*Lot Size*/
+                , QTYUNIT                       /*수량단위*/
+                , INSPECTIONUNIT                /*검사 단위*/
+                , DESCRIPTION                   /*설명*/
+                , CREATOR                       /*생성자*/
+                , CREATEDTIME                   /*생성일*/
+                , MODIFIER                      /*수정자*/
+                , MODIFIEDTIME                  /*수정일*/
+                , LASTTXNHISTKEY                /*마지막TXN HistKey*/
+                , LASTTXNID                     /*마지막TXN ID*/
+                , LASTTXNUSER                   /*마지막TXN 사용자*/
+                , LASTTXNTIME                   /*마지막TXN 시간*/
+                , LASTTXNCOMMENT                /*마지막TXN 코멘트*/
+                , VALIDSTATE                    /*유효여부*/
+		    )VALUES(
+                  #{INSPITEMID}                   /*검사 항목 ID*/
+                , #{INSPITEMVERSION}              /*검사 항목 Version*/
+                , #{INSPECTIONDEFID}              /*검사 정의 ID*/
+                , #{INSPECTIONDEFVERSION}         /*검사 정의 Version*/
+                , #{RESOURCEID}                   /*자원 ID*/
+                , #{RESOURCEVERSION}              /*자원 Version*/
+                , #{PROCESSSEGID}                 /*공정ID*/
+                , #{PROCESSEGVERSION}             /*공정Version*/
+                , #{RESOURCETYPE}                 /*자원유형*/
+                , #{ENTERPRISEID}                 /*회사 ID*/
+                , #{PLANTID}                      /*Site ID*/
+                , #{VALIDTYPE}                    /*확인 유형*/
+                , #{UNIT}                         /*단위*/
+                , #{SEQUENCE}                     /*순서*/
+                , #{TANKSIZE}                     /*탱크사이즈*/
+                , #{CALCULATIONTYPE}              /*분석값 계산식 유형*/
+                , #{ANALYSISCONST}                /*분석값 상수*/
+                , #{FOMULATYPE}                   /*보충량 계산식 유형*/
+                , #{QTYCONST}                     /*보충량 상수*/
+                , #{SPECCLASSID}                  /*Spec 그룹 ID*/
+                , #{SPECSEQUENCE}                 /*SpecSequence*/
+                , #{ISINSPECTIONREQUIRED}         /*검사필수여부*/
+                , #{INSPECTORDEGREE}              /*검사원 등급*/
+                , #{ISAQL}                        /*AQL여부*/
+                , #{AQLINSPECTIONLEVEL}           /*검사수준*/
+                , #{AQLDEFECTLEVEL}               /*불량수준*/
+                , #{AQLDECISIONDEGREE}            /*AQL판정등급*/
+                , #{AQLCYCLE}                     /*AQL주기*/
+                , #{ISNCR}                        /*NCR여부*/
+                , #{NCRINSPECTIONQTY}             /*검사수량*/
+                , #{NCRCYCLE}                     /*NCR주기*/
+                , #{NCRDECISIONDEGREE}            /*NCR판정등급*/
+                , #{NCRDEFECTRATE}                /*불량율*/
+                , #{NCRLOTSIZE}                   /*Lot Size*/
+                , #{QTYUNIT}                      /*수량단위*/
+                , #{INSPECTIONUNIT}               /*검사 단위*/
+                , #{DESCRIPTION}                  /*설명*/
+                , #{CREATOR}                      /*생성자*/
+                , SYSDATE                         /*생성일*/
+                , #{MODIFIER}                     /*수정자*/
+                , SYSDATE                         /*수정일*/
+                , #{LASTTXNHISTKEY}               /*마지막TXN HistKey*/
+                , #{LASTTXNID}                    /*마지막TXN ID*/
+                , #{CREATOR}                      /*마지막TXN 사용자*/
+                , SYSDATE                         /*마지막TXN 시간*/
+                , #{LASTTXNCOMMENT}               /*마지막TXN 코멘트*/
+                , #{VALIDSTATE}                   /*유효여부*/
+            )
+    </insert>
+        
+    <!-- 검사방법목록 수정 -->
+    <update id="updateInspDefinition" parameterType="map">
+		UPDATE /* smh.bas.dao.BAS04300Dao.updateInspDefinition */ BAS_INSPECTIONDEFINITION
+		   SET INSPECTIONDEFNAME             = #{INSPECTIONDEFNAME}          /*검사 정의명*/
+		     , VERSIONSTATE                  = #{VERSIONSTATE}               /*Version 상태*/
+		     , DESCRIPTION                   = #{DESCRIPTION}                /*설명*/
+		     , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+		     , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+		     , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+		     , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+		     , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+		     , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+		     , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+		     , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+		 WHERE INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+		   AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+		   AND INSPECTIONCLASSID             = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+		   AND INSPECTIONMETHODID            = #{INSPECTIONMETHODID}         /*검사방법ID*/
+    </update>
+
+    <!-- 검사 그룹 정보 수정 -->
+    <update id="updateInspectionclass" parameterType="map">
+    DECLARE
+    BEGIN
+		UPDATE /* smh.bas.dao.BAS04300Dao.updateInspectionclass */ BAS_INSPECTIONCLASS
+		   SET MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+         WHERE ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+           AND INSPECTIONCLASSID             = #{INSPECTIONCLASSID}          /*검사 그룹 ID*/
+        ;
+
+        <!-- 다국어 테이블 저장용 -->
+        IF #{INSPECTIONCLASSNAME_KR} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','ko-KR',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_KR}); END IF;
+        IF #{INSPECTIONCLASSNAME_US} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','en-US',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_US}); END IF;
+        IF #{INSPECTIONCLASSNAME_CN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','zh-CN',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_CN}); END IF;
+        IF #{INSPECTIONCLASSNAME_VN} IS NOT NULL THEN <include refid="insertDictionary" />('BAS_INSPECTIONCLASS','vi-VN',#{INSPECTIONCLASSNAME}, #{CREATOR}, #{INSPECTIONCLASSNAME_VN}); END IF;
+        <!-- 다국어 테이블 저장용 -->
+    END;
+    </update>
+    
+    <!-- 검사방법목록 수정 -->
+    <update id="updateInspectionitemrel" parameterType="map">
+		UPDATE /* smh.bas.dao.BAS04300Dao.updateInspectionitemrel */ BAS_INSPECTIONITEMREL
+		   SET ISINSPECTIONREQUIRED          = #{ISINSPECTIONREQUIRED}       /*검사필수여부*/
+             , ISNCR                         = #{ISNCR}                      /*NCR여부*/
+             , NCRDECISIONDEGREE             = #{NCRDECISIONDEGREE}          /*NCR판정등급*/
+             , MODIFIER                      = #{MODIFIER}                   /*수정자*/
+             , MODIFIEDTIME                  = SYSDATE                       /*수정일*/
+             , LASTTXNHISTKEY                = #{LASTTXNHISTKEY}             /*마지막TXN HistKey*/
+             , LASTTXNID                     = #{LASTTXNID}                  /*마지막TXN ID*/
+             , LASTTXNUSER                   = #{MODIFIER}                   /*마지막TXN 사용자*/
+             , LASTTXNTIME                   = SYSDATE                       /*마지막TXN 시간*/
+             , LASTTXNCOMMENT                = #{LASTTXNCOMMENT}             /*마지막TXN 코멘트*/
+             , VALIDSTATE                    = #{VALIDSTATE}                 /*유효여부*/
+         WHERE ENTERPRISEID                  = #{ENTERPRISEID}               /*회사 ID*/
+           AND INSPITEMID                    = #{INSPITEMID}                 /*검사 항목 ID*/
+           AND INSPITEMVERSION               = #{INSPITEMVERSION}            /*검사 항목 Version*/
+           AND INSPECTIONDEFID               = #{INSPECTIONDEFID}            /*검사 정의 ID*/
+           AND INSPECTIONDEFVERSION          = #{INSPECTIONDEFVERSION}       /*검사 정의 Version*/
+           AND RESOURCEID                    = #{RESOURCEID}                 /*자원 ID*/
+           AND RESOURCEVERSION               = #{RESOURCEVERSION}            /*자원 Version*/
+           AND PROCESSSEGID                  = #{PROCESSSEGID}               /*공정ID*/
+           AND PROCESSEGVERSION              = #{PROCESSEGVERSION}           /*공정Version*/
+    </update>     
+</mapper>

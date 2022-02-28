@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!--
+    파일명       : JAVA 배치 프로그램
+    설명          : JAVA 배치 프로그램 실행 정보 조회
+    작성자       : 진성하
+    최초작성일 : 2017.07.21
+<< 개정이력(Modification Information) >>
+      수정일              수정자      수정내용
+     2017.10.1    진성하     최초  생성
+-->
+
+<mapper namespace="com.nbdf.batch.dao.BatchJavaDao">
+
+    <select id="selectEmailBatchList" resultType="hashmap">
+    SELECT /* "com.nbdf.batch.dao.BatchJavaDao.selectEmailBatchList" */
+               SNDNG_LOG_ID
+              , SENDER_INFO
+              , RCVER_INFO
+              , SENDER_NM
+              , COMMENTS
+              , SUBJECT_TEXT
+              , CC
+    FROM   CMD_SNDNG_LOGS
+    WHERE
+              SNDNG_KND_CD='EMAIL'
+              AND SNDNG_YN = 'N'
+    ORDER BY CREATION_DATE ASC
+    </select>
+
+        <!-- 배치 실행 상태 업데이트(실패) -->
+    <update id="updateEmailBatchFail" parameterType="hashmap">
+    UPDATE /* "com.nbdf.batch.dao.BatchJavaDao.updateEmailBatchFail" */ CMD_SNDNG_LOGS
+    SET    SNDNG_YN = 'F',
+             RM = #{RM}
+    WHERE
+    SNDNG_LOG_ID = #{SNDNG_LOG_ID}
+   </update>
+
+    <!-- 배치 실행 상태 업데이트(성공) -->
+    <update id="updateEmailBatchSuccess" parameterType="hashmap">
+    UPDATE /* "com.nbdf.batch.dao.BatchJavaDao.updateEmailBatchSuccess" */ CMD_SNDNG_LOGS
+    SET    SNDNG_YN = 'Y'
+    WHERE
+    SNDNG_LOG_ID = #{SNDNG_LOG_ID}
+   </update>
+
+    <!-- 배치프로그램 SMS설정 조회-->
+    <select id="selectCmdBatPgmSmsList" parameterType="hashmap" resultType="hashmap">
+     SELECT /* "com.nbdf.cmd.cm.cmam.dao.CMAM01000Dao.selectCmdBatPgmSmsList"  */
+        A.BAT_PGMS_SMS_ID
+        ,A.BAT_PGM_ID
+        ,A.OFCR_NM
+        ,A.TEL_NO
+        ,A.SMS_RCV_YN
+        ,A.CREATED_BY
+        ,A.CREATION_DATE
+        ,A.LAST_UPDATED_BY
+        ,A.LAST_UPDATE_DATE
+        ,B.BAT_PGM_DESC
+    FROM CMD_BAT_PGMS_SMS A, CMD_BAT_PGMS B
+    WHERE  A.BAT_PGM_ID = (SELECT BAT_PGM_ID FROM cmd_bat_logs WHERE BAT_LOG_ID = #{BAT_LOG_ID} AND ROWNUM=1)
+    AND A.SMS_RCV_YN = 'Y'
+    AND A.BAT_PGM_ID = B.BAT_PGM_ID
+    </select>
+
+    <!-- SMS 발송 저장 -->
+    <update id="insertSmsSndIfs" parameterType="hashmap">
+         INSERT /* "com.nbdf.cmd.cm.cmam.dao.CMAM01000Dao.insertSmsSndIfs"  */
+         INTO    CMD_SMS_IFS
+                    ( SND_PHN_ID       /* 보내는사람 휴대폰 번호  */
+                    , RCV_PHN_ID       /* 받는사람 휴대폰 번호     */
+                    , SND_MSG           /* 메시지 내용                   */
+                    , SND_PUSH_MSG  /* 우체국앱 PUSH 메시지   */
+                    , SND_DTTM        /* 예약시간 */
+                    , CREATION_DATE
+                    , TRAN_ID
+                    , LINK_STAT_CD
+                    )
+         VALUES (
+                       #{SND_PHN_ID}
+                     , #{RCV_PHN_ID}
+                     , SUBSTRB(#{SND_MSG}, 0, 118)
+                     , SUBSTRB(#{SND_PUSH_MSG}, 0, 1990)
+                     , TO_CHAR(SYSDATE, 'YYYYMMDDHH24MISS')
+                     , SYSDATE
+                     , CMD_GET_TRAN_ID_F(#{JOB_SYS_CD})
+                     , 'N'
+                     )
+     </update>
+ </mapper>
