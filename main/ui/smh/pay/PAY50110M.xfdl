@@ -1,0 +1,174 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="PAY50110M" width="920" height="720" titletext="연봉정보" onload="fn_init">
+    <Layouts>
+      <Layout height="720" mobileorientation="landscape" width="920">
+        <Button id="btn_searchOpen" taborder="0" left="10" top="6" width="30" height="24" cssclass="btn_WF_searchOpen" onclick="nfn_searchOpen_onclick"/>
+        <Static id="sta_title" taborder="1" text="업무화면명(자동)" left="40" top="6" width="145" height="24" cssclass="sta_WF_title" fittocontents="width" expr="nexacro.getApplication().gds_menu.lookup(&quot;PGM_ID&quot;,comp.parent.name,&quot;MENU_NM&quot;)"/>
+        <Button id="btn_favorite" taborder="2" left="sta_title:2" top="6" width="24" height="24" cssclass="btn_WF_favorite"/>
+        <Grid id="grd_salaryInfo" taborder="3" left="0" top="36" autoenter="select" right="0" binddataset="ds_selectPayList" autofittype="col" bottom="58">
+          <Formats>
+            <Format id="default">
+              <Columns>
+                <Column size="80"/>
+                <Column size="80"/>
+                <Column size="80"/>
+                <Column size="80"/>
+                <Column size="80"/>
+              </Columns>
+              <Rows>
+                <Row size="24" band="head"/>
+                <Row size="24"/>
+                <Row size="24" band="summ"/>
+              </Rows>
+              <Band id="head">
+                <Cell text="년도"/>
+                <Cell col="1" text="월균등지급액"/>
+                <Cell col="2" text="설추석지급액"/>
+                <Cell col="3" text="연봉"/>
+                <Cell col="4" text="예상퇴직금"/>
+              </Band>
+              <Band id="body">
+                <Cell text="bind:REVIEW_DATE"/>
+                <Cell col="1" text="bind:PROPOSED_SALARY_N" textAlign="right" expr="expr:PROPOSED_SALARY_N==''?'0':PROPOSED_SALARY_N"/>
+                <Cell col="2" text="bind:PAYED_PIECEWORK" textAlign="right" expr="expr:PAYED_PIECEWORK==''?'0':PAYED_PIECEWORK"/>
+                <Cell col="3" text="bind:BASE_ANNUAL_SALARY" textAlign="right" expr="expr:BASE_ANNUAL_SALARY==''?'0':BASE_ANNUAL_SALARY"/>
+                <Cell col="4" text="bind:RETIRE_ESTIMATION" textAlign="right" expr="expr:RETIRE_ESTIMATION==''?'0':RETIRE_ESTIMATION"/>
+              </Band>
+              <Band id="summary">
+                <Cell text="합계" textAlign="center"/>
+                <Cell col="1" expr="dataset.getSum('parseInt(PROPOSED_SALARY_N)')" displaytype="currency"/>
+                <Cell col="2" expr="dataset.getSum('parseInt(PAYED_PIECEWORK)')" displaytype="currency"/>
+                <Cell col="3" expr="dataset.getSum('parseInt(BASE_ANNUAL_SALARY)')" displaytype="currency"/>
+                <Cell col="4" expr="dataset.getSum('parseInt(RETIRE_ESTIMATION)')" displaytype="currency"/>
+              </Band>
+            </Format>
+          </Formats>
+        </Grid>
+        <Div id="div_page" taborder="13" url="common::com_paging.xfdl" left="27.07%" bottom="-40" height="20" right="27.72%" background="transparent" color="rgba(68,68,68,1)" font="9pt &quot;Dotum&quot;" visible="false"/>
+        <Static id="Static19" taborder="4" text="* 개인별 연봉정보는 [인비사항]이므로 본인의 연봉정보를 타인에게 공개해서는 안됩니다." left="15" height="24" cssclass="sta_font_red" right="10" onclick="Static19_onclick" bottom="24"/>
+        <Static id="Static16_01" taborder="5" text="* 예상퇴직금은 현재 시점의 예상 퇴직금이므로, 실제 퇴직금과 차이가 있을 수 있습니다." left="15" cssclass="sta_font_black" right="10" height="24" bottom="0"/>
+      </Layout>
+    </Layouts>
+    <Script type="xscript5.1"><![CDATA[
+/**************************************************************************
+ * 1. 필수 include(필수)
+ ***************************************************************************/
+// include "lib::comLib.xjs";
+// include "cuslib::nbdfComLib.xjs";
+
+// var gfnXjs = new GfnXjs();
+
+/**************************************************************************
+ * 2. FORM 변수 선언 영역
+ ***************************************************************************/
+this.fv_currDate;
+
+/**************************************************************************
+ * 3. FORM LOAD
+ ***************************************************************************/
+this.fn_init = function (obj:Form, e:nexacro.LoadEventInfo)
+{	
+	
+	//this.sta_cnt.set_expr(expr:'result : <fc v="#f31d24">'+comp.parent.ds_search.rowcount+'</fc>')
+	this.nfn_formInit(obj);
+	// 엔터키 설정 함수(조회)
+	//this.gfn_setEnterSearch(this.div_search, "nfn_search");
+	//this.div_page.set_visible(true);
+
+	// paging
+	//this.fn_paging_onload(obj);
+	// paging end
+	this.fn_search();
+};
+
+
+/**************************************************************************
+ * 4. 공통버튼영역 (함수 삭제금지!!!!)
+ ***************************************************************************/
+/*
+ * 기능 : 검색
+ */
+this.fn_search = function (obj:Button, e:nexacro.ClickEventInfo)
+{	
+// 	var userInfo = this._userInfo;
+// 	var keys = Object.keys(userInfo);
+	
+	trace("==============");
+	trace(this.gf_getPersonId());
+	
+	//person_id 저장
+	var personId = this.gf_getPersonId();
+
+	this.ds_selectPayList.clearData();
+
+	this.ds_search.clearData();
+	this.ds_search.addRow();
+	this.ds_search.setColumn(0, "PERSON_ID", personId);
+
+	var sSvcID = "selectPayList";
+	var sController = "/pay50110/selectPayList.do";
+	var sInDatasets = "INPUT=ds_search";
+	var sOutDatasets = "ds_selectPayList=output";
+	var sArgs = "";
+	this.gfn_transaction(sSvcID, sController, sInDatasets, sOutDatasets, sArgs);
+};
+
+
+
+
+/**************************************************************************
+ * 5. TRANSACTION, CALLBACK 영역
+ ***************************************************************************/
+this.fn_callBack = function (trId, errCD, errMsg)
+{
+	if (errCD < 0) 
+	{
+		this.gfn_Message("ProcessingError", trId + errMsg, "error", "ok");
+	}
+	else 
+	{
+		if (trId == "selectPayList") 
+		{
+			
+			this.notFoundView(this.grd_salaryInfo);
+		}
+	}
+};
+
+/**************************************************************************
+ * 6. 팝업 시작
+ **************************************************************************/
+
+
+
+/**************************************************************************
+ * 7. 기타 함수 시작
+ **************************************************************************/
+
+
+
+/**************************************************************************
+ * 8. 이벤트
+ ***************************************************************************/
+
+]]></Script>
+    <Objects>
+      <Dataset id="ds_selectPayList">
+        <ColumnInfo>
+          <Column id="REVIEW_DATE" type="STRING" size="256" description="연도"/>
+          <Column id="PROPOSED_SALARY_N" type="BIGDECIMAL" size="256" description="기본급"/>
+          <Column id="PAYED_PIECEWORK" type="BIGDECIMAL" size="256" description="개인성과급 비중%"/>
+          <Column id="BASE_ANNUAL_SALARY" type="BIGDECIMAL" size="256" description="표준연봉"/>
+          <Column id="RETIRE_ESTIMATION" type="BIGDECIMAL" size="256" description="예상퇴직금"/>
+          <Column id="PERSON_ID" type="BIGDECIMAL" size="256" description="person id"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_search">
+        <ColumnInfo>
+          <Column id="PERSON_ID" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+    </Objects>
+  </Form>
+</FDL>

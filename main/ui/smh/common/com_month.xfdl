@@ -1,0 +1,199 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="com_month" width="190" height="197" titletext="월력" onload="form_onload">
+    <Layouts>
+      <Layout width="190" height="197">
+        <Div id="Div00" taborder="1" left="0" top="0" text="Div01" cssclass="pop_Calendar03" right="0" bottom="0" background="#ffffff">
+          <Layouts>
+            <Layout>
+              <Static id="sta_00" taborder="15" left="0" top="0" height="27" border="0px none,0px none,1px solid #e6e6e6" right="0"/>
+              <Button id="btn_preYear" taborder="0" cssclass="btn_pop_calPrev" left="0" top="0" height="26" onclick="btn_preYear_onclick" width="26"/>
+              <Button id="btn_nextYear" taborder="1" cssclass="btn_pop_calNext" top="0" height="26" onclick="btn_nextYear_onclick" width="26" right="0"/>
+              <Static id="sta_year" taborder="2" text="2021" cssclass="txt_14B" left="26" top="0" height="26" onclick="Div00_sta_year_onclick" textAlign="center" right="26"/>
+              <Button id="btn_01" taborder="3" text="1월" cssclass="btn_pop_calNumber" left="5" top="32" height="40" onclick="btn_month_onclick" width="60"/>
+              <Button id="btn_02" taborder="4" text="2월" cssclass="btn_pop_calNumber" left="65" top="32" height="40" onclick="btn_month_onclick" width="60"/>
+              <Button id="btn_03" taborder="5" text="3월" cssclass="btn_pop_calNumber" left="125" top="32" height="40" onclick="btn_month_onclick" width="60" background="transparent" color="rgba(102,102,102,1)" font="9pt &quot;Dotum&quot;"/>
+              <Button id="btn_04" taborder="6" text="4월" cssclass="btn_pop_calNumber" left="5" top="72" height="40" onclick="btn_month_onclick" width="60"/>
+              <Button id="btn_08" taborder="7" text="8월" cssclass="btn_pop_calNumber" left="65" top="112" height="40" onclick="btn_month_onclick" width="60"/>
+              <Button id="btn_07" taborder="8" text="7월" cssclass="btn_pop_calNumber" left="5" top="112" height="40" onclick="btn_month_onclick" width="60"/>
+              <Button id="btn_06" taborder="9" text="6월" cssclass="btn_pop_calNumber" left="125" top="72" height="40" onclick="btn_month_onclick" width="60"/>
+              <Button id="btn_05" taborder="10" text="5월" cssclass="btn_pop_calNumber" left="65" top="72" height="40" onclick="btn_month_onclick" width="60"/>
+              <Button id="btn_12" taborder="11" text="12월" cssclass="btn_pop_calNumber" left="125" top="152" height="40" onclick="btn_month_onclick" width="60"/>
+              <Button id="btn_11" taborder="12" text="11월" cssclass="btn_pop_calNumber" left="65" top="152" height="40" onclick="btn_month_onclick" width="60" background="transparent" color="rgba(102,102,102,1)" font="9pt &quot;Dotum&quot;"/>
+              <Button id="btn_10" taborder="13" text="10월" cssclass="btn_pop_calNumber" left="5" top="152" height="40" onclick="btn_month_onclick" width="60"/>
+              <Button id="btn_09" taborder="14" text="9월" cssclass="btn_pop_calNumber" left="125" top="112" height="40" onclick="btn_month_onclick" width="60"/>
+            </Layout>
+          </Layouts>
+        </Div>
+      </Layout>
+    </Layouts>
+    <Script type="xscript5.1"><![CDATA[/***************************************************************************************
+ * 시스템명 	: IFC MES시스템
+ * 업무명 		: 월력
+ * 파일명 		: com_month.xfdl
+ * 작성자 		: UI공통
+ * 작성일 		: 2014.04.14
+ *
+ * 설  명		: 월선택 기능 제공
+ *---------------------------------------------------------------------------------------
+ * 변경일		변경자		변경내역
+ *---------------------------------------------------------------------------------------
+ *
+ *---------------------------------------------------------------------------------------
+ ****************************************************************************************/
+
+/**************************************************************************
+ * 1. 필수 include(필수)
+ ***************************************************************************/
+// include "lib::comLib.xjs";
+/**************************************************************************
+ * 2. FORM 변수 선언 영역
+ ***************************************************************************/
+this.Div00.form.sta_year.text = this.gfn_getYear();
+/* 사용자가 년도를 지정하지 않는 경우 올해로 설정 */
+/**************************************************************************
+ * 3. FORM 정의
+ ***************************************************************************/
+
+/* Form Load (필수) */
+this.form_onload = function (obj:Form, e:nexacro.LoadEventInfo)
+{
+	this.fn_init();
+	this.fn_thisMonth(); //현재월 CSS처리
+};
+
+/* 초기값 셋팅 */
+this.fn_init = function ()
+{
+	var sDay,sCallBackNm;
+
+	// 그리드에서 호출되어진 popupDiv 일 때...
+	if (this.name !== "pdv_calendar") 
+	{
+		sDay = this.parent._fv_yyyymm_inint_value;
+		sCallBackNm = this.parent._fv_callback_user_property;
+		this.callbackfunction = this.parent[sCallBackNm];
+	}
+	else 
+	{
+		sDay = this.parent.msk_month.value;
+	}
+
+	if (!this.gfn_isNull(sDay)) 
+	{
+		this.fn_setCalendar(sDay.substr(0, 4), sDay.substr(4, 2));
+	}
+	else 
+	{
+		this.fn_setCalendar("", "");
+	}
+};
+
+
+/**************************************************************************
+ * 4. TRANSACTION, CALLBACK 영역
+ ***************************************************************************/
+
+/**************************************************************************
+ * 7. 기타 함수 시작
+ **************************************************************************/
+
+/* 월력 값 지정 */
+this.fn_setCalendar = function (sYY, sMM)
+{
+	if (this.gfn_isNull(sYY) || this.gfn_isNull(sMM)) 
+	{
+		return;
+	}
+
+	// 년도 셋팅
+	this.Div00.form.sta_year.set_text(sYY);
+
+	// 월 선택
+	this.fn_activeMonthBtn(sMM);
+};
+
+/* 월 Button Style 변경 */
+this.fn_activeMonthBtn = function (sMM)
+{
+	var objComp;
+	var sCompId;
+
+	for (var i = 1; i <= 12; i++) 
+	{
+		sCompId = "btn_" + this.gfn_right(this.gfn_lpad(i.toString(), "0", 1), 2);
+		objComp = this.components[sCompId];
+		if (this.gfn_right(sCompId, 2) === sMM) 
+		{
+			// 필요시 이 곳에서 set_cssclass 처리.
+			// objComp.setFocus();
+		}
+		else 
+		{
+			// 필요시 이 곳에서 set_cssclass 처리.
+		}
+	}
+};
+
+/*현재 월 CSS처리 함수 */
+this.fn_thisMonth = function ()
+{
+	var yearValue = this.gfn_getYear();
+	var monValue = this.gfn_right(this.gfn_getYearMonth(), 2);
+	var btnMon = "btn_" + monValue;
+
+	if (this.Div00.form.sta_year.text == yearValue) 
+	{
+		this.Div00.form.components[btnMon].set_cssclass("btn_pop_calNumber_S");
+	}
+	else 
+	{
+		this.Div00.form.components[btnMon].set_cssclass("btn_pop_calNumber");
+	}
+};
+
+
+/**************************************************************************
+ * 8. 이벤트
+ ***************************************************************************/
+
+/* next 년도 */
+this.btn_nextYear_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.Div00.form.sta_year.set_text((parseInt(this.Div00.form.sta_year.text, 10) + 1).toString());
+
+	this.fn_setCalendar(this.Div00.form.sta_year.text, "");
+	this.fn_thisMonth(); //현재월 CSS처리
+};
+
+/* pre  년도 */
+this.btn_preYear_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.Div00.form.sta_year.set_text((parseInt(this.Div00.form.sta_year.text, 10) - 1).toString());
+
+	this.fn_setCalendar(this.Div00.form.sta_year.text, "");
+	this.fn_thisMonth(); //현재월 CSS처리
+};
+
+/* 월 선택시 */
+this.btn_month_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	var strDate = this.Div00.form.sta_year.text + this.gfn_replace(obj.id, "btn_", "");
+	var arrRet = [];
+	arrRet.push(this.gfn_left(strDate, 6)); //선택한 년월
+	arrRet.push(this.gfn_left(strDate, 6) + "01"); //월 시작일
+	arrRet.push(this.gfn_left(strDate, 6) + this.gfn_lastDateNum(arrRet[1])); //월 종료일
+	this.parent.closePopup(arrRet);
+};
+
+/* escape시 창 닫기 */
+this.month_onkeyup = function (obj:Form, e:nexacro.KeyEventInfo)
+{
+	if (e.keycode === 27) 
+	{
+		this.parent.closePopup();
+	}
+};
+]]></Script>
+  </Form>
+</FDL>

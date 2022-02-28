@@ -1,0 +1,126 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="sample_page" width="1024" height="768" titletext="RD호출(html5)--삭제">
+    <Layouts>
+      <Layout width="1024" height="768">
+        <Button id="Button00" taborder="0" text="호출" left="1.66%" top="120" right="83.3%" height="29" onclick="Button00_onclick"/>
+        <WebBrowser id="WebBrowser00" left="1.66%" top="160" right="31.25%" height="526" taborder="1" onloadcompleted="WebBrowser00_onloadcompleted" url="http://localhost:8080/oz70/ozhviewer/ozReportViewer2.jsp"/>
+        <Static id="Static00" taborder="2" text="서버 URL" left="1.66%" top="8" right="86.62%" height="27" font="11pt &quot;맑은 고딕&quot;"/>
+        <Static id="Static01" taborder="3" text="Viewer ID" left="1.66%" top="40" right="86.62%" height="27" font="11pt &quot;맑은 고딕&quot;"/>
+        <Static id="Static02" taborder="4" text="File Name" left="1.66%" top="72" right="86.62%" height="27" font="11pt &quot;맑은 고딕&quot;"/>
+        <Edit id="Edit00" taborder="5" left="10.25%" top="8" right="41.41%" height="27" value="http://ldekmc.kpic.go.kr:7714/ReportingServer/service"/>
+        <Edit id="Edit01" taborder="6" left="10.25%" top="40" right="41.41%" height="27" value="crownix-viewer"/>
+        <Edit id="Edit02" taborder="7" left="10.25%" top="72" right="41.41%" height="27" value="http://10.222.77.248:7714/ReportingServer/mrd/RSCM00101R.mrd"/>
+        <Button id="Button01" taborder="8" text="DB호출" left="560" top="114" width="133" height="34" onclick="Button01_onclick"/>
+      </Layout>
+    </Layouts>
+    <Objects>
+      <Dataset id="ds_list" firefirstcount="0" useclientlayout="false" updatecontrol="true" enableevent="true" loadkeymode="keep" loadfiltermode="keep" reversesubsum="false">
+        <ColumnInfo>
+          <Column id="EVL_YY" type="STRING" size="256"/>
+          <Column id="EVL_MM" type="STRING" size="256"/>
+          <Column id="GRFC_LPSAO_CD" type="STRING" size="256"/>
+          <Column id="GRFC_CD" type="STRING" size="256"/>
+          <Column id="GRFC_NM" type="STRING" size="256"/>
+          <Column id="GOAL1" type="STRING" size="256"/>
+          <Column id="GOAL2" type="STRING" size="256"/>
+          <Column id="GOAL3" type="STRING" size="256"/>
+          <Column id="GOAL4" type="STRING" size="256"/>
+          <Column id="GOAL5" type="STRING" size="256"/>
+          <Column id="GOAL6" type="STRING" size="256"/>
+          <Column id="GOAL7" type="STRING" size="256"/>
+          <Column id="GOAL8" type="STRING" size="256"/>
+          <Column id="GOAL9" type="STRING" size="256"/>
+        </ColumnInfo>
+        <Rows>
+          <Row>
+            <Col id="GRFC_NM">이순신</Col>
+          </Row>
+        </Rows>
+      </Dataset>
+    </Objects>
+    <Script type="xscript5.1"><![CDATA[
+this.bIsLoaded = false; //페이지 오픈 여부
+
+// --------------------------------------------------
+// 여기는 공통으로 구현 필요.
+// --------------------------------------------------
+this.fn_getIframeHandle = function (objWb)
+{
+	return objWb._ifrm_elem._handle;
+};
+// --------------------------------------------------
+
+this.Button00_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	if (nexacro.Rrowser == "Runtime") 
+	{
+		return;
+	}
+
+	// 이미 한번 오픈한 경우 레포트 	바로 호출
+	if (this.bIsLoaded) 
+	{
+		trace("=================>reopen");
+		var sRptUrl = this.Edit02.value;
+		var sParam = "/rdata [" + this.ds_list.saveXML() + "]";
+
+		this.fn_rdSet(sRptUrl, sParam);
+		return;
+	}
+	// this.WebBrowser00.set_url("http://10.222.77.247:9090/nexacro/rd_sample/crownix/sample/sample_nexa.html");
+	// this.WebBrowser00.set_url("http://localhost:8011/kmc/nexacro/sample_nexa.html");
+	this.WebBrowser00.set_url("http://localhost:8011/fcm/rd_nexa/rd_nexa.html");
+};
+
+this.WebBrowser00_onloadcompleted = function (obj:WebBrowser, e:nexacro.WebLoadCompEventInfo)
+{
+	if (e.url.indexOf("rd_nexa.html") >= 0) 
+	{
+		var sUrl = this.Edit00.value;
+		var sId = this.Edit01.value;
+		this.fn_rdCreate(sUrl, sId);
+
+		var sRptUrl = this.Edit02.value;
+		var sParam = "/rdata [" + xmldata + "]";
+		this.fn_rdSet(sRptUrl, sParam);
+	}
+};
+
+/*------------------------------------------------------------
+ // 레포트 viewer 를 생성한다.
+ --------------------------------------------------------------*/
+this.fn_rdCreate = function (sUrl, sId)
+{
+	trace(">>>>>fn_rdCreate call");
+	var pWin = this.WebBrowser00.getProperty("document");
+	var ifms = this.fn_getIframeHandle(this.WebBrowser00);
+	var crownixRpt = ifms.contentWindow._crownix_createViewer(sUrl, sId);
+
+	if (crownixRpt == null || crownixRpt == undefined) 
+	{
+		alert("report 생성실패...");
+		return;
+	}
+	crownixRpt = null;
+
+	this.bIsLoaded = true;
+};
+
+/*------------------------------------------------------------
+ // 레포트를 호출한다.
+ --------------------------------------------------------------*/
+this.fn_rdSet = function (sUrl, sParam)
+{
+	var pWin = this.WebBrowser00.getProperty("document");
+	var ifms = this.fn_getIframeHandle(this.WebBrowser00);
+	ifms.contentWindow.crownixViewer.openFile(sUrl, sParam);
+};
+
+this.Button01_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.WebBrowser00.callMethod("test");
+};
+]]></Script>
+  </Form>
+</FDL>

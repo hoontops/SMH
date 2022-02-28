@@ -1,0 +1,211 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="fm_mdi" width="1278" height="30" titletext="mdi" onload="fm_mdi_onload" scrollbartype="none" scrolltype="none" background="#e5eef5">
+    <Layouts>
+      <Layout height="30" mobileorientation="landscape" width="1278">
+        <Static id="Static00" taborder="0" left="0" top="0" height="30" right="0" cssclass="sta_mdi_bg01"/>
+        <Tab id="tabMdi" taborder="1" tabindex="0" left="40" top="0" height="100" right="71" cssclass="tab_MDI" showextrabutton="true" onchanged="tabMdi_onchanged" onextrabuttonclick="tabMdi_onextrabuttonclick" tabbuttonheight="30" onmousedown="tabMdi_onmousedown" onlbuttondown="tabMdi_onlbuttondown">
+          <Tabpages>
+            <Tabpage id="Tabpage2" text="Tabpage2"/>
+          </Tabpages>
+        </Tab>
+        <Button id="btn_home" taborder="2" left="5" top="0" width="30" height="30" cssclass="btn_MDI_home_S" border="0px none" onclick="btn_home_onclick"/>
+        <Button id="btn_closeAll" taborder="3" top="0" width="26" height="30" right="10" cssclass="btn_MDI_allClose" onclick="btnCloseAll_onclick" tooltiptext="CloseAll"/>
+        <Button id="btn_openList" taborder="4" top="0" width="35" height="30" right="36" cssclass="btn_MDI_openList" tooltiptext="OpenFormList" onclick="btn_openList_onclick"/>
+        <PopupDiv id="pdv_openlist" visible="false" left="1055" top="131" width="220" height="246" cssclass="pdiv_layerPOP">
+          <Layouts>
+            <Layout>
+              <Grid id="grd_openlist" taborder="0" left="3" top="2" cssclass="grd_openList" binddataset="gdsOpenMenu" autoenter="select" autofittype="col" oncellclick="pdv_openlist_grd_openlist_oncellclick" right="2" bottom="2">
+                <Formats>
+                  <Format id="default">
+                    <Columns>
+                      <Column size="0"/>
+                      <Column size="160"/>
+                      <Column size="24"/>
+                    </Columns>
+                    <Rows>
+                      <Row size="24"/>
+                    </Rows>
+                    <Band id="body">
+                      <Cell text="bind:chk" edittype="checkbox" displaytype="checkboxcontrol" padding="0px"/>
+                      <Cell col="1" text="bind:MENU_NM" padding="0px"/>
+                      <Cell col="2" padding="0px" cssclass="cell_delete"/>
+                    </Band>
+                  </Format>
+                </Formats>
+              </Grid>
+            </Layout>
+          </Layouts>
+        </PopupDiv>
+        <Button id="btn_openList00" taborder="5" top="0" width="35" height="30" right="176" cssclass="btn_MDI_openList" tooltiptext="OpenFormList" onclick="btn_openList00_onclick"/>
+      </Layout>
+    </Layouts>
+    <Script type="xscript5.1"><![CDATA[
+this.application = nexacro.getApplication();
+
+this.fm_mdi_onload = function(obj:nexacro.Form,e:nexacro.LoadEventInfo)
+{
+	this.application = nexacro.getApplication();
+	this.tabMdi.removeTabpage(0);
+};
+
+this.tabMdi_onchanged = function(obj:nexacro.Tab,e:nexacro.TabIndexChangeEventInfo)
+{
+	var sWinId = obj.tabpages[e.postindex].name;
+	gv_appWorkFrameSet[sWinId].form.setFocus();
+	var menuId = nexacro.getApplication().gdsOpenMenu.lookup( "WINID", sWinId, "MENU_ID");
+	var menuPath = gv_appTopFrame.form.fn_createMenuPath(menuId,true);
+	gv_appBottomFrame.form.sta_menuPath.set_text(menuPath);
+	
+	
+	this.application.mainframe.VFrameSet.HFrameSet0.VFrameSet0.set_separatesize("30,0,*");
+	this.btn_home.set_cssclass("btn_MDI_home");
+	
+};
+
+this.tabMdi_onextrabuttonclick = function(obj:nexacro.Tab,e:nexacro.TabMouseEventInfo)
+{
+	var sWinId = obj.tabpages[e.index].name;	
+	obj.removeTabpage(e.index);
+	
+	gv_appWorkFrameSet[sWinId].form.close();
+
+	gv_appLeftFrame.form.fn_DelOpenMenu(sWinId);
+};
+
+// 탭 추가
+this.fn_AddTabPage = function(pvWinId, pvMenuNm)
+{
+	var nIndex = this.tabMdi.insertTabpage(pvWinId, -1, "", pvMenuNm);
+	this.tabMdi.set_tabindex(nIndex);
+	var objChildFrame = gv_appWorkFrameSet.frames[pvWinId];
+	objChildFrame.form.setFocus();
+}
+
+this.fn_DeleteTabpage = function(pvWinId)
+{
+	var nCnt = this.tabMdi.getTabpageCount();	
+	for(var i=0; i<nCnt; i++)
+	{	
+		if(this.tabMdi.tabpages[i].name == pvWinId)
+		{
+			this.tabMdi.removeTabpage(i); 
+			gv_appLeftFrame.form.fn_DelOpenMenu(pvWinId);
+			return;
+		}
+	}
+}
+
+this.fn_ActiveTabPage = function(pvWinId, objArgs, bReload)
+{
+	var nCnt = this.tabMdi.getTabpageCount();	
+	for(var i=0; i<nCnt; i++)
+	{	
+		this.tabMdi.tabpages[i].set_cssclass("tab_MDI_D"); 
+		if(this.tabMdi.tabpages[i].name == pvWinId)
+		{
+			this.tabMdi.tabpages[i].set_cssclass("tab_MDI"); 
+			this.tabMdi.set_tabindex(i);
+			var objChildFrame = gv_appWorkFrameSet.frames[pvWinId];
+			objChildFrame.form.setFocus();
+
+			this.tabMdi.tabpages[i].arguments = [];
+			if ( objArgs && !this.gfn_isNull(objArgs) )
+			{
+				for ( var key in objArgs )
+				{
+					if ( objArgs.hasOwnProperty(key) )
+					{
+						this.tabMdi.tabpages[i].arguments[key] = objArgs[key];
+					}
+				}
+			}
+			if(bReload){
+				var objChildFrame = gv_appWorkFrameSet.frames[pvWinId];
+				objChildFrame.form.setFocus();
+				if ( objArgs && !this.gfn_isNull(objArgs) )
+				{
+					for ( var key in objArgs )
+					{
+						if ( objArgs.hasOwnProperty(key) )
+						{
+							objChildFrame.arguments[key] = objArgs[key];
+						}
+					}
+				}			
+				objChildFrame.form.reload();
+			}							
+			return;
+		}
+	}
+
+}
+
+this.btnCloseAll_onclick = function(obj:nexacro.Button,e:nexacro.ClickEventInfo)
+{
+	var WorkFrame = gv_appWorkFrameSet.all;
+	for(var i=WorkFrame.length-1; i>=0; i--) 
+	{
+		WorkFrame[i].form.close();
+		this.tabMdi.removeTabpage(i);
+	}
+};
+
+this.btn_openList_onclick = function(obj:nexacro.Button,e:nexacro.ClickEventInfo)
+{
+	var top = nexacro.toNumber(obj.top) + gv_appTopFrame.height;
+	var left = nexacro.toNumber(gv_appTopFrame.width) - nexacro.toNumber(obj.right);
+	trace("top-->"+top);
+	trace("left-->"+left);
+	this.pdv_openlist.trackPopup(left, top);	
+};
+
+this.pdv_openlist_grd_openlist_oncellclick = function(obj:nexacro.Grid,e:nexacro.GridClickEventInfo)
+{
+	if(e.col==1){
+		var sMenuId = nexacro.getApplication().gdsOpenMenu.getColumn(e.row, "MENU_ID");
+		this.gfn_showWork(sMenuId);
+		this.pdv_openlist.closePopup();
+	}else if(e.col==2){
+		var sWinId = nexacro.getApplication().gdsOpenMenu.getColumn(e.row, "WINID");
+		this.pdv_openlist.closePopup();
+		gv_appWorkFrameSet[sWinId].form.close();
+		gv_appLeftFrame.form.fn_DelOpenMenu(sWinId);
+		this.fn_DeleteTabpage(sWinId);
+	}
+};
+
+this.btn_home_onclick = function(obj:nexacro.Button,e:nexacro.ClickEventInfo)
+{
+	//gv_appBodyFrameSet.set_separatesize("76,0,*,0,27");
+	var separatesize = this.application.mainframe.VFrameSet.HFrameSet0.VFrameSet0.separatesize;
+	if(separatesize=="30,*,0"){
+		this.application.mainframe.VFrameSet.HFrameSet0.VFrameSet0.set_separatesize("30,0,*");
+		obj.set_cssclass("btn_MDI_home");
+	}else{
+		this.application.mainframe.VFrameSet.HFrameSet0.VFrameSet0.set_separatesize("30,*,0");
+		obj.set_cssclass("btn_MDI_home_S");
+		// 이때 홈 조회
+		this.application.mainframe.VFrameSet.HFrameSet0.VFrameSet0.WorkFrame.form.fn_login_comp();
+	}
+	
+};
+
+
+this.tabMdi_onlbuttondown = function(obj:nexacro.Tab,e:nexacro.MouseEventInfo)
+{
+	this.application.mainframe.VFrameSet.HFrameSet0.VFrameSet0.set_separatesize("30,0,*");
+	this.btn_home.set_cssclass("btn_MDI_home");
+};
+
+this.btn_openList00_onclick = function(obj:nexacro.Button,e:nexacro.ClickEventInfo){
+	
+	var winid = this.tabMdi.tabpages[this.tabMdi.tabindex].name;
+	trace(winid);
+	var oArg = {winid:winid}
+	this.gfn_openPopup('aaaaaaaa',"template::template02_ds_view.xfdl",oArg,"");
+	
+};
+]]></Script>
+  </Form>
+</FDL>

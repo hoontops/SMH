@@ -1,0 +1,864 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="PCM01700T06" width="1258" height="316" titletext="자재(작업시작)" oninit="fn_init">
+    <Layouts>
+      <Layout height="316" width="1258">
+        <Static id="title1_01" taborder="0" text="자재(작업시작)" left="0" height="34" cssclass="sta_WF_subTitle2" usedecorate="true" top="0" width="97" fittocontents="width"/>
+        <Grid id="grd_standardRequirementStart" taborder="4" left="60%" top="34" autoenter="select" binddataset="ds_standardRequirementInfo" cssclass="grd_sub" bottom="0" right="0">
+          <Formats>
+            <Format id="default">
+              <Columns>
+                <Column size="40"/>
+                <Column size="150"/>
+                <Column size="200"/>
+                <Column size="200"/>
+                <Column size="90"/>
+              </Columns>
+              <Rows>
+                <Row size="24" band="head"/>
+                <Row size="24"/>
+              </Rows>
+              <Band id="head">
+                <Cell text="No"/>
+                <Cell col="1" text="자재 ID" tooltiptext="CONSUMABLEDEFID"/>
+                <Cell col="2" text="자재명" tooltiptext="CONSUMABLEDEFNAME"/>
+                <Cell col="3" text="기준소요량" tooltiptext="STANDARDREQUIREMENTQTY"/>
+                <Cell col="4" text="소요량" tooltiptext="REQUIREMENTQTY"/>
+              </Band>
+              <Band id="body">
+                <Cell text="expr:currow+1"/>
+                <Cell col="1" text="bind:CONSUMABLEDEFID" textAlign="left"/>
+                <Cell col="2" text="bind:CONSUMABLEDEFNAME" textAlign="left"/>
+                <Cell col="3" text="bind:STANDARDREQUIREMENTQTY" textAlign="right" displaytype="mask" maskeditformat="#,###,###,##0.#####"/>
+                <Cell col="4" text="bind:REQUIREMENTQTY" textAlign="right" displaytype="mask" maskeditformat="#,###,###,##0.#####"/>
+              </Band>
+            </Format>
+          </Formats>
+        </Grid>
+        <Grid id="grd_consumableStart" taborder="1" left="0" top="34" autoenter="select" binddataset="ds_consumableList" cssclass="grd_sub" bottom="0" right="grd_standardRequirementStart:10">
+          <Formats>
+            <Format id="default">
+              <Columns>
+                <Column size="40"/>
+                <Column size="150"/>
+                <Column size="200"/>
+                <Column size="150"/>
+                <Column size="100"/>
+                <Column size="100"/>
+                <Column size="100"/>
+                <Column size="150"/>
+              </Columns>
+              <Rows>
+                <Row size="24" band="head"/>
+                <Row size="24"/>
+              </Rows>
+              <Band id="head">
+                <Cell text="No"/>
+                <Cell col="1" text="자재 ID" tooltiptext="CONSUMABLEDEFID"/>
+                <Cell col="2" text="자재명" tooltiptext="CONSUMABLEDEFNAME"/>
+                <Cell col="3" text="자재 LOT No." tooltiptext="CONSUMABLELOTID"/>
+                <Cell col="4" text="재고수량" tooltiptext="STOCKQTY"/>
+                <Cell col="5" text="가용수량" tooltiptext="AVAILABLEQTY"/>
+                <Cell col="6" text="투입수량" tooltiptext="INPUTQTY"/>
+                <Cell col="7" text="Lot 사용수량" tooltiptext="LOTUSINGQTY"/>
+              </Band>
+              <Band id="body">
+                <Cell text="expr:currow+1"/>
+                <Cell col="1" text="bind:CONSUMABLEDEFID" textAlign="left"/>
+                <Cell col="2" text="bind:CONSUMABLEDEFNAME" textAlign="left"/>
+                <Cell col="3" text="bind:CONSUMABLELOTID" textAlign="left"/>
+                <Cell col="4" text="bind:STOCKQTY" textAlign="right" displaytype="mask" maskeditformat="#,###,###,##0.#####"/>
+                <Cell col="5" text="bind:AVAILABLEQTY" textAlign="right" displaytype="mask" maskeditformat="#,###,###,##0.#####"/>
+                <Cell col="6" text="bind:INPUTQTY" textAlign="right" displaytype="mask" maskeditformat="#,###,###,##0.#####"/>
+                <Cell col="7" text="bind:LOTUSINGQTY" textAlign="right" displaytype="mask" maskeditformat="#,###,###,##0.#####" edittype="mask"/>
+              </Band>
+            </Format>
+          </Formats>
+        </Grid>
+        <Static id="sta_consumableLotIdStart" taborder="2" text="자재 LOT" left="title1_01:200" top="9" width="65" height="20" cssclass="sta_WF_label_point" fittocontents="width"/>
+        <Edit id="edt_consumableLotIdStart" taborder="3" left="sta_consumableLotIdStart:5" top="9" height="20" width="160" onkeydown="edt_consumableLotIdStart_onkeydown"/>
+        <Button id="btn_delRow" taborder="5" cssclass="btn_WF_grdDel" top="7" onclick="btn_delRow_onclick" right="grd_standardRequirementStart:10" width="29" height="24"/>
+        <Static id="sta_cnt_ds_consumableList" taborder="6" text="Count : &lt;fc v=&quot;#f31d24&quot;&gt;0&lt;/fc&gt;" left="112" top="0" height="34" cssclass="sta_WF_subTitle" usedecorate="true" padding="5px 0px 0px" width="140"/>
+      </Layout>
+    </Layouts>
+    <Script type="xscript5.1"><![CDATA[/***************************************************************************************
+ * 시스템명 	: IFC MES시스템
+ * 업무명 		: 인수등록 :: 자재(작업시작) 탭
+ * 파일명 		: PCM01700T06.xfdl
+ * 작성자 		: 김성현
+ * 작성일 		: 2021.04.10
+ *
+ * 설  명		: 인수등록 :: 자재(작업시작) 탭
+ *---------------------------------------------------------------------------------------
+ * 변경일		변경자		변경내역
+ *---------------------------------------------------------------------------------------
+ * 2021.04.10	김성현   	최초작성
+ *---------------------------------------------------------------------------------------
+ ****************************************************************************************/
+
+/**************************************************************************
+ * 1. 필수 include
+ ***************************************************************************/
+include "lib::lib_bas.xjs";	//기준관리 공통 라이브러리 include
+include "lib::lib_pcm.xjs";	
+include "lib::lib_tom.xjs";	//TOM 공통 라이브러리 include
+include "lib::lib_mtm.xjs";	//MTM 공통 라이브러리 include
+/**************************************************************************
+ * 2. FORM 변수 선언 영역
+ ***************************************************************************/
+this._panelPerQty = 0; 	
+this._panelQty = 0;
+this._qty = 0;
+this._visibleLotId = true;
+this._visibleFileUp = false;
+this._VisibleDefectDgree = false;
+this._visibleTopDefectCode = false;
+this._lotId = "";
+this._queryVersion = "";
+this.ds_consumableList_rowposition = -1;
+
+
+
+
+/**************************************************************************
+ * 3. FORM LOAD
+ ***************************************************************************/
+this.fn_init = function (obj:Form, e:nexacro.LoadEventInfo)
+{
+	console.log("PCM01700T06");
+
+	this.nfn_formInit(obj);
+	
+// 	var vlotId = this.nfn_nvl(this.parent.parent.parent.parent.parent.div_work.form.div_search.form.edt_lotId.value, "");
+// 	var vpfsDetail_tabSearch = this.parent.parent.parent.parent.parent.g_pfsDetail_tabSearch;
+// 	
+// 	if(vlotId != "" && vpfsDetail_tabSearch) this.fn_search();
+};
+
+/**************************************************************************
+ * 4. 공통버튼영역 (함수 삭제금지!!!!) 
+ ***************************************************************************/
+
+
+/**************************************************************************
+ * 5. TRANSACTION, CALLBACK 영역
+ ***************************************************************************/
+this.fn_callBack = function (trId, errCD, errMsg)
+{
+	if (errCD != 0) 
+	{
+		this.gfn_Message("ProcessingError", trId + errMsg, "error", "ok");
+		return;			
+	}
+	
+	switch(trId) {	
+		case "selectConsumableListByProcessWorkCompleteAndByProcess":	
+		    console.log("selectConsumableListByProcessWorkCompleteAndByProcess");
+			console.log(this.ds_consumableList.saveXML());
+			console.log(this.ds_standardRequirementInfo.saveXML());
+			
+			break;	
+		case "getConsumableLotByProcess":
+
+			if (this.ds_consumableListTemp.getRowCount() > 0)
+			{
+				
+				var currentAreaId    = this.nfn_nvl(this.ds_lotInfoData.getColumn(0, "AREAID"), "");
+				var consumableAreaId = this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "AREAID"), "");
+
+				var currentWarehouseId    = this.nfn_nvl(this.ds_lotInfoData.getColumn(0, "WAREHOUSEID"), "");
+				var consumableWarehouseId = this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "WAREHOUSEID"), "");
+
+				var consumableState = this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "CONSUMABLESTATE"), "");
+
+				if (currentWarehouseId != consumableWarehouseId)
+				{
+					// 현재 창고에서 보유하고 있는 자재가 아닙니다. 현재 창고 ID : {0}, 소유 창고 ID : {1}
+					this.gfn_Message("ConsumableNotInWarehouse", [currentWarehouseId, consumableWarehouseId], "info", "ok");
+					return;
+				}
+
+				if (consumableState == "Consumed")
+				{
+					// 해당 자재 Lot은 사용이 완료 된 Lot 입니다. Lot Id : {0}
+					this.gfn_Message("ConsumedConsumableLot", [this._lotId], "info", "ok");
+					return;
+				}
+
+				if (consumableState == "Scrapped")
+				{
+					// 해당 자재 Lot은 폐기 처리 된 Lot 입니다. Lot Id : {0}
+					this.gfn_Message("ScrappedConsumableLot", [this._lotId], "info", "ok");
+					return;
+				}
+
+				
+				var inputQty = nexacro.toNumber(this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "INPUTQTY"), "0"));
+
+				if (inputQty <= 0)
+				{
+					var stockQty    = nexacro.toNumber(this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "STOCKQTY"), "0"));
+					var lotUsingQty = nexacro.toNumber(this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "LOTUSINGQTY"), "0"));
+ 
+					// 해당 자재 Lot은 다른 Lot에서 모두 사용되었습니다. 재고수량 : {0}, Lot 사용수량 : {1}
+					this.gfn_Message("ConsumableLotIsAlreadyUsingInLot", [stockQty.ToString("#,##0.#####"), lotUsingQty.ToString("#,##0.#####")], "info", "ok");
+					return;
+				}
+
+
+				var consumableLotId 	 = this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "CONSUMABLELOTID"), "");
+				var consumableDefId      = this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "CONSUMABLEDEFID"), "");
+				var consumableDefVersion = this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "CONSUMABLEDEFVERSION"), "");
+
+
+				//ds_consumableList KEYCOLUMN group by SUM(INPUTQTY)
+				
+				
+				this.ds_consumableDistinctList.clearData();
+				this.ds_consumableDistinctList.copyData(this.ds_consumableList);
+				
+				this.gf_distincDsFilter(this.ds_consumableDistinctList, "KEYCOLUMN");
+				
+				
+				trace("this.ds_consumableDistinctList.getRowCount() >>" + this.ds_consumableDistinctList.getRowCount());
+				
+				var vKeyColumn = "";
+				var nRow = -1;
+				this.ds_inputQtyList.clearData();
+				
+				this.ds_consumableList.set_enableevent(false);
+				
+				for(var i=0; i<this.ds_consumableDistinctList.getRowCount(); i++)
+				{
+					vKeyColumn = this.ds_consumableDistinctList.getColumn(i, "KEYCOLUMN");
+					
+					this.ds_consumableList.filter("KEYCOLUMN=='" + vKeyColumn + "'");
+					
+					nRow = this.ds_inputQtyList.addRow();
+					this.ds_inputQtyList.setColumn(nRow, "KEYCOLUMN", vKeyColumn);
+					this.ds_inputQtyList.setColumn(nRow, "INPUTQTY", this.ds_consumableList.getSum("INPUTQTY"));
+					
+					trace("this.ds_consumableList.getRowCount() 1>>" + this.ds_consumableList.getRowCount());
+					trace("this.ds_consumableList.getSum() >>" + this.ds_consumableList.getSum("INPUTQTY"));
+					
+					this.ds_consumableList.filter("");
+				}				
+				
+				this.ds_consumableList.filter("");
+				this.ds_consumableList.set_enableevent(true);
+
+				//dataset.getSum('컬럼명')
+				var key = this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "KEYCOLUMN"), "");
+				var value_Key   = "";
+				var value_Value = -1;
+				
+				for(var i = 0; i < this.ds_inputQtyList.getRowCount(); i++)
+				{
+					value_Key   = this.nfn_nvl(this.ds_inputQtyList.getColumn(i, "KEYCOLUMN"), "");
+					value_Value = nexacro.toNumber(this.nfn_nvl(this.ds_inputQtyList.getColumn(i, "INPUTQTY"), "0"));
+					
+					if(key == value_Key)
+					{
+
+						var nRow   = this.ds_standardRequirementInfo.findRow("KEYCOLUMN", value_Key);
+						var reqQty = nexacro.toNumber(this.nfn_nvl(this.ds_standardRequirementInfo.getColumn(nRow, "REQUIREMENTQTY"), "0"));
+						
+						if ((reqQty - value_Value) <= 0)
+						{
+							// {0} 자재는 이미 BOM 소요량만큼 투입되었습니다.
+							this.gfn_Message("ConsumableIsAlreadyInputEqualRequirement", [value_Key.split('|')[0]], "info", "ok");
+							return;
+						}
+
+						var vInputQty    = nexacro.toNumber(this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "INPUTQTY"), "0"));
+						var vOrginputQty = nexacro.toNumber(this.nfn_nvl(this.ds_consumableListTemp.getColumn(0, "ORGINPUTQTY"), "0"));
+						
+						if (vInputQty > (reqQty - value_Value))
+							this.ds_consumableListTemp.setColumn(0, "INPUTQTY", (reqQty - value_Value));
+
+						if (vOrginputQty > (reqQty - value_Value))
+							this.ds_consumableListTemp.setColumn(0, "ORGINPUTQTY", (reqQty - value_Value));
+					}
+				}
+
+
+		
+
+				this.ds_checkParam.clearData();
+				this.ds_checkParam.addRow();
+				this.ds_checkParam.setColumn(0, "ENTERPRISEID", this.gf_getEnterpriseId());
+				this.ds_checkParam.setColumn(0, "PLANTID", this.gf_getSiteType());
+				this.ds_checkParam.setColumn(0, "AREAID", this.nfn_nvl(this.ds_lotInfoData.getColumn(0, "AREAID"), ""));
+				this.ds_checkParam.setColumn(0, "CONSUMABLELOTID", consumableLotId);
+				this.ds_checkParam.setColumn(0, "CONSUMABLEDEFID", consumableDefId);
+				this.ds_checkParam.setColumn(0, "CONSUMABLEDEFVERSION", consumableDefVersion);
+				this.ds_checkParam.setColumn(0, "VERSION", "10001");
+				
+				
+
+				var sSvcID = "getPriorityConsumableLotByProcess";
+				var sController = "/pcm01800/getPriorityConsumableLotByProcess.do";
+				var sInDatasets = "INPUT=ds_checkParam";
+				var sOutDatasets = "ds_priorityConsumableList=output";
+				var sArgs = "";
+				this.gfn_transaction(sSvcID, sController, sInDatasets, sOutDatasets, sArgs);	
+		
+
+			}
+
+			var sSvcID = "getConsumableAlternativeLotByProcess";
+			var sController = "/pcm01800/getConsumableAlternativeLotByProcess.do";
+			var sInDatasets = "INPUT=ds_param";
+			var sOutDatasets = "ds_alternativeList=output";
+			var sArgs = "";
+			this.gfn_transaction(sSvcID, sController, sInDatasets, sOutDatasets, sArgs);	
+	
+			break;
+			
+		case "getPriorityConsumableLotByProcess":
+		
+			if (this.ds_priorityConsumableList.getRowCount() > 0)
+			{
+				// 해당 자재 보다 먼저 입고된 자재 Lot이 있습니다. 그래도 진행 하겠습니까?
+				var vCnf = this.gfn_confirm("ExistsFirstStockLot", "information", ""); 
+				
+				if(!vCnf) return;
+				
+			}
+				
+			if(this.ds_consumableList.getRowCount() == 0)
+			{
+				this.ds_consumableList.addColumn( "AREAID"              , "string", 256 );
+				this.ds_consumableList.addColumn( "WAREHOUSEID"         , "string", 256 );
+				this.ds_consumableList.addColumn( "KEYCOLUMN"           , "string", 256 );
+				this.ds_consumableList.addColumn( "CONSUMABLEDEFID"     , "string", 256 );
+				this.ds_consumableList.addColumn( "CONSUMABLEDEFVERSION", "string", 256 );
+				this.ds_consumableList.addColumn( "CONSUMABLEDEFNAME"   , "string", 256 );
+				this.ds_consumableList.addColumn( "CONSUMABLELOTID"     , "string", 256 );
+				this.ds_consumableList.addColumn( "STOCKQTY"            , "BIGDECIMAL", 256 );
+				this.ds_consumableList.addColumn( "AVAILABLEQTY"        , "BIGDECIMAL", 256 );
+				this.ds_consumableList.addColumn( "INPUTQTY"            , "string", 256 );
+				this.ds_consumableList.addColumn( "ORGINPUTQTY"         , "BIGDECIMAL", 256 );
+				this.ds_consumableList.addColumn( "DEFECTQTY"           , "BIGDECIMAL", 256 );	
+				this.ds_consumableList.addColumn( "LOTUSINGQTY"         , "BIGDECIMAL", 256 );
+				this.ds_consumableList.addColumn( "CONSUMABLEDEFECT"    , "string", 256 );
+				this.ds_consumableList.addColumn( "CONSUMABLESTATE"     , "string", 256 );										
+			}
+				
+			var cnt = this.ds_consumableListTemp.getRowCount();
+			for(var i = 0; i < cnt; i++)
+			{
+				var nRow = this.ds_consumableList.addRow();
+				this.ds_consumableList.copyRow(nRow,this.ds_consumableListTemp, i);
+			}
+			
+			
+			break;
+		case "getConsumableAlternativeLotByProcess":
+		
+			if (this.ds_alternativeList.getRowCount() > 0) 
+			{
+		
+				var currentAreaId    = this.nfn_nvl(this.ds_lotInfoData.getColumn(0, "AREAID"), "");
+				var consumableAreaId = this.nfn_nvl(this.ds_alternativeList.getColumn(0, "AREAID"), "");
+
+				var currentWarehouseId    = this.nfn_nvl(this.ds_lotInfoData.getColumn(0, "WAREHOUSEID"), "");
+				var consumableWarehouseId = this.nfn_nvl(this.ds_alternativeList.getColumn(0, "WAREHOUSEID"), "");
+
+				if (currentWarehouseId != consumableWarehouseId)
+				{
+					// 현재 창고에서 보유하고 있는 자재가 아닙니다. 현재 창고 ID : {0}, 소유 창고 ID : {1}
+					this.gfn_Message("ConsumableNotInWarehouse", [currentWarehouseId, consumableWarehouseId], "info", "ok");
+					return;
+				}
+
+
+				this.ds_consumableDistinctList.clearData();
+				this.ds_consumableDistinctList.copyData(this.ds_consumableList);
+				
+				this.gf_distincDsFilter(this.ds_consumableDistinctList, "KEYCOLUMN");
+				
+				
+				trace("this.ds_consumableDistinctList.getRowCount() >>" + this.ds_consumableDistinctList.getRowCount());
+				
+				var vKeyColumn = "";
+				var nRow = -1;
+				this.ds_inputQtyList.clearData();
+				
+				this.ds_consumableList.set_enableevent(false);
+				
+				for(var i=0; i<this.ds_consumableDistinctList.getRowCount(); i++)
+				{
+					vKeyColumn = this.ds_consumableDistinctList.getColumn(i, "KEYCOLUMN");
+					
+					this.ds_consumableList.filter("KEYCOLUMN=='" + vKeyColumn + "'");
+					
+					nRow = this.ds_inputQtyList.addRow();
+					this.ds_inputQtyList.setColumn(nRow, "KEYCOLUMN", vKeyColumn);
+					this.ds_inputQtyList.setColumn(nRow, "INPUTQTY", this.ds_consumableList.getSum("INPUTQTY"));
+					
+					trace("this.ds_consumableList.getRowCount() 1>>" + this.ds_consumableList.getRowCount());
+					trace("this.ds_consumableList.getSum() >>" + this.ds_consumableList.getSum("INPUTQTY"));
+					
+					this.ds_consumableList.filter("");
+				}				
+				
+				this.ds_consumableList.filter("");
+				
+				this.ds_consumableList.set_enableevent(true);
+				
+				//dataset.getSum('컬럼명')
+				var key = this.nfn_nvl(this.ds_alternativeList.getColumn(0, "KEYCOLUMN"), "");
+				var value_Key   = "";
+				var value_Value = -1;
+				
+				for(var i = 0; i < this.ds_inputQtyList.rowcount; i++)
+				{
+					value_Key   = this.nfn_nvl(this.ds_inputQtyList.getColumn(i, "KEYCOLUMN"), "");
+					value_Value = this.nfn_nvl(this.ds_inputQtyList.getColumn(i, "INPUTQTY"), "");
+					
+					if(key == value_Key)
+					{
+
+						var nRow   = this.ds_standardRequirementInfo.findRow("KEYCOLUMN", value_Key);
+						var reqQty = nexacro.toNumber(this.nfn_nvl(this.ds_standardRequirementInfo.getColumn(nRow, "REQUIREMENTQTY"), "0"));
+						
+						if ((reqQty - value_Value) <= 0)
+						{
+							// {0} 자재는 이미 BOM 소요량만큼 투입되었습니다.
+							this.gfn_Message("ConsumableIsAlreadyInputEqualRequirement", [value_Key.split('|')[0]], "info", "ok");
+							return;
+						}
+
+						var vInputQty    = nexacro.toNumber(this.nfn_nvl(this.ds_alternativeList.getColumn(0, "INPUTQTY"), "0"));
+						
+						if (vInputQty > (reqQty - value_Value))
+							this.ds_alternativeList.setColumn(0, "INPUTQTY", (reqQty - value_Value));
+
+					}
+				}
+				
+
+
+
+				if(this.ds_consumableList.getRowCount() == 0)
+				{
+					this.ds_consumableList.addColumn( "AREAID"              , "string", 256 );
+					this.ds_consumableList.addColumn( "WAREHOUSEID"         , "string", 256 );
+					this.ds_consumableList.addColumn( "KEYCOLUMN"           , "string", 256 );
+					this.ds_consumableList.addColumn( "CONSUMABLEDEFID"     , "string", 256 );
+					this.ds_consumableList.addColumn( "CONSUMABLEDEFVERSION", "string", 256 );
+					this.ds_consumableList.addColumn( "CONSUMABLEDEFNAME"   , "string", 256 );
+					this.ds_consumableList.addColumn( "CONSUMABLELOTID"     , "string", 256 );
+					this.ds_consumableList.addColumn( "STOCKQTY"            , "BIGDECIMAL", 256 );
+					this.ds_consumableList.addColumn( "AVAILABLEQTY"        , "BIGDECIMAL", 256 );
+					this.ds_consumableList.addColumn( "INPUTQTY"            , "string", 256 );
+					this.ds_consumableList.addColumn( "ORGINPUTQTY"         , "BIGDECIMAL", 256 );
+					this.ds_consumableList.addColumn( "DEFECTQTY"           , "BIGDECIMAL", 256 );	
+					this.ds_consumableList.addColumn( "LOTUSINGQTY"         , "BIGDECIMAL", 256 );
+					this.ds_consumableList.addColumn( "CONSUMABLEDEFECT"    , "string", 256 );
+					this.ds_consumableList.addColumn( "CONSUMABLESTATE"     , "string", 256 );										
+				}
+
+				var nCnt = this.ds_alternativeList.getRowCount();
+				for(var i = 0; i < nCnt; i++)
+				{
+					var nRow = this.ds_consumableList.addRow();
+					this.ds_consumableList.copyRow(nRow,this.ds_alternativeList, i);
+				}
+				
+				return;
+			}
+
+			// 해당 자재 Lot의 품목은 BOM에 등록 되지 않은 자재 입니다.
+			this.gfn_Message("NotExistsConsumableInBOM", null, "info", "ok");
+			
+			break;
+		default:
+	}
+};
+
+
+/**************************************************************************
+ * 6. 팝업 호출/콜백
+ **************************************************************************/
+
+
+/**************************************************************************
+ * 7. 기타 함수(화면 로컬 정의) 
+ **************************************************************************/
+ 		
+				
+ this.fn_search = function ()
+ {
+	console.log("fn_search");
+	
+	var vLotId          = this.parent.parent.parent.parent.parent.g_LotId;
+	var vPanelperQty    = this.parent.parent.parent.parent.parent.g_PanelperQty; 
+	var vPnlQty         = this.parent.parent.parent.parent.parent.g_PnlQty;
+	var vPcsQty         = this.parent.parent.parent.parent.parent.g_PcsQty;
+	var vQueryVersion   = this.parent.parent.parent.parent.parent.queryVersion;
+	var vLotInfoData    = this.parent.parent.parent.parent.parent.ds_lotInfo;
+	
+	this.setLotInfo(vLotId, vPanelperQty, vPnlQty, vPcsQty, vQueryVersion, vLotInfoData);
+	
+	console.log("자재(작업시작)");
+	
+	// 자재(작업시작)
+	
+	this.ds_consumableParam.clearData();
+	this.ds_consumableParam.addRow();
+	this.ds_consumableParam.setColumn(0, "ENTERPRISEID", this.gf_getEnterpriseId());
+	this.ds_consumableParam.setColumn(0, "PLANTID", this.gf_getSiteType());
+	this.ds_consumableParam.setColumn(0, "LOTID", this.parent.parent.parent.parent.parent.div_work.form.div_search.form.edt_lotId.value);
+	this.ds_consumableParam.setColumn(0, "MATERIALTYPE", "Consumable");
+	this.ds_consumableParam.setColumn(0, "VERSION", this.parent.parent.parent.parent.parent.queryVersion);
+	
+
+	this.ds_standardRequirementParam.clearData();
+	this.ds_standardRequirementParam.addRow();
+	this.ds_standardRequirementParam.setColumn(0, "ENTERPRISEID", this.gf_getEnterpriseId());
+	this.ds_standardRequirementParam.setColumn(0, "PLANTID", this.gf_getSiteType());
+	this.ds_standardRequirementParam.setColumn(0, "LOTID", this.parent.parent.parent.parent.parent.div_work.form.div_search.form.edt_lotId.value);
+	this.ds_standardRequirementParam.setColumn(0, "VERSION", this.parent.parent.parent.parent.parent.queryVersion);
+
+	
+	var sSvcID = "selectConsumableListByProcessWorkCompleteAndByProcess";
+	var sController = "/pcm01800/selectConsumableListByProcessWorkCompleteAndByProcess.do";
+	var sInDatasets = "INPUT1=ds_consumableParam INPUT2=ds_standardRequirementParam";
+	var sOutDatasets = "ds_consumableList=output1 ds_standardRequirementInfo=output2";
+	var sArgs = "";
+	this.gfn_transaction(sSvcID, sController, sInDatasets, sOutDatasets, sArgs);	
+	
+
+};			
+
+this.setLotInfo = function (lotId, panelPerQty, panelQty, qty, queryVersion, dataSet)
+{
+	console.log("setLotInfo 1");
+	var queryVersion = "10001";
+	this._lotId = lotId;
+	this._panelPerQty = panelPerQty;
+	this._panelQty = panelQty;
+	this._qty = qty;
+	console.log("setLotInfo 2");
+	this.ds_lotInfoData.clearData();  // 1700M 에서 가져옴. 
+	this.ds_lotInfoData.copyData(dataSet);
+
+	this._queryVersion = queryVersion;
+	console.log("setLotInfo 3");
+};
+
+/**************************************************************************
+ * 8. 이벤트 
+ ***************************************************************************/
+
+this.btn_delRow_onclick = function(obj:nexacro.Button,e:nexacro.ClickEventInfo)
+{
+	var nRow = this.ds_consumableLis.rowcount == 1 ? 0 : this.ds_consumableList_rowposition;
+	this.ds_consumableList.deleteRow(nRow);
+};
+
+this.ds_consumableList_onrowposchanged = function(obj:nexacro.NormalDataset,e:nexacro.DSRowPosChangeEventInfo)
+{
+	this.ds_consumableList_rowposition = e.newrow;
+};
+
+this.edt_consumableLotIdStart_onkeydown = function(obj:nexacro.Edit,e:nexacro.KeyEventInfo)
+{
+	if(e.keycode == 13 || e.keycode == 9)
+	{
+		if (!this.checkAlreadyInputLot(this.edt_consumableLotIdStart.value, "CONSUMABLELOTID"))
+		{
+			this.edt_consumableLotIdStart.set_value("");
+			return;
+		}
+		
+		this.ds_param.clearData();
+		this.ds_param.addRow();
+		this.ds_param.setColumn(0, "ENTERPRISEID", this.gf_getEnterpriseId());
+		this.ds_param.setColumn(0, "PLANTID", this.gf_getSiteType());
+		this.ds_param.setColumn(0, "LOTID", this._lotId);
+		this.ds_param.setColumn(0, "CONSUMABLELOTID", this.edt_consumableLotIdStart.value);
+		this.ds_param.setColumn(0, "VERSION", this._queryVersion);
+		
+		
+		this.edt_consumableLotIdStart.set_value("");
+
+
+		var sSvcID = "getConsumableLotByProcess";
+		var sController = "/pcm01800/getConsumableLotByProcess.do";
+		var sInDatasets = "INPUT=ds_param";
+		var sOutDatasets = "ds_consumableListTemp=output";
+		var sArgs = "";
+		this.gfn_transaction(sSvcID, sController, sInDatasets, sOutDatasets, sArgs);	
+	}	
+};
+
+this.checkAlreadyInputLot = function(lotId, fieldName)
+{
+
+	var resultRow = this.ds_consumableList.findRow(fieldName, lotId);
+	if (resultRow > -1)
+	{
+		// 이미 등록된 Lot Id 입니다. Lot Id = {0}
+		this.gfn_Message("AlreadyInputLot", [lotId], "warning", "ok");
+		this.ds_consumableList.set_rowposition(resultRow);
+		this.grd_consumableStart.setFocus();
+		return false;
+	}
+
+	return true;
+
+};
+
+
+this.setLotInfo = function (lotId, panelPerQty, panelQty, qty, queryVersion, dataSet)
+{
+	var queryVersion = "10001";
+	this._lotId = lotId;
+	this._panelPerQty = panelPerQty;
+	this._panelQty = panelQty;
+	this._qty = qty;
+	
+	this.ds_lotInfoData.clearData();  // 1700M 에서 가져옴. 
+	this.ds_lotInfoData.copyData(dataSet);
+
+	this._queryVersion = queryVersion;
+};
+
+
+this.gf_distincDsFilter = function(objDs, sColID)
+{
+	var arrArgs	= sColID.split(",");
+	var sFilterExpr		= "";
+	var sFindRowExpr	= "";
+	
+	for (var i=0; i<arrArgs.length; i++)
+	{
+		if (objDs.getColumnInfo(arrArgs[i]) == null) continue;
+		
+		sFindRowExpr	+= (sFindRowExpr) ? " && " : "";
+		sFindRowExpr	+= "" + arrArgs[i] + "=='\" + " + arrArgs[i] + " + \"'";
+	}
+	
+	if (sFindRowExpr) {
+		sFilterExpr	= "rowidx==dataset.findRowExpr(\"" + sFindRowExpr + "\")";
+	}
+	objDs.filter(sFilterExpr);
+};
+
+		]]></Script>
+    <Objects>
+      <Dataset id="ds_consumableList" onrowposchanged="ds_consumableList_onrowposchanged">
+        <ColumnInfo>
+          <Column id="AREAID" type="STRING" size="256"/>
+          <Column id="WAREHOUSEID" type="STRING" size="256"/>
+          <Column id="KEYCOLUMN" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFID" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFVERSION" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFNAME" type="STRING" size="256"/>
+          <Column id="CONSUMABLELOTID" type="STRING" size="256"/>
+          <Column id="STOCKQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="AVAILABLEQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="INPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="ORGINPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="DEFECTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="LOTUSINGQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="CONSUMABLEDEFECT" type="STRING" size="256"/>
+          <Column id="CONSUMABLESTATE" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_consumableParam">
+        <ColumnInfo>
+          <Column id="ENTERPRISEID" type="STRING" size="256"/>
+          <Column id="PLANTID" type="STRING" size="256"/>
+          <Column id="LOTID" type="STRING" size="256"/>
+          <Column id="MATERIALTYPE" type="STRING" size="256"/>
+          <Column id="VERSION" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_standardRequirementInfo">
+        <ColumnInfo>
+          <Column id="KEYCOLUMN" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFID" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFVERSION" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFNAME" type="STRING" size="256"/>
+          <Column id="STANDARDREQUIREMENTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="REQUIREMENTQTY" type="BIGDECIMAL" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_standardRequirementParam">
+        <ColumnInfo>
+          <Column id="ENTERPRISEID" type="STRING" size="256"/>
+          <Column id="PLANTID" type="STRING" size="256"/>
+          <Column id="LOTID" type="STRING" size="256"/>
+          <Column id="VERSION" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_param">
+        <ColumnInfo>
+          <Column id="ENTERPRISEID" type="STRING" size="256"/>
+          <Column id="PLANTID" type="STRING" size="256"/>
+          <Column id="LOTID" type="STRING" size="256"/>
+          <Column id="CONSUMABLELOTID" type="STRING" size="256"/>
+          <Column id="VERSION" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_checkParam">
+        <ColumnInfo>
+          <Column id="ENTERPRISEID" type="STRING" size="256"/>
+          <Column id="PLANTID" type="STRING" size="256"/>
+          <Column id="AREAID" type="STRING" size="256"/>
+          <Column id="CONSUMABLELOTID" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFID" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFVERSION" type="STRING" size="256"/>
+          <Column id="VERSION" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_alternativeList">
+        <ColumnInfo>
+          <Column id="AREAID" type="STRING" size="256"/>
+          <Column id="WAREHOUSEID" type="STRING" size="256"/>
+          <Column id="KEYCOLUMN" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFID" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFVERSION" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFNAME" type="STRING" size="256"/>
+          <Column id="CONSUMABLELOTID" type="STRING" size="256"/>
+          <Column id="STOCKQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="AVAILABLEQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="INPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="ORGINPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="DEFECTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="LOTUSINGQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="CONSUMABLEDEFECT" type="STRING" size="256"/>
+          <Column id="CONSUMABLESTATE" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_priorityConsumableList"/>
+      <Dataset id="ds_inputQtyList">
+        <ColumnInfo>
+          <Column id="AREAID" type="STRING" size="256"/>
+          <Column id="WAREHOUSEID" type="STRING" size="256"/>
+          <Column id="KEYCOLUMN" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFID" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFVERSION" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFNAME" type="STRING" size="256"/>
+          <Column id="CONSUMABLELOTID" type="STRING" size="256"/>
+          <Column id="STOCKQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="AVAILABLEQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="INPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="ORGINPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="DEFECTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="LOTUSINGQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="CONSUMABLEDEFECT" type="STRING" size="256"/>
+          <Column id="CONSUMABLESTATE" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_consumableDistinctList">
+        <ColumnInfo>
+          <Column id="AREAID" type="STRING" size="256"/>
+          <Column id="WAREHOUSEID" type="STRING" size="256"/>
+          <Column id="KEYCOLUMN" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFID" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFVERSION" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFNAME" type="STRING" size="256"/>
+          <Column id="CONSUMABLELOTID" type="STRING" size="256"/>
+          <Column id="STOCKQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="AVAILABLEQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="INPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="ORGINPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="DEFECTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="LOTUSINGQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="CONSUMABLEDEFECT" type="STRING" size="256"/>
+          <Column id="CONSUMABLESTATE" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_consumableListTemp">
+        <ColumnInfo>
+          <Column id="AREAID" type="STRING" size="256"/>
+          <Column id="WAREHOUSEID" type="STRING" size="256"/>
+          <Column id="KEYCOLUMN" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFID" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFVERSION" type="STRING" size="256"/>
+          <Column id="CONSUMABLEDEFNAME" type="STRING" size="256"/>
+          <Column id="CONSUMABLELOTID" type="STRING" size="256"/>
+          <Column id="STOCKQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="AVAILABLEQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="INPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="ORGINPUTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="DEFECTQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="LOTUSINGQTY" type="BIGDECIMAL" size="256"/>
+          <Column id="CONSUMABLEDEFECT" type="STRING" size="256"/>
+          <Column id="CONSUMABLESTATE" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_lotInfoData">
+        <ColumnInfo>
+          <Column id="LOTID" type="STRING" size="256"/>
+          <Column id="PLANTID" type="STRING" size="256"/>
+          <Column id="PATHTYPE" type="STRING" size="256"/>
+          <Column id="PRODUCTDEFTYPE" type="STRING" size="256"/>
+          <Column id="PROCESSSTATE" type="STRING" size="256"/>
+          <Column id="PROCESSPATHID" type="STRING" size="256"/>
+          <Column id="PROCESSSEGMENTID" type="STRING" size="256"/>
+          <Column id="PROCESSSEGMENTVERSION" type="STRING" size="256"/>
+          <Column id="NEXTPROCESSSEGMENTID" type="STRING" size="256"/>
+          <Column id="NEXTPROCESSSEGMENTVERSION" type="STRING" size="256"/>
+          <Column id="NEXTPROCESSSEGMENTTYPE" type="STRING" size="256"/>
+          <Column id="PRODUCTDEFVERSION" type="STRING" size="256"/>
+          <Column id="PRODUCTTYPE" type="STRING" size="256"/>
+          <Column id="PRODUCTDEFTYPEID" type="STRING" size="256"/>
+          <Column id="LOTTYPE" type="STRING" size="256"/>
+          <Column id="ISHOLD" type="STRING" size="256"/>
+          <Column id="AREANAME" type="STRING" size="256"/>
+          <Column id="DEFECTUNIT" type="STRING" size="256"/>
+          <Column id="PCSPNL" type="STRING" size="256"/>
+          <Column id="PANELPERQTY" type="STRING" size="256"/>
+          <Column id="PROCESSSEGMENTTYPE" type="STRING" size="256"/>
+          <Column id="STEPTYPE" type="STRING" size="256"/>
+          <Column id="ISPRINTLOTCARD" type="STRING" size="256"/>
+          <Column id="ISPRINTRCLOTCARD" type="STRING" size="256"/>
+          <Column id="TRACKINUSER" type="STRING" size="256"/>
+          <Column id="TRACKINUSERNAME" type="STRING" size="256"/>
+          <Column id="MATERIALCLASS" type="STRING" size="256"/>
+          <Column id="AREAID" type="STRING" size="256"/>
+          <Column id="ISRCLOT" type="STRING" size="256"/>
+          <Column id="SELFSHIPINSPRESULT" type="STRING" size="256"/>
+          <Column id="SELFTAKEINSPRESULT" type="STRING" size="256"/>
+          <Column id="MEASUREINSPRESULT" type="STRING" size="256"/>
+          <Column id="OSPINSPRESULT" type="STRING" size="256"/>
+          <Column id="ISBEFOREROLLCUTTING" type="STRING" size="256"/>
+          <Column id="Column30" type="STRING" size="256"/>
+          <Column id="LOTSTATE" type="STRING" size="256"/>
+          <Column id="WAREHOUSEID" type="STRING" size="256"/>
+          <Column id="ISWEEKMNG" type="STRING" size="256"/>
+          <Column id="DESCRIPTION" type="STRING" size="256"/>
+          <Column id="PARENTPROCESSSEGMENTCLASSID" type="STRING" size="256"/>
+          <Column id="RTRSHT" type="STRING" size="256"/>
+          <Column id="PROCESSSEGMENTCLASSID" type="STRING" size="256"/>
+          <Column id="RESOURCENAME" type="STRING" size="256"/>
+          <Column id="ISCLAIMLOT" type="STRING" size="256"/>
+          <Column id="PRODUCTDEFID" type="STRING" size="256"/>
+          <Column id="UNIT" type="STRING" size="256"/>
+          <Column id="PREVPROCESSSEGMENTNAME" type="STRING" size="256"/>
+          <Column id="PRODUCTDEFNAME" type="STRING" size="256"/>
+          <Column id="PRODUCTIONTYPENAME" type="STRING" size="256"/>
+          <Column id="PNLQTY" type="STRING" size="256"/>
+          <Column id="PROCESSSEGMENTNAME" type="STRING" size="256"/>
+          <Column id="INPUTDATE" type="STRING" size="256"/>
+          <Column id="ISLOCKING" type="STRING" size="256"/>
+          <Column id="PCSQTY" type="STRING" size="256"/>
+          <Column id="NEXTPROCESSSEGMENTNAME" type="STRING" size="256"/>
+          <Column id="PRODUCTIONORDERID" type="STRING" size="256"/>
+          <Column id="ISREWORK" type="STRING" size="256"/>
+          <Column id="MM" type="STRING" size="256"/>
+          <Column id="USERSEQUENCE" type="STRING" size="256"/>
+          <Column id="DUEDATE" type="STRING" size="256"/>
+          <Column id="CUSTOMERNAME" type="STRING" size="256"/>
+          <Column id="RESOURCEID" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+    </Objects>
+  </Form>
+</FDL>

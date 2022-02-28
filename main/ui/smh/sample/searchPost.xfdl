@@ -1,0 +1,139 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="HRA10610M0" width="460" height="590" titletext="주소검색(DAUM API)" onload="fn_init">
+    <Layouts>
+      <Layout>
+        <Static id="Static05" taborder="0" text="20" visible="false" top="0" right="0" bottom="0" width="20" style="background:gold;padding:0 0 3 0;align:center middle;opacity:50;"/>
+        <Static id="Static01" taborder="1" text="20" visible="false" left="0%" top="0" bottom="0" width="20" style="background:gold;padding:0 0 3 0;align:center middle;opacity:50;"/>
+        <Button id="Button00" taborder="2" onclick="btn_close_onclick" top="0" right="0" width="23" height="23"/>
+        <Static id="sta_title" taborder="3" text="주소 검색" onclick="sta_title_onclick" cssclass="sta_WF_subTitle" left="20" top="10" height="31" style="font:bold 11 Dotum;" width="400"/>
+        <Static id="Static10" taborder="4" text="15" visible="false" left="-4" bottom="0" width="100%" height="15" style="background:lightseagreen;padding:0 0 3 0;align:center middle;opacity:50;"/>
+        <Static id="Static_hline00" taborder="5" text="10" visible="false" left="0%" top="0" right="0%" height="10" style="background:lightseagreen;padding:0 0 3 0;align:center middle;opacity:50;"/>
+        <Button id="btn_close" taborder="6" text="닫기" onclick="btn_close_onclick" cssclass="btn_DR_GridCancel" right="20" width="60" height="21" style="padding:1 0 0 15;" bottom="14"/>
+        <Static id="Static_hline170" taborder="7" text="10" visible="false" left="2" right="1" height="10" style="background:lightseagreen;padding:0 0 3 0;align:center middle;opacity:50;" bottom="35"/>
+        <WebBrowser id="web" left="20" top="41" height="500" taborder="8" onkillfocus="web_onkillfocus" width="420" onusernotify="web_onusernotify"/>
+      </Layout>
+    </Layouts>
+    <Script type="xscript5.1"><![CDATA[/***************************************************************************************
+* 시스템명 	: 
+* 업무명 		: 주소검색(DAUM API호출)
+* 파일명 		:
+* 작성자 		: 
+* 작성일 		: 
+*
+* 설  명		: 주소검색(DAUM API호출) 호출 제공
+*---------------------------------------------------------------------------------------
+* 변경일		변경자		변경내역 
+*---------------------------------------------------------------------------------------
+* 
+*---------------------------------------------------------------------------------------
+****************************************************************************************/
+
+/**************************************************************************
+ * 10. 필수 include(필수)
+***************************************************************************/
+
+/**************************************************************************
+ * 20. FORM 변수 선언 영역
+***************************************************************************/
+
+/**************************************************************************
+ * 30. FORM 정의
+***************************************************************************/
+//*****(필수) 화면 로딩후에 실행되는 함수
+this.fn_init = function(obj:Form, e:nexacro.LoadEventInfo)
+{ 	
+	//http://localhost:8011/html/drcr/searchPostCode.html
+	var sUrl = nexacro.getEnvironment().services["svcurl"].url;
+	sUrl = sUrl + "/html/searchPostCode.html";
+	
+	this.web.set_url(sUrl);
+}
+
+/**************************************************************************
+ * 40. TRANSACTION 영역
+***************************************************************************/
+
+/**************************************************************************
+ * 45. CALLBACK 영역
+***************************************************************************/
+
+//webbrowser에서 넘어옴
+this.web_onusernotify = function(obj:WebBrowser, e:nexacro.WebTitleChangeEventInfo)
+{
+trace(e.userdata);
+  var udata = e.userdata;
+  var tstr = e.userdata+'';
+  if( tstr.indexOf('{"zonecode') >= 0 ){
+	udata = JSON.parse(tstr);
+  }
+  
+  
+	var postno       = udata.zonecode;		//5자리 새우편번호 사용
+
+    if( postno ){
+    var jibunAddress = udata.jibunAddress;
+    var roadAddress  = udata.roadAddress;
+    
+    var buildingName = udata.buildingName;	//건물명
+    var sido    	 = udata.sido;			//시/도
+    var sigungu 	 = udata.sigungu;		//시/군/구  
+    var bcode        = udata.bcode;		//법정동/법정리 코드
+    var bname    	 = udata.bname;		//법정동/법정리
+    var bname1   	 = udata.bname1;		//법정리의 읍/면
+    var roadname     = udata.roadname;		//도로명
+    
+	trace('postno : '+postno);
+    var arrJibun = (jibunAddress+"").split(" ");
+    var arrRoad  = (roadAddress+"").split(" ");
+    var jibuns = arrJibun[arrJibun.length-1].split("-");
+    var roads = arrRoad[arrRoad.length-1].split("-");
+    
+    //return value
+ 	var rtnArray = new Array();
+ 	rtnArray[0]  = postno;			//우편번호
+ 	rtnArray[1]  = sido;			//시도
+ 	rtnArray[2]  = sigungu;			//구군
+ 	rtnArray[3]  = this.nfn_isNull(bname1) ? bname : bname1;	//읍면동(법정동)
+ 	rtnArray[4]  = jibuns[0];		//(구주소)번지
+ 	rtnArray[5]  = jibuns.length > 1 ? jibuns[1] : ""; //(구주소)지번
+ 	rtnArray[6]  = bcode; 			//(신주소)도로번호
+ 	rtnArray[7]  = roadname;	    //(신주소)도로명
+ 	rtnArray[8]  = roads[0];		//(신주소)본번
+ 	rtnArray[9]  = roads.length > 1 ? roads[1] : ""; //(신주소)부번
+ 	rtnArray[10] = buildingName;	//(신주소)건물명
+ 	
+ 	this.opener.fv_rtnValue = rtnArray;
+	this.close();
+	}
+	else{
+	trace('userdata not found');
+	}
+}
+
+/**************************************************************************
+* 50. 기타 함수 시작
+**************************************************************************/
+
+	
+/**************************************************************************
+ * 60. 이벤트
+***************************************************************************/
+//버튼>>닫기 클릭
+this.btn_close_onclick = function(obj:Button,  e:nexacro.ClickEventInfo)
+{
+ 	var rtnArray = new Array();
+ 	this.opener.fv_rtnValue = rtnArray;
+	this.close();
+}
+
+/**************************************************************************
+ * 70. 페이징
+***************************************************************************/
+
+/**************************************************************************
+ * 80. 팝업
+***************************************************************************/]]></Script>
+    <Objects/>
+  </Form>
+</FDL>

@@ -1,0 +1,228 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="sample_application_07" left="0" top="0" width="1024" height="768" onload="fn_init">
+    <Layouts>
+      <Layout height="768" width="1024">
+        <Grid id="grd_00" taborder="0" left="10" top="40" autoenter="select" height="220" width="160" binddataset="ds_dslist">
+          <Formats>
+            <Format id="default">
+              <Columns>
+                <Column size="146"/>
+              </Columns>
+              <Rows>
+                <Row size="24" band="head"/>
+                <Row size="24"/>
+              </Rows>
+              <Band id="head">
+                <Cell text="ds_id"/>
+              </Band>
+              <Band id="body">
+                <Cell text="bind:ds_id" textAlign="left"/>
+              </Band>
+            </Format>
+          </Formats>
+        </Grid>
+        <Button id="Button00" taborder="1" text="All" left="800" top="8" width="90" height="22" onclick="Button00_onclick" font="22px/normal NanumSquareRoundL, NanumSquareRoundLight"/>
+        <Button id="btn_close00" taborder="2" onclick="btn_close_onclick" cssclass="btn_pop_close" visible="true" top="5" right="11" width="25" height="25" tooltiptext="닫기"/>
+        <Grid id="grd_00_00" taborder="3" left="180" top="40" autoenter="select" height="710" width="830" binddataset="ds_result" autofittype="none" autosizingtype="col">
+          <Formats>
+            <Format id="default">
+              <Columns>
+                <Column size="80"/>
+              </Columns>
+              <Rows>
+                <Row band="head" size="24"/>
+                <Row size="24"/>
+              </Rows>
+              <Band id="head">
+                <Cell text="ddddddddddd"/>
+              </Band>
+              <Band id="body">
+                <Cell text="bind:ddddddddddd"/>
+              </Band>
+            </Format>
+          </Formats>
+        </Grid>
+        <Grid id="grd_00_01" taborder="4" left="10" top="270" autoenter="select" height="480" width="160" binddataset="ds_collist">
+          <Formats>
+            <Format id="default">
+              <Columns>
+                <Column size="143"/>
+                <Column size="99"/>
+              </Columns>
+              <Rows>
+                <Row size="24" band="head"/>
+                <Row size="24"/>
+              </Rows>
+              <Band id="head">
+                <Cell text="colname"/>
+                <Cell col="1" text="coltype"/>
+              </Band>
+              <Band id="body">
+                <Cell text="bind:colname" textAlign="left"/>
+                <Cell col="1" text="bind:coltype" textAlign="left"/>
+              </Band>
+            </Format>
+          </Formats>
+        </Grid>
+      </Layout>
+    </Layouts>
+    <Objects>
+      <Dataset id="ds_dslist" canrowposchange="ds_grd00_canrowposchange">
+        <ColumnInfo>
+          <Column id="ds_id" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_result">
+        <ColumnInfo>
+          <Column id="ddddddddddd" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_collist">
+        <ColumnInfo>
+          <Column id="colname" type="STRING" size="256"/>
+          <Column id="coltype" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+    </Objects>
+    <Script type="xscript5.1"><![CDATA[/***************************************************************************************
+ * 시스템명 	: 화면간 데이터 전송 샘플
+ * 업무명 		: 
+ * 파일명 		: 
+ * 작성자 		: quristyle
+ * 작성일 		: 2015.03.18
+ *
+ * 설  명		: 확장 가능한 화면간 데이터 전송.
+ *---------------------------------------------------------------------------------------
+ * 변경일		변경자		변경내역
+ *---------------------------------------------------------------------------------------
+ * 2022.01.18	quristyle   	최초작성
+ *---------------------------------------------------------------------------------------
+ ****************************************************************************************/
+
+/**************************************************************************
+ * 1. 필수 include(필수)
+ ***************************************************************************/
+
+/**************************************************************************
+ * 2. FORM 변수 선언 영역
+ ***************************************************************************/
+var _winid = '';
+var isBindComp = false;
+var _dsCnt = 0;
+/**************************************************************************
+ * 3. FORM 정의
+ ***************************************************************************/
+this.fn_init = function(obj:Form, e:nexacro.LoadEventInfo){  
+  //alert('detail init');
+  this.nfn_formInit(obj); //...... 샘플이니깐 안항.
+  
+  
+  _winid = this.parent.winid;
+  
+  var ocFrm = gv_appWorkFrameSet.frames[_winid];  
+  
+	for( var i = 0; i < ocFrm.form.components[0].form.objects.length; i++ ){
+	  var c = ocFrm.form.components[0].form.objects[i];
+	  if(typeof c == "object" && c._type_name == "Dataset" ){
+	    trace( c.id );
+		var ridx = this.ds_dslist.addRow();
+		this.ds_dslist.setColumn(ridx, 0, c.id);
+		_dsCnt++;
+	  }
+	}
+  this.gc_f('bindComplate');
+}
+
+
+/**************************************************************************
+ * 4. 공통버튼영역 (함수 삭제금지!!!!)
+ ***************************************************************************/
+
+
+/**************************************************************************
+ * 5. TRANSACTION, CALLBACK 영역
+ ***************************************************************************/
+
+
+/**************************************************************************
+ * 6. 팝업 시작
+ **************************************************************************/
+
+/**************************************************************************
+ * 7. 기타 함수 시작
+ **************************************************************************/
+this.bindComplate = function(){
+  if( _dsCnt == this.ds_dslist.rowcount ){
+    isBindComp = true;
+	this.show_datasetinfo(this.ds_dslist.rowcount-1);
+  }
+  else{
+    this.gc_f('bindComplate');
+  }
+}
+/**************************************************************************
+ * 8. 이벤트
+ ***************************************************************************/
+
+
+// grid row change
+this.ds_grd00_canrowposchange = function(obj:nexacro.NormalDataset,e:nexacro.DSRowPosChangeEventInfo){
+  if( isBindComp ){ this.show_datasetinfo(e.newrow); }
+};
+
+this.show_datasetinfo = function(ridx){
+
+  if( ridx == null ){ 
+    //ridx = this.ds_dslist.rowcount-1;
+	return;
+  }
+  
+  //var ridx = this.ds_dslist.rowposition;
+  trace('1 -----------> '+ridx);
+  var ds_id = this.ds_dslist.getColumn(ridx, 0);  
+  if(ds_id==undefined){
+    return;
+  }
+  
+  trace('2 -----------> '+ridx +'   dsname : '+ds_id);
+  
+  var ocFrm = gv_appWorkFrameSet.frames[_winid];  
+  var dsObj = ocFrm.form.components[0].form.objects[ds_id];
+   
+  this.ds_collist.clearData();
+   
+  for( var i = 0; i < dsObj.colcount; i++ ){
+    var ci = dsObj.getColumnInfo(i);
+	var ridx = this.ds_collist.addRow();
+	this.ds_collist.setColumn(ridx, 0, ci.name);
+	this.ds_collist.setColumn(ridx, 1, ci.type);
+  }
+   
+   
+   
+   
+  var dobjXml = dsObj.saveXML();
+  
+  this.ds_result.clear();
+  
+  this.ds_result.loadXML(dobjXml);
+  
+  this.grd_00_00.setBindDataset(this.ds_result);
+  this.grd_00_00.createFormat();
+  
+  
+}
+
+
+this.btn_close_onclick = function(obj:nexacro.Button,e:nexacro.ClickEventInfo) {
+	this.close();
+};
+
+this.Button00_onclick = function(obj:nexacro.Button,e:nexacro.ClickEventInfo)
+{
+  isBindComp = true;
+};
+]]></Script>
+  </Form>
+</FDL>

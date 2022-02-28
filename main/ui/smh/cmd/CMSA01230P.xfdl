@@ -1,0 +1,165 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="CMSA01230P" width="642" height="418" titletext="파일 업로드/다운로드[K]" onload="fn_init" cssclass="form_PopupBg">
+    <Layouts>
+      <Layout width="642" height="418">
+        <Div id="div_file" taborder="0" url="common::com_file_upload_download_b1.xfdl" left="1.87%" top="5" right="1.71%" height="376" border="0px solid rgba(128,128,128,1)"/>
+        <Button id="btn_sel" taborder="2" text="확인" onclick="fn_sel" cssclass="btn_WF" top="257" height="21" width="40" right="-48" visible="false"/>
+        <Button id="btn_close" taborder="3" text="닫기" onclick="fn_close" cssclass="btn_DR_GridCancel" top="383" right="10" height="21" width="60"/>
+        <Static id="Static01" taborder="4" text="파일 업로드/다운로드" cssclass="sta_WF_subTitle" left="2.34%" top="9" right="61.06%" height="31"/>
+        <Static id="Static02" taborder="5" text="10" visible="false" left="1.87%" top="36" right="64.49%" height="10" background="lightseagreen" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static10" taborder="6" text="15" visible="false" left="1.87%" top="3" right="64.49%" height="15" background="lightseagreen" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static13" taborder="7" text="15" visible="false" left="1.71%" top="368" right="1.56%" height="15" background="lightseagreen" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static11" taborder="8" text="12" visible="false" left="1.87%" top="404" right="1.56%" height="12" background="lightseagreen" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static04" taborder="9" text="15" visible="false" left="0%" top="0" right="98.13%" height="284" background="gold" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static03" taborder="10" text="15" visible="false" left="98.29%" top="0" right="0%" height="284" background="gold" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Button id="Button00" taborder="11" onclick="fn_close" cssclass="btn_POP_Close" left="96.11%" top="0" right="0%" height="23"/>
+      </Layout>
+    </Layouts>
+    <Script type="xscript5.1"><![CDATA[/***************************************************************************************
+ * 시스템명    	: IFC MES시스템
+ * 업무명 		: 파일 업로드/업로드 관리
+ * 파일명 		: cmsa01200P.xfdl
+ * 작성자 		: Kang Jeong GI
+ * 작성일 		: 2017.06.22
+ *
+ * 설  명		: 파일 업로드 다운로드 기능
+ *---------------------------------------------------------------------------------------
+ * 변경일		변경자			    변경내역
+ *---------------------------------------------------------------------------------------
+ * 2017.06.22	Kang Jeong GI   	최초작성
+ *---------------------------------------------------------------------------------------
+ ****************************************************************************************/
+
+
+/**************************************************************************
+ * 1. FORM 변수 선언 영역
+ ***************************************************************************/
+this.SUCC_YN; //파일성공여부
+
+/**************************************************************************
+ * 2. FORM 정의
+ ***************************************************************************/
+this.fn_init = function (obj:Form, e:nexacro.LoadEventInfo)
+{
+	this.div_file.jobSysCd = this.parent.arg_jobSysCd; //업무구분코드
+	this.div_file.subDir = this.parent.arg_subDir; //업무구분상세코드
+	this.div_file.atchFileId = this.parent.arg_atchFileId; //첨부파일ID
+	this.div_file.atchTyCd = this.parent.arg_atchTyCd; //테이블명
+	this.div_file.descr = this.parent.arg_descr; //파일 업로드/다운로드 설명
+	this.div_file.maxFileCnt = this.parent.arg_maxFileCnt; //첨부파일 최대 갯수
+
+	trace("jobSysCd-->" + this.parent.arg_jobSysCd);
+	trace("subDir-->" + this.parent.arg_subDir);
+	trace("atchFileId-->" + this.parent.arg_atchFileId);
+	trace("atchTyCd-->" + this.parent.arg_atchTyCd);
+	trace("descr-->" + this.parent.arg_descr);
+	trace("maxFileCnt-->" + this.parent.arg_maxFileCnt);
+
+	this.nfn_formInit(obj);
+
+	this.div_file.fn_search();
+};
+
+
+/**************************************************************************
+ * 3. TRANSACTION, CALLBACK 영역
+ ***************************************************************************/
+this.fn_callBack = function (trId, errCD, errMsg)
+{
+	if (errCD < 0) 
+	{
+		if (trId.substring(0, 6) == "select") 
+		{
+			this.gfn_Message("SMCMM0005", trId + errMsg, "error", "ok");
+		}
+		else 
+		{
+			this.gfn_Message("EMFCM0001", trId + errMsg, "error", "ok");
+		}
+	}
+};
+
+
+/**************************************************************************
+ * 4. 이벤트
+ ***************************************************************************/
+this.btn_upload03_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.div_file.fn_upload();
+};
+
+
+/**************************************************************************
+ * 5. TRANSACTION, CALLBACK 영역
+ ***************************************************************************/
+// 조회 후 호출되는 함수
+this.fn_callBack = function (strSvcId, nErrorCode, strErrorMsg)
+{
+	if (nErrorCode < 0) 
+	{
+		return this.gfn_alert(strErrorMsg);
+	}
+	else 
+	{
+		switch (strSvcId) 
+		{
+			case "selectAtchFileList":
+				// if(this.div_file.ds_file.rowcount == 0) this.gfn_Message("IMCMM0028", null, "info","ok");
+				break;
+			case "completeFileUpload":
+				// trace(this.div_file.ds_file.saveXML());
+				break;
+			case "deleteAtchFile":
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+
+// 닫기 버튼
+this.fn_close = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	var rtnArray = new Array();
+	var fileChanged = this.div_file.fileChanged;
+	if (fileChanged == "N") 
+	{
+		rtnArray = null;
+	}
+	else 
+	{
+		rtnArray[0] = this.div_file.ds_file.getCaseCount("ATCH_FILE_GUID != null && ATCH_FILE_GUID != ''");
+		rtnArray[1] = this.div_file.ds_file.getColumn(0, "FULL_SAVE_COURS");
+		rtnArray[2] = this.div_file.ds_file.getColumn(0, "FILE_EXT");
+		rtnArray[3] = this.SUCC_YN;
+		rtnArray[4] = this.gfn_blankStr(this.div_file.ds_file.getColumn(0, "ATCH_FILE_ID"));
+	}
+	this.opener.fv_rtnValue = rtnArray;
+	this.close();
+};
+
+
+// 확인 버튼
+this.fn_sel = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	var rtnArray = new Array();
+	rtnArray[0] = this.div_file.ds_file.getCaseCount("ATCH_FILE_GUID != null && ATCH_FILE_GUID != ''");
+	rtnArray[1] = this.div_file.ds_file.getColumn(0, "FULL_SAVE_COURS");
+	rtnArray[2] = this.div_file.ds_file.getColumn(0, "FILE_EXT");
+	rtnArray[3] = this.SUCC_YN;
+	rtnArray[4] = this.gfn_blankStr(this.div_file.ds_file.getColumn(0, "ATCH_FILE_ID"));
+	this.opener.fv_rtnValue = rtnArray;
+	this.close();
+};
+
+
+// 파일 다운로드 버튼
+this.fn_fileDownLoad = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.div_file.grd_list_oncelldblclick();
+};
+]]></Script>
+  </Form>
+</FDL>

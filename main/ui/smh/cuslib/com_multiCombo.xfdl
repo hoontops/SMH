@@ -1,0 +1,228 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="com_multiCombo" width="150" height="21" titletext="Multi Select Combo" background="white">
+    <Layouts>
+      <Layout width="150" height="21">
+        <Edit id="edt_comboResult" taborder="0" left="0" top="0" right="0" bottom="0" displaynulltext="선택" padding="0px 21px 0px 8px"/>
+        <Button id="btn_dropcombo" taborder="1" top="0" width="21" onclick="btn_dropcombo_onclick" right="0" bottom="0" background="url('image::cmb_WF_Drop_N.png') no-repeat center center" border="1px none rgba(128,128,128,1)"/>
+        <PopupDiv id="pdiv_data" text="PopupDiv00" left="0" top="21" width="150" height="200" background="white">
+          <Layouts>
+            <Layout>
+              <Button id="btn_all_check" taborder="1" text="전체선택" left="5" top="5" width="64" height="19" onclick="pdiv_data_btn_all_check_onclick" cssclass="btn_WF_basic"/>
+              <Button id="btn_select_data" taborder="2" text="확인" top="5" width="40" height="19" onclick="pdiv_data_btn_select_data_onclick" right="5" cssclass="btn_WF_basic"/>
+              <Grid id="grd_data" taborder="0" left="0" top="29" binddataset="ds_initData" right="0" bottom="0" oncellclick="pdiv_data_grd_data_oncellclick" border="2px solid rgba(51,51,51,1), 0px none rgba(204,204,204,1), 0px none rgba(204,204,204,1), 0px none rgba(204,204,204,1)">
+                <Formats>
+                  <Format id="default">
+                    <Columns>
+                      <Column size="20"/>
+                      <Column size="152"/>
+                    </Columns>
+                    <Rows>
+                      <Row size="21"/>
+                    </Rows>
+                    <Band id="body">
+                      <Cell displaytype="checkbox" edittype="checkbox" text="bind:chk" textAlign="center" verticalAlign="middle" padding="0px -10px 0px -10px" border="1px none rgba(128,128,128,1)"/>
+                      <Cell col="1" text="bind:value" border="1px none rgba(128,128,128,1)"/>
+                    </Band>
+                  </Format>
+                </Formats>
+              </Grid>
+            </Layout>
+          </Layouts>
+        </PopupDiv>
+        <Button id="btn_hide" taborder="3" left="0" top="0" onclick="btn_dropcombo_onclick" right="22" bottom="0" background="transparent" border="1px none #808080"/>
+        <Static id="Static01" taborder="5" text="5" visible="false" left="1" top="22" width="30" height="5" background="lightseagreen" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static02" taborder="6" text="5" visible="false" left="119" top="22" width="30" height="5" background="lightseagreen" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static04" taborder="8" text="5" visible="false" left="1" top="46" width="30" height="5" background="lightseagreen" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static05" taborder="9" text="5" visible="false" left="119" top="46" width="30" height="5" background="lightseagreen" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static00" taborder="4" text="5" visible="false" left="1" top="21" width="5" height="28" background="gold" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Static id="Static03" taborder="7" text="5" visible="false" left="144" top="22" width="5" height="28" background="gold" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+      </Layout>
+    </Layouts>
+    <Objects>
+      <Dataset id="ds_initData">
+        <ColumnInfo>
+          <Column id="chk" type="STRING" size="1"/>
+          <Column id="code" type="STRING" size="256"/>
+          <Column id="value" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_selectData">
+        <ColumnInfo>
+          <Column id="chk" type="STRING" size="1"/>
+          <Column id="code" type="STRING" size="256"/>
+          <Column id="value" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+    </Objects>
+    <Script type="xscript5.1"><![CDATA[/***************************************************************************************
+ * 시스템명	 	: IFC MES시스템
+ * 업무명 		: UI공통개발
+ * 파일명 		: com_multiCombo.xfdl
+ * 작성자 		: 진성하
+ * 작성일 		: 2017.11.19
+ *
+ * 설  명		: 멀티셀렉트 콤보박스
+ *---------------------------------------------------------------------------------------
+ * 변경일		변경자		변경내역
+ *---------------------------------------------------------------------------------------
+ * 2017.11.19	진성하		최초생성
+ *---------------------------------------------------------------------------------------
+ ****************************************************************************************/
+
+/***************************************************************************************
+ * 1. 필수 include(필수)
+ ****************************************************************************************/
+// include "lib::comLib.xjs";
+
+
+/***************************************************************************************
+ * 2. FORM 변수 선언 영역
+ ****************************************************************************************/
+var allChkIdx = 0;
+
+/***************************************************************************************
+ * 3. FORM 정의
+ ****************************************************************************************/
+
+/* 멀티콤보 데이터 초기화 */
+this.fn_init_multicombo_data = function (objDs)
+{
+	this.ds_initData.clearData();
+	this.ds_initData.appendData(objDs);
+	this.ds_selectData.clearData();
+
+	this.fn_initText();
+
+	var v_max_length = this.ds_initData.getMax("String(value).length");
+
+	var v_grid_checkbox_width = 20;
+	var v_grid_valuecolumn_width = (v_max_length * 8) + 10;
+
+	this.pdiv_data.form.grd_data.setFormatColProperty(0, "size", v_grid_checkbox_width);
+
+	if ((v_grid_checkbox_width + v_grid_valuecolumn_width) > this.getOffsetWidth()) 
+	{
+		this.pdiv_data.form.grd_data.setFormatColProperty(1, "size", v_grid_valuecolumn_width);
+		this.pdiv_data.set_width((v_grid_checkbox_width + v_grid_valuecolumn_width) + 2);
+	}
+	else 
+	{
+		this.pdiv_data.form.grd_data.setFormatColProperty(1, "size", (this.getOffsetWidth() - (v_grid_checkbox_width) - 2));
+		this.pdiv_data.set_width(this.getOffsetWidth());
+	}
+
+	var dsRowCnt = this.ds_initData.getRowCount();
+	this.pdiv_data.set_height(((dsRowCnt) * 22) + 30);
+};
+
+
+/***************************************************************************************
+ * 4. 함수 처리
+ ****************************************************************************************/
+
+/* 초기 선택된 값이 있을때 text값 세팅 */
+this.fn_initText = function ()
+{
+	var findRow = this.ds_initData.findRow(0, 1);
+
+	if (findRow != -1) 
+	{
+		this.edt_comboResult.set_value("다중 선택");
+	}
+};
+
+
+/***************************************************************************************
+ * 5. 이벤트 처리
+ ****************************************************************************************/
+
+/* 콤보 펼치기 버튼 온클릭 이벤트 */
+this.btn_dropcombo_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	var nLeft = system.screenToClientX(nexacro.getApplication().mainframe, system.clientToScreenX(this.edt_comboResult, 0));
+	var nTop = system.screenToClientY(nexacro.getApplication().mainframe, system.clientToScreenY(this.edt_comboResult, 0)) + parseInt(this.edt_comboResult.getOffsetHeight());
+
+	this.pdiv_data.trackPopup(nLeft, nTop);
+};
+
+/* 그리드 셀클릭 이벤트 */
+this.pdiv_data_grd_data_oncellclick = function (obj:Grid, e:nexacro.GridClickEventInfo)
+{
+	var nIndex = obj.getCellPos();
+	if (nIndex == 1) 
+	{
+		if (this.ds_initData.getColumn(e.row, 0) == 1) 
+		{
+			this.ds_initData.setColumn(e.row, 0, 0);
+		}
+		else 
+		{
+			this.ds_initData.setColumn(e.row, 0, 1);
+		}
+	}
+	else 
+	{
+		return false;
+	}
+};
+
+/* 전체선택 버튼 온클릭 이벤트 */
+this.pdiv_data_btn_all_check_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	if (obj.text == "전체선택") 
+	{
+		obj.set_text("전체해제");
+	}
+	else 
+	{
+		obj.set_text("전체선택");
+	}
+
+	if (allChkIdx == 0) 
+	{
+		for (var i = 0; i < this.ds_initData.getRowCount(); i++) 
+		{
+			this.ds_initData.setColumn(i, 0, "1");
+		}
+		allChkIdx = 1;
+	}
+	else 
+	{
+		for (var i = 0; i < this.ds_initData.getRowCount(); i++) 
+		{
+			this.ds_initData.setColumn(i, 0, "0");
+		}
+		allChkIdx = 0;
+	}
+};
+
+/* 확인 버튼 온클릭 이벤트 */
+this.pdiv_data_btn_select_data_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	var filterVal = "chk==1";
+
+	this.ds_selectData.clearData();
+	this.ds_initData.filter("");
+	this.ds_initData.filter(filterVal);
+	this.ds_selectData.copyData(this.ds_initData, true);
+	this.ds_initData.filter("");
+
+	if (this.ds_selectData.getRowCount() == 1) 
+	{
+		this.edt_comboResult.set_value(this.ds_selectData.getColumn(0, "value"));
+	}
+	else if (this.ds_selectData.getRowCount() > 0) 
+	{
+		this.edt_comboResult.set_value("다중 선택");
+	}
+	else 
+	{
+		this.edt_comboResult.set_value("데이터 미 선택");
+	}
+
+	this.pdiv_data.closePopup();
+};
+]]></Script>
+  </Form>
+</FDL>

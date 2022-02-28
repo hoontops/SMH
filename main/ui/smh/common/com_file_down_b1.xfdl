@@ -1,0 +1,367 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="com_file_down_b1" width="827" height="355" titletext="File Down" onload="form_onload">
+    <Layouts>
+      <Layout width="827" height="355">
+        <Grid id="grd_list" taborder="0" binddataset="ds_file" autoenter="select" cellsizingtype="col" autofittype="col" nodatatext="파일이 없습니다." oncelldblclick="grd_list_oncelldblclick" left="0" top="34" right="0" bottom="0" font="9pt &quot;dotum&quot;">
+          <Formats>
+            <Format id="default">
+              <Columns>
+                <Column size="40"/>
+                <Column size="316"/>
+                <Column size="0"/>
+                <Column size="0"/>
+                <Column size="0"/>
+                <Column size="0"/>
+              </Columns>
+              <Rows>
+                <Row size="24" band="head"/>
+                <Row size="24"/>
+              </Rows>
+              <Band id="head">
+                <Cell text="NO"/>
+                <Cell col="1" text="파일명"/>
+                <Cell col="2" text="input Time"/>
+                <Cell col="3" text="파일크기(KB)"/>
+                <Cell col="4" text="저장경로"/>
+                <Cell col="5" text="저장파일명"/>
+              </Band>
+              <Band id="body">
+                <Cell text="expr:rowidx + 1"/>
+                <Cell col="1" text="bind:OC_FILE_NM"/>
+                <Cell col="2" text="bind:inputTime"/>
+                <Cell col="3" text="expr:comp.parent.gfn_isNull(FILE_SIZE) ? &quot;&quot;:nexacro.round( (FILE_SIZE / 1024), 2 )+&quot; KB&quot;" textAlign="right"/>
+                <Cell col="4" text="bind:SVR_SAVE_COURS"/>
+                <Cell col="5" text="bind:ATCH_FILE_GUID"/>
+              </Band>
+            </Format>
+          </Formats>
+        </Grid>
+        <FileDownload id="FileDownload00" taborder="3" text="FileDownload00" visible="false" left="727" top="368" width="100" height="24"/>
+        <Static id="sta_cnt" taborder="1" text="&lt;fc v=&quot;#f31d24&quot;&gt;0&lt;/fc&gt;&lt;fc v=&quot;#999999&quot;&gt;건&lt;/fc&gt;" left="105" top="0" height="34" cssclass="sta_WF_subTitle" usedecorate="true" right="620" padding="5px 0px 0px"/>
+        <Static id="sta_subTitle" taborder="2" text="파일 다운로드" left="0" top="0" height="34" cssclass="sta_WF_subTitle" usedecorate="true" padding="5px 0px 0px" fittocontents="width" width="95"/>
+        <Button id="btn_fileDownLoad" taborder="4" text="파일다운로드" onclick="btn_fileDownLoad_onclick" cssclass="btn_WF_grdCom" top="6" right="10" width="98" height="24" tooltiptext="FILEDOWNLOADTITLE"/>
+      </Layout>
+    </Layouts>
+    <Objects>
+      <Dataset id="ds_search" firefirstcount="0" useclientlayout="false" updatecontrol="true" enableevent="true" loadkeymode="keep" loadfiltermode="keep" reversesubsum="false">
+        <ColumnInfo>
+          <Column id="JOB_SYS_CD" type="STRING" size="256"/>
+          <Column id="ATCH_SRC_KEY" type="STRING" size="256"/>
+          <Column id="ATCH_TY_CD" type="STRING" size="256"/>
+          <Column id="TABLE_NAME" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_file" firefirstcount="0" useclientlayout="true" updatecontrol="true" enableevent="true" loadkeymode="keep" loadfiltermode="keep">
+        <ColumnInfo>
+          <Column id="CHK" type="STRING" size="256"/>
+          <Column id="SEQ" type="STRING" size="256"/>
+          <Column id="FILE_NAME" type="STRING" size="256"/>
+          <Column id="FILE_SIZE" type="STRING" size="256"/>
+          <Column id="ORG_FILE_NAME" type="STRING" size="256"/>
+          <Column id="INPUT_TIME" type="STRING" size="256"/>
+          <Column id="FILE_TYPE" type="STRING" size="256"/>
+          <Column id="JOB_SYS_CD" type="STRING" size="256"/>
+          <Column id="FILE_EXT" type="STRING" size="256"/>
+          <Column id="OC_FILE_NM" type="STRING" size="256"/>
+          <Column id="ATCH_FILE_GUID" type="STRING" size="256"/>
+          <Column id="SVR_SAVE_COURS" type="STRING" size="256"/>
+          <Column id="DRM_APY_YN" type="STRING" size="256"/>
+          <Column id="RM" type="STRING" size="256"/>
+          <Column id="ATCH_FILE_ID" type="BIGDECIMAL" size="256"/>
+          <Column id="DNLD_CNT" type="BIGDECIMAL" size="256"/>
+          <Column id="KEEP_START_DATEC" type="STRING" size="256"/>
+          <Column id="KEEP_END_DATEC" type="STRING" size="256"/>
+          <Column id="USE_YN" type="STRING" size="256"/>
+          <Column id="CREATION_DATE" type="STRING" size="256"/>
+          <Column id="LAST_UPDATED_BY" type="BIGDECIMAL" size="256"/>
+          <Column id="LAST_UPDATE_DATE" type="STRING" size="256"/>
+          <Column id="LAST_UPDATE_LOGIN" type="BIGDECIMAL" size="256"/>
+          <Column id="TABLE_NAME" type="STRING" size="256"/>
+          <Column id="DESC" type="STRING" size="256"/>
+          <Column id="ATCH_SRC_KEY" type="STRING" size="256"/>
+          <Column id="SEQ_NO" type="BIGDECIMAL" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+    </Objects>
+    <Script type="xscript5.1"><![CDATA[/***********************************************************************
+ * 01. 업무구분 : 파일 업/다운로드 콤포넌트
+ * 02. 화면명   : fileUpDown.xfdl
+ * 03. 화면설명 :
+ * 04. 작성일   :
+ * 05. 작성자   :
+ * 06. 수정이력 :
+ ***********************************************************************
+ *     수정일     작성자   내용
+ ***********************************************************************
+ *
+ ***********************************************************************
+ */
+
+/***********************************************************************
+ * Script Include
+ ************************************************************************/
+// include "lib::comLib.xjs";
+
+/***********************************************************************
+ * 화면 변수 선언부
+ ************************************************************************/
+this.strPostId = "";
+
+this.jobSysCd = "";
+this.atchSrcKey = "";
+this.atchTyCd = "";
+this.tableName = "";
+
+this.fv_fileUploadHeight = 0;
+this.fv_upUrl = nexacro.getEnvironment().services["svcurl"].url;
+this.fv_uploadDo = "/comm/uploadFile/" + this.parent.parent.arg_jobSysCd + ".do"; //업로드 서비스명
+this.fv_filePath = "upload"; //파일 Up/Down 서버경로
+this.fv_fileDelCase = "N"; //(option)파일 삭제 유형 : 'N' row 단위 삭제, 'C' 그리드 checkbox 선택 삭제 유형
+
+/***********************************************************************
+ * Event 처리 부분
+ ***********************************************************************/
+this.form_onload = function (obj:Form, e:nexacro.LoadEventInfo)
+{
+	// FileUpload 콤포넌트 버튼 높이 setting
+	// this.fv_fileUploadHeight = this.div_fup.fup_AttachedFile.height;
+};
+
+
+/*
+ * 기능 : 검색
+ */
+this.fn_search = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.ds_search.clearData();
+	this.ds_search.addRow();
+	this.ds_search.setColumn(0, "JOB_SYS_CD", this.jobSysCd);
+	this.ds_search.setColumn(0, "ATCH_SRC_KEY", this.atchSrcKey);
+	this.ds_search.setColumn(0, "ATCH_TY_CD", this.atchTyCd);
+	this.ds_search.setColumn(0, "TABLE_NAME", this.tableName);
+	var sSvcID = "selectAtchFileList";
+	var sController = "/cmsa01200/selectAtchFileList.do";
+	var sInDatasets = "INPUT=ds_search";
+	var sOutDatasets = "ds_file=output";
+	var sArgs = "";
+	sArgs += this.gfn_setParam("method", "selectAtchFileList");
+	this.gfn_transaction(sSvcID, sController, sInDatasets, sOutDatasets, sArgs);
+};
+
+/************************************************************************
+ * TRANSACTION, CALLBACK 영역
+ ************************************************************************/
+this.fn_callBack = function (strSvcId, nErrorCode, strErrorMsg)
+{
+	if (nErrorCode < 0) 
+	{
+		return this.gfn_alert(strErrorMsg);
+	}
+	else 
+	{
+		switch (strSvcId) 
+		{
+			case "selectAtchFileList":
+				this.sta_cnt.set_text('<fc v="#f31d24">'+this.nfn_numberWithCommas(this.ds_file.rowcount)+'</fc><fc v="#999999">건</fc>');
+				break;
+			default:
+				break;
+		}
+	}
+};
+
+/************************************************************************************************
+ * 사용자 FUNCTION 영역 (필수)
+ ************************************************************************************************/
+/*------------------------------------------------------------------------------
+ * 기   능:		파일업/다운로드 초기화
+ * 인   수:		path - 파일업/다운로드 경로(필수)
+ delCase - 파일 삭제 유형 : 'N' row 단위 삭제, 'C' 그리드 checkbox 선택 삭제 유형(옵션)
+ * 리   턴: 	없음
+ -------------------------------------------------------------------------------*/
+this.fn_initFileUpDown = function (path, delCase)
+{
+	this.fv_filePath = path;
+
+	if (!this.gfn_isNull(delCase)) 
+	{
+		if (delCase == "N" || delCase == "C") 
+		{
+			this.fv_fileDelCase = delCase;
+		}
+	}
+};
+
+/***********************************************************************
+ * FileUpload 콤포넌트 item 추가
+ ************************************************************************/
+this.fup_AttachedFile_onitemchanged = function (obj:FileUpload, e:nexacro.FileUploadItemChangeEventInfo)
+{
+	var sFilePath = e.newvalue;
+
+	// sFilePath = aFilePath[i];
+	var dirExpt = sFilePath.lastIndexOf("\\") + 1;
+	var sFileName = sFilePath.substr(dirExpt);
+	trace("sFileName >> " + sFileName);
+
+
+	// trace("onitemchanged : "+obj.height);
+	var args = {
+		"orgcolname" : "OC_FILE_NM"
+	};
+	var nRow = this.fn_addUploadFile(obj, this.ds_file, args);
+
+	// Dialog 호출 후 취소시 후 처리 없음.
+	if (this.gfn_isNull(nRow)) 
+	{
+		return;
+	}
+
+	/** 
+	 필요시 업무단 처리 부분...
+	 */
+};
+
+
+/***********************************************************************
+ * 사용자 정의함수 부분
+ - 전체 파일 사이즈 계산
+ ************************************************************************/
+this.fn_calcTotalFileSize = function ()
+{
+	this.nTotalSize = 0;
+
+	for (var i = 0; i < this.ds_file.rowcount; i++) 
+	{
+		this.nTotalSize += parseInt(this.ds_file.getColumn(i, "FILE_SIZE"));
+	}
+
+	if (this.nTotalSize < 1024) 
+	{
+		this.st_FileSize.set_text(this.nTotalSize + "B");
+	}
+	else 
+	{
+		this.st_FileSize.set_text((Math.ceil(this.nTotalSize / 1024) + "KB"));
+	}
+};
+
+
+/***********************************************************************
+ * Upload
+ ************************************************************************/
+this.fn_upload = function (sPath)
+{
+	if (this.gfn_isNull(sPath)) 
+	{
+		sPath = this.fv_filePath;
+	}
+
+	if (this.gfn_isNull(sPath)) 
+	{
+		return this.gfn_alert("msg.err.nofilepath");
+		// 경로가 지정되지 않은 첨부파일은 업/다운로드 할 수 없습니다.
+	}
+
+	// 변경사항 체크 - 파일 업로드가 없으면 바로 save 처리
+	var fCnt = this.div_fup.fup_AttachedFile.getItemCount(true);
+	if (fCnt == 0) 
+	{
+		// Upload 이후 부모창 callback 호출
+		this.lookupFunc("fn_callBack").call("completeFileUpload", 1, "There are no files to upload.");
+	}
+	else 
+	{
+		var upUrl = this.fv_upUrl + this.fv_uploadDo + "?path=" + sPath;
+		trace("fn_upload url : " + upUrl);
+
+		this.div_fup.fup_AttachedFile.upload(upUrl);
+	}
+};
+
+
+this.div_fup_fup_AttachedFile_onsuccess = function (obj:FileUpload, e:nexacro.FileUploadEventInfo)
+{
+	trace("e.errorcode : " + e.errorcode);
+
+	if (e.datasets == null) 
+	{
+		trace("업로드 실패");
+	}
+	else 
+	{
+		trace("업로드 성공");
+		// alert(e.datasets[0].rowcount);
+		// alert(e.datasets[0].saveXML());
+
+
+		// 업로드 성공 후 받은 데이터셋에서 해당 파일의 파일명을 데이터셋에 저장.
+		var sysname = "";
+		for (var i = this.ds_file.rowcount - 1; i >= 0; i--) 
+		{
+			sysname = this.ds_file.getColumn(i, "FILE_NAME");
+			trace("sysname ..>> " + sysname);
+			if (this.gfn_isNull(sysname)) 
+			{
+				this.ds_file.deleteRow(i);
+			}
+		}
+
+		this.ds_file.appendData(e.datasets[0], true);
+
+		// 파일콤포넌트 index 초기화
+		for (var i = obj.getItemCount() - 1; i >= 0; i--) 
+		{
+			obj.deleteItem(i);
+		}
+
+		// 파일 사이즈 total 계산
+		var nSize = this.ds_file.getSum("FILE_SIZE");
+		trace(nSize);
+		nSize = nexacro.round((nSize / 1024), 2); //KB
+		this.st_FileSize.set_text(nSize + " KB");
+
+		// Upload 이후 부모창 callback 호출
+		this.lookupFunc("fn_callBack").call("completeFileUpload", e.errorcode, e.errormsg);
+	}
+};
+
+/*-------------------------------------------------------------------------------
+ * 설명      : 첨부 파일 다운로드 및 삭제
+ *------------------------------------------------------------------------------*/
+this.grd_list_oncelldblclick = function (obj:Grid, e:nexacro.GridClickEventInfo)
+{
+	/*
+	 var atchFileGuid = this.ds_file.getColumn(this.ds_file.rowposition, "ATCH_FILE_GUID");
+	 var dnUrl = this.fv_upUrl+"/comm/downFile/"+atchFileGuid+"/"+this.jobSysCd+".do";
+	 this.FileDownload00.set_downloadurl( dnUrl );
+	 */
+	var atchFileId = this.ds_file.getColumn(this.ds_file.rowposition, "ATCH_FILE_ID");
+	var seqNo = this.ds_file.getColumn(this.ds_file.rowposition, "SEQ_NO");
+
+	/*dnUrl 정보 중 STM 혹은 FCM 자신의 프로젝트에 맞는 값 선택 */
+	var dnUrl = this.fv_upUrl + "/comm/dnFile/" + atchFileId + "/" + seqNo + ".do";
+	trace("dnUrl :" + dnUrl);
+	this.FileDownload00.set_downloadurl(dnUrl);
+	var bSucc = this.FileDownload00.download();
+
+
+	trace("bSucc >> " + bSucc);
+};
+
+
+
+this.btn_fileDownLoad_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	if (this.ds_file.rowposition < 0) 
+	{
+		alert("다운로드 할 파일을 선택하십시오!");
+		return;
+	}
+
+	this.grd_list_oncelldblclick();
+};
+]]></Script>
+  </Form>
+</FDL>

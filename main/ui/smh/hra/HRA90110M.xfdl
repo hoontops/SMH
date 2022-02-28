@@ -1,0 +1,216 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="HRA90110M" width="920" height="720" titletext="Organization Chart" oninit="fn_init">
+    <Layouts>
+      <Layout height="720" mobileorientation="landscape" width="920">
+        <Button id="btn_searchOpen" taborder="0" left="10" top="6" width="30" height="24" cssclass="btn_WF_searchOpen" onclick="nfn_searchOpen_onclick"/>
+        <Static id="sta_title" taborder="1" text="업무화면명(자동)" left="40" top="6" width="145" height="24" cssclass="sta_WF_title" fittocontents="width" expr="nexacro.getApplication().gds_menu.lookup(&quot;PGM_ID&quot;,comp.parent.name,&quot;MENU_NM&quot;)"/>
+        <Button id="btn_favorite" taborder="2" left="187" top="6" width="24" height="24" cssclass="btn_WF_favorite"/>
+        <Div id="div_work" taborder="3" left="0" top="36" bottom="0" right="10">
+          <Layouts>
+            <Layout>
+              <Grid id="Grid01_00" taborder="0" left="0" top="0" cssclass="grd_tree" autofittype="col" autoenter="select" treeinitstatus="expand,all" treeuseexpandkey="true" treeusecheckbox="false" treeusebutton="use" bottom="10" width="40%" binddataset="ds_tree" onselectchanged="fn_getMemberList">
+                <Formats>
+                  <Format id="default">
+                    <Columns>
+                      <Column size="168"/>
+                    </Columns>
+                    <Rows>
+                      <Row size="24"/>
+                    </Rows>
+                    <Band id="body">
+                      <Cell text="bind:NAME" edittype="tree" displaytype="treeitemcontrol" treelevel="bind:LEVEL" cssclass="expr:lev==&quot;0&quot;?'lev0':''"/>
+                    </Band>
+                  </Format>
+                </Formats>
+              </Grid>
+              <Grid id="grd_qamQcinspectorhistory" taborder="1" top="34" autoenter="select" right="0" binddataset="ds_members" autofittype="col" bottom="10" width="59%">
+                <Formats>
+                  <Format id="default">
+                    <Columns>
+                      <Column size="120"/>
+                      <Column size="120"/>
+                      <Column size="120"/>
+                      <Column size="160"/>
+                    </Columns>
+                    <Rows>
+                      <Row size="24" band="head"/>
+                      <Row size="24"/>
+                    </Rows>
+                    <Band id="head">
+                      <Cell text="성명" tooltiptext="성명"/>
+                      <Cell col="1" text="호칭" tooltiptext="호칭"/>
+                      <Cell col="2" text="직책" tooltiptext="직책"/>
+                      <Cell col="3" text="직무" tooltiptext="직무"/>
+                    </Band>
+                    <Band id="body">
+                      <Cell text="bind:EMPLOYEE_NAME"/>
+                      <Cell col="1" text="bind:TITLE_NAME"/>
+                      <Cell col="2" text="bind:POSITION_NAME"/>
+                      <Cell col="3" text="bind:JOB_NAME"/>
+                    </Band>
+                  </Format>
+                </Formats>
+              </Grid>
+              <Static id="Static20_00_00" taborder="2" text="Members" height="34" cssclass="sta_WF_subTitle" top="0" tooltiptext="Members" left="41.10%" width="180"/>
+              <Grid id="Grid01_00_00" taborder="3" left="40" top="0" cssclass="grd_tree" binddataset="ds_tree00" autofittype="col" autoenter="select" treeinitstatus="expand,all" treeuseexpandkey="true" treeusecheckbox="false" treeusebutton="use" bottom="93" width="0">
+                <Formats>
+                  <Format id="default">
+                    <Columns>
+                      <Column size="260"/>
+                    </Columns>
+                    <Rows>
+                      <Row size="24"/>
+                    </Rows>
+                    <Band id="body">
+                      <Cell text="bind:name" displaytype="treeitemcontrol" edittype="tree" treelevel="bind:level"/>
+                    </Band>
+                  </Format>
+                </Formats>
+              </Grid>
+            </Layout>
+          </Layouts>
+        </Div>
+      </Layout>
+    </Layouts>
+    <Script type="xscript5.1"><![CDATA[/***************************************************************************************
+ * 시스템명 	: 조직도
+ * 업무명 		: 조직도 조회
+ * 파일명 		: HRA90110M.xfdl
+ * 작성자 		: 한만섭
+ * 설  명		: 조직도 조회
+ *---------------------------------------------------------------------------------------
+ * 변경일		변경자			변경내역
+ *---------------------------------------------------------------------------------------
+ * 2022.02.18	한만섭			최초작성 
+ *---------------------------------------------------------------------------------------
+ ****************************************************************************************/
+
+
+/**************************************************************************
+ * 1. 필수 include
+ ***************************************************************************/
+
+
+/**************************************************************************
+ * 2. FORM 변수 선언 영역
+ ***************************************************************************/
+ //전역변수 선언
+var changed = false;
+var personId = this.gf_getPersonId();
+var personDeptCd = this.gf_getDeptCd();
+
+/**************************************************************************
+ * 3. FORM LOAD
+ ***************************************************************************/
+
+this.fn_init = function (obj:Form, e:nexacro.LoadEventInfo)
+{
+	this.nfn_formInit(obj);
+	this.fn_getOrgTreeInfo(); 	// 조직도 트리 정보
+};
+
+/**************************************************************************
+ * 4. 이벤트 영역
+ ***************************************************************************/
+
+
+
+//************************************************
+// 조직도 트리 정보
+//************************************************
+this.fn_getOrgTreeInfo = function(obj:nexacro.Button, e:nexacro.ClickEventInfo)
+{	
+	trace("조직도 트리 정보 INFO===============================");
+	this.ds_search.setColumn(0, "ORG_ID", personDeptCd);
+	
+	var sSvcID = "selectOrgTree";
+	var sController = "/hra90110/selectOrgTree.do";
+	var sInDatasets = "INPUT=ds_search";
+	var sOutDatasets = "ds_tree=ds_tree ds_members=ds_members";
+	var sArgs = "";
+	this.gfn_transaction(sSvcID, sController, sInDatasets, sOutDatasets, sArgs);
+}
+
+//************************************************
+// 조직원 정보
+//************************************************
+this.fn_getMemberList = function(obj:nexacro.Grid,e:nexacro.GridSelectEventInfo)
+{
+	if(this.changed) {
+		trace("조직원 정보 INFO===============================");
+		
+		var dsTree = this.ds_tree,
+			orgId = dsTree.getColumn(e.row, 'ORG_ID');
+			
+		this.ds_search.setColumn(0, "ORG_ID", orgId);
+		this.ds_members.clearData();
+		
+		var sSvcID = "selectMembers";
+		var sController = "/hra90110/selectMembers.do";
+		var sInDatasets = "INPUT=ds_search";
+		var sOutDatasets = "ds_members=ds_members";
+		var sArgs = "";
+		this.gfn_transaction(sSvcID, sController, sInDatasets, sOutDatasets, sArgs);
+	}
+}
+
+/**************************************************************************
+ * 5. TRANSACTION, CALLBACK 영역
+ ***************************************************************************/
+this.fn_callBack = function (trId, errCD, errMsg)
+{
+	if (errCD < 0) 
+	{
+		this.gfn_Message("ProcessingError", trId + errMsg, "error", "ok");
+	}
+	else 
+	{
+		if (trId == "selectOrgTree") 
+		{	
+			var ds = this.ds_tree,
+				nRow = ds.findRow( "ORG_ID", personDeptCd);
+			
+			ds.set_rowposition(nRow);
+			this.changed = true;
+		}
+	}
+}]]></Script>
+    <Objects>
+      <Dataset id="ds_tree">
+        <ColumnInfo>
+          <Column id="NAME" type="STRING" size="256"/>
+          <Column id="LEVEL" type="STRING" size="256"/>
+          <Column id="ORG_ID" type="STRING" size="256"/>
+        </ColumnInfo>
+      </Dataset>
+      <Dataset id="ds_search" useclientlayout="false">
+        <ColumnInfo>
+          <Column id="ORG_ID" type="STRING" size="256"/>
+        </ColumnInfo>
+        <Rows>
+          <Row/>
+        </Rows>
+      </Dataset>
+      <Dataset id="ds_members">
+        <ColumnInfo>
+          <Column id="GRADE_TITLE" type="STRING" size="32"/>
+          <Column id="EFFECTIVE_ORG_DATE" type="STRING" size="32"/>
+          <Column id="TITLE_NAME" type="STRING" size="32"/>
+          <Column id="GRADE_SEQ" type="BIGDECIMAL" size="16"/>
+          <Column id="JOB_FAMILY" type="STRING" size="32"/>
+          <Column id="GRADE_NAME" type="STRING" size="32"/>
+          <Column id="EMPLOYEE_NAME" type="STRING" size="32"/>
+          <Column id="POSITION_NAME" type="STRING" size="32"/>
+          <Column id="JOB_NAME" type="STRING" size="32"/>
+          <Column id="RETIRE_REASON" type="STRING" size="32"/>
+          <Column id="POSITION_GRADE_SEQ" type="STRING" size="32"/>
+          <Column id="PERSON_ID" type="BIGDECIMAL" size="16"/>
+          <Column id="EMPLOYEE_NUMBER" type="STRING" size="32"/>
+          <Column id="RETIRE_DATE" type="STRING" size="32"/>
+          <Column id="PROMOTION_DATE" type="STRING" size="32"/>
+        </ColumnInfo>
+      </Dataset>
+    </Objects>
+  </Form>
+</FDL>

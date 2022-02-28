@@ -1,0 +1,138 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="PAY40140M" width="920" height="720" titletext="월별 직원 근태현황" onload="fn_init">
+    <Layouts>
+      <Layout height="720" mobileorientation="landscape" width="920">
+        <Div id="div_search" taborder="0" text="Div00" left="0.00%" top="36" right="10" height="42" cssclass="div_WF_search" background="rgba(247,247,247,1)">
+          <Layouts>
+            <Layout width="1005" height="80">
+              <Static id="Static00" taborder="0" cssclass="sta_WF_Label" left="21" top="10" width="70" height="20" textAlign="right" verticalAlign="middle" text="조회년월" tooltiptext="조회년월"/>
+              <Static id="Static13" taborder="1" text="10" visible="false" left="0%" top="0" right="0%" height="10" background="gold" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+              <Static id="Static02" taborder="2" text="20" visible="false" left="0%" top="-1" right="97.83%" height="43" background="gold" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" font="8pt &quot;Dotum&quot;" opacity="0.5"/>
+              <Static id="Static04" taborder="3" text="10" visible="false" left="0%" right="76.88%" bottom="0" height="10" background="gold" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+              <Static id="Static06" taborder="4" text="10" visible="false" left="10.24%" top="1" right="88.66%" bottom="-1" background="gold" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+              <Static id="Static07" taborder="5" text="20" visible="false" left="190" top="0" right="698" height="43" background="gold" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" font="8pt &quot;Dotum&quot;" opacity="0.5"/>
+              <Static id="Static00_00" taborder="6" cssclass="sta_WF_Label" left="211" top="10" width="70" height="20" textAlign="right" verticalAlign="middle" text="부서" tooltiptext="부서"/>
+              <Edit id="edt_deptOrg" taborder="8" left="291" top="10" width="120" height="20"/>
+              <Button id="Button02" taborder="9" left="411" width="22" height="20" cssclass="btn_WF_finder" top="10" visible="false"/>
+              <Div id="cal_monthDate" taborder="7" left="101" top="10" width="90" height="21" url="common::com_monthCalendar.xfdl" text="____-__"/>
+            </Layout>
+          </Layouts>
+          <InitValue/>
+        </Div>
+        <Button id="btn_print" taborder="1" text="출력" onclick="fn_print" top="8" right="10" width="60" height="20" tooltiptype="hover" tooltiptext="출력"/>
+        <Static id="Static78" taborder="2" text="15" visible="false" left="0.00%" top="27" right="1.09%" height="9" background="lightseagreen" padding="0px 0px 3px 0px" textAlign="center" verticalAlign="middle" opacity="0.5"/>
+        <Button id="btn_searchOpen" taborder="3" left="10" top="6" width="30" height="24" cssclass="btn_WF_searchOpen" onclick="nfn_searchOpen_onclick"/>
+        <Static id="sta_title" taborder="4" text="업무화면명(자동)" left="40" top="6" width="145" height="24" cssclass="sta_WF_title" fittocontents="width" expr="nexacro.getApplication().gds_menu.lookup(&quot;PGM_ID&quot;,comp.parent.name,&quot;MENU_NM&quot;)"/>
+        <Button id="btn_favorite" taborder="5" left="187" top="6" width="24" height="24" cssclass="btn_WF_favorite"/>
+      </Layout>
+    </Layouts>
+    <Script type="xscript5.1"><![CDATA[/***************************************************************************************
+ * 시스템명 	: 출근현황
+ * 업무명 		: 
+ * 파일명 		: PAY40140M.xfdl
+ * 작성자 		: 유성연
+ * 작성일 		: 2022.02.16
+ *
+ * 설  명		: 월별현황
+ *---------------------------------------------------------------------------------------
+ * 변경일		변경자		변경내역
+ *---------------------------------------------------------------------------------------
+ * 2022.02.16	유성연   	최초작성
+ *---------------------------------------------------------------------------------------
+ ****************************************************************************************/
+
+
+/**************************************************************************
+ * 1. 필수 include
+ ***************************************************************************/
+
+
+/**************************************************************************
+ * 2. FORM 변수 선언 영역
+ ***************************************************************************/
+	
+	this.userId;
+	this.userNm; 
+	this.deptNm;
+	this.deptCd;
+	this.personId;
+	
+	
+
+	
+/**************************************************************************
+ * 3. FORM LOAD
+ ***************************************************************************/
+this.fn_init = function (obj:Form, e:nexacro.LoadEventInfo)
+{
+	//화면 초기화
+	 this.nfn_formInit(obj);
+	 this.fn_monthClear();
+	 this.personId = this.gf_getPersonId();
+	 this.deptNm = this.gf_getDeptNm();	
+	 this.deptCd = this.gf_getDeptCd();
+	 this.fn_deptClear();
+};
+
+
+
+/**************************************************************************
+ * 4. 공통버튼영역 (함수 삭제금지!!!!) 
+ ***************************************************************************/
+
+// 달력현재날짜로 초기화
+this.fn_monthClear = function()
+{
+	this.fv_currDate = this.nfn_getCurrentSystemTime();
+	this.div_search.form.cal_monthDate.form.msk_month.set_value(this.fv_currDate.substring(0,6));
+} ;
+// 부서명 로그인 정보한 사람의 부서정보로 초기화
+this.fn_deptClear = function() {
+	this.div_search.form.edt_deptOrg.set_value(this.deptNm);
+}
+
+/*
+* 기능: 출력버튼
+*/
+this.fn_print = function(obj:nexacro.Button,e:nexacro.ClickEventInfo)
+{   
+   
+   
+   var oArg = {
+      sRptPath   : "",
+      sRptName   : "HJSPAYR08040",
+      strField   : "[" + this.deptCd + "]["+this.div_search.form.cal_monthDate.form.msk_month.value+"]",
+      bModalless : false
+   };
+   var title    = "월별 직원 근태현황"; //this.nfn_nvl(this.nfn_getDictionarynameUpper("LOTCARDPRINT"),"LOT Card 출력");
+   var sOption = "titletext="+title+",modeless=false";
+   
+   this.gfn_reportPopup("reportViewer", "common::com_report.xfdl", oArg, sOption);   
+};
+
+/**************************************************************************
+ * 5. TRANSACTION, CALLBACK 영역
+ ***************************************************************************/
+		
+
+this.fn_callBack = function (trId, errCD, errMsg) {
+
+};
+
+/**************************************************************************
+ * 6. 팝업 호출/콜백
+ **************************************************************************/
+
+
+/**************************************************************************
+ * 7. 기타 함수(화면 로컬 정의) 
+ **************************************************************************/
+	
+
+/**************************************************************************
+ * 8. 이벤트 
+ ***************************************************************************/
+]]></Script>
+  </Form>
+</FDL>

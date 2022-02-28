@@ -1,0 +1,201 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<FDL version="2.1">
+  <Form id="Sample13" width="800" height="764" titletext="RichTextEditor (Div Link)" onload="RichTextEditorSample_onload">
+    <Layouts>
+      <Layout width="800" height="764">
+        <Div id="div_editor" taborder="1" left="42" top="38" height="472" url="common::richtexteditor.xfdl" async="true" width="726" enable="true" border="0px none rgba(128,128,128,1)" text=""/>
+        <Button id="btn_save" taborder="2" text="Save Data" left="568" top="11" width="89" height="26" onclick="btn_save_onclick"/>
+        <Button id="btn_load" taborder="3" text="Load Data" left="472" top="11" width="89" height="26" onclick="btn_load_onclick"/>
+        <Button id="btn_disable" taborder="4" text="editor disable" left="42" top="11" width="91" height="26" cssclass="btn_WF_Stats" onclick="btn_disable_onclick"/>
+        <Button id="btn_enable" taborder="5" text="editor enable" left="134" top="11" width="88" height="26" cssclass="btn_WF_Stats" onclick="btn_enable_onclick"/>
+        <Button id="btn_contentHeight" taborder="6" text="content 높이 조절" left="223" top="11" width="116" height="26" onclick="btn_contentHeight_onclick" cssclass="btn_WF_Stats"/>
+        <Edit id="Edit00" taborder="0" left="340" top="11" width="92" height="26"/>
+        <Static id="sta_00" taborder="7" text="Small RichTextEditor" left="49" top="479" width="240" height="49"/>
+        <Div id="div_editor00" taborder="8" left="42" top="518" height="242" url="common::richtexteditor_s.xfdl" async="true" width="726" enable="true" border="0px none rgba(128,128,128,1)"/>
+        <Button id="btn_load00" taborder="9" text="Load Data(pop)" left="671" top="12" width="89" height="26" onclick="btn_load00_onclick"/>
+      </Layout>
+    </Layouts>
+    <Objects>
+      <Dataset id="ds_images" firefirstcount="0" useclientlayout="false" updatecontrol="true" enableevent="true" loadkeymode="keep" loadfiltermode="keep" reversesubsum="false">
+        <ColumnInfo>
+          <Column id="filename" type="STRING" size="256"/>
+          <Column id="savefilename" type="STRING" size="256"/>
+          <Column id="filesize" type="INT" size="256"/>
+          <Column id="selected" type="STRING" size="256"/>
+        </ColumnInfo>
+        <Rows>
+          <Row>
+            <Col id="selected">Y</Col>
+            <Col id="filename">birthday.jpg</Col>
+            <Col id="savefilename">birthday.jpg</Col>
+            <Col id="filesize">14168</Col>
+          </Row>
+          <Row>
+            <Col id="filename">ChristmasTree.jpg</Col>
+            <Col id="savefilename">ChristmasTree.jpg</Col>
+            <Col id="filesize">12215</Col>
+          </Row>
+        </Rows>
+      </Dataset>
+    </Objects>
+    <Script type="xscript5.1"><![CDATA[
+this.RichTextEditorSample_onload = function (obj:Form, e:nexacro.LoadEventInfo)
+{
+	var userConfig = {
+		editor : { // showThumbnailMode : false,//이미지 추가시 Thumbnail true/false 처리
+			loadCallback : this.onloadEditor,
+			resizeCallback : this.onresizeEditor
+		}
+	};
+	this.div_editor.form.initialize(userConfig, obj);
+
+	// onload 시점에 Editor content 높이 설정
+	this.fn_setContentHeight(300);
+};
+
+// editor loading 이 완료되었을 때
+this.onloadEditor = function (obj)
+{
+	// obj 는 this.div_editor 임.
+
+	// 콘텐트 설정
+	this.fn_setContent();
+
+	// web editor 포커스에서 this 로 포커스 이동 처리
+	this.fn_setFocus();
+};
+
+// editor resize 가 발생할 때
+this.onresizeEditor = function (obj, e)
+{
+	// obj 는 this.div_editor 이고 e 는 nexacro.SizeEventInfo 임.
+	this.resetScroll();
+};
+
+// 데이터 로드
+this.btn_load_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.fn_setContent();
+};
+
+// 데이터 로드
+this.fn_setContent = function ()
+{
+	// 컨텐츠에 포함된 테스트 이미지 경로 지정
+	var image1 = "";
+	var image2 = "";
+
+	var contents = "<div>This is a <font color=\"#ff8000\" size=\"5\">Rich Text Editor </font>created in a nexacro platform.</div>";
+
+	// 컨텐츠 지정
+	this.div_editor.form.setContent(contents);
+};
+// 데이터 저장
+this.btn_save_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.saveData();
+};
+
+this.saveData = function ()
+{
+	// 에디터 컨텐츠
+	var content = this.div_editor.form.getContent();
+	trace("================= content =================\n");
+	trace(content);
+	trace("===========================================\n");
+};
+
+// preview
+this.btn_preview_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	var content = this.div_editor.form.getContent();
+
+	if (Eco.isEmpty(content)) 
+	{
+		alert("미리보기 내용이 없습니다.");
+		return;
+	}
+
+	var child = new ChildFrame();
+	child.init("preview", "absolute", 0, 0, 800, 630);
+	child.set_formurl("common::com_webPreview.xfdl");
+	child.set_openalign("center middle");
+
+	var arg = {
+		'content' : content
+	};
+	child.showModal(this.getOwnerFrame(), arg);
+};
+
+
+
+/* web editor enable 처리 */
+this.btn_disable_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.div_editor.form.fn_enable(false);
+};
+
+/* web editor disable(수정불가) 처리 */
+this.btn_enable_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.div_editor.form.fn_enable(true);
+};
+
+// web editor 높이 설정
+this.btn_contentHeight_onclick = function (obj:Button, e:nexacro.ClickEventInfo)
+{
+	this.fn_setContentHeight(300);
+};
+
+this.fn_setContentHeight = function (nHeight)
+{
+	// content 높이 설정
+	this.div_editor.form.fn_setEditorContentHeight(nHeight);
+
+	// content Height 적용
+	this.div_editor.form.setContentHeight();
+};
+
+
+// web Editor 사용시 focus 처리
+this.fn_setFocus = function (obj)
+{
+	/* BROWSWER 영역에서 focus 처리 되므로 예외처리를 try 구문으로... */
+	try 
+	{
+		// div link 로 focus 를 빼준다.
+		this.div_editor.setFocus();
+
+		// 요청한 component focus 처리.
+		obj.setFocus();
+	}
+	catch (err) 
+	{
+	}
+}
+	
+;
+
+this.btn_load00_onclick = function(obj:nexacro.Button,e:nexacro.ClickEventInfo)
+{	
+	var content = "<div>This is a <font color=\"#ff8000\" size=\"5\">Rich Text Editor </font>created in a nexacro platform.</div>";
+
+	if (Eco.isEmpty(content)) 
+	{
+		this.gfn_Message("NoCommentsMeasurement", null, "warning", "ok");//alert("미리보기 내용이 없습니다.");
+		return;
+	}
+
+	var child = new ChildFrame();
+	child.init("preview", 0, 0, 800, 630);
+	child.set_formurl("common::com_webPreview.xfdl");
+	child.set_openalign("center middle");
+
+	var arg = {
+		'fv_content' : content
+	};
+	child.showModal(this.getOwnerFrame(), arg);		
+};
+]]></Script>
+  </Form>
+</FDL>
